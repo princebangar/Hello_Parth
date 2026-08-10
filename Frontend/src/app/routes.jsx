@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect } from 'react'
 import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
 import {
   NATIVE_LAST_ROUTE_KEY,
+  rememberLoginReturnTo,
   syncActiveModule,
 } from '../shared/utils/activeModule.js'
 
@@ -50,6 +51,7 @@ const AppRoutes = () => {
 
   useEffect(() => {
     syncActiveModule(location.pathname)
+    rememberLoginReturnTo(location.pathname)
   }, [location.pathname])
 
   useEffect(() => {

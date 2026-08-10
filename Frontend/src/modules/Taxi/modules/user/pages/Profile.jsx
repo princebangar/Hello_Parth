@@ -186,7 +186,7 @@ const Profile = () => {
     // inherit stale dark-mode DOM classes from the previous screen.
     syncThemeForPath('/login');
 
-    navigate('/login', { replace: true });
+    navigate('/login', { replace: true, state: { from: '/taxi/user' } });
   };
 
   const initials = (profile.name || 'User')

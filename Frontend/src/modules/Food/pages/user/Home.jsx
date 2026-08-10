@@ -99,7 +99,6 @@ import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailabil
 import HomeHeader from "@food/components/user/home/HomeHeader";
 import { getVerticalTheme } from "@/shared/constants/superAppVerticalTheme";
 import { syncThemeForPath } from "@/shared/utils/theme.js";
-import GrocerySection from "@food/components/user/home/QuickSection";
 import PromoRow from "@food/components/user/home/PromoRow";
 import PromotionBannerCarousel from "@food/components/user/home/PromotionBannerCarousel";
 import OutOfServiceView from "@food/components/user/OutOfServiceView";
@@ -649,8 +648,6 @@ export default function Home() {
   const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const verticalParam = searchParams.get("vertical");
-  const superAppVertical = verticalParam === "grocery" ? "grocery" : "food";
 
   const handleVerticalChange = useCallback(
     (id) => {
@@ -661,9 +658,7 @@ export default function Home() {
       if (id === "taxi") {
         syncThemeForPath("/taxi/user");
         navigate("/taxi/user", { replace: true });
-        return;
       }
-      setSearchParams({ vertical: id }, { replace: true });
     },
     [navigate, setSearchParams],
   );
@@ -2184,7 +2179,7 @@ export default function Home() {
             const rest = order.restaurantId;
             if (!rest || !rest._id || uniqueMap.has(rest._id)) return;
 
-            // Food restaurants only (exclude grocery / isRestaurant: false)
+            // Food restaurants only (exclude non-restaurant outlets)
             if (rest.isRestaurant === false) return;
 
             // Active only
@@ -3088,16 +3083,16 @@ export default function Home() {
 
     <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-16 md:pb-6 overflow-x-clip">
       <HomeHeader
-        activeVertical={superAppVertical}
+        activeVertical="food"
         onVerticalChange={handleVerticalChange}
         location={effectiveLocation}
         savedAddressText={headerSavedAddressText}
         locationTitle={headerLocationTitle}
         locationSubtitle={headerLocationSubtitle}
         handleLocationClick={handleLocationClick}
-        handleSearchFocus={superAppVertical === "food" ? handleSearchFocus : undefined}
-        placeholderIndex={superAppVertical === "food" ? placeholderIndex : undefined}
-        placeholders={superAppVertical === "food" ? placeholders : undefined}
+        handleSearchFocus={handleSearchFocus}
+        placeholderIndex={placeholderIndex}
+        placeholders={placeholders}
         handleVegModeChange={handleVegModeChange}
         isVegMode={vegMode}
         vegModeToggleRef={vegModeToggleRef}
@@ -3122,7 +3117,7 @@ export default function Home() {
             <OutOfServiceView />
           </motion.div>
         )}
-        {!zoneLoading && (!isOutOfService || !Number.isFinite(effectiveLocation?.latitude) || !Number.isFinite(effectiveLocation?.longitude)) && superAppVertical === "food" && (
+        {!zoneLoading && (!isOutOfService || !Number.isFinite(effectiveLocation?.latitude) || !Number.isFinite(effectiveLocation?.longitude)) && (
           <motion.div
             key="food-panel"
             initial={{ opacity: 0 }}
@@ -4757,18 +4752,6 @@ export default function Home() {
       <StickyCartCard />
       {/* Live order strip: only on homepage (not in UserLayout) */}
       <OrderTrackingCard hasBottomNav />
-          </motion.div>
-        )}
-
-        {!zoneLoading && !isOutOfService && superAppVertical === "grocery" && (
-          <motion.div
-            key="grocery-panel"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-          >
-            <GrocerySection />
           </motion.div>
         )}
       </AnimatePresence>

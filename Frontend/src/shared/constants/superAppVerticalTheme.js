@@ -2,16 +2,14 @@
  * Hello Parth super-app vertical colours — matched to hello-parth-logo.png
  *
  * Logo accents (bright):
- *   Food    — orange  #FC6C00 (scooter, food icon)
- *   Taxi    — dark blue (logo navy / rides)
- *   Grocery — green   #74CC08 (E, grocery cart)
+ *   Food — orange  #FC6C00 (scooter, food icon)
+ *   Taxi — dark blue (logo navy / rides)
  *
  * UI uses darker shades for headers / inactive tabs; logo brights for accents & active tabs.
  */
 export const HELLO_PARTH_LOGO_COLORS = {
   food: '#FC6C00',
   taxi: '#1E4A8C',
-  grocery: '#74CC08',
 };
 
 export const SUPER_APP_VERTICAL_THEME = {
@@ -38,18 +36,6 @@ export const SUPER_APP_VERTICAL_THEME = {
     themeBg: 'bg-[#0B172A]',
     activeTabBg: 'bg-[#2563EB]',
     inactiveTabBg: 'bg-[#050C16]/90',
-  },
-  grocery: {
-    accent: HELLO_PARTH_LOGO_COLORS.grocery,
-    activeTab: HELLO_PARTH_LOGO_COLORS.grocery,
-    theme: '#4A8508',
-    inactiveTab: '#2E5505',
-    stickyBackdrop: 'rgba(74, 133, 8, 0.92)',
-    accentSoft: '#F3FBE8',
-    accentSoftHover: '#E3F5CE',
-    themeBg: 'bg-[#4A8508]',
-    activeTabBg: 'bg-[#74CC08]',
-    inactiveTabBg: 'bg-[#2E5505]/90',
   },
 };
 

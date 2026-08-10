@@ -20,13 +20,28 @@ export const dispatchNotificationInboxRefresh = () => {
   window.dispatchEvent(new CustomEvent(REFRESH_EVENT));
 };
 
+const hasModuleAccessToken = (module) => {
+  if (!module || typeof window === "undefined") return false;
+  try {
+    return Boolean(localStorage.getItem(`${module}_accessToken`)?.trim());
+  } catch {
+    return false;
+  }
+};
+
 export default function useNotificationInbox(module, options = {}) {
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(Boolean(options?.autoload !== false));
+  const [loading, setLoading] = useState(false);
 
   const fetchInbox = useCallback(async () => {
-    if (!module) return;
+    // Public browse must not hit protected inbox APIs (avoids 401 / refresh noise).
+    if (!module || !hasModuleAccessToken(module)) {
+      setItems([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);

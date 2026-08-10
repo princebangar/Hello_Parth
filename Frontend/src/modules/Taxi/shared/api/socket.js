@@ -49,13 +49,28 @@ const getStoredTokenByRole = (role) => {
           getSessionItem('driverToken'),
           getSessionItem('token'),
         ]
-      : [
-          localStorage.getItem(`${role}Token`),
-          localStorage.getItem('token'),
-        ]
+      : normalizedRole === 'user'
+        ? [
+            localStorage.getItem('userToken'),
+            localStorage.getItem('user_accessToken'),
+            localStorage.getItem('token'),
+          ]
+        : [
+            localStorage.getItem(`${role}Token`),
+            localStorage.getItem('token'),
+          ]
   ).filter(Boolean);
 
-  return entries.find((token) => String(getTokenPayload(token)?.role || '').toLowerCase() === normalizedRole) || null;
+  // Prefer role-matched JWT; allow blank-role food tokens for user sockets.
+  const roleMatched = entries.find((token) => {
+    const tokenRole = String(getTokenPayload(token)?.role || '').toLowerCase();
+    if (normalizedRole === 'user') {
+      return tokenRole === 'user' || tokenRole === '';
+    }
+    return tokenRole === normalizedRole;
+  });
+
+  return roleMatched || null;
 };
 
 const resolveTokenForRole = (role) => {
@@ -106,8 +121,8 @@ class SocketService {
   connect(options = {}) {
     const token = options.token || resolveTokenForRole(options.role);
 
+    // Guest / public browse: realtime is optional until login.
     if (!token) {
-      console.warn('[socket] missing token for role', options.role || 'unknown');
       return null;
     }
 

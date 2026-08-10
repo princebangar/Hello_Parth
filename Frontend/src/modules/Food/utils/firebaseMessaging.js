@@ -447,16 +447,27 @@ function setSavedToken(moduleName, token) {
 
 async function saveTokenByModule(moduleName, token, platform = "web") {
   pushDebugLog(PUSH_DEBUG_PREFIX, "saveTokenByModule starting", { moduleName, platform });
-  if (moduleName === "restaurant") {
-    await restaurantAPI.saveFcmToken(token, platform);
-    return;
-  }
-  if (moduleName === "delivery") {
-    await deliveryAPI.saveFcmToken(token, platform);
-    return;
-  }
-  if (moduleName === "user") {
-    await userAPI.saveFcmToken(token, { platform });
+  try {
+    if (moduleName === "restaurant") {
+      await restaurantAPI.saveFcmToken(token, platform);
+      return;
+    }
+    if (moduleName === "delivery") {
+      await deliveryAPI.saveFcmToken(token, platform);
+      return;
+    }
+    if (moduleName === "user") {
+      await userAPI.saveFcmToken(token, { platform });
+    }
+  } catch (error) {
+    // Stale local session: drop tokens so public browse stops retrying protected APIs.
+    if (error?.response?.status === 401) {
+      try {
+        localStorage.removeItem(`${moduleName}_accessToken`);
+        localStorage.removeItem(`${moduleName}_refreshToken`);
+      } catch (_) {}
+    }
+    throw error;
   }
 }
 

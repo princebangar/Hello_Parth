@@ -342,17 +342,17 @@ const PromoBanners = ({ plain = false }) => {
                 strokeWidth="2"
                 strokeDasharray="3 3"
               />
-              <motion.circle
-                cx="15"
-                cy="90"
-                r="3"
-                fill="#F59E0B"
+              {/* Animate via transform — animating SVG cx/cy can briefly become undefined in framer-motion */}
+              <motion.g
+                initial={{ x: 15, y: 90 }}
                 animate={{
-                  cx: [15, 65, 115],
-                  cy: [90, 68, 35],
+                  x: [15, 65, 115],
+                  y: [90, 68, 35],
                 }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              />
+              >
+                <circle cx="0" cy="0" r="3" fill="#F59E0B" />
+              </motion.g>
             </svg>
 
             {/* High Quality 3D Vehicle Illustration */}

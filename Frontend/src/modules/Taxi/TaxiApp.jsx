@@ -417,7 +417,10 @@ const UserProtectedRoute = () => {
   const location = useLocation();
 
   if (!getLocalUserToken()) {
-    return <Navigate to="/login" state={{ from: location.pathname }} />;
+    // After login, resume this screen. Back-from-login uses public home instead
+    // (see resolveLoginBackRoute) so guests are not bounced in a login loop.
+    const from = location.pathname;
+    return <Navigate to="/login" state={{ from }} replace />;
   }
 
   return <Outlet />;
@@ -482,12 +485,16 @@ const UserAccountInvalidationListener = () => {
     };
 
     const socket = socketService.connect({ role: 'user' });
+    if (!socket) {
+      return undefined;
+    }
+
     socketService.on('account:deleted', handleLogout);
     socketService.on('chat:message', handleAdminChatMessage);
 
     const handleAuthStale = (event) => {
       const staleToken = event.detail?.token || '';
-      const currentUserToken = localStorage.getItem('userToken') || localStorage.getItem('token') || '';
+      const currentUserToken = localStorage.getItem('userToken') || localStorage.getItem('user_accessToken') || localStorage.getItem('token') || '';
       const currentAdminToken = localStorage.getItem('adminToken') || '';
 
       if (event.detail?.role === 'user' && (!staleToken || staleToken === currentUserToken)) {
@@ -507,10 +514,7 @@ const UserAccountInvalidationListener = () => {
       socketService.off('account:deleted', handleLogout);
       socketService.off('chat:message', handleAdminChatMessage);
       window.removeEventListener('app:auth-stale', handleAuthStale);
-
-      if (socket) {
-        socketService.disconnect();
-      }
+      socketService.disconnect();
     };
   }, [location.pathname, navigate]);
 
@@ -698,9 +702,9 @@ function TaxiApp() {
               <Route path="privacy-policy" element={<LegalPage />} />
               <Route path="refund" element={<LegalPage />} />
               <Route path="cancellation" element={<LegalPage />} />
-              <Route path="login" element={<Navigate to="/login" replace />} />
-              <Route path="onboarding" element={<Navigate to="/login" replace />} />
-              <Route path="verify-otp" element={<Navigate to="/login" replace />} />
+              <Route path="login" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
+              <Route path="onboarding" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
+              <Route path="verify-otp" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
               <Route path="signup" element={<Signup />} />
 
               <Route path="ride/select-location" element={<SelectLocation />} />
@@ -798,12 +802,12 @@ function TaxiApp() {
               </Route>
 
               {/* User Module Routes (Taxi-prefixed aliases to match Driver style) */}
-              <Route path="user/onboarding" element={<Navigate to="/login" replace />} />
-              <Route path="user/login" element={<Navigate to="/login" replace />} />
+              <Route path="user/onboarding" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
+              <Route path="user/login" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
               <Route path="user/terms" element={<LegalPage />} />
               <Route path="user/privacy" element={<LegalPage />} />
               <Route path="user/refund" element={<LegalPage />} />
-              <Route path="user/verify-otp" element={<Navigate to="/login" replace />} />
+              <Route path="user/verify-otp" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
               <Route path="user/signup" element={<Signup />} />
               <Route path="user" element={<UserHomeRoute taxiPrefixed />} />
 

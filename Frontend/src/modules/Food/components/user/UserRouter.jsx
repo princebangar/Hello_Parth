@@ -46,9 +46,6 @@ const Offers = lazy(() => import("@food/pages/user/Offers"))
 // Gourmet
 const Gourmet = lazy(() => import("@food/pages/user/Gourmet"))
 
-// Grocery
-const QuickSection = lazy(() => import("@food/components/user/home/QuickSection"))
-
 
 // Collections
 const Collections = lazy(() => import("@food/pages/user/Collections"))
@@ -134,7 +131,7 @@ export default function UserRouter() {
             }
           />
           <Route path="under-250" element={<Under250 />} />
-          <Route path="grocery" element={<Navigate to="/food/user?vertical=grocery" replace />} />
+          <Route path="grocery" element={<Navigate to="/food/user" replace />} />
           <Route path="categories" element={<Categories />} />
           <Route path="category/:category" element={<CategoryPage />} />
           <Route path="restaurants" element={<Restaurants />} />
@@ -311,9 +308,9 @@ export default function UserRouter() {
           <Route path="profile/cancellation" element={<Cancellation />} />
 
           {/* Auth - User login is centralized at /user/auth/login */}
-          <Route path="auth/login" element={<Navigate to="/login" replace />} />
-          <Route path="auth/sign-in" element={<Navigate to="/login" replace />} />
-          <Route path="auth/otp" element={<Navigate to="/login" replace />} />
+          <Route path="auth/login" element={<Navigate to="/login" replace state={{ from: '/food/user' }} />} />
+          <Route path="auth/sign-in" element={<Navigate to="/login" replace state={{ from: '/food/user' }} />} />
+          <Route path="auth/otp" element={<Navigate to="/login" replace state={{ from: '/food/user' }} />} />
           <Route path="auth/callback" element={<AuthCallback />} />
 
           {/* Help */}

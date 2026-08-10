@@ -101,8 +101,6 @@ const SEARCH_HISTORY_KEY = "professional_search_history_v1"
 export default function ProfessionalSearch() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get("q") || ""
-  const isGrocerySearch = searchParams.get("vertical") === "grocery"
-  const isRestaurantParam = isGrocerySearch ? "false" : "true"
   const navigate = useNavigate()
   const { getDefaultAddress } = useProfile()
   const { location: userCoords, requestLocation } = useGeoLocation()
@@ -185,7 +183,7 @@ export default function ProfessionalSearch() {
 
   useEffect(() => {
     fetchCategories()
-  }, [zoneId, zoneStatus, zoneLoading, hasEffectiveCoordinates, isGrocerySearch, isRestaurantParam])
+  }, [zoneId, zoneStatus, zoneLoading, hasEffectiveCoordinates])
 
   useEffect(() => {
     const readMode = () => {
@@ -204,9 +202,8 @@ export default function ProfessionalSearch() {
 
   const fetchCategories = async () => {
     try {
-      const params = {}
+      const params = { isRestaurant: "true" }
       if (zoneId) params.zoneId = zoneId
-      if (isRestaurantParam) params.isRestaurant = isRestaurantParam
 
       const res = await searchAPI.getAdminCategories(params)
       const fetched = res.data?.data?.categories || res.data?.categories || []
@@ -217,7 +214,7 @@ export default function ProfessionalSearch() {
       }
 
       // Fallback: fetch all active categories without zone constraint
-      const fallbackRes = await searchAPI.getAdminCategories({ isRestaurant: isRestaurantParam })
+      const fallbackRes = await searchAPI.getAdminCategories({ isRestaurant: "true" })
       const fallbackCategories = fallbackRes.data?.data?.categories || fallbackRes.data?.categories || []
       setCategories(Array.isArray(fallbackCategories) ? fallbackCategories : [])
     } catch (err) {
@@ -225,11 +222,7 @@ export default function ProfessionalSearch() {
     }
   }
 
-  const buildSearchParams = useCallback((overrides = {}) => {
-    const next = { ...overrides }
-    if (isGrocerySearch) next.vertical = "grocery"
-    return next
-  }, [isGrocerySearch])
+  const buildSearchParams = useCallback((overrides = {}) => ({ ...overrides }), [])
 
   const addToHistory = (term) => {
     const newHistory = [term, ...history.filter(h => h !== term)].slice(0, 5)
@@ -256,7 +249,7 @@ export default function ProfessionalSearch() {
         lat: effectiveLocation?.latitude,
         lng: effectiveLocation?.longitude,
         zoneId,
-        isRestaurant: isRestaurantParam,
+        isRestaurant: "true",
       })
       
       const all = res.data?.data?.restaurants || res.data?.restaurants || []
@@ -270,7 +263,7 @@ export default function ProfessionalSearch() {
     } finally {
       setLoading(false)
     }
-  }, [effectiveLocation, zoneId, isRestaurantParam])
+  }, [effectiveLocation, zoneId])
 
   useEffect(() => {
     performSearch(debouncedQuery, selectedCategoryId)
@@ -341,7 +334,7 @@ export default function ProfessionalSearch() {
       } catch (_) {}
     }
 
-    const fallbackPath = isGrocerySearch ? '/food/user?vertical=grocery' : '/food/user'
+    const fallbackPath = '/food/user'
 
     setTimeout(() => {
       if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
@@ -372,7 +365,7 @@ export default function ProfessionalSearch() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input 
               autoFocus
-              placeholder={isGrocerySearch ? 'Search for stores or products...' : 'Search for restaurants or dishes...'} 
+              placeholder="Search for restaurants or dishes..." 
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="pl-10 pr-10 h-11 bg-slate-100 dark:bg-zinc-800 border-none focus:ring-2 focus:ring-rose-500 rounded-xl"
@@ -490,7 +483,7 @@ export default function ProfessionalSearch() {
                 <div className="flex items-center gap-2 mb-4">
                    <div className="w-1 h-5 bg-orange-500 rounded-full" />
                    <h2 className="text-lg font-bold dark:text-white">
-                     {isGrocerySearch ? 'Products from stores' : 'Dishes from restaurants'}
+                     Dishes from restaurants
                    </h2>
                 </div>
                 <div className="grid gap-4">
@@ -538,11 +531,6 @@ export default function ProfessionalSearch() {
                                </>
                              )}
                           </div>
-                          {isGrocerySearch && (
-                            <span className="mt-2 inline-flex w-fit rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                              Open now
-                            </span>
-                          )}
                        </div>
                     </Link>
                    );
@@ -557,7 +545,7 @@ export default function ProfessionalSearch() {
                 <div className="flex items-center gap-2 mb-4">
                    <div className="w-1 h-5 bg-rose-500 rounded-full" />
                    <h2 className="text-lg font-bold dark:text-white">
-                     {isGrocerySearch ? 'Stores' : 'Restaurants'}
+                     Restaurants
                    </h2>
                 </div>
                 <div className="grid gap-6">

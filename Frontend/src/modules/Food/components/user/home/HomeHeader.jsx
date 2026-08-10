@@ -10,7 +10,6 @@ import {
 import { Badge } from "@food/components/ui/badge";
 import foodIcon from "@food/assets/category-icons/food.png";
 import quickIcon from "@food/assets/category-icons/quick.png";
-import hotelIcon from "@food/assets/category-icons/hotel.png";
 import { useCart } from "@food/context/CartContext";
 import useNotificationInbox from "@food/hooks/useNotificationInbox";
 import { getVerticalTheme } from "@/shared/constants/superAppVerticalTheme";
@@ -40,13 +39,6 @@ const TAXI_PLACEHOLDERS = [
   'Search "bike taxi"',
   'Search "rental ride"',
   'Search "outstation"',
-];
-
-const GROCERY_PLACEHOLDERS = [
-  'Search "bread"',
-  'Search "milk"',
-  'Search "fruits"',
-  'Search "snacks"',
 ];
 
 function readHelloParthLocation() {
@@ -127,42 +119,14 @@ function TaxiIcon({ isActive }) {
   );
 }
 
-function GroceryIcon({ isActive }) {
-  if (isActive) {
-    return (
-      <svg className="w-8 h-8 filter drop-shadow-sm" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10 18H14L18 44H48L52 18H58" stroke="#14532D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M18 44H48L46 50C45.4 52.2 43.5 54 41 54H25C22.5 54 20.6 52.2 20 50L18 44Z" fill="#86EFAC" stroke="#14532D" strokeWidth="2.5" strokeLinejoin="round" />
-        <circle cx="24" cy="58" r="3" fill="#14532D" />
-        <circle cx="42" cy="58" r="3" fill="#14532D" />
-        <path d="M22 26H42C43.1 26 44 26.9 44 28V34C44 35.1 43.1 36 42 36H22C20.9 36 20 35.1 20 34V28C20 26.9 20.9 26 22 26Z" fill="#FEF9C3" stroke="#14532D" strokeWidth="2" />
-        <path d="M28 22C28 19 30 16 33 16C36 16 38 19 38 22" fill="#EF4444" stroke="#14532D" strokeWidth="2" />
-        <path d="M33 16V22" stroke="#14532D" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M46 30C48 28 50 28 52 30C54 32 54 34 52 36" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="w-8 h-8 opacity-70 text-white" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M10 18H14L18 44H48L52 18H58" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18 44H48L46 50C45.4 52.2 43.5 54 41 54H25C22.5 54 20.6 52.2 20 50L18 44Z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-      <circle cx="24" cy="58" r="3" fill="currentColor" />
-      <circle cx="42" cy="58" r="3" fill="currentColor" />
-      <path d="M28 22C28 19 30 16 33 16C36 16 38 19 38 22" stroke="currentColor" strokeWidth="2.5" />
-    </svg>
-  );
-}
-
 const renderVerticalIcon = (id, isActive) => {
   if (id === 'food') return <BurgerIcon isActive={isActive} />;
   if (id === 'taxi') return <TaxiIcon isActive={isActive} />;
-  if (id === 'grocery') return <GroceryIcon isActive={isActive} />;
   return null;
 };
 
 const foodTheme = getVerticalTheme('food');
 const taxiTheme = getVerticalTheme('taxi');
-const groceryTheme = getVerticalTheme('grocery');
 
 const VERTICALS = [
   {
@@ -182,15 +146,6 @@ const VERTICALS = [
     themeBg: taxiTheme.themeBg,
     activeTabBg: taxiTheme.activeTabBg,
     inactiveTabBg: taxiTheme.inactiveTabBg,
-  },
-  {
-    id: 'grocery',
-    name: 'Hello Parth Grocery',
-    path: '/food/user?vertical=grocery',
-    icon: hotelIcon,
-    themeBg: groceryTheme.themeBg,
-    activeTabBg: groceryTheme.activeTabBg,
-    inactiveTabBg: groceryTheme.inactiveTabBg,
   },
 ];
 
@@ -222,20 +177,15 @@ export default function HomeHeader({
   let routeVertical = 'food';
   if (locationPath.startsWith('/taxi/')) {
     routeVertical = 'taxi';
-  } else if (locationPath.includes('/food/user/grocery') || locationPath.includes('/grocery')) {
-    routeVertical = 'grocery';
-  } else if (new URLSearchParams(reactLocation.search).get('vertical') === 'grocery') {
-    routeVertical = 'grocery';
-  } else if (['food', 'taxi', 'grocery'].includes(activeVerticalProp)) {
+  } else if (['food', 'taxi'].includes(activeVerticalProp)) {
     routeVertical = activeVerticalProp;
   }
 
   const activeVertical = isControlled
-    ? (['food', 'taxi', 'grocery'].includes(activeVerticalProp) ? activeVerticalProp : 'food')
+    ? (['food', 'taxi'].includes(activeVerticalProp) ? activeVerticalProp : 'food')
     : (activeVerticalProp ?? routeVertical);
   const isFood = activeVertical === 'food';
   const isTaxi = activeVertical === 'taxi';
-  const isGrocery = activeVertical === 'grocery';
 
   const handleVerticalTabClick = useCallback((verticalId) => {
     if (isControlled) {
@@ -251,7 +201,7 @@ export default function HomeHeader({
       navigate('/taxi/user');
       return;
     }
-    navigate(`/food/user?vertical=${verticalId}`);
+    navigate('/food/user');
   }, [isControlled, onVerticalChange, navigate]);
 
   const currentVertical = VERTICALS.find((v) => v.id === activeVertical) || VERTICALS[0];
@@ -302,9 +252,8 @@ export default function HomeHeader({
   const resolvedPlaceholders = useMemo(() => {
     if (placeholdersProp?.length) return placeholdersProp;
     if (isTaxi) return TAXI_PLACEHOLDERS;
-    if (isGrocery) return GROCERY_PLACEHOLDERS;
     return FOOD_PLACEHOLDERS;
-  }, [placeholdersProp, isTaxi, isGrocery]);
+  }, [placeholdersProp, isTaxi]);
 
   const placeholderIndex = placeholderIndexProp ?? internalPlaceholderIndex;
 
@@ -323,12 +272,8 @@ export default function HomeHeader({
     }
     if (isTaxi) {
       navigate('/taxi/user/ride/select-location');
-      return;
     }
-    if (isGrocery) {
-      navigate('/food/user/grocery');
-    }
-  }, [handleLocationClick, isTaxi, isGrocery, navigate]);
+  }, [handleLocationClick, isTaxi, navigate]);
 
   const onSearchFocus = useCallback(() => {
     if (handleSearchFocus) {
@@ -341,12 +286,8 @@ export default function HomeHeader({
     }
     if (isFood) {
       navigate('/food/user/search');
-      return;
     }
-    if (isGrocery) {
-      navigate('/food/user/search?vertical=grocery');
-    }
-  }, [handleSearchFocus, isTaxi, isFood, isGrocery, navigate]);
+  }, [handleSearchFocus, isTaxi, isFood, navigate]);
 
   const walletPath = isTaxi ? '/taxi/user/wallet' : '/food/user/wallet';
 

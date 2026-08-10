@@ -140,6 +140,16 @@ const buildFaviconHref = (faviconUrl = '') => {
   return `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
 };
 
+const normalizeAppDisplayName = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Hello Parth';
+  const lower = raw.toLowerCase();
+  if (lower === 'appzeto' || lower.includes('appzeto') || lower === 'app') {
+    return 'Hello Parth';
+  }
+  return raw;
+};
+
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS_CONTEXT.settings);
   const [loading, setLoading] = useState(true);
@@ -148,9 +158,13 @@ export const SettingsProvider = ({ children }) => {
     try {
       const bootstrapResponse = await api.get('/common/settings');
       const bootstrapData = bootstrapResponse?.data?.data || bootstrapResponse?.data || {};
+      const general = {
+        ...(bootstrapData.general || {}),
+        app_name: normalizeAppDisplayName(bootstrapData.general?.app_name),
+      };
 
       setSettings({
-        general: bootstrapData.general || {},
+        general,
         customization: bootstrapData.customization || {},
         transportRide: bootstrapData.transportRide || { enable_bus_service: '0' },
         bidRide: bootstrapData.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
@@ -168,8 +182,7 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const appName = settings.general?.app_name || 'App';
-    document.title = appName;
+    document.title = normalizeAppDisplayName(settings.general?.app_name);
 
     const favicon = settings.general?.favicon || settings.customization?.favicon;
     if (favicon) {

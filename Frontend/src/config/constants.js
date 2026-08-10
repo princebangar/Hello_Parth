@@ -6,7 +6,6 @@
 export const MODULES = {
   FOOD: 'Food',
   TAXI: 'taxi',
-  QUICK_COMMERCE: 'quickCommerce',
 };
 
 export const ROLES = {

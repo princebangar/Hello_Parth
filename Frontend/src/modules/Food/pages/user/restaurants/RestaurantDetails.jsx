@@ -197,12 +197,9 @@ function RestaurantDetailsContent() {
       if (isRecommended) return ""
       const itemKey = getMenuItemKey(item)
       if (!highlightedDishId || itemKey !== highlightedDishId) return ""
-      const isGroceryStore = restaurant?.isRestaurant === false
-      return isGroceryStore
-        ? "bg-emerald-50 ring-2 ring-[#1A9E5C] ring-inset dark:bg-emerald-950/20"
-        : "bg-orange-50 ring-2 ring-[#EB590E] ring-inset dark:bg-orange-950/20"
+      return "bg-orange-50 ring-2 ring-[#EB590E] ring-inset dark:bg-orange-950/20"
     },
-    [getMenuItemKey, highlightedDishId, restaurant?.isRestaurant],
+    [getMenuItemKey, highlightedDishId],
   )
 
   // One completed load per slug — prevents zone/location updates from re-spamming APIs.
@@ -630,7 +627,7 @@ function RestaurantDetailsContent() {
             isAcceptingOrders: actualRestaurant?.isAcceptingOrders !== false, // Default to true if not specified
             pricingAttributes: Array.isArray(actualRestaurant?.pricingAttributes) ? actualRestaurant.pricingAttributes : (Array.isArray(apiRestaurant?.pricingAttributes) ? apiRestaurant.pricingAttributes : []),
             pureVegRestaurant: actualRestaurant?.pureVegRestaurant === true || apiRestaurant?.pureVegRestaurant === true || actualRestaurant?.pureVeg === true || apiRestaurant?.pureVeg === true,
-            // isRestaurant flag from backend — false means it is a grocery/quick-commerce store
+            // Food outlet flag from backend
             isRestaurant: actualRestaurant?.isRestaurant !== false && apiRestaurant?.isRestaurant !== false,
           }
 
@@ -1996,12 +1993,8 @@ function RestaurantDetailsContent() {
   }, [highlightOffers.length])
 
   const handleBack = useCallback(() => {
-    if (restaurant?.isRestaurant === false) {
-      navigate("/food/user?vertical=grocery")
-      return
-    }
     goBack()
-  }, [restaurant?.isRestaurant, navigate, goBack])
+  }, [goBack])
 
   // Show loading state until the current slug fetch fully completes
   if (!isContentReady) {

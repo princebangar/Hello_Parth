@@ -5,7 +5,7 @@ import { ShieldCheck, Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
 import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
 import { setUnifiedAuthData, isUnifiedAuthenticated } from "@food/utils/auth"
-import { resolvePostLoginRoute } from "@/shared/utils/activeModule.js"
+import { resolveLoginBackRoute, rememberLoginReturnTo } from "@/shared/utils/activeModule.js"
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
@@ -25,9 +25,13 @@ export default function UnifiedOTPFastLogin() {
 
   // Dismiss soft keyboard on unmount & auto-redirect if already logged in
   useEffect(() => {
+    const fromPath = location.state?.from
+    if (fromPath) {
+      rememberLoginReturnTo(fromPath)
+    }
+
     if (isUnifiedAuthenticated()) {
-      const fromPath = location.state?.from || resolvePostLoginRoute()
-      navigate(fromPath, { replace: true })
+      navigate(resolveLoginBackRoute(fromPath), { replace: true })
     }
     return () => {
       if (typeof document !== 'undefined') {
@@ -65,19 +69,12 @@ export default function UnifiedOTPFastLogin() {
       setStep(1)
       return
     }
-    const fromPath = location.state?.from
-    const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
-    const fallbackPath = currentPath.includes('taxi') ? '/taxi/user' : '/food/user'
 
-    const targetPath = (fromPath && fromPath !== '/login' && !fromPath.includes('/auth/login')) ? fromPath : fallbackPath
+    const targetPath = resolveLoginBackRoute(location.state?.from)
 
-    // Wait 30ms for browser soft keyboard dismiss animation to complete before unmounting input
+    // Wait 30ms for soft keyboard dismiss before unmounting inputs.
     setTimeout(() => {
-      if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
-        navigate(-1)
-      } else {
-        navigate(targetPath, { replace: true })
-      }
+      navigate(targetPath, { replace: true })
     }, 30)
   }
 
@@ -143,9 +140,9 @@ export default function UnifiedOTPFastLogin() {
   // Check if already logged in on mount
   useEffect(() => {
     if (isUnifiedAuthenticated()) {
-      navigate(resolvePostLoginRoute(), { replace: true })
+      navigate(resolveLoginBackRoute(location.state?.from), { replace: true })
     }
-  }, [navigate])
+  }, [location.state?.from, navigate])
 
   const normalizedPhone = () => {
     const digits = String(phoneNumber).replace(/\D/g, "").slice(-15)
@@ -338,7 +335,7 @@ export default function UnifiedOTPFastLogin() {
         console.warn("[Auth] FCM save route failed after login:", fcmSaveError?.message || fcmSaveError)
       }
       toast.success("Authentication successful!")
-      const targetRoute = location.state?.from || resolvePostLoginRoute()
+      const targetRoute = resolveLoginBackRoute(location.state?.from)
       navigate(targetRoute, { replace: true })
     } catch (err) {
       const status = err?.response?.status
@@ -397,7 +394,7 @@ export default function UnifiedOTPFastLogin() {
 
       setUnifiedAuthData(nextData)
       toast.success("Profile completed successfully!")
-      const targetRoute = location.state?.from || resolvePostLoginRoute()
+      const targetRoute = resolveLoginBackRoute(location.state?.from)
       navigate(targetRoute, { replace: true })
     } catch (err) {
       const msg =
@@ -505,10 +502,6 @@ export default function UnifiedOTPFastLogin() {
             <button
               type="button"
               onClick={handleBack}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                handleBack(e);
-              }}
               className="w-10 h-10 rounded-full bg-white hover:bg-gray-50 active:scale-95 flex items-center justify-center text-[#1A1A1A] transition-all border border-gray-300 shadow-md cursor-pointer pointer-events-auto relative z-[100]"
               aria-label="Back"
             >
