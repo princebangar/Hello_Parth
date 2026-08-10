@@ -1,0 +1,568 @@
+import crypto from 'crypto';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+import { FoodUser } from '../users/user.model.js';
+import { FoodRestaurant } from '../../modules/food/restaurant/models/restaurant.model.js';
+import { FoodDeliveryPartner } from '../../modules/food/delivery/models/deliveryPartner.model.js';
+import { FoodAdmin } from '../admin/admin.model.js';
+import { Driver as TaxiDriver } from '../../modules/taxi/driver/models/Driver.js';
+import { BusDriver as TaxiBusDriver } from '../../modules/taxi/driver/models/BusDriver.js';
+import { Owner as TaxiOwner } from '../../modules/taxi/admin/models/Owner.js';
+import { ServiceStore as TaxiServiceStore } from '../../modules/taxi/admin/models/ServiceStore.js';
+import { ServiceCenterStaff as TaxiServiceCenterStaff } from '../../modules/taxi/admin/models/ServiceCenterStaff.js';
+import { config } from '../../config/env.js';
+import { resolveRoomOwnerId } from '../../config/socket.js';
+import { logger } from '../../utils/logger.js';
+import { AuthError } from '../auth/errors.js';
+
+const FIREBASE_MESSAGING_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const FCM_SEND_URL = (projectId) =>
+    `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`;
+const OWNER_MODELS = {
+    USER: FoodUser,
+    RESTAURANT: FoodRestaurant,
+    DELIVERY_PARTNER: FoodDeliveryPartner,
+    ADMIN: FoodAdmin,
+    DRIVER: TaxiDriver,
+    BUS_DRIVER: TaxiBusDriver,
+    OWNER: TaxiOwner,
+    SERVICE_CENTER: TaxiServiceStore,
+    SERVICE_CENTER_STAFF: TaxiServiceCenterStaff
+};
+const OWNER_ROLE_ALIASES = {
+    USER: 'USER',
+    RESTAURANT: 'RESTAURANT',
+    DELIVERY_PARTNER: 'DELIVERY_PARTNER',
+    ADMIN: 'ADMIN',
+    TAXI_USER: 'USER',
+    DRIVER: 'DRIVER',
+    BUS_DRIVER: 'BUS_DRIVER',
+    OWNER: 'OWNER',
+    SERVICE_CENTER: 'SERVICE_CENTER',
+    SERVICE_CENTER_STAFF: 'SERVICE_CENTER_STAFF'
+};
+const OWNER_TOKEN_FIELD_CONFIG = {
+    USER: { web: 'fcmTokens', mobile: 'fcmTokenMobile' },
+    RESTAURANT: { web: 'fcmTokens', mobile: 'fcmTokenMobile' },
+    DELIVERY_PARTNER: { web: 'fcmTokens', mobile: 'fcmTokenMobile' },
+    ADMIN: { web: 'fcmTokens', mobile: 'fcmTokenMobile' },
+    DRIVER: { web: 'fcmTokenWeb', mobile: 'fcmTokenMobile' },
+    BUS_DRIVER: { web: 'fcmTokenWeb', mobile: 'fcmTokenMobile' },
+    OWNER: { web: 'fcmTokenWeb', mobile: 'fcmTokenMobile' },
+    SERVICE_CENTER: { web: 'fcmTokenWeb', mobile: 'fcmTokenMobile' },
+    SERVICE_CENTER_STAFF: { web: 'fcmTokenWeb', mobile: 'fcmTokenMobile' }
+};
+const OWNER_APP_PREFIXES = {
+    USER: '👤',
+    RESTAURANT: '🏪',
+    DELIVERY_PARTNER: '🛵',
+    ADMIN: '🛡️'
+};
+
+let cachedAccessToken = null;
+let cachedAccessTokenExpiryMs = 0;
+let cachedServiceAccount = null;
+
+const sanitizeString = (value) => String(value ?? '').trim();
+const previewToken = (token) => {
+    const normalized = sanitizeString(token);
+    if (!normalized) return '<empty>';
+    if (normalized.length <= 16) return normalized;
+    return `${normalized.slice(0, 8)}...${normalized.slice(-8)}`;
+};
+
+const toBase64Url = (input) =>
+    Buffer.from(JSON.stringify(input))
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+
+const normalizePrivateKey = (key) => String(key || '').replace(/\\n/g, '\n').trim();
+
+const getServiceAccountFromEnv = () => {
+    if (cachedServiceAccount) return cachedServiceAccount;
+
+    const pathValue = sanitizeString(config.firebaseServiceAccountPath || process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+    if (pathValue) {
+        const filePath = resolve(process.cwd(), pathValue);
+        if (existsSync(filePath)) {
+            cachedServiceAccount = JSON.parse(readFileSync(filePath, 'utf8'));
+            return cachedServiceAccount;
+        }
+    }
+
+    const rawJson = sanitizeString(config.firebaseServiceAccount || process.env.FIREBASE_SERVICE_ACCOUNT);
+    if (rawJson) {
+        cachedServiceAccount = JSON.parse(rawJson);
+        return cachedServiceAccount;
+    }
+
+    throw new Error('Firebase service account is not configured. Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT.');
+};
+
+const getFirebaseProjectId = () => {
+    const account = getServiceAccountFromEnv();
+    const projectId =
+        sanitizeString(config.firebaseProjectId) ||
+        sanitizeString(account.project_id) ||
+        sanitizeString(process.env.FIREBASE_PROJECT_ID);
+    if (!projectId) {
+        throw new Error('Firebase project ID is not configured.');
+    }
+    return projectId;
+};
+
+const getFirebaseAccessToken = async () => {
+    const now = Date.now();
+    if (cachedAccessToken && cachedAccessTokenExpiryMs - now > 60_000) {
+        return cachedAccessToken;
+    }
+
+    const account = getServiceAccountFromEnv();
+    const privateKey = normalizePrivateKey(account.private_key);
+    if (!account.client_email || !privateKey) {
+        throw new Error('Firebase service account is missing client_email or private_key.');
+    }
+
+    const iat = Math.floor(now / 1000);
+    const exp = iat + 3600;
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const payload = {
+        iss: account.client_email,
+        scope: FIREBASE_MESSAGING_SCOPE,
+        aud: OAUTH_TOKEN_URL,
+        iat,
+        exp
+    };
+
+    const jwtUnsigned = `${toBase64Url(header)}.${toBase64Url(payload)}`;
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(jwtUnsigned);
+    signer.end();
+    const signature = signer.sign(privateKey, 'base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    const assertion = `${jwtUnsigned}.${signature}`;
+
+    const body = new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion
+    });
+
+    const response = await fetch(OAUTH_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Firebase OAuth token exchange failed (${response.status}): ${text}`);
+    }
+
+    const json = await response.json();
+    cachedAccessToken = json.access_token;
+    cachedAccessTokenExpiryMs = now + ((Number(json.expires_in) || 3600) * 1000);
+    return cachedAccessToken;
+};
+
+const normalizeDataMap = (data = {}) => {
+    const result = {};
+    for (const [key, value] of Object.entries(data || {})) {
+        if (value === undefined || value === null) continue;
+        result[String(key)] = String(value);
+    }
+    return result;
+};
+
+const buildMessagePayload = (payload = {}, token) => {
+    const notification = {
+        title: sanitizeString(payload.title || payload.notification?.title || 'New notification'),
+        body: sanitizeString(payload.body || payload.notification?.body || '')
+    };
+    const data = normalizeDataMap(payload.data || {});
+    const image =
+        sanitizeString(payload.icon || payload.notification?.image || payload.notification?.icon || data.image || data.imageUrl);
+
+    // If payload.dataOnly is true, we omit the 'notification' block.
+    // This prevents FCM from auto-displaying while allowing app code to show a 'Local Notification'.
+    const message = { token };
+
+    if (!payload.dataOnly) {
+        message.notification = notification;
+        if (image) {
+            message.notification.image = image;
+        }
+    }
+
+    if (Object.keys(data).length > 0) {
+        message.data = data;
+    }
+
+    message.android = {
+        priority: 'high',
+        notification: {
+            channel_id: 'default',
+            sound: 'default',
+            default_vibrate_timings: true,
+            default_light_settings: true
+        }
+    };
+
+    message.webpush = {
+        headers: {
+            Urgency: 'high'
+        },
+        notification: {
+            title: notification.title,
+            body: notification.body,
+            icon: image || payload.icon || '/favicon.ico'
+        }
+    };
+
+    return message;
+};
+
+const parseFirebaseError = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        try {
+            const text = await response.text();
+            return { error: { message: text } };
+        } catch {
+            return { error: { message: 'Unknown Firebase error' } };
+        }
+    }
+};
+
+const shouldRemoveTokenFromError = (errorJson, response) => {
+    const status = response?.status;
+    const message = String(errorJson?.error?.message || '').toUpperCase();
+    return status === 404 || message.includes('UNREGISTERED') || message.includes('INVALID_ARGUMENT');
+};
+
+const normalizeOwnerType = (ownerType) => {
+    const normalized = String(ownerType || '').trim().toUpperCase();
+    return OWNER_ROLE_ALIASES[normalized] || null;
+};
+
+const getOwnerModel = (ownerType) => OWNER_MODELS[normalizeOwnerType(ownerType)] || null;
+
+const getTokenFieldForOwnerPlatform = (ownerType, platform) => {
+    const normalizedOwnerType = normalizeOwnerType(ownerType);
+    const config = OWNER_TOKEN_FIELD_CONFIG[normalizedOwnerType];
+    if (!config) return null;
+    return platform === 'mobile' ? config.mobile : config.web;
+};
+
+const normalizeTokenList = (tokens = []) => {
+    const normalized = [...new Set((Array.isArray(tokens) ? tokens : [tokens]).map(sanitizeString).filter(Boolean))];
+    return normalized.slice(-10);
+};
+
+const readTokenFieldAsList = (doc, fieldName) => {
+    if (!doc || !fieldName) return [];
+    return normalizeTokenList(doc[fieldName] || []);
+};
+
+const writeTokenFieldFromList = (doc, fieldName, tokens) => {
+    const normalizedTokens = normalizeTokenList(tokens);
+    if (!fieldName) return;
+    if (Array.isArray(doc[fieldName])) {
+        doc[fieldName] = normalizedTokens;
+        return;
+    }
+    // Scalar token fields (e.g. TaxiDriver.fcmTokenMobile) should keep the latest token.
+    doc[fieldName] = normalizedTokens[normalizedTokens.length - 1] || '';
+};
+
+const readTokensFromDoc = (doc, platform) => {
+    if (!doc) return [];
+    if (platform) {
+        const field = getTokenFieldForOwnerPlatform(doc.__ownerType, platform);
+        return readTokenFieldAsList(doc, field);
+    }
+    const webField = getTokenFieldForOwnerPlatform(doc.__ownerType, 'web');
+    const mobileField = getTokenFieldForOwnerPlatform(doc.__ownerType, 'mobile');
+    return normalizeTokenList([...readTokenFieldAsList(doc, webField), ...readTokenFieldAsList(doc, mobileField)]);
+};
+
+export const listOwnerTokens = async ({ ownerType, ownerId, platform }) => {
+    if (!ownerType || !ownerId) return [];
+    const normalizedOwnerId = resolveRoomOwnerId(ownerId);
+    if (!normalizedOwnerId) return [];
+    const model = getOwnerModel(ownerType);
+    if (!model) return [];
+    const doc = await model.findById(normalizedOwnerId).select('fcmTokens fcmTokenMobile fcmTokenWeb').lean();
+    if (doc) doc.__ownerType = ownerType;
+    return readTokensFromDoc(doc, platform);
+};
+
+export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, platform = 'web' }) => {
+    const normalizedToken = sanitizeString(token);
+
+    if (!ownerType || !ownerId || !normalizedToken) {
+        throw new Error('ownerType, ownerId, and token are required.');
+    }
+
+    const normalizedOwnerId = resolveRoomOwnerId(ownerId);
+    if (!normalizedOwnerId) {
+        throw new Error('ownerType, ownerId, and token are required.');
+    }
+
+    const normalizedPlatform = platform === 'mobile' ? 'mobile' : 'web';
+    const model = getOwnerModel(ownerType);
+    if (!model) {
+        throw new Error(`Unsupported owner type: ${ownerType}`);
+    }
+
+    const doc = await model.findById(normalizedOwnerId).select('fcmTokens fcmTokenMobile fcmTokenWeb').lean();
+    if (!doc) {
+        throw new AuthError('Session is stale or invalid for this account. Please login again.');
+    }
+
+    const field = getTokenFieldForOwnerPlatform(ownerType, normalizedPlatform);
+    if (!field) {
+        throw new Error(`Unsupported owner type: ${ownerType}`);
+    }
+    const existingTokens = readTokenFieldAsList(doc, field);
+    logger.info(
+        `[FCM Service] upsert start ownerType=${normalizeOwnerType(ownerType)} ownerId=${ownerId} platform=${normalizedPlatform} field=${field} existingCount=${existingTokens.length} tokenPreview=${previewToken(normalizedToken)}`
+    );
+
+    const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
+    const updateValue = Array.isArray(doc[field]) ? tokens : (tokens[tokens.length - 1] || '');
+
+    await model.updateOne({ _id: normalizedOwnerId }, { $set: { [field]: updateValue } });
+    logger.info(
+        `[FCM Service] upsert success ownerType=${normalizeOwnerType(ownerType)} ownerId=${ownerId} platform=${normalizedPlatform} field=${field} newCount=${tokens.length} tokenPresent=${tokens.includes(normalizedToken)}`
+    );
+    return { success: true };
+};
+
+export const removeFirebaseDeviceToken = async ({ ownerType, ownerId, token, platform }) => {
+    const normalizedToken = sanitizeString(token);
+    if (!ownerType || !ownerId || !normalizedToken) {
+        throw new Error('ownerType, ownerId, and token are required.');
+    }
+    const model = getOwnerModel(ownerType);
+    if (!model) {
+        throw new Error(`Unsupported owner type: ${ownerType}`);
+    }
+    const doc = await model.findById(ownerId).select('fcmTokens fcmTokenMobile fcmTokenWeb').lean();
+    if (!doc) {
+        return { success: false };
+    }
+
+    const updates = {};
+    if (platform) {
+        const field = getTokenFieldForOwnerPlatform(ownerType, platform);
+        if (field) {
+            const existing = readTokenFieldAsList(doc, field);
+            const remaining = existing.filter((t) => t !== normalizedToken);
+            updates[field] = Array.isArray(doc[field]) ? remaining : (remaining[remaining.length - 1] || '');
+        }
+    } else {
+        const webField = getTokenFieldForOwnerPlatform(ownerType, 'web');
+        const mobileField = getTokenFieldForOwnerPlatform(ownerType, 'mobile');
+        if (webField) {
+            const existingWeb = readTokenFieldAsList(doc, webField).filter((t) => t !== normalizedToken);
+            updates[webField] = Array.isArray(doc[webField]) ? existingWeb : (existingWeb[existingWeb.length - 1] || '');
+        }
+        if (mobileField) {
+            const existingMobile = readTokenFieldAsList(doc, mobileField).filter((t) => t !== normalizedToken);
+            updates[mobileField] = Array.isArray(doc[mobileField]) ? existingMobile : (existingMobile[existingMobile.length - 1] || '');
+        }
+    }
+
+    if (Object.keys(updates).length > 0) {
+        await model.updateOne({ _id: ownerId }, { $set: updates });
+    }
+    return { success: true };
+};
+
+export const sendPushNotification = async (tokens, payload = {}) => {
+    const projectId = getFirebaseProjectId();
+    const accessToken = await getFirebaseAccessToken();
+    const uniqueTokens = normalizeTokenList(tokens);
+
+    if (uniqueTokens.length === 0) {
+        return { successCount: 0, failureCount: 0, results: [] };
+    }
+
+    const results = await Promise.all(
+        uniqueTokens.map(async (token) => {
+            const message = buildMessagePayload(payload, token);
+            try {
+                const response = await fetch(FCM_SEND_URL(projectId), {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message })
+                });
+
+                if (!response.ok) {
+                    const errorJson = await parseFirebaseError(response);
+                    const errorMessage = errorJson?.error?.message || `FCM send failed (${response.status})`;
+                    if (String(errorMessage).toLowerCase().includes('senderid mismatch')) {
+                        logger.error(
+                            `[FCM] SenderId mismatch: device tokens were registered with a different Firebase project than FIREBASE_SERVICE_ACCOUNT. Align Backend FIREBASE_SERVICE_ACCOUNT with Frontend VITE_FIREBASE_PROJECT_ID (${getFirebaseProjectId()}).`,
+                        );
+                    }
+                    return {
+                        token,
+                        ok: false,
+                        remove: shouldRemoveTokenFromError(errorJson, response),
+                        error: errorMessage
+                    };
+                }
+
+                return {
+                    token,
+                    ok: true,
+                    response: await response.json()
+                };
+            } catch (error) {
+                return {
+                    token,
+                    ok: false,
+                    remove: false,
+                    error: error?.message || String(error)
+                };
+            }
+        })
+    );
+
+    const successCount = results.filter((result) => result.ok).length;
+    const failureCount = results.length - successCount;
+    return { successCount, failureCount, results };
+};
+
+export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, platform } = {}) => {
+    // 💡 Clone the payload to avoid side-effects (e.g. adding multiple prefixes to the same object during broadcasting)
+    const enrichedPayload = { ...payload };
+
+    // 🏷️ Add Highlighter Prefix to the Title
+    // Zomato/Swiggy style: keep notification title as is without emoji prefixes or custom highlighter
+    // If title is missing, fallback to notification.title or a generic placeholder
+    if (!enrichedPayload.title && enrichedPayload.notification?.title) {
+        enrichedPayload.title = enrichedPayload.notification.title;
+    }
+    // No additional prefixes are added
+
+    const tokens = await listOwnerTokens({ ownerType, ownerId, platform });
+    if (!tokens.length) {
+        logger.warn(`FCM push skipped: no tokens for ${ownerType}:${resolveRoomOwnerId(ownerId)}`);
+        return { successCount: 0, failureCount: 0, results: [] };
+    }
+    try {
+        console.log(`[FCM] Sending to ${ownerType}:${ownerId}. Title: "${enrichedPayload.title || 'Data Only'}"`);
+        const response = await sendPushNotification(tokens, enrichedPayload);
+        const invalidTokens = (response.results || [])
+
+            .filter((item) => !item.ok && item.remove)
+            .map((item) => item.token)
+            .filter(Boolean);
+        if (invalidTokens.length > 0) {
+            const model = getOwnerModel(ownerType);
+            const doc = model ? await model.findById(ownerId).select('fcmTokens fcmTokenMobile fcmTokenWeb').lean() : null;
+            if (doc) {
+                const fieldNames = platform
+                    ? [getTokenFieldForOwnerPlatform(ownerType, platform)]
+                    : [getTokenFieldForOwnerPlatform(ownerType, 'web'), getTokenFieldForOwnerPlatform(ownerType, 'mobile')];
+                const updates = {};
+                for (const field of fieldNames) {
+                    if (!field) continue;
+                    const remaining = readTokenFieldAsList(doc, field).filter((t) => !invalidTokens.includes(t));
+                    updates[field] = Array.isArray(doc[field]) ? remaining : (remaining[remaining.length - 1] || '');
+                }
+                if (Object.keys(updates).length > 0) {
+                    await model.updateOne({ _id: ownerId }, { $set: updates });
+                }
+            }
+        }
+        logger.info(
+            `FCM push sent to ${ownerType}:${ownerId} (${platform || 'all'}). Success=${response.successCount}, Failure=${response.failureCount}`
+        );
+        return response;
+    } catch (error) {
+        logger.warn(`FCM push failed for ${ownerType}:${ownerId}: ${error.message}`);
+        return { successCount: 0, failureCount: tokens.length, error: error.message };
+    }
+};
+
+export const sendNotificationToOwners = async (targets = [], payload = {}) => {
+    // 🔍 Tip #6: Deduplicate targets by ownerType:ownerId before sending
+    // This prevents duplicate notifications if the same person is listed twice (e.g. as USER and partner)
+    const uniqueTargets = Array.isArray(targets)
+        ? [...new Map(targets.filter(t => t?.ownerType && t?.ownerId).map(t => [`${t.ownerType}:${t.ownerId}`, t])).values()]
+        : [];
+
+    const results = [];
+    for (const target of uniqueTargets) {
+        results.push(
+            await sendNotificationToOwner({
+                ownerType: target.ownerType,
+                ownerId: target.ownerId,
+                platform: target.platform,
+                payload
+            })
+        );
+    }
+    return results;
+};
+
+export const notifyAdminsSafely = async (payload = {}) => {
+    try {
+        const admins = await FoodAdmin.find({ isActive: true }).select('_id').lean();
+        if (!admins.length) return [];
+
+        const targets = admins.map(a => ({
+            ownerType: 'ADMIN',
+            ownerId: String(a._id)
+        }));
+
+        return await sendNotificationToOwners(targets, payload);
+    } catch (e) {
+        logger.error(`Error notifying admins: ${e.message}`);
+        return [];
+    }
+};
+
+export const sendTestNotification = async ({ ownerType, ownerId, platform }) => {
+    return sendNotificationToOwner({
+        ownerType,
+        ownerId,
+        platform,
+        payload: {
+            title: 'Test Notification',
+            body: 'This is a test notification from Firebase push',
+            data: {
+                type: 'test',
+                link: '/'
+            }
+        }
+    });
+};
+export const notifyOwnerSafely = async (target = {}, payload = {}) => {
+    try {
+        return await sendNotificationToOwner({ ...target, payload });
+    } catch (error) {
+        logger.warn(`FCM individual push failed: ${error.message}`);
+        return null;
+    }
+};
+
+export const notifyOwnersSafely = async (targets = [], payload = {}) => {
+    try {
+        return await sendNotificationToOwners(targets, payload);
+    } catch (error) {
+        logger.warn(`FCM broadcast push failed: ${error.message}`);
+        return [];
+    }
+};
