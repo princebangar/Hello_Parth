@@ -10,7 +10,7 @@ import mobilityBanner from '@/assets/images/mobility-banner-cartoony.png';
 const AuthLayout = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const appName = settings.general?.app_name || 'Eqosy';
+  const appName = settings.general?.app_name || 'Hello Parth';
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
 
   const handleClose = () => {

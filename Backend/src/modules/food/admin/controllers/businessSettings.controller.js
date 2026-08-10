@@ -8,8 +8,8 @@ export async function getBusinessSettings(req, res, next) {
         if (!settings) {
             // Create default settings if none exist
             settings = await FoodBusinessSettings.create({
-                companyName: 'Eqosy',
-                email: 'admin@eqosy.com'
+                companyName: 'Hello Parth',
+                email: 'admin@helloparth.com'
             });
         }
         return sendResponse(res, 200, 'Business settings fetched successfully', settings);

@@ -39,7 +39,7 @@ const FEATURE_META = {
   '/cab-sharing': {
     icon: <Bus size={48} strokeWidth={1.5} />,
     title: 'Cab Sharing',
-    subtitle: 'Share rides, save big — Eqosy\'s USP',
+    subtitle: 'Share rides, save big — Hello Parth\'s USP',
     description: 'Real-time seat booking in shared cabs. Choose your seat, split the fare, and travel smart.',
     color: 'bg-green-50',
     accent: 'text-green-600',
@@ -65,7 +65,7 @@ const ComingSoon = () => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const meta = FEATURE_META[location.pathname] || DEFAULT_META;
-  const subtitle = String(meta.subtitle || '').replace(/Eqosy/gi, appName);
+  const subtitle = String(meta.subtitle || '').replace(/Hello Parth/gi, appName);
 
   return (
     <div className="min-h-screen bg-white max-w-lg mx-auto flex flex-col font-sans">

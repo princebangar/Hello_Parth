@@ -27,11 +27,11 @@ const ROLES = {
 };
 
 const DEFAULT_CREDENTIALS = {
-  adminEmail: String(process.env.DEFAULT_ADMIN_EMAIL || "Eqosyindia@gmail.com")
+  adminEmail: String(process.env.DEFAULT_ADMIN_EMAIL || "helloparthindia@gmail.com")
     .trim()
     .toLowerCase(),
   adminPassword: String(
-    process.env.DEFAULT_ADMIN_PASSWORD || "sahin.eqosy@2004#",
+    process.env.DEFAULT_ADMIN_PASSWORD || "Helloparth@2026",
   ),
   userPhone: String(process.env.DEFAULT_USER_PHONE || "7974161582"),
   restaurantPhone: String(process.env.DEFAULT_RESTAURANT_PHONE || "7974161582"),
@@ -299,7 +299,7 @@ export const adminLogin = async (email, password) => {
     admin = await FoodAdmin.create({
       email: DEFAULT_CREDENTIALS.adminEmail,
       password: DEFAULT_CREDENTIALS.adminPassword,
-      name: "Eqosy Admin",
+      name: "Hello Parth Admin",
       isActive: true,
       active: true,
       adminLevel: ADMIN_LEVELS.PLATFORM_SUPERADMIN,
@@ -381,9 +381,9 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
   if (!restaurantDoc && isDefaultPhone(phone, DEFAULT_CREDENTIALS.restaurantPhone)) {
     // Auto-provision default restaurant account for configured default phone.
     restaurantDoc = await FoodRestaurant.create({
-      restaurantName: "Eqosy Demo Restaurant",
-      ownerName: "Eqosy Restaurant Owner",
-      ownerEmail: "restaurant@eqosy.com",
+      restaurantName: "Hello Parth Demo Restaurant",
+      ownerName: "Hello Parth Restaurant Owner",
+      ownerEmail: "restaurant@helloparth.com",
       ownerPhone: normalizePhone10(DEFAULT_CREDENTIALS.restaurantPhone),
       primaryContactNumber: normalizePhone10(DEFAULT_CREDENTIALS.restaurantPhone),
       city: "Bhopal",
@@ -488,7 +488,7 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
   if (!deliveryPartner && isDefaultPhone(phone, DEFAULT_CREDENTIALS.deliveryPhone)) {
     // Auto-provision default delivery account for configured default phone.
     deliveryPartner = await FoodDeliveryPartner.create({
-      name: "Eqosy Delivery Partner",
+      name: "Hello Parth Delivery Partner",
       phone: normalizePhone10(DEFAULT_CREDENTIALS.deliveryPhone),
       city: "Bhopal",
       state: "Madhya Pradesh",

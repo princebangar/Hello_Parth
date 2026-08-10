@@ -6,7 +6,6 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 import bikeLogo from '../../Food/assets/bikelogo.png'
-import eqosyDeliveryRider from '../../Food/assets/eqosy-delivery-rider.png'
 
 
 /**
@@ -38,7 +37,7 @@ import eqosyDeliveryRider from '../../Food/assets/eqosy-delivery-rider.png'
  * - The component will automatically calculate and display the driving route polyline
  */
 
-const getDeliveryIconUrl = () => eqosyDeliveryRider
+const getDeliveryIconUrl = () => bikeLogo
 
 const mapContainerStyle = {
   width: '100%',
@@ -295,7 +294,7 @@ export default function GoogleMapsTracking({
         suppressMarkers: true, // We'll use custom markers
         preserveViewport: true, // Preserve viewport - we'll center manually
                       polylineOptions: {
-                        strokeColor: '#3b82f6', // Bright blue like Eqosy Partner
+                        strokeColor: '#3b82f6', // Bright blue like Hello Parth Partner
                         strokeWeight: 6,
                         strokeOpacity: 1.0, // Fully visible - plain solid line
                         icons: [], // No icons/dots - plain solid line only

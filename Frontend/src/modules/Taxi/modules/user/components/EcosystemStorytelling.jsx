@@ -67,7 +67,7 @@ const EcosystemStorytelling = () => {
           </span>
         </div>
         <h2 className="text-[20px] font-black text-slate-800 tracking-tight leading-tight">
-          Your City. Connected by <span className="text-[#FF6B00] drop-shadow-[0_4px_10px_rgba(255,107,0,0.15)]">Eqosy</span>.
+          Your City. Connected by <span className="text-[#FF6B00] drop-shadow-[0_4px_10px_rgba(255,107,0,0.15)]">Hello Parth</span>.
         </h2>
         <p className="mt-1 text-[10.5px] font-bold text-slate-500 leading-snug max-w-[280px] mx-auto">
           Ride, Food, and Parcel delivery — everything you need in one place.
@@ -194,12 +194,12 @@ const EcosystemStorytelling = () => {
         <div className="absolute z-20 bottom-4 left-4 right-4 flex justify-between items-center gap-1.5">
           <div className="flex items-center gap-1 bg-gradient-to-r from-red-500 to-orange-500 text-white px-2 py-0.5 rounded-full border border-white/20 shadow-md">
             <Bike size={10} />
-            <span className="text-[7px] font-black uppercase tracking-wider">EQOSY Delivery</span>
+            <span className="text-[7px] font-black uppercase tracking-wider">HELLO PARTH Delivery</span>
           </div>
 
           <div className="flex items-center gap-1 bg-slate-900 text-[#FFB300] px-2 py-0.5 rounded-full border border-[#FFB300]/40 shadow-lg">
             <Car size={10} />
-            <span className="text-[7px] font-black uppercase tracking-wider">EQOSY Cab</span>
+            <span className="text-[7px] font-black uppercase tracking-wider">HELLO PARTH Cab</span>
           </div>
 
           <div className="flex items-center gap-1 bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30 shadow-md">

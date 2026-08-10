@@ -90,7 +90,7 @@ import {
 } from "@food/components/ui/dropdown-menu";
 import { useLocation } from "@food/hooks/useLocation";
 import { useZone } from "@food/hooks/useZone";
-import quickSpicyLogo from "@food/assets/eqosy-logo.png";
+import quickSpicyLogo from "@food/assets/hello-parth-logo.png";
 import offerImage from "@food/assets/offerimage.png";
 import api, { publicGetOnce, restaurantAPI, adminAPI, orderAPI } from "@food/api";
 import { API_BASE_URL } from "@food/api/config";
@@ -672,7 +672,7 @@ export default function Home() {
   const [heroSearch, setHeroSearch] = useState("");
   const { openSearch, closeSearch, searchValue, setSearchValue } =
     useSearchOverlay();
-  const { triggerEqosyCartLoader } = useCart();
+  const { triggerHelloParthCartLoader } = useCart();
   const { openLocationSelector } = useLocationSelector();
   const { vegMode, setVegMode: setVegModeContext } = useProfile();
   const [prevVegMode, setPrevVegMode] = useState(vegMode);
@@ -3450,8 +3450,8 @@ export default function Home() {
                         <Link
                           to={`/user/restaurants/${restaurantSlug}`}
                           onClick={() => {
-                            if (triggerEqosyCartLoader) {
-                              triggerEqosyCartLoader("Opening Restaurant...", "Loading fresh menu & food categories...", 900);
+                            if (triggerHelloParthCartLoader) {
+                              triggerHelloParthCartLoader("Opening Restaurant...", "Loading fresh menu & food categories...", 900);
                             }
                           }}
                           className="h-full flex">

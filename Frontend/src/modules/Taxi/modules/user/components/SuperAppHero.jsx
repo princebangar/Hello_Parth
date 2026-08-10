@@ -61,11 +61,11 @@ export default function SuperAppHero({ onSearchFocus }) {
         >
           <Sparkles size={10} className="text-amber-400 animate-pulse" />
           <span className="text-[9px] font-black uppercase tracking-[0.25em] text-indigo-200">
-            EQOSY Super App Experience
+            HELLO PARTH Super App Experience
           </span>
         </motion.div>
 
-        {/* Center: Glowing EQOSY Logo & Search Bar */}
+        {/* Center: Glowing HELLO PARTH Logo & Search Bar */}
         <div className="w-full flex flex-col items-center gap-3.5 my-auto">
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
@@ -80,7 +80,7 @@ export default function SuperAppHero({ onSearchFocus }) {
             {/* Soft Glow behind Logo */}
             <div className="absolute -inset-3 rounded-full bg-amber-400/20 blur-lg animate-pulse" />
             <h1 className="relative text-[36px] font-black tracking-[-0.04em] text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 leading-none select-none">
-              eqosy
+              hello parth
             </h1>
           </motion.div>
 

@@ -529,7 +529,7 @@ function showForegroundNotification(payload = {}) {
           if (registration) {
             registration.showNotification(title, {
               body,
-              icon: "/eqosy-logo.png",
+              icon: "/hello-parth-logo.png",
               image,
               tag: notificationKey || undefined,
               data: payload?.data || {},
@@ -539,7 +539,7 @@ function showForegroundNotification(payload = {}) {
           } else {
             new Notification(title, {
               body,
-              icon: "/eqosy-logo.png",
+              icon: "/hello-parth-logo.png",
               image,
               tag: notificationKey || undefined,
               requireInteraction: true
@@ -548,7 +548,7 @@ function showForegroundNotification(payload = {}) {
         }).catch(() => {
           new Notification(title, {
             body,
-            icon: "/eqosy-logo.png",
+            icon: "/hello-parth-logo.png",
             image,
             tag: notificationKey || undefined,
           });
@@ -556,7 +556,7 @@ function showForegroundNotification(payload = {}) {
       } else {
         new Notification(title, {
           body,
-          icon: "/eqosy-logo.png",
+          icon: "/hello-parth-logo.png",
           image,
           tag: notificationKey || undefined,
         });

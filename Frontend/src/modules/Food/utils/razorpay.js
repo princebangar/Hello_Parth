@@ -80,9 +80,9 @@ export const initRazorpayPayment = async (options) => {
       amount: options.amount,
       currency: options.currency || 'INR',
       order_id: options.order_id,
-      name: options.name || 'Eqosy',
+      name: options.name || 'Hello Parth',
       description: options.description || 'Order Payment',
-      image: options.image || '/eqosy-logo.png',
+      image: options.image || '/hello-parth-logo.png',
       prefill: {
         name: options.prefill?.name || '',
         email: options.prefill?.email || '',

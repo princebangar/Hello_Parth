@@ -60,7 +60,7 @@ import {
 } from "@food/utils/foodVariants"
 import fssaiLogo from "@food/assets/fssai.png"
 import { RestaurantDetailSkeleton } from "@food/components/ui/loading-skeletons"
-import EqosyCartLoader from "@food/components/ui/EqosyCartLoader"
+import HelloParthCartLoader from "@food/components/ui/HelloParthCartLoader"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -79,7 +79,7 @@ function RestaurantDetailsContent() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const targetDishId = useMemo(() => String(searchParams.get('dish') || searchParams.get('item') || searchParams.get('itemId') || '').trim(), [searchParams])
-  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, triggerEqosyCartLoader } = useCart()
+  const { addToCart, updateQuantity, removeFromCart, getCartItem, cart, triggerHelloParthCartLoader } = useCart()
   const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites, addFavorite, removeFavorite, isFavorite } = useProfile()
   const { location: userLocation } = useLocation() // Get user's current location
   const { zoneId, isOutOfService } = useZone(userLocation) // Get user's zone for zone-based filtering
@@ -2006,7 +2006,7 @@ function RestaurantDetailsContent() {
   // Show loading state until the current slug fetch fully completes
   if (!isContentReady) {
     return (
-      <EqosyCartLoader
+      <HelloParthCartLoader
         show={true}
         message="Loading Restaurant..."
         subMessage="Fetching fresh menu & food categories..."

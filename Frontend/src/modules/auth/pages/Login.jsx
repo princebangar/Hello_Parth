@@ -447,9 +447,9 @@ export default function UnifiedOTPFastLogin() {
             className="flex items-center gap-4 mb-16"
           >
             <div className="w-12 h-12 flex items-center justify-center bg-white rounded-xl shadow-lg">
-              <img src="/eqosy-logo.png" alt="Eqosy" className="w-8 h-8 object-contain" />
+              <img src="/hello-parth-logo.png" alt="Hello Parth" className="w-8 h-8 object-contain" />
             </div>
-            <h1 className="text-3xl font-black tracking-tight">Eqosy</h1>
+            <h1 className="text-3xl font-black tracking-tight">Hello Parth</h1>
           </motion.div>
 
           <motion.div
@@ -526,14 +526,14 @@ export default function UnifiedOTPFastLogin() {
             >
               {/* Circular Logo */}
               <img
-                src="/eqosy-logo.png"
-                alt="Eqosy"
+                src="/hello-parth-logo.png"
+                alt="Hello Parth"
                 className="w-[84px] h-[84px] rounded-full object-cover shadow-lg mb-6"
               />
 
               <div className="text-center mb-8">
                 <h2 className="text-[32px] leading-tight font-black text-[#1A1A1A] tracking-tight mb-2">
-                  Welcome to Eqosy
+                  Welcome to Hello Parth
                 </h2>
                 <p className="text-[#1A1A1A] text-[15px] font-medium max-w-[28ch] mx-auto">
                   Enter your phone number to<br />access the unified ecosystem.

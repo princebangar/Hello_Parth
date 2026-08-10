@@ -8,7 +8,7 @@ import apiClient, { authAPI } from "@food/api"
 import { setAuthData as setUserAuthData } from "@food/utils/auth"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
-import logoImg from "@food/assets/eqosy-logo.png"
+import logoImg from "@food/assets/hello-parth-logo.png"
 
 export default function OTP() {
   const navigate = useNavigate()
@@ -471,7 +471,7 @@ export default function OTP() {
 
           <footer className="mt-auto pt-10 text-center">
             <p className="text-[9px] text-zinc-300 dark:text-zinc-700 font-black uppercase tracking-[0.4em]">
-              Eqosy Secure Network
+              Hello Parth Secure Network
             </p>
           </footer>
         </div>

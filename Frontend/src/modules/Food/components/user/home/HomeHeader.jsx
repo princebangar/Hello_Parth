@@ -49,7 +49,7 @@ const GROCERY_PLACEHOLDERS = [
   'Search "snacks"',
 ];
 
-function readEqosyLocation() {
+function readHelloParthLocation() {
   if (typeof window === 'undefined') return null;
   try {
     const saved = JSON.parse(window.localStorage.getItem(LOCATION_STORAGE_KEY) || '{}');
@@ -167,7 +167,7 @@ const groceryTheme = getVerticalTheme('grocery');
 const VERTICALS = [
   {
     id: 'food',
-    name: 'EqosyFood',
+    name: 'Hello Parth Food',
     path: '/food/user',
     icon: foodIcon,
     themeBg: foodTheme.themeBg,
@@ -176,7 +176,7 @@ const VERTICALS = [
   },
   {
     id: 'taxi',
-    name: 'EqosyTaxi',
+    name: 'Hello Parth Taxi',
     path: '/taxi/user',
     icon: quickIcon,
     themeBg: taxiTheme.themeBg,
@@ -185,7 +185,7 @@ const VERTICALS = [
   },
   {
     id: 'grocery',
-    name: 'EqosyGrocery',
+    name: 'Hello Parth Grocery',
     path: '/food/user?vertical=grocery',
     icon: hotelIcon,
     themeBg: groceryTheme.themeBg,
@@ -258,11 +258,11 @@ export default function HomeHeader({
   const verticalTheme = getVerticalTheme(activeVertical);
   const bannerImages = heroBannerImages.length > 0 ? heroBannerImages : FALLBACK_BANNER_IMAGES;
 
-  const [storedLocation, setStoredLocation] = useState(() => readEqosyLocation());
+  const [storedLocation, setStoredLocation] = useState(() => readHelloParthLocation());
   const [internalPlaceholderIndex, setInternalPlaceholderIndex] = useState(0);
 
   useEffect(() => {
-    const syncLocation = () => setStoredLocation(readEqosyLocation());
+    const syncLocation = () => setStoredLocation(readHelloParthLocation());
     syncLocation();
     window.addEventListener('storage', syncLocation);
     window.addEventListener(LOCATION_UPDATED_EVENT, syncLocation);

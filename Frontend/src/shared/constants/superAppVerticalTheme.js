@@ -1,5 +1,5 @@
 /**
- * Eqosy super-app vertical colours — matched to eqosy-logo.png
+ * Hello Parth super-app vertical colours — matched to hello-parth-logo.png
  *
  * Logo accents (bright):
  *   Food    — orange  #FC6C00 (scooter, food icon)
@@ -8,7 +8,7 @@
  *
  * UI uses darker shades for headers / inactive tabs; logo brights for accents & active tabs.
  */
-export const EQOSY_LOGO_COLORS = {
+export const HELLO_PARTH_LOGO_COLORS = {
   food: '#FC6C00',
   taxi: '#1E4A8C',
   grocery: '#74CC08',
@@ -16,8 +16,8 @@ export const EQOSY_LOGO_COLORS = {
 
 export const SUPER_APP_VERTICAL_THEME = {
   food: {
-    accent: EQOSY_LOGO_COLORS.food,
-    activeTab: EQOSY_LOGO_COLORS.food,
+    accent: HELLO_PARTH_LOGO_COLORS.food,
+    activeTab: HELLO_PARTH_LOGO_COLORS.food,
     theme: '#B84600',
     inactiveTab: '#8A3200',
     stickyBackdrop: 'rgba(184, 70, 0, 0.92)',
@@ -40,8 +40,8 @@ export const SUPER_APP_VERTICAL_THEME = {
     inactiveTabBg: 'bg-[#050C16]/90',
   },
   grocery: {
-    accent: EQOSY_LOGO_COLORS.grocery,
-    activeTab: EQOSY_LOGO_COLORS.grocery,
+    accent: HELLO_PARTH_LOGO_COLORS.grocery,
+    activeTab: HELLO_PARTH_LOGO_COLORS.grocery,
     theme: '#4A8508',
     inactiveTab: '#2E5505',
     stickyBackdrop: 'rgba(74, 133, 8, 0.92)',

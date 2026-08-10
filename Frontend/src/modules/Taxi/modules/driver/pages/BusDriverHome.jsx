@@ -623,7 +623,7 @@ const BusDriverHome = () => {
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6B00]">EQOSY BUS CAPTAIN</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6B00]">HELLO PARTH BUS CAPTAIN</span>
                 </div>
                 <p className="text-xs font-black text-white truncate max-w-[180px] sm:max-w-xs">
                   {busService?.operatorName || 'Intercity Bus Lines'}
@@ -1133,7 +1133,7 @@ const BusDriverHome = () => {
                 <div>
                   <h3 className="text-lg font-black text-slate-900">{driverDisplayName}</h3>
                   <p className="text-xs font-bold text-[#FF6B00]">Bus Captain • {driverIdCode}</p>
-                  <p className="text-[11px] font-medium text-slate-500">{busService?.operatorName || 'EQOSY Intercity Express'}</p>
+                  <p className="text-[11px] font-medium text-slate-500">{busService?.operatorName || 'HELLO PARTH Intercity Express'}</p>
                 </div>
               </div>
 
@@ -1238,7 +1238,7 @@ const BusDriverHome = () => {
                   <span className="text-slate-400 flex items-center gap-1.5 font-medium">
                     <Globe size={14} className="text-blue-400" /> Fleet Operator
                   </span>
-                  <span className="font-bold text-white">{busService?.operatorName || 'EQOSY Fleet'}</span>
+                  <span className="font-bold text-white">{busService?.operatorName || 'HELLO PARTH Fleet'}</span>
                 </div>
 
                 <div className="flex items-center justify-between pb-2 border-b border-slate-800">

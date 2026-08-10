@@ -12,7 +12,7 @@ const cardVariants = {
 }
 
 export default function StickyCartCard() {
-  const { cart, getCartCount, triggerEqosyCartLoader } = useCart()
+  const { cart, getCartCount, triggerHelloParthCartLoader } = useCart()
   const navigate = useNavigate()
   const [isVisible, setIsVisible] = useState(true)
   const [bottomPosition, setBottomPosition] = useState("bottom-[88px]") // Fixed above bottom navigation
@@ -63,7 +63,7 @@ export default function StickyCartCard() {
                 <button
                   onClick={(e) => {
                     e.preventDefault();
-                    triggerEqosyCartLoader("Opening Cart...", "Fetching your selected items...", 850);
+                    triggerHelloParthCartLoader("Opening Cart...", "Fetching your selected items...", 850);
                     setTimeout(() => {
                       navigate("/food/user/cart");
                     }, 150);

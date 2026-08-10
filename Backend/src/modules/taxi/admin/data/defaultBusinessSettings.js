@@ -1,12 +1,12 @@
 export const createDefaultBusinessSettings = () => ({
   scope: 'default',
   general: {
-    app_name: 'Eqosy',
+    app_name: 'Hello Parth',
     contact_phone_1: '0000000000',
     contact_phone_2: '0000000000',
     contact_booking_number: '9999999999',
-    footer_1: '2026 © Eqosy.',
-    footer_2: 'Design & Develop by Eqosy',
+    footer_1: '2026 © Hello Parth.',
+    footer_2: 'Design & Develop by Hello Parth',
     default_lat: '22.7196',
     default_lng: '75.8577',
     logo: '',

@@ -2169,7 +2169,7 @@ export default function OrderTracking({ isSharedView = false }) {
           </DialogHeader>
           <div className="py-4 text-center space-y-6">
             <p className="text-base text-gray-600 dark:text-gray-300 leading-relaxed font-medium">
-              This small fee helps us pay the bills so that we can keep {companyName || "Eqosy"} running
+              This small fee helps us pay the bills so that we can keep {companyName || "Hello Parth"} running
             </p>
             <Button
               type="button"

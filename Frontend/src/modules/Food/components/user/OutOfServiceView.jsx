@@ -127,8 +127,8 @@ export default function OutOfServiceView() {
           >
             <div className="h-12 w-12 rounded-2xl overflow-hidden flex items-center justify-center flex-shrink-0">
               <img
-                src="/eqosy-logo.png"
-                alt="Eqosy Logo"
+                src="/hello-parth-logo.png"
+                alt="Hello Parth Logo"
                 className="w-full h-full object-cover"
               />
             </div>
@@ -157,7 +157,7 @@ export default function OutOfServiceView() {
       {/* Semi-transparent Branding Logo */}
       <div className="absolute bottom-10 left-6 z-10 select-none opacity-20 pointer-events-none">
         <span className="text-[32px] font-black text-white tracking-tighter uppercase">
-          Eqosy
+          Hello Parth
         </span>
       </div>
     </div>

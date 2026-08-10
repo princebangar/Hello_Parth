@@ -8,7 +8,7 @@ import {
 import { useAppGoogleMapsLoader } from '@/modules/Taxi/modules/admin/utils/googleMaps';
 import io from 'socket.io-client';
 import { API_BASE_URL, resolveSocketOrigin } from '@food/api/config';
-import eqosyRestaurantPin from '@food/assets/eqosy-restaurant-pin.png';
+import helloParthRestaurantPin from '@food/assets/hello-parth-restaurant-pin.png';
 import { subscribeOrderTracking, subscribeDeliveryLocation } from '@food/realtimeTracking';
 import { collectOrderTrackingIds, joinOrderTrackingRooms } from '@food/utils/orderTrackingRooms';
 import { buildVisibleRouteFromRiderPosition } from '@food/utils/liveTrackingPolyline';
@@ -1034,7 +1034,7 @@ const DeliveryTrackingMap = ({
               </div>
             )}
             <img
-              src={eqosyRestaurantPin}
+              src={helloParthRestaurantPin}
               alt="Restaurant"
               className="relative w-12 h-12 object-contain drop-shadow-xl"
               onError={(e) => {

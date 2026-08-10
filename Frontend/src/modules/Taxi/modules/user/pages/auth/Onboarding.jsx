@@ -24,7 +24,7 @@ const FALLBACK_SLIDES = [
   {
     id: 3,
     title: 'Earn with Every Referral',
-    body: 'Share your code and earn ₹50 for every friend who joins Eqosy.',
+    body: 'Share your code and earn ₹50 for every friend who joins Hello Parth.',
     image: '/man.png',
     gradientFrom: '#10B981',
     gradientTo: '#059669',
@@ -68,7 +68,7 @@ const Onboarding = () => {
 
   const slide = slides[current];
   const isLast = current === slides.length - 1;
-  const slideBody = String(slide?.body || '').replace(/Eqosy/gi, appName);
+  const slideBody = String(slide?.body || '').replace(/Hello Parth/gi, appName);
 
   const variants = {
     enter:  (dir) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),

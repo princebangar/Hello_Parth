@@ -48,7 +48,7 @@ export const getPublicPageByKey = async (key) => {
     const doc = await FoodPageContent.findOne({ key: k }).lean();
     if (!doc) {
         if (k === 'about') {
-            return { key: k, data: { appName: 'Eqosy', version: '1.0.0', description: '', logo: '' } };
+            return { key: k, data: { appName: 'Hello Parth', version: '1.0.0', description: '', logo: '' } };
         }
         return { key: k, data: DEFAULT_PAGES[k] || { title: '', content: '' } };
     }
@@ -88,7 +88,7 @@ export const upsertLegalPage = async (key, payload, updatedBy) => {
 };
 
 export const upsertAboutPage = async (payload, updatedBy) => {
-    const appName = decodeHtmlEntities(String(payload?.appName || '')).trim() || 'Eqosy';
+    const appName = decodeHtmlEntities(String(payload?.appName || '')).trim() || 'Hello Parth';
     const version = decodeHtmlEntities(String(payload?.version || '')).trim() || '1.0.0';
     const description = decodeHtmlEntities(String(payload?.description || '')).trim();
     const logo = decodeHtmlEntities(String(payload?.logo || '')).trim();

@@ -406,10 +406,10 @@ export default function Help() {
                       We'll respond within 24 hours
                     </p>
                     <a
-                      href="mailto:support@eqosy.com"
+                      href="mailto:support@helloparth.com"
                       className="text-sm text-primary hover:underline font-medium"
                     >
-                      support@eqosy.com
+                      support@helloparth.com
                     </a>
                   </div>
                 </div>

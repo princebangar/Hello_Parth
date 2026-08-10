@@ -485,7 +485,7 @@ const OwnerDashboard = () => {
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-black uppercase tracking-widest text-blue-900">
-                    EQOSY OWNER SUITE
+                    HELLO PARTH OWNER SUITE
                   </span>
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
                   <span className="text-[9px] font-extrabold text-emerald-800 uppercase">FLEET ACTIVE</span>
@@ -1115,7 +1115,7 @@ const OwnerDashboard = () => {
                       {activeModal === 'withdraw' && 'Owner Payout Withdrawal'}
                     </h3>
                     <p className="text-[10px] font-bold text-slate-400">
-                      EQOSY Owner Operations Console
+                      HELLO PARTH Owner Operations Console
                     </p>
                   </div>
                 </div>

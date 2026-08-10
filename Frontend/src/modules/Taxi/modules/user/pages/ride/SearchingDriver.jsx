@@ -815,7 +815,7 @@ const SearchingDriver = () => {
         const response = await api.patch(`/rides/${rideId}/cancel`, cancellationData);
         const data = response?.data?.data || response?.data || {};
         if (data.cancellationCharge > 0 || data.isFeeApplied) {
-          toast.success(`Your ride has been cancelled. A cancellation fee of ₹${data.cancellationCharge} has been applied according to Eqosy's cancellation policy.`);
+          toast.success(`Your ride has been cancelled. A cancellation fee of ₹${data.cancellationCharge} has been applied according to Hello Parth's cancellation policy.`);
         } else {
           toast.success("Your ride has been cancelled successfully.");
         }

@@ -1,8 +1,8 @@
 {
-  "name": "eqosy-backend",
+  "name": "hello-parth-backend",
   "version": "1.0.0",
   "type": "module",
-  "description": "Eqosy Product Backend",
+  "description": "Hello Parth Product Backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

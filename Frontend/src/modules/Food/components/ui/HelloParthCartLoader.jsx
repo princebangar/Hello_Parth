@@ -1,12 +1,12 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingBag, Utensils, Flame, Sparkles, ShoppingCart } from "lucide-react";
-import eqosyLogo from "@food/assets/eqosy-logo.png";
+import helloParthLogo from "@food/assets/hello-parth-logo.png";
 
-export default function EqosyCartLoader({
+export default function HelloParthCartLoader({
   show = false,
   message = "Adding to Cart...",
-  subMessage = "Preparing your fresh delicacies with Eqosy",
+  subMessage = "Preparing your fresh delicacies with Hello Parth",
   fullScreen = true,
 }) {
   return (
@@ -53,10 +53,10 @@ export default function EqosyCartLoader({
                 className="absolute h-16 w-16 rounded-full bg-gradient-to-r from-[#EB590E] to-[#FA0272] blur-md sm:h-20 sm:w-20"
               />
 
-              {/* Eqosy Logo Image */}
+              {/* Hello Parth Logo Image */}
               <motion.img
-                src={eqosyLogo}
-                alt="Eqosy Logo"
+                src={helloParthLogo}
+                alt="Hello Parth Logo"
                 animate={{ scale: [1, 1.06, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                 className="relative z-10 h-14 w-14 object-contain drop-shadow-md sm:h-16 sm:w-16"
@@ -87,7 +87,7 @@ export default function EqosyCartLoader({
             <div className="relative z-10 space-y-1.5">
               <div className="flex items-center justify-center gap-1.5">
                 <span className="bg-gradient-to-r from-[#EB590E] via-[#FA0272] to-[#FF6B00] bg-clip-text text-xl font-black tracking-widest text-transparent sm:text-2xl">
-                  EQOSY
+                  HELLO PARTH
                 </span>
                 <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600 dark:bg-orange-950/60 dark:text-orange-400">
                   FOOD
@@ -121,7 +121,7 @@ export default function EqosyCartLoader({
             {/* Bottom Branded Badge */}
             <div className="mt-4 flex items-center justify-center gap-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
               <ShoppingCart className="h-3 w-3 text-orange-500" />
-              <span>Eqosy Express Cart</span>
+              <span>Hello Parth Express Cart</span>
             </div>
           </motion.div>
         </motion.div>

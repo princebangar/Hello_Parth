@@ -557,7 +557,7 @@ export default function HubMenu() {
             let uploadResponse
             try {
               uploadResponse = await uploadAPI.uploadMedia(file, {
-                folder: 'eqosy/restaurant/addons'
+                folder: 'hello-parth/restaurant/addons'
               })
             } catch (folderUploadError) {
               // Fallback: retry without folder in case provider/account rejects custom folder.
@@ -1731,7 +1731,7 @@ export default function HubMenu() {
                       <span className="text-sm font-medium text-gray-900">I will turn it on myself</span>
                     </label>
                     <p className="text-xs text-gray-500 ml-8">
-                      This item will not be visible to customers on the Eqosy Store app till you switch it on.
+                      This item will not be visible to customers on the Hello Parth Store app till you switch it on.
                     </p>
                   </div>
                 </div>

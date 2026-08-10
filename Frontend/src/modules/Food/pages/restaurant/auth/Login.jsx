@@ -5,7 +5,7 @@ import { Button } from "@food/components/ui/button"
 import { restaurantAPI } from "@food/api"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
-import logoImg from "@food/assets/eqosy-logo.png"
+import logoImg from "@food/assets/hello-parth-logo.png"
 
 const DEFAULT_COUNTRY_CODE = "+91"
 

@@ -27,7 +27,7 @@ export default function AddToCartAnimation({
   linkTo = '/food/user/cart',
   dynamicBottom = null,
 }) {
-  const { items, itemCount, total, lastAddEvent, lastRemoveEvent, triggerEqosyCartLoader } = useCart();
+  const { items, itemCount, total, lastAddEvent, lastRemoveEvent, triggerHelloParthCartLoader } = useCart();
   const location = useLocation();
   const navigate = useNavigate();
   const linkRef = useRef(null);
@@ -451,8 +451,8 @@ export default function AddToCartAnimation({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (triggerEqosyCartLoader) {
-                  triggerEqosyCartLoader("Opening Cart...", "Fetching your selected items...", 850);
+                if (triggerHelloParthCartLoader) {
+                  triggerHelloParthCartLoader("Opening Cart...", "Fetching your selected items...", 850);
                 }
                 setTimeout(() => {
                   navigate(linkTo);

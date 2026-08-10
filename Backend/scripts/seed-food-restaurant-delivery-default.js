@@ -7,9 +7,9 @@ const DEFAULTS = {
   restaurant: {
     phone: "9009925021",
     countryCode: "+91",
-    restaurantName: "Eqosy Demo Restaurant",
-    ownerName: "Eqosy Restaurant Owner",
-    ownerEmail: "restaurant@eqosy.com",
+    restaurantName: "Hello Parth Demo Restaurant",
+    ownerName: "Hello Parth Restaurant Owner",
+    ownerEmail: "restaurant@helloparth.com",
     city: "Bhopal",
     state: "Madhya Pradesh",
     status: "approved",
@@ -17,7 +17,7 @@ const DEFAULTS = {
   delivery: {
     phone: "7610416911",
     countryCode: "+91",
-    name: "Eqosy Delivery Partner",
+    name: "Hello Parth Delivery Partner",
     city: "Bhopal",
     state: "Madhya Pradesh",
     vehicleType: "bike",

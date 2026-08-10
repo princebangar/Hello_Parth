@@ -16,12 +16,12 @@ const legalContent = {
     title: 'Terms & Conditions',
     icon: ScrollText,
     intro:
-      'These Terms & Conditions govern the use of the Eqosy website, app, and booking services. By using the platform, you agree to follow these terms whenever you browse, register, book, cancel, or pay for a service.',
+      'These Terms & Conditions govern the use of the Hello Parth website, app, and booking services. By using the platform, you agree to follow these terms whenever you browse, register, book, cancel, or pay for a service.',
     sections: [
       {
         title: 'Use of the platform',
         body:
-          'Eqosy provides technology services for ride booking, vehicle-based transport support, parcel movement, and related mobility services. Availability can vary by city, vehicle type, demand, operating hours, and serviceability.',
+          'Hello Parth provides technology services for ride booking, vehicle-based transport support, parcel movement, and related mobility services. Availability can vary by city, vehicle type, demand, operating hours, and serviceability.',
       },
       {
         title: 'Eligibility',
@@ -51,12 +51,12 @@ const legalContent = {
       {
         title: 'Account actions',
         body:
-          'Eqosy may suspend, restrict, or terminate access where there is fraud, abusive conduct, repeated policy violations, non-payment, chargeback misuse, or legal/regulatory risk.',
+          'Hello Parth may suspend, restrict, or terminate access where there is fraud, abusive conduct, repeated policy violations, non-payment, chargeback misuse, or legal/regulatory risk.',
       },
       {
         title: 'Liability and service interruptions',
         body:
-          'Eqosy works to keep the service reliable, but delays may happen because of traffic, weather, technical downtime, route closures, law-and-order issues, or third-party failures. To the extent permitted by law, Eqosy is not responsible for indirect or consequential loss arising from such interruptions.',
+          'Hello Parth works to keep the service reliable, but delays may happen because of traffic, weather, technical downtime, route closures, law-and-order issues, or third-party failures. To the extent permitted by law, Hello Parth is not responsible for indirect or consequential loss arising from such interruptions.',
       },
       {
         title: 'Contact',
@@ -70,7 +70,7 @@ const legalContent = {
     title: 'Privacy Policy',
     icon: ShieldCheck,
     intro:
-      'This website is managed by Eqosy. This Privacy Policy explains what information we collect, why we collect it, how we use it, and the steps we take to protect it when you use the Eqosy website or connected services.',
+      'This website is managed by Hello Parth. This Privacy Policy explains what information we collect, why we collect it, how we use it, and the steps we take to protect it when you use the Hello Parth website or connected services.',
     sections: [
       {
         title: 'Information we may collect',
@@ -98,7 +98,7 @@ const legalContent = {
       {
         title: 'Payments and data security',
         body:
-          'Payments may be processed through third-party payment partners. Eqosy does not intentionally store full card data on the website. We use reasonable administrative and technical safeguards to protect user information, but no internet-based system can be guaranteed to be fully secure.',
+          'Payments may be processed through third-party payment partners. Hello Parth does not intentionally store full card data on the website. We use reasonable administrative and technical safeguards to protect user information, but no internet-based system can be guaranteed to be fully secure.',
       },
       {
         title: 'Data retention and user rights',
@@ -111,7 +111,7 @@ const legalContent = {
       {
         title: 'Policy updates',
         body:
-          'Eqosy may revise this Privacy Policy from time to time. Continued use of the website after an update means you accept the revised policy.',
+          'Hello Parth may revise this Privacy Policy from time to time. Continued use of the website after an update means you accept the revised policy.',
       },
     ],
   },
@@ -120,7 +120,7 @@ const legalContent = {
     title: 'Refund & Cancellation Policy',
     icon: ReceiptText,
     intro:
-      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the Eqosy platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
+      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the Hello Parth platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
     sections: [
       {
         title: 'When refunds may be approved',
@@ -134,7 +134,7 @@ const legalContent = {
       {
         title: 'Refund policy overview',
         body:
-          'Eqosy reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
+          'Hello Parth reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
       },
       {
         title: 'Cancellation rules',
@@ -183,7 +183,7 @@ const legalContent = {
         bullets: [
           'Raise the issue through the support team with your booking ID, payment details, and reason for the request.',
           'Submit the request as early as possible after the cancelled or affected booking.',
-          'Eqosy may ask for screenshots, transaction references, or additional verification before approval.',
+          'Hello Parth may ask for screenshots, transaction references, or additional verification before approval.',
         ],
       },
       {
@@ -202,7 +202,7 @@ const legalContent = {
     title: 'Cancellation Policy',
     icon: Scale,
     intro:
-      'This page summarizes how cancellations are handled across Eqosy booking categories.',
+      'This page summarizes how cancellations are handled across Hello Parth booking categories.',
     sections: [
       {
         title: 'General policy',

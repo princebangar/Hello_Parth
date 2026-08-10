@@ -1,4 +1,4 @@
-export const ACTIVE_MODULE_KEY = 'eqosy_active_module'
+export const ACTIVE_MODULE_KEY = 'hello_parth_active_module'
 export const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
 
 export const FOOD_ADMIN_HOME = '/admin/food'
@@ -76,7 +76,7 @@ const isTransientRoute = (route) =>
 /**
  * Post-login destination for the consumer (/login) auth flow only.
  * Must never send users to admin/restaurant/delivery panels — those have
- * their own login screens. Leftover `eqosy_active_module=admin` or
+ * their own login screens. Leftover `hello_parth_active_module=admin` or
  * `native_last_route=/admin/...` from an earlier admin visit must not
  * override a normal user login.
  */

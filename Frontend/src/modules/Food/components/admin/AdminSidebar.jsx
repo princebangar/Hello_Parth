@@ -58,7 +58,7 @@ import { adminSidebarMenu } from "@food/utils/adminSidebarMenu"
 import { filterFoodSidebarMenu } from "@food/constants/foodAdminAccess"
 import { getCurrentUser } from "@food/utils/auth"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
-import quickSpicyLogo from "@food/assets/eqosy-logo.png"
+import quickSpicyLogo from "@food/assets/hello-parth-logo.png"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
 const debugError = (...args) => { }

@@ -6,7 +6,7 @@ import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
 import { Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@food/components/ui/button"
-import logoImg from "@food/assets/eqosy-logo.png"
+import logoImg from "@food/assets/hello-parth-logo.png"
 
 export default function DeliverySignIn() {
   const companyName = useCompanyName()

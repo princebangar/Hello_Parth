@@ -1920,7 +1920,7 @@ const SelectVehicle = () => {
 
     const token = getLocalUserToken();
     if (!token) {
-      localStorage.setItem('eqosy_active_module', 'taxi');
+      localStorage.setItem('hello_parth_active_module', 'taxi');
       navigate('/login', { state: { from: location.pathname } });
       return;
     }

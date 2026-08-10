@@ -48,7 +48,7 @@ export default function AboutUs() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [aboutData, setAboutData] = useState({
-    appName: 'Eqosy Food',
+    appName: 'Hello Parth Food',
     version: '1.0.0',
     description: '',
     logo: '',
@@ -234,7 +234,7 @@ export default function AboutUs() {
                 id="logo"
                 value={aboutData.logo}
                 onChange={(e) => setAboutData(prev => ({ ...prev, logo: e.target.value }))}
-                placeholder="https://example.com/eqosy-logo.png"
+                placeholder="https://example.com/hello-parth-logo.png"
                 className="mt-1"
               />
             </div>

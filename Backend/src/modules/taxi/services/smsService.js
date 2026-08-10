@@ -5,8 +5,8 @@ import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
 const DLT_TEMPLATE_TEXT =
   process.env.SMS_DLT_TEMPLATE_TEXT ||
-  'Welcome to Eqosy. Your OTP for registration is ##var##.BGADEC';
-const DEFAULT_BRAND_NAME = 'Eqosy';
+  'Welcome to Hello Parth. Your OTP for registration is ##var##.BGADEC';
+const DEFAULT_BRAND_NAME = 'Hello Parth';
 
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 
@@ -120,7 +120,7 @@ const getConfiguredBrandName = async () => {
 };
 
 const renderOtpMessage = ({ otp }) => {
-  return `Welcome to Eqosy. Your OTP for registration is ${otp}.BGADEC`;
+  return `Welcome to Hello Parth. Your OTP for registration is ${otp}.BGADEC`;
 };
 
 const isSuccessfulProviderResponse = (response, responseText) => {
@@ -207,7 +207,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
   const senderId = (env.sms?.indiaHub?.senderId || process.env.SMS_INDIA_HUB_SENDER_ID || 'BGADEC').trim();
   const peId = (env.sms?.indiaHub?.peId || process.env.SMS_INDIA_HUB_PE_ID || '1001164203633432409').trim();
   const templateId = (env.sms?.indiaHub?.dltTemplateId || process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID || '1007282516644508833').trim();
-  const message = `Welcome to the Eqosy powered by Appzeto.Your OTP for registration is ${otp}.BGADEC`;
+  const message = `Welcome to the Hello Parth powered by Hello Parth.Your OTP for registration is ${otp}.BGADEC`;
 
   console.log(`[SMS] Dispatching live SMS OTP ${otp} to ${msisdn} via SMS India Hub...`);
 

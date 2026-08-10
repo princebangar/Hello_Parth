@@ -58,7 +58,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import quickSpicyLogo from "@food/assets/eqosy-logo.png";
+import quickSpicyLogo from "@food/assets/hello-parth-logo.png";
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -1359,12 +1359,12 @@ const AdminLayout = () => {
           <div className="group/sidebar-head relative mb-4 flex h-24 items-center border-b border-white/5 px-6">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/5 bg-white/5 p-1 transition-all group-hover/sidebar-head:scale-105">
-                <img src={quickSpicyLogo} alt="Eqosy" className="h-10 w-10 object-contain" />
+                <img src={quickSpicyLogo} alt="Hello Parth" className="h-10 w-10 object-contain" />
               </div>
               {!isCollapsed && (
                 <div className="flex flex-col">
                   <h3 className="text-[15px] font-extrabold leading-tight text-white tracking-tight">
-                    Eqosy Admin
+                    Hello Parth Admin
                   </h3>
                   <div className="mt-1 flex items-center gap-1.5">
                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />

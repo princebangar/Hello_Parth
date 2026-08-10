@@ -11,7 +11,7 @@ export const INDIA_CENTER = { lat: 22.7196, lng: 75.8577 };
 export const DELHI_CENTER = { lat: 28.6139, lng: 77.209 };
 
 /** Single loader id + library set for the whole app (@react-google-maps/api allows only one). */
-export const GOOGLE_MAPS_LOADER_ID = 'eqosy-google-maps';
+export const GOOGLE_MAPS_LOADER_ID = 'hello-parth-google-maps';
 export const GOOGLE_MAPS_LIBRARIES = ['geometry', 'places', 'visualization'];
 
 export const getLatLng = (source, fallback = INDIA_CENTER) => {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react"
 import { buildCartLineId } from "@food/utils/foodVariants"
-import EqosyCartLoader from "@food/components/ui/EqosyCartLoader"
+import HelloParthCartLoader from "@food/components/ui/HelloParthCartLoader"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -15,7 +15,7 @@ const defaultCartContext = {
   total: 0,
   lastAddEvent: null,
   lastRemoveEvent: null,
-  triggerEqosyCartLoader: () => {},
+  triggerHelloParthCartLoader: () => {},
   addToCart: () => {
     debugWarn('CartProvider not available - addToCart called');
   },
@@ -160,19 +160,19 @@ export function CartProvider({ children }) {
   // Track last remove event for animation
   const [lastRemoveEvent, setLastRemoveEvent] = useState(null)
 
-  // Eqosy Custom Cart Loader State
-  const [showEqosyLoader, setShowEqosyLoader] = useState(false);
-  const [eqosyLoaderOptions, setEqosyLoaderOptions] = useState({
+  // Hello Parth Custom Cart Loader State
+  const [showHelloParthLoader, setShowHelloParthLoader] = useState(false);
+  const [helloParthLoaderOptions, setHelloParthLoaderOptions] = useState({
     message: "Adding to Cart...",
-    subMessage: "Preparing your fresh delicacies with Eqosy",
+    subMessage: "Preparing your fresh delicacies with Hello Parth",
     duration: 850
   });
 
-  const triggerEqosyCartLoader = useCallback((message = "Adding to Cart...", subMessage = "Preparing your fresh delicacies with Eqosy", durationMs = 850) => {
-    setEqosyLoaderOptions({ message, subMessage, duration: durationMs });
-    setShowEqosyLoader(true);
+  const triggerHelloParthCartLoader = useCallback((message = "Adding to Cart...", subMessage = "Preparing your fresh delicacies with Hello Parth", durationMs = 850) => {
+    setHelloParthLoaderOptions({ message, subMessage, duration: durationMs });
+    setShowHelloParthLoader(true);
     setTimeout(() => {
-      setShowEqosyLoader(false);
+      setShowHelloParthLoader(false);
     }, durationMs);
   }, []);
 
@@ -190,7 +190,7 @@ export function CartProvider({ children }) {
   }, [cart])
 
   const addToCart = (item, sourcePosition = null) => {
-    triggerEqosyCartLoader("Adding to Cart...", "Preparing your fresh delicacies with Eqosy", 850);
+    triggerHelloParthCartLoader("Adding to Cart...", "Preparing your fresh delicacies with Hello Parth", 850);
     const safeCart = normalizeCartData(cart)
     if (safeCart.length > 0) {
       const firstItemRestaurantId = safeCart[0]?.restaurantId
@@ -549,7 +549,7 @@ export function CartProvider({ children }) {
       total: cartForAnimation.total,
       lastAddEvent,
       lastRemoveEvent,
-      triggerEqosyCartLoader,
+      triggerHelloParthCartLoader,
       addToCart,
       removeFromCart,
       updateQuantity,
@@ -560,16 +560,16 @@ export function CartProvider({ children }) {
       cleanCartForRestaurant,
       replaceCart,
     }),
-    [cart, cartForAnimation, lastAddEvent, lastRemoveEvent, triggerEqosyCartLoader]
+    [cart, cartForAnimation, lastAddEvent, lastRemoveEvent, triggerHelloParthCartLoader]
   )
 
   return (
     <CartContext.Provider value={value}>
       {children}
-      <EqosyCartLoader
-        show={showEqosyLoader}
-        message={eqosyLoaderOptions.message}
-        subMessage={eqosyLoaderOptions.subMessage}
+      <HelloParthCartLoader
+        show={showHelloParthLoader}
+        message={helloParthLoaderOptions.message}
+        subMessage={helloParthLoaderOptions.subMessage}
       />
     </CartContext.Provider>
   )

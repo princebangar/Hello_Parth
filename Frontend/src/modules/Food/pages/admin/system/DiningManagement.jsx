@@ -102,7 +102,7 @@ export default function DiningManagement() {
             let imageUrl = editingCategoryImageUrl
 
             if (categoryFile) {
-                const uploadResponse = await uploadAPI.uploadMedia(categoryFile, { folder: "eqosy/dining/categories" })
+                const uploadResponse = await uploadAPI.uploadMedia(categoryFile, { folder: "hello-parth/dining/categories" })
                 imageUrl = uploadResponse?.data?.data?.url || ""
             }
 

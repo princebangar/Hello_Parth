@@ -10,7 +10,7 @@ import {
 import { checkOnboardingStatus, isRestaurantOnboardingComplete } from "@food/utils/onboardingUtils"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { motion, AnimatePresence } from "framer-motion"
-import logoImg from "@food/assets/eqosy-logo.png"
+import logoImg from "@food/assets/hello-parth-logo.png"
 
 export default function RestaurantOTP() {
   const companyName = useCompanyName()

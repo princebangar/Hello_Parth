@@ -36,7 +36,7 @@ export default function UserOrderDetails() {
   const [loading, setLoading] = useState(true)
   const [showPlatformFeeModal, setShowPlatformFeeModal] = useState(false)
   const [showDeliveryFeeModal, setShowDeliveryFeeModal] = useState(false)
-  const [companyName, setCompanyName] = useState("Eqosy")
+  const [companyName, setCompanyName] = useState("Hello Parth")
 
   useEffect(() => {
     getCompanyNameAsync().then((name) => {
@@ -749,7 +749,7 @@ export default function UserOrderDetails() {
               </button>
             </div>
             <p className="text-base text-gray-600 dark:text-gray-300 leading-relaxed font-medium py-2">
-              This small fee helps us pay the bills so that we can keep {companyName || "Eqosy"} running
+              This small fee helps us pay the bills so that we can keep {companyName || "Hello Parth"} running
             </p>
             <div>
               <button

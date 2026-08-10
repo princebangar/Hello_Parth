@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
-const quickSpicyLogo = "/eqosy-logo.png"
+const quickSpicyLogo = "/hello-parth-logo.png"
 
 export default function Home() {
   const navigate = useNavigate()
@@ -60,7 +60,7 @@ export default function Home() {
               </div>
             )}
           </div>
-          <CardTitle className="text-3xl font-bold text-center">{companyName || "Eqosy Food"}</CardTitle>
+          <CardTitle className="text-3xl font-bold text-center">{companyName || "Hello Parth Food"}</CardTitle>
           <CardDescription className="text-lg">
             Welcome to the Food Delivery Platform
           </CardDescription>

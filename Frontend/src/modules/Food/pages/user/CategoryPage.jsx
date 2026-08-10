@@ -44,7 +44,7 @@ export default function CategoryPage() {
   const { category } = useParams()
   const navigate = useNavigate()
   const { vegMode, getDefaultAddress } = useProfile()
-  const { triggerEqosyCartLoader } = useCart()
+  const { triggerHelloParthCartLoader } = useCart()
   const { location } = useLocation()
   const [deliveryAddressMode, setDeliveryAddressMode] = useState(() => {
     try {
@@ -1571,8 +1571,8 @@ export default function CategoryPage() {
                       key={restaurant.id}
                       to={`/user/restaurants/${restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
                       onClick={() => {
-                        if (triggerEqosyCartLoader) {
-                          triggerEqosyCartLoader("Loading Restaurant...", "Fetching fresh menu & food categories...", 900);
+                        if (triggerHelloParthCartLoader) {
+                          triggerHelloParthCartLoader("Loading Restaurant...", "Fetching fresh menu & food categories...", 900);
                         }
                       }}
                       className="block"
@@ -1682,8 +1682,8 @@ export default function CategoryPage() {
                     key={restaurant.id}
                     to={`/user/restaurants/${restaurantSlug}`}
                     onClick={() => {
-                      if (triggerEqosyCartLoader) {
-                        triggerEqosyCartLoader("Loading Restaurant...", "Fetching fresh menu & food categories...", 900);
+                      if (triggerHelloParthCartLoader) {
+                        triggerHelloParthCartLoader("Loading Restaurant...", "Fetching fresh menu & food categories...", 900);
                       }
                     }}
                     className="h-full flex"
