@@ -25,10 +25,11 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
   const normalizedPath = getNormalizedRestaurantPath(pathname)
   const explicitBackPath = toRestaurantPath(state?.backTo) || toRestaurantPath(state?.from)
 
-  if (
-    normalizedPath === "/orders/all" ||
-    /^\/orders\/[^/]+$/.test(normalizedPath)
-  ) {
+  if (normalizedPath === "/orders/all") {
+    return explicitBackPath || "/food/restaurant"
+  }
+
+  if (/^\/orders\/[^/]+$/.test(normalizedPath)) {
     return explicitBackPath || "/food/restaurant/orders/all"
   }
 
@@ -37,7 +38,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     /^\/food\/[^/]+$/.test(normalizedPath) ||
     /^\/food\/[^/]+\/edit$/.test(normalizedPath)
   ) {
-    return explicitBackPath || "/food/restaurant"
+    return explicitBackPath || "/food/restaurant/food/all"
   }
 
   if (
@@ -45,7 +46,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     /^\/advertisements\/[^/]+$/.test(normalizedPath) ||
     /^\/advertisements\/[^/]+\/edit$/.test(normalizedPath)
   ) {
-    return explicitBackPath || "/food/restaurant"
+    return explicitBackPath || "/food/restaurant/advertisements"
   }
 
   if (
@@ -85,7 +86,7 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     normalizedPath === "/privacy" ||
     normalizedPath === "/terms"
   ) {
-    return explicitBackPath || "/food/restaurant/explore"
+    return explicitBackPath || "/food/restaurant"
   }
 
   if (
@@ -94,14 +95,19 @@ const resolveRestaurantBackPath = ({ pathname, state }) => {
     normalizedPath === "/ratings-reviews" ||
     normalizedPath === "/dish-ratings"
   ) {
-    return explicitBackPath || "/food/restaurant/feedback"
+    return explicitBackPath || "/food/restaurant/reviews"
   }
 
   if (
     normalizedPath === "/help-centre/support" ||
+    normalizedPath === "/help-content" ||
     normalizedPath === "/share-feedback"
   ) {
     return explicitBackPath || "/food/restaurant/feedback"
+  }
+
+  if (normalizedPath === "/reservations") {
+    return explicitBackPath || "/food/restaurant/explore"
   }
 
   if (

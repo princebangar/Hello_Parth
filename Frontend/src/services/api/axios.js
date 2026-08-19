@@ -8,47 +8,12 @@
 
 import axios from "axios";
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-
-const resolveApiBaseUrl = () => {
-  const envValue =
-    typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-      ? String(import.meta.env.VITE_API_BASE_URL).trim().replace(/\/$/, "")
-      : "";
-
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-
-  if (!envValue) {
-    return origin ? `${origin}/api/v1` : "/api/v1";
-  }
-
-  // Strict check: must start with http:// or https:// with dual slashes
-  if (/^https?:\/\//i.test(envValue)) {
-    try {
-      const parsed = new URL(envValue);
-      if (typeof window !== "undefined") {
-        const isEnvLocal = LOCAL_HOSTS.has(parsed.hostname);
-        const isBrowserLocal = LOCAL_HOSTS.has(window.location.hostname);
-        if (isEnvLocal && !isBrowserLocal) {
-          return `${origin}/api/v1`;
-        }
-      }
-      return envValue;
-    } catch (_) {}
-  }
-
-  // If envValue is relative or malformed, attach origin in browser
-  if (origin) {
-    const cleanPath = envValue.replace(/^https?:?\/*/, "/").replace(/^\/+/, "/");
-    const path = cleanPath.startsWith("/api") ? cleanPath : "/api/v1";
-    return `${origin}${path}`;
-  }
-
-  return "/api/v1";
-};
-
-// Prefer explicit env. If not set, use same-origin (works with reverse proxy).
-const baseURL = resolveApiBaseUrl();
+// Prefer explicit env. If not set, default to /api/v1 so the Vite proxy can forward to backend.
+// This avoids hardcoding ports like 5000 that may conflict with local setups.
+const baseURL =
+  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
+    ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, "")
+    : "/api/v1";
 
 const apiClient = axios.create({
   baseURL: baseURL || undefined,
@@ -99,47 +64,16 @@ function getModuleFromConfig(config) {
   return getModuleFromUrl(config?.url);
 }
 
-function decodeJwtPayload(token) {
-  try {
-    const payload = String(token || "").split(".")[1];
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=");
-    return JSON.parse(atob(padded));
-  } catch {
-    return null;
-  }
-}
-
-function isTokenForModule(token, module) {
-  const payload = decodeJwtPayload(token);
-  if (!payload) return false;
-  const role = String(payload.role || "").toLowerCase();
-
-  const hasUserId = Boolean(payload.userId || payload.sub);
-
-  if (module === "user") return role === "user" && hasUserId;
-  if (module === "admin") return role === "admin" && hasUserId;
-  if (module === "restaurant") return role === "restaurant" && hasUserId;
-  if (module === "delivery") return ["delivery_partner", "delivery"].includes(role) && hasUserId;
-
-  return true;
-}
-
 function getAccessToken(config) {
   const module = getModuleFromConfig(config);
   const key = `${module}_accessToken`;
   try {
     // 1. Try module-specific token first
     const moduleToken = localStorage.getItem(key);
-    if (moduleToken && isTokenForModule(moduleToken, module)) return moduleToken;
-    
-    // 2. Fallback to generic token only if it matches this Food module shape.
-    if (module !== "admin") {
-      const genericToken = localStorage.getItem("accessToken");
-      return genericToken && isTokenForModule(genericToken, module) ? genericToken : null;
-    }
-    return null;
+    if (moduleToken) return moduleToken;
+
+    // 2. Fallback to generic token if module-specific token is missing
+    return localStorage.getItem("accessToken") || null;
   } catch {
     return null;
   }
@@ -150,12 +84,9 @@ function getRefreshToken(module) {
     // 1. Try module-specific refresh token
     const moduleRefreshToken = localStorage.getItem(`${module}_refreshToken`);
     if (moduleRefreshToken) return moduleRefreshToken;
-    
-    // 2. Fallback to generic refresh token only for non-admin modules
-    if (module !== "admin") {
-      return localStorage.getItem("refreshToken") || null;
-    }
-    return null;
+
+    // 2. Fallback to generic refresh token
+    return localStorage.getItem("refreshToken") || null;
   } catch {
     return null;
   }
@@ -193,6 +124,22 @@ function onRefreshFailed(module) {
   }
 }
 
+function isLocalDevBrowser() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (import.meta.env?.DEV) return true;
+    const host = String(window.location.hostname || "").toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host.endsWith(".local")
+    );
+  } catch {
+    return false;
+  }
+}
+
 apiClient.interceptors.request.use(
   (config) => {
     config.contextModule = getModuleFromConfig(config);
@@ -202,6 +149,11 @@ apiClient.interceptors.request.use(
       if (config.headers && config.headers["Content-Type"]) {
         delete config.headers["Content-Type"];
       }
+    }
+
+    // Same live backend: mark local frontend so maintenance APIs stay open for dev.
+    if (isLocalDevBrowser()) {
+      config.headers["X-HelloParth-Client"] = "local-dev";
     }
 
     const token = getAccessToken(config);
@@ -247,10 +199,9 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
+      // Use relative URL so this works both with an explicit baseURL and with a dev proxy.
       // Use plain axios to avoid interceptor recursion.
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const path = (baseURL && baseURL.startsWith("http")) ? `${baseURL}/food/auth/refresh-token` : `${origin}${baseURL || '/api/v1'}/food/auth/refresh-token`;
-      const refreshUrl = path.startsWith("http") ? path : `http://localhost:5000${path}`;
+      const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : "/api/v1/food/auth/refresh-token";
       const { data } = await axios.post(refreshUrl, { refreshToken }, { timeout: 10000 });
       const newAccessToken = data?.data?.accessToken || data?.accessToken;
       if (newAccessToken) {
@@ -265,8 +216,16 @@ apiClient.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newAccessToken}`;
         return apiClient(original);
       }
-    } catch (_) {
-      onRefreshFailed(module);
+    } catch (refreshErr) {
+      const status = refreshErr?.response?.status;
+      // Only log out if the server explicitly rejected the refresh token
+      if (status === 401 || status === 403 || status === 400) {
+        onRefreshFailed(module);
+      } else {
+        // Network error or server error - don't clear auth, just fail the queue
+        refreshSubscribers.forEach((cb) => cb(null, module));
+        refreshSubscribers = [];
+      }
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

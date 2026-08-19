@@ -4,6 +4,43 @@ import { FoodCategory } from '../../admin/models/category.model.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import mongoose from 'mongoose';
 
+const zoneToPolygon = (zoneDoc) => {
+    const coords = Array.isArray(zoneDoc?.coordinates) ? zoneDoc.coordinates : [];
+    if (coords.length < 3) return null;
+    const ring = coords
+        .map((c) => [Number(c.longitude), Number(c.latitude)])
+        .filter((pair) => pair.every((n) => Number.isFinite(n)));
+    if (ring.length < 3) return null;
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+    return { type: 'Polygon', coordinates: [ring] };
+};
+
+const buildZoneCondition = async (zoneIdRaw) => {
+    if (!zoneIdRaw || !mongoose.Types.ObjectId.isValid(zoneIdRaw)) return null;
+    const zoneOr = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
+    try {
+        const zoneDoc = await FoodZone.findById(zoneIdRaw).select('isActive coordinates location').lean();
+        if (zoneDoc?.isActive) {
+            const polygon = zoneToPolygon(zoneDoc);
+            if (polygon) {
+                zoneOr.push({ location: { $geoWithin: { $geometry: polygon } } });
+            }
+        }
+    } catch {
+        // Ignore zone lookup errors; fall back to zoneId match only.
+    }
+    return { $or: zoneOr };
+};
+
+const mergeAndConditions = (...conditions) => {
+    const flat = conditions.filter(Boolean);
+    if (flat.length === 0) return {};
+    if (flat.length === 1) return flat[0];
+    return { $and: flat };
+};
+
 /**
  * Unified Search Service
  * Searches for restaurants by name and also searches for food items, 
@@ -22,201 +59,225 @@ export const searchUnified = async (query = {}, options = {}) => {
         page = 1,
         limit = 20,
         zoneId,
-        pricingAttributes,
-        isRestaurant
+        orderType
     } = query;
 
     const skip = (page - 1) * limit;
     const term = String(q || '').trim();
     const regex = term ? new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null;
 
-    // Base conditions
-    const baseRestaurantConditions = { status: { $ne: 'rejected' } };
-    const andConditions = [];
+    const effectiveOrderType = String(orderType || 'delivery').trim().toLowerCase();
 
-    // Resolve target zone: either explicitly passed or auto-detected from user's current lat/lng coordinates
-    let resolvedZoneId = zoneId && mongoose.Types.ObjectId.isValid(String(zoneId).trim())
-        ? new mongoose.Types.ObjectId(String(zoneId).trim())
-        : null;
-
-    if (!resolvedZoneId && lat !== undefined && lat !== null && lng !== undefined && lng !== null) {
-        const latNum = parseFloat(lat);
-        const lngNum = parseFloat(lng);
-        if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
-            try {
-                const { findMatchingZone } = await import('../../restaurant/services/zone.service.js');
-                const matchedZone = await findMatchingZone(latNum, lngNum);
-                if (matchedZone?._id) {
-                    resolvedZoneId = new mongoose.Types.ObjectId(String(matchedZone._id));
-                }
-            } catch (err) {
-                console.error("[Search-Service] Failed to auto-detect zone from lat/lng:", err);
+    // Strict zone: only search within the user's detected service zone.
+    if (!zoneId || !mongoose.Types.ObjectId.isValid(zoneId)) {
+        return {
+            success: true,
+            data: {
+                restaurants: [],
+                total: 0,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                zoneFiltered: false
             }
-        }
+        };
     }
 
-    if (resolvedZoneId) {
-        try {
-            const targetZone = await FoodZone.findById(resolvedZoneId).select('name zoneName serviceLocation').lean();
-            const locationName = targetZone?.serviceLocation || targetZone?.name || targetZone?.zoneName;
-            const zoneMatchConditions = [{ zoneId: resolvedZoneId }];
-
-            if (locationName && typeof locationName === 'string' && locationName.trim()) {
-                const escapeRx = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const locClean = locationName.trim();
-                const locRx = { $regex: escapeRx(locClean), $options: 'i' };
-                zoneMatchConditions.push(
-                    { city: locRx },
-                    { 'location.city': locRx },
-                    { area: locRx },
-                    { 'location.area': locRx }
-                );
-            }
-            andConditions.push({ $or: zoneMatchConditions });
-        } catch (err) {
-            andConditions.push({ zoneId: resolvedZoneId });
-        }
-    }
-
-    if (isRestaurant === 'false') {
-        baseRestaurantConditions.isRestaurant = false;
-    } else if (isRestaurant === 'true') {
-        baseRestaurantConditions.isRestaurant = { $ne: false };
-    }
+    // 1. Initial Filter (approved status and basic conditions)
+    const baseConditions = [{ status: 'approved' }];
+    const zoneCondition = await buildZoneCondition(zoneId);
+    if (zoneCondition) baseConditions.push(zoneCondition);
 
     if (isVeg === 'true') {
-        baseRestaurantConditions.pureVegRestaurant = true;
-    }
-
-    if (pricingAttributes) {
-        let attrs = [];
-        if (Array.isArray(pricingAttributes)) {
-            attrs = pricingAttributes;
-        } else if (typeof pricingAttributes === 'string') {
-            attrs = pricingAttributes.split(',').map(s => s.trim()).filter(Boolean);
-        }
-        if (attrs.length > 0) {
-            baseRestaurantConditions.pricingAttributes = { $all: attrs };
-        }
+        baseConditions.push({ pureVegRestaurant: true });
     }
 
     if (minRating) {
-        baseRestaurantConditions.rating = { $gte: parseFloat(minRating) };
+        baseConditions.push({ rating: { $gte: parseFloat(minRating) } });
     }
 
     if (maxDeliveryTime) {
-        baseRestaurantConditions.estimatedDeliveryTimeMinutes = { $lte: parseInt(maxDeliveryTime) };
+        baseConditions.push({ estimatedDeliveryTimeMinutes: { $lte: parseInt(maxDeliveryTime) } });
     }
 
-    // Helper to construct full query without losing $and zone conditions
-    const buildRestaurantQuery = (extraConditions = {}) => {
-        const queryObj = { ...baseRestaurantConditions, ...extraConditions };
-        if (andConditions.length > 0) {
-            queryObj.$and = queryObj.$and ? [...queryObj.$and, ...andConditions] : [...andConditions];
-        }
-        return queryObj;
-    };
+    if (effectiveOrderType === 'takeaway') {
+        baseConditions.push({ 'takeawaySettings.isEnabled': true });
+    } else if (effectiveOrderType === 'dining') {
+        baseConditions.push({ 'diningSettings.isEnabled': true });
+    }
+
+    let restaurantFilter = mergeAndConditions(...baseConditions);
+
+    console.log(`[Search-Service] Querying with term: "${term}", categoryId: "${categoryId}", zoneId: "${zoneId}", orderType: "${effectiveOrderType}"`);
+    console.log(`[Search-Service] Final Restaurant Filter:`, JSON.stringify(restaurantFilter));
 
     let restaurantIds = new Set();
     let restaurantDetailsMap = new Map();
+    /** @type {Map<string, Array<{_id: any, name: string, price: number, image: string, foodType: string}>>} */
+    const categoryDishesByRestaurant = new Map();
 
     // 2. Handle Category Filtering (Restaurants don't have categoryId, FoodItems do)
     if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
-        const catFoodItems = await FoodItem.find({
-            categoryId: new mongoose.Types.ObjectId(categoryId),
-            approvalStatus: { $ne: 'rejected' },
-            isActive: { $ne: false },
-            isAvailable: { $ne: false }
-        }).select('restaurantId').lean();
-        
-        const catRestaurantIds = [...new Set(catFoodItems.map(f => f.restaurantId?.toString()).filter(Boolean))];
-        if (catRestaurantIds.length > 0) {
-            andConditions.push({ _id: { $in: catRestaurantIds.map(id => new mongoose.Types.ObjectId(id)) } });
+        const categoryDoc = await FoodCategory.findById(categoryId).select('name').lean();
+        let categoryIdsToMatch = [new mongoose.Types.ObjectId(categoryId)];
+        if (categoryDoc && categoryDoc.name) {
+            const escapedName = categoryDoc.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const sameNamedCategories = await FoodCategory.find({
+                name: { $regex: new RegExp('^' + escapedName + '$', 'i') }
+            }).select('_id').lean();
+            if (sameNamedCategories.length > 0) {
+                categoryIdsToMatch = sameNamedCategories.map(c => c._id);
+            }
         }
+
+        // Pull dish fields once so category browse can skip N+1 menu fetches on the client.
+        const catFoodItems = await FoodItem.find({
+            categoryId: { $in: categoryIdsToMatch },
+            approvalStatus: 'approved',
+            isAvailable: { $ne: false },
+        })
+            .select('restaurantId name price image foodType')
+            .lean();
+
+        for (const food of catFoodItems) {
+            const rid = food?.restaurantId?.toString?.();
+            if (!rid) continue;
+            if (!categoryDishesByRestaurant.has(rid)) {
+                categoryDishesByRestaurant.set(rid, []);
+            }
+            const list = categoryDishesByRestaurant.get(rid);
+            if (list.length >= 16) continue;
+            list.push({
+                _id: food._id,
+                name: food.name,
+                price: food.price,
+                image: food.image || '',
+                foodType: food.foodType || 'Non-Veg',
+            });
+        }
+
+        const catRestaurantIds = [...categoryDishesByRestaurant.keys()];
+        if (catRestaurantIds.length > 0) {
+            restaurantFilter = mergeAndConditions(
+                restaurantFilter,
+                { _id: { $in: catRestaurantIds.map(id => new mongoose.Types.ObjectId(id)) } }
+            );
+        } else {
+            // No food items in this category -> No restaurants
+            return {
+                success: true,
+                data: { restaurants: [], total: 0, page: parseInt(page), limit: parseInt(limit) }
+            };
+        }
+    }
+
+    const scopedRestaurants = await FoodRestaurant.find(restaurantFilter).select('_id').lean();
+    const allowedRestaurantIds = scopedRestaurants.map((r) => r._id);
+
+    if (allowedRestaurantIds.length === 0) {
+        return {
+            success: true,
+            data: {
+                restaurants: [],
+                total: 0,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                zoneFiltered: true
+            }
+        };
     }
 
     // 3. Search Matching
     if (regex) {
-        // A. Search by Restaurant Name / Cuisine / Area / City (strictly within zone/city $and)
-        const matchedRestaurants = await FoodRestaurant.find(
-            buildRestaurantQuery({
-                $or: [
-                    { restaurantName: { $regex: regex } },
-                    { cuisines: { $regex: regex } },
-                    { area: { $regex: regex } },
-                    { city: { $regex: regex } }
-                ]
-            })
-        ).limit(limit * 2).lean();
+        // A. Search by Restaurant Name / Cuisine
+        const nameSearchFilter = mergeAndConditions(restaurantFilter, {
+            $or: [
+                { restaurantName: { $regex: regex } },
+                { cuisines: { $regex: regex } }
+            ]
+        });
+
+        const matchedRestaurants = await FoodRestaurant.find(nameSearchFilter)
+            .limit(limit * 3)
+            .lean();
 
         matchedRestaurants.forEach(r => {
             restaurantIds.add(r._id.toString());
             restaurantDetailsMap.set(r._id.toString(), { ...r, matchType: 'restaurant' });
         });
 
-        // B. Search by Food Item Name / Description (strictly scoped to zone restaurants)
+        // B. Search by Food Item Name / Description / Variants (zone + service scoped)
         const foodFilters = {
-            approvalStatus: { $ne: 'rejected' },
-            isActive: { $ne: false },
-            isAvailable: { $ne: false }
-        };
-        if (isVeg === 'true') foodFilters.foodType = 'Veg';
-        
-        // Scope food item search to restaurants matching zone/filters
-        const eligibleRestaurantsForZone = await FoodRestaurant.find(buildRestaurantQuery()).select('_id').lean();
-        if (eligibleRestaurantsForZone.length > 0) {
-            foodFilters.restaurantId = { $in: eligibleRestaurantsForZone.map(r => r._id) };
-        } else {
-            foodFilters.restaurantId = { $in: [] };
-        }
-        
-        const matchedFoods = await FoodItem.find({
-            ...foodFilters,
+            approvalStatus: 'approved',
+            isAvailable: { $ne: false },
+            restaurantId: { $in: allowedRestaurantIds },
             $or: [
                 { name: { $regex: regex } },
-                { description: { $regex: regex } }
+                { description: { $regex: regex } },
+                { categoryName: { $regex: regex } },
+                { 'variants.name': { $regex: regex } }
             ]
-        }).limit(limit * 2).lean();
+        };
+        if (isVeg === 'true') foodFilters.foodType = 'Veg';
 
-        const foodRestaurantIds = [...new Set(matchedFoods.map(f => f.restaurantId?.toString()).filter(Boolean))];
-        
-        if (foodRestaurantIds.length > 0) {
-            const unmatchedIds = foodRestaurantIds.filter(id => !restaurantIds.has(id));
-            if (unmatchedIds.length > 0) {
-                const rsForFoods = await FoodRestaurant.find(
-                    buildRestaurantQuery({
-                        _id: { $in: unmatchedIds.map(id => new mongoose.Types.ObjectId(id)) }
-                    })
-                ).lean();
+        const matchedFoods = await FoodItem.find(foodFilters)
+            .limit(Math.max(limit * 6, 60))
+            .lean();
 
-                rsForFoods.forEach(r => {
-                    restaurantIds.add(r._id.toString());
-                    restaurantDetailsMap.set(r._id.toString(), { ...r });
-                });
-            }
+        const foodByRestaurant = new Map();
+        matchedFoods.forEach((food) => {
+            const rid = food.restaurantId?.toString();
+            if (!rid || foodByRestaurant.has(rid)) return;
+            foodByRestaurant.set(rid, food);
+        });
 
-            foodRestaurantIds.forEach((restaurantId) => {
-                const existing = restaurantDetailsMap.get(restaurantId);
-                if (!existing) return;
-
-                const foodMatch = matchedFoods.find(
-                    (food) => food.restaurantId?.toString() === restaurantId,
-                );
-                if (!foodMatch) return;
-
-                restaurantDetailsMap.set(restaurantId, {
+        const unmatchedIds = [];
+        foodByRestaurant.forEach((food, rid) => {
+            if (restaurantDetailsMap.has(rid)) {
+                const existing = restaurantDetailsMap.get(rid);
+                restaurantDetailsMap.set(rid, {
                     ...existing,
                     matchType: 'food',
-                    matchedDish: foodMatch.name,
-                    matchedDishImage: foodMatch.image,
-                    matchedDishId: foodMatch._id,
+                    matchedDish: food.name,
+                    matchedDishImage: food.image,
+                    matchedDishId: food._id,
+                    matchedDishFoodType: food.foodType || null,
+                    foodType: food.foodType || null,
+                    isVeg: String(food.foodType || '').toLowerCase() === 'veg',
+                });
+                return;
+            }
+            unmatchedIds.push(rid);
+        });
+
+        if (unmatchedIds.length > 0) {
+            const foodRestaurantFilter = mergeAndConditions(
+                restaurantFilter,
+                { _id: { $in: unmatchedIds.map(id => new mongoose.Types.ObjectId(id)) } }
+            );
+
+            const rsForFoods = await FoodRestaurant.find(foodRestaurantFilter).lean();
+
+            rsForFoods.forEach(r => {
+                const rid = r._id.toString();
+                const food = foodByRestaurant.get(rid);
+                if (!food) return;
+                restaurantIds.add(rid);
+                restaurantDetailsMap.set(rid, {
+                    ...r,
+                    matchType: 'food',
+                    matchedDish: food.name,
+                    matchedDishImage: food.image,
+                    matchedDishId: food._id,
+                    matchedDishFoodType: food.foodType || null,
+                    foodType: food.foodType || null,
+                    isVeg: String(food.foodType || '').toLowerCase() === 'veg',
                 });
             });
         }
     } else {
-        // No search text -> List all restaurants matching zone/filters
-        const allMatching = await FoodRestaurant.find(buildRestaurantQuery())
-            .sort({ isSponsored: -1, rating: -1, createdAt: -1 })
+        // No search text -> List all restaurants matching filters (category/zone)
+        const allMatching = await FoodRestaurant.find(restaurantFilter)
+            .sort({ rating: -1, createdAt: -1 })
             .limit(limit * 2)
             .lean();
             
@@ -226,125 +287,214 @@ export const searchUnified = async (query = {}, options = {}) => {
         });
     }
 
-    // 4. Final Result Formatting & Distance / Delivery Time Calculation
+    // 4. Final Result Formatting
     let results = Array.from(restaurantDetailsMap.values());
-    const userLat = lat !== undefined && lat !== null ? parseFloat(lat) : null;
-    const userLng = lng !== undefined && lng !== null ? parseFloat(lng) : null;
 
-    if (Number.isFinite(userLat) && Number.isFinite(userLng) && results.length > 0) {
-        results.forEach(res => {
-            let rLat = typeof res.location?.latitude === 'number' ? res.location.latitude : null;
-            let rLng = typeof res.location?.longitude === 'number' ? res.location.longitude : null;
-            if (rLat === null && Array.isArray(res.location?.coordinates) && res.location.coordinates.length === 2) {
-                rLng = Number(res.location.coordinates[0]);
-                rLat = Number(res.location.coordinates[1]);
-            }
-            if (rLat === null && typeof res.latitude === 'number') rLat = res.latitude;
-            if (rLng === null && typeof res.longitude === 'number') rLng = res.longitude;
+    // Distance sorting (GeoJSON coordinates [lng, lat] or latitude/longitude fields)
+    if (lat && lng && results.length > 0) {
+        const userLat = Number(lat);
+        const userLng = Number(lng);
+        const toRad = (deg) => (deg * Math.PI) / 180;
+        const haversineKm = (lat1, lng1, lat2, lng2) => {
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lng2 - lng1);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRad(lat1)) *
+                    Math.cos(toRad(lat2)) *
+                    Math.sin(dLon / 2) *
+                    Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return 6371 * c;
+        };
 
-            if (Number.isFinite(rLat) && Number.isFinite(rLng)) {
-                const dLat = (rLat - userLat) * Math.PI / 180;
-                const dLon = (rLng - userLng) * Math.PI / 180;
-                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                          Math.cos(userLat * Math.PI / 180) * Math.cos(rLat * Math.PI / 180) *
-                          Math.sin(dLon/2) * Math.sin(dLon/2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                const distKm = 6371 * c; // Km
-                res.distanceScore = distKm;
-                res.distanceKm = Math.round(distKm * 10) / 10;
-                const mins = Math.max(15, Math.min(60, 15 + Math.round(distKm * 3)));
-                res.estimatedDeliveryTime = `${mins} mins`;
-                res.estimatedDeliveryTimeMinutes = mins;
+        results.forEach((res) => {
+            const coords = res.location?.coordinates;
+            const restaurantLat = Number(
+                Array.isArray(coords) && coords.length >= 2
+                    ? coords[1]
+                    : (res.location?.latitude ?? res.latitude),
+            );
+            const restaurantLng = Number(
+                Array.isArray(coords) && coords.length >= 2
+                    ? coords[0]
+                    : (res.location?.longitude ?? res.longitude),
+            );
+
+            if (
+                Number.isFinite(userLat) &&
+                Number.isFinite(userLng) &&
+                Number.isFinite(restaurantLat) &&
+                Number.isFinite(restaurantLng)
+            ) {
+                const km = haversineKm(userLat, userLng, restaurantLat, restaurantLng);
+                res.distanceScore = km;
+                res.distanceInKm = Math.round(km * 100) / 100;
+                res.distance =
+                    km >= 1
+                        ? `${km.toFixed(1)} km`
+                        : `${Math.round(km * 1000)} m`;
             } else {
                 res.distanceScore = 999;
+                res.distanceInKm = null;
             }
         });
-        results.sort((a, b) => {
-            if (a.isSponsored && !b.isSponsored) return -1;
-            if (!a.isSponsored && b.isSponsored) return 1;
-            return (a.distanceScore || 999) - (b.distanceScore || 999);
-        });
-    } else if (results.length > 0) {
-        results.sort((a, b) => {
-            if (a.isSponsored && !b.isSponsored) return -1;
-            if (!a.isSponsored && b.isSponsored) return 1;
-            return 0;
+        results.sort((a, b) => (a.distanceScore || 999) - (b.distanceScore || 999));
+    }
+
+    // ... (rest of logic up to result formation)
+    let pageRestaurants = results.slice(skip, skip + limit);
+
+    if (categoryDishesByRestaurant.size > 0) {
+        pageRestaurants = pageRestaurants.map((restaurant) => {
+            const rid = restaurant?._id?.toString?.();
+            const dishes = rid ? categoryDishesByRestaurant.get(rid) : null;
+            if (!Array.isArray(dishes) || dishes.length === 0) return restaurant;
+            const first = dishes[0];
+            return {
+                ...restaurant,
+                categoryDishes: dishes,
+                matchedDish: first.name,
+                matchedDishImage: first.image,
+                matchedDishId: first._id,
+                matchedDishFoodType: first.foodType || null,
+                foodType: first.foodType || null,
+                isVeg: String(first.foodType || '').toLowerCase() === 'veg',
+            };
         });
     }
 
-    // 5. Attach recommended images for the auto slider
-    const { attachRecommendedImagesToRestaurants } = await import('../../restaurant/services/restaurant.service.js');
-    let paginatedRestaurants = results.slice(skip, skip + limit);
-    paginatedRestaurants = await attachRecommendedImagesToRestaurants(paginatedRestaurants);
-
-    return {
+    const finalResult = {
         success: true,
         data: {
-            restaurants: paginatedRestaurants,
+            restaurants: pageRestaurants,
             total: results.length,
             page: parseInt(page),
             limit: parseInt(limit),
-            zoneFiltered: !!resolvedZoneId
+            zoneFiltered: !!(zoneId && mongoose.Types.ObjectId.isValid(zoneId))
         }
     };
+
+    return finalResult;
 };
 
 /**
  * Fetch Admin-only categories
  */
 export const getAdminCategories = async (query = {}) => {
-    try {
-        const restaurantFilter = { status: 'approved' };
-        if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
-            restaurantFilter.zoneId = new mongoose.Types.ObjectId(query.zoneId);
-        }
-        if (query.isRestaurant === 'false') {
-            restaurantFilter.isRestaurant = false;
-        } else if (query.isRestaurant === 'true') {
-            restaurantFilter.isRestaurant = { $ne: false };
-        }
+    const zoneId = query.zoneId;
 
-        const eligibleRestaurantIds = await FoodRestaurant.distinct('_id', restaurantFilter);
-
-        const eligibleCategoryIds = eligibleRestaurantIds.length
-            ? await FoodItem.distinct('categoryId', {
-                approvalStatus: 'approved',
-                isActive: { $ne: false },
-                isAvailable: { $ne: false },
-                categoryId: { $ne: null },
-                restaurantId: { $in: eligibleRestaurantIds }
-            })
-            : [];
-
-        const filter = { 
-            isActive: true,
-            $or: [
-                { restaurantId: null },
-                { restaurantId: { $exists: false } },
-                ...(eligibleCategoryIds.length ? [{ _id: { $in: eligibleCategoryIds } }] : [])
-            ]
-        };
-
-        if (query.zoneId && mongoose.Types.ObjectId.isValid(query.zoneId)) {
-            filter.$and = [
-                {
-                    $or: [
-                        { zoneId: new mongoose.Types.ObjectId(query.zoneId) },
-                        { zoneId: { $exists: false } },
-                        { zoneId: null }
-                    ]
-                }
-            ];
-        }
-
-        let categories = await FoodCategory.find(filter).sort({ sortOrder: 1, name: 1 }).lean();
+    let approvedCategoryIds = [];
+    if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+        const zoneRestaurants = await FoodRestaurant.find({
+            zoneId: new mongoose.Types.ObjectId(zoneId),
+            status: 'approved'
+        }).select('_id').lean();
+        const zoneRestaurantIds = zoneRestaurants.map(r => r._id);
         
-        if (!categories || categories.length === 0) {
-            categories = await FoodCategory.find({ isActive: { $ne: false } }).sort({ sortOrder: 1, name: 1 }).lean();
-        }
-        return categories;
-    } catch (err) {
-        console.error("Error in getAdminCategories:", err);
-        return await FoodCategory.find({ isActive: { $ne: false } }).sort({ sortOrder: 1, name: 1 }).lean();
+        approvedCategoryIds = await FoodItem.distinct('categoryId', {
+            approvalStatus: 'approved',
+            restaurantId: { $in: zoneRestaurantIds },
+            categoryId: { $ne: null }
+        });
+    } else {
+        approvedCategoryIds = await FoodItem.distinct('categoryId', {
+            approvalStatus: 'approved',
+            categoryId: { $ne: null }
+        });
     }
+
+    if (!approvedCategoryIds.length) {
+        return [];
+    }
+
+    const filter = { 
+        _id: { $in: approvedCategoryIds },
+        isActive: true, 
+        isApproved: true,
+        $and: [
+            {
+                $or: [
+                    { restaurantId: { $exists: false } },
+                    { restaurantId: null },
+                    { restaurantId: { $eq: undefined } }
+                ]
+            }
+        ]
+    };
+
+    if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+        filter.$and.push({
+            $or: [
+                { zoneId: new mongoose.Types.ObjectId(zoneId) },
+                { zoneId: { $exists: false } },
+                { zoneId: null }
+            ]
+        });
+    } else {
+        filter.$and.push({
+            $or: [
+                { zoneId: { $exists: false } },
+                { zoneId: null }
+            ]
+        });
+    }
+
+    const list = await FoodCategory.find(filter).sort({ sortOrder: 1, name: 1 }).lean();
+
+    // Deduplicate in memory
+    const groups = {};
+    for (const cat of list) {
+        const key = String(cat.name || '').toLowerCase().trim();
+        if (!key) continue;
+        if (!groups[key]) {
+            groups[key] = [];
+        }
+        groups[key].push(cat);
+    }
+
+    const deduplicated = [];
+    for (const key of Object.keys(groups)) {
+        const group = groups[key];
+        if (group.length === 1) {
+            deduplicated.push(group[0]);
+            continue;
+        }
+
+        group.sort((a, b) => {
+            const aZoneMatch = zoneId && String(a.zoneId) === String(zoneId);
+            const bZoneMatch = zoneId && String(b.zoneId) === String(zoneId);
+            if (aZoneMatch && !bZoneMatch) return -1;
+            if (!aZoneMatch && bZoneMatch) return 1;
+
+            const aGlobal = !a.zoneId;
+            const bGlobal = !b.zoneId;
+            if (aGlobal && !bGlobal) return -1;
+            if (!aGlobal && bGlobal) return 1;
+
+            const aHasImg = !!a.image;
+            const bHasImg = !!b.image;
+            if (aHasImg && !bHasImg) return -1;
+            if (!aHasImg && bHasImg) return 1;
+
+            const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : 0;
+            const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : 0;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+
+            const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return bTime - aTime;
+        });
+
+        deduplicated.push(group[0]);
+    }
+
+    deduplicated.sort((a, b) => {
+        const aOrder = typeof a.sortOrder === 'number' ? a.sortOrder : 0;
+        const bOrder = typeof b.sortOrder === 'number' ? b.sortOrder : 0;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    return deduplicated;
 };

@@ -1,12 +1,22 @@
 import { useState, useEffect } from "react"
 import { useNavigate, Link, useSearchParams } from "react-router-dom"
-import { Phone, User, AlertCircle, Loader2, Truck, ArrowLeft } from "lucide-react"
+import { Phone, User, AlertCircle, Loader2, Truck } from "lucide-react"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
+import { Input } from "@food/components/ui/input"
+import { Label } from "@food/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@food/components/ui/select"
 import { deliveryAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
+import { clearOnboardingFcmLocal } from "@food/utils/firebaseMessaging"
+import loginBg from "@food/assets/deliveryloginbanner.png"
 import { useCompanyName } from "@food/hooks/useCompanyName"
-import { motion, AnimatePresence } from "framer-motion"
-import logoImg from "@food/assets/hello-parth-logo.png"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -152,6 +162,8 @@ export default function DeliverySignup() {
         ref: String(searchParams.get("ref") || "").trim() || undefined,
       }
       sessionStorage.setItem("deliverySignupDetails", JSON.stringify(signupDetails))
+      sessionStorage.setItem("deliveryNeedsRegistration", "true")
+      clearOnboardingFcmLocal("delivery")
       clearModuleAuth("delivery")
 
       navigate("/food/delivery/signup/details")
@@ -166,171 +178,238 @@ export default function DeliverySignup() {
     }
   }
 
-  const [keyboardInset, setKeyboardInset] = useState(0)
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return undefined
-
-    const updateKeyboardInset = () => {
-      const viewport = window.visualViewport
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-      setKeyboardInset(inset > 0 ? inset : 0)
-    }
-
-    updateKeyboardInset()
-    window.visualViewport.addEventListener("resize", updateKeyboardInset)
-    window.visualViewport.addEventListener("scroll", updateKeyboardInset)
-
-    return () => {
-      window.visualViewport.removeEventListener("resize", updateKeyboardInset)
-      window.visualViewport.removeEventListener("scroll", updateKeyboardInset)
-    }
-  }, [])
-
   return (
-    <div className="min-h-[100dvh] bg-white dark:bg-[#0A0A0B] flex flex-col font-sans overflow-hidden">
-      {/* Top Branding Section - 35% height */}
-      <div className="relative h-[35dvh] w-full bg-[#1A1A1A] overflow-hidden flex flex-col items-center justify-center">
-        {/* Subtle Decorative Elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#F38F24]/5 rounded-full blur-[80px] translate-x-1/3 -translate-y-1/3"></div>
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-[60px] -translate-x-1/3 translate-y-1/3"></div>
-        </div>
-
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="relative z-10 flex flex-col items-center gap-4"
-        >
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-xl border-2 border-white/25 overflow-hidden">
-            <img src={logoImg} alt={`${companyName} logo`} className="w-full h-full object-cover scale-110" />
-          </div>
-          <div className="text-center text-white">
-            <h1 className="font-black text-2xl tracking-tight leading-none mb-1">
-              {companyName.toUpperCase()}<span className="opacity-60 italic">PARTNER</span>
+    <div className="h-screen w-full flex bg-white overflow-hidden">
+      {/* Left image section */}
+      <div className="hidden lg:flex lg:w-1/2 relative">
+        <img
+          src={loginBg}
+          alt="Delivery background"
+          className="w-full h-full object-cover"
+        />
+        {/* Orange half-circle text block attached to the left with animation */}
+        <div className="absolute inset-0 flex items-center text-white pointer-events-none">
+          <div
+            className="bg-primary-orange/80 rounded-r-full py-10 xl:py-20 pl-10 xl:pl-14 pr-10 xl:pr-20 max-w-[70%] shadow-xl backdrop-blur-[1px]"
+            style={{ animation: "slideInLeft 0.8s ease-out both" }}
+          >
+            <h1 className="text-3xl xl:text-4xl font-extrabold mb-4 tracking-wide leading-tight">
+              JOIN AS
+              <br />
+              DELIVERY PARTNER
             </h1>
-            <div className="h-0.5 w-8 bg-white/40 mx-auto rounded-full" />
+            <p className="text-base xl:text-lg opacity-95 max-w-xl">
+              Start your journey as a delivery partner and earn flexible income.
+            </p>
           </div>
-        </motion.div>
+        </div>
       </div>
 
-      {/* Bottom Form Section - 65% height */}
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="flex-1 bg-white dark:bg-[#0A0A0B] rounded-t-[2.5rem] -mt-8 relative z-20 shadow-[0_-20px_40px_rgba(0,0,0,0.05)] px-6 pt-8 pb-6 flex flex-col"
-        style={{ marginBottom: keyboardInset ? `${keyboardInset}px` : 0 }}
-      >
-        <div className="max-w-md mx-auto w-full flex flex-col h-full">
-          <div className="space-y-2 mb-6">
-            <h2 className="text-2xl font-black text-[#1A1A1A] dark:text-white tracking-tight">
-              Create Your Account
-            </h2>
-            <p className="text-sm font-medium text-gray-500">
-              Enter your details to start your delivery journey.
-            </p>
+      {/* Right form section */}
+      <div className="w-full lg:w-1/2 h-full flex flex-col">
+        {/* Top logo and version */}
+        <div className="relative flex items-center justify-center px-6 sm:px-10 lg:px-16 pt-6 pb-4">
+          <div
+            className="flex items-center gap-3"
+            style={{ animation: "fadeInDown 0.7s ease-out both" }}
+          >
+            <div className="h-11 w-11 rounded-xl bg-primary-orange flex items-center justify-center text-white shadow-lg">
+              <Truck className="h-6 w-6" />
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-2xl font-bold tracking-wide text-primary-orange">
+                {companyName}
+              </span>
+              <span className="text-xs font-medium text-gray-500">
+                Delivery Partner
+              </span>
+            </div>
           </div>
-
-          <div className="space-y-6 flex-1">
-            <AnimatePresence>
-              {apiError && (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-red-500 bg-red-50 py-3 px-4 rounded-xl border border-red-100"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{apiError}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-4">
-                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider ml-1">
-                  Full Name
-                </label>
-                <div className={`flex items-center gap-0 bg-[#F8F9FA] dark:bg-zinc-900 border ${errors.name ? 'border-red-500' : 'border-gray-200 dark:border-zinc-800'} rounded-xl focus-within:border-[#F38F24] focus-within:ring-1 focus-within:ring-[#F38F24] transition-all overflow-hidden group h-14`}>
-                  <div className="flex items-center px-4 bg-transparent text-gray-400">
-                    <User size={20} className="group-focus-within:text-[#F38F24] transition-colors" />
-                  </div>
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-gray-400 text-base font-semibold px-2 text-[#1A1A1A] dark:text-white h-full"
-                    required
-                  />
-                </div>
-                {errors.name && (
-                  <p className="text-xs font-bold text-red-500 ml-1">{errors.name}</p>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider ml-1">
-                  Mobile Number
-                </label>
-                <div className={`flex items-center gap-0 bg-[#F8F9FA] dark:bg-zinc-900 border ${errors.phone ? 'border-red-500' : 'border-gray-200 dark:border-zinc-800'} rounded-xl focus-within:border-[#F38F24] focus-within:ring-1 focus-within:ring-[#F38F24] transition-all overflow-hidden h-14`}>
-                  <div className="px-5 border-r border-gray-200 dark:border-zinc-800 bg-transparent text-[#1A1A1A] dark:text-white font-black text-lg h-full flex items-center">
-                    +91
-                  </div>
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="Enter 10-digit number"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-gray-400 text-lg font-black tracking-widest px-5 text-[#1A1A1A] dark:text-white h-full"
-                    required
-                  />
-                </div>
-                {errors.phone && (
-                  <p className="text-xs font-bold text-red-500 ml-1">{errors.phone}</p>
-                )}
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-14 mt-4 rounded-xl font-bold text-base transition-all bg-[#1A1A1A] hover:bg-black text-white hover:shadow-lg disabled:opacity-50 disabled:bg-gray-200 disabled:text-gray-400"
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    <span>Creating...</span>
-                  </div>
-                ) : (
-                  "Continue to Details"
-                )}
-              </Button>
-            </form>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col items-center gap-4">
-            <button
-              onClick={() => navigate("/food/delivery/login")}
-              className="flex items-center gap-2 text-sm font-bold text-[#1A1A1A] hover:text-[#F38F24] transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to login
-            </button>
-            <p className="text-xs text-gray-400 font-medium text-center leading-relaxed">
-              By continuing you agree to the<br />
-              <Link to="/food/delivery/terms" className="text-[#1A1A1A] font-bold">Terms and Conditions</Link>
-            </p>
+          <div className="absolute right-6 sm:right-10 lg:right-16 top-6 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-700 shadow-sm">
+            Software Version : 1.0.0
           </div>
         </div>
-      </motion.div>
+
+        {/* Centered content (title + form + info) */}
+        <div
+          className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 lg:px-16 pb-8"
+          style={{ animation: "fadeInUp 0.8s ease-out 0.15s both" }}
+        >
+          {/* Title */}
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-2">
+              Create Your Account
+            </h2>
+            <p className="text-sm text-gray-500">
+              Enter your details to get started.
+            </p>
+          </div>
+          {apiError && (
+            <div className="mb-4 flex items-center gap-1 text-xs sm:text-sm text-red-600">
+              <AlertCircle className="h-3 w-3" />
+              <span>{apiError}</span>
+            </div>
+          )}
+
+          {/* Form */}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5 w-full max-w-lg rounded-xl bg-white/80 backdrop-blur-sm p-1 sm:p-2"
+          >
+            {/* Name input */}
+            <div className="space-y-1.5">
+              <Label htmlFor="name" className="text-sm font-medium text-gray-700">
+                Full Name
+              </Label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                  <User className="h-4 w-4" />
+                </span>
+                <Input
+                  id="name"
+                  name="name"
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={`h-11 pl-9 border-gray-300 rounded-md shadow-sm focus-visible:ring-primary-orange focus-visible:ring-2 transition-colors placeholder:text-gray-400 ${errors.name ? "border-red-500" : ""}`}
+                  required
+                />
+              </div>
+              {errors.name && (
+                <div className="flex items-center gap-1 text-xs sm:text-sm text-red-600">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>{errors.name}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Phone input */}
+            <div className="space-y-1.5">
+              <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
+                Phone Number
+              </Label>
+              <div className="flex gap-2">
+                <div className="flex items-center px-4 h-11 border border-gray-300 bg-gray-50 text-gray-700 rounded-md shrink-0">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <span>🇮🇳</span>
+                    <span>+91</span>
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                      <Phone className="h-4 w-4" />
+                    </span>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="Enter 10-digit number"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className={`h-11 pl-9 border-gray-300 rounded-md shadow-sm focus-visible:ring-primary-orange focus-visible:ring-2 transition-colors placeholder:text-gray-400 ${errors.phone ? "border-red-500" : ""}`}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              {errors.phone && (
+                <div className="flex items-center gap-1 text-xs sm:text-sm text-red-600">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>{errors.phone}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Sign up button */}
+            <Button
+              type="submit"
+              className="mt-2 h-11 w-full bg-primary-orange hover:bg-primary-orange/90 text-white text-base font-semibold rounded-md shadow-md transition-colors"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending OTP...
+                </>
+              ) : (
+                "Send OTP"
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm space-y-2">
+            <p>
+              <span className="text-gray-600">Already have an account? </span>
+              <Link
+                to="/food/delivery/login"
+                className="text-primary-orange hover:underline font-medium"
+              >
+                Login
+              </Link>
+            </p>
+            <p className="text-xs text-gray-500">
+              By continuing, you agree to our{" "}
+              <Link to="/food/delivery/terms" className="text-primary-orange hover:underline">
+                Terms and Conditions
+              </Link>
+            </p>
+          </div>
+
+          {/* Demo credentials / info bar */}
+          <div className="mt-8 w-full max-w-lg rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-xs sm:text-sm text-gray-800 flex items-start gap-3">
+            <div className="mt-0.5 text-primary-orange">
+              <AlertCircle className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="font-semibold mb-1">Demo Credentials</div>
+              <div>
+                <span className="font-semibold">Phone :</span> +91 9876543210
+              </div>
+              <div>
+                <span className="font-semibold">OTP :</span> 1234
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Simple keyframe animations */}
+        <style>{`
+          @keyframes slideInLeft {
+            from {
+              opacity: 0;
+              transform: translateX(-40px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          @keyframes fadeInDown {
+            from {
+              opacity: 0;
+              transform: translateY(-16px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}</style>
+      </div>
     </div>
   )
 }

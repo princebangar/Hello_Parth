@@ -12,21 +12,9 @@ import { useProfile } from "@food/context/ProfileContext"
 import { useZone } from "@food/hooks/useZone"
 import { useLocation } from "@food/hooks/useLocation"
 import { restaurantAPI } from "@food/api"
-import { API_BASE_URL } from "@food/api/config"
 import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
-
-const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "")
-
-const normalizeImageUrl = (imageUrl) => {
-  if (typeof imageUrl !== "string" || !imageUrl.trim()) return ""
-  const trimmed = imageUrl.trim()
-  if (/^(https?:)?\/\//i.test(trimmed) || /^data:/i.test(trimmed) || /^blob:/i.test(trimmed)) {
-    return trimmed
-  }
-  return trimmed.startsWith("/")
-    ? `${BACKEND_ORIGIN}${trimmed}`
-    : `${BACKEND_ORIGIN}/${trimmed}`
-}
+import { filterRestaurantsForVegMode } from "@food/utils/vegMode"
+import { normalizeImageUrl } from "@food/utils/common"
 
 const pickRestaurantImage = (restaurant) => {
   const candidates = [
@@ -42,12 +30,17 @@ const pickRestaurantImage = (restaurant) => {
 }
 
 export default function Restaurants() {
-  const { addFavorite, removeFavorite, isFavorite } = useProfile()
+  const { addFavorite, removeFavorite, isFavorite, orderType, vegMode, vegModeOption } = useProfile()
   const { location: userLocation } = useLocation()
   const { zoneId } = useZone(userLocation)
   const [restaurants, setRestaurants] = useState([])
   const [loading, setLoading] = useState(true)
   const showRestaurantsSkeleton = useDelayedLoading(loading)
+
+  const visibleRestaurants = useMemo(
+    () => filterRestaurantsForVegMode(restaurants, { vegMode, vegModeOption }),
+    [restaurants, vegMode, vegModeOption],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -55,7 +48,7 @@ export default function Restaurants() {
     const fetchRestaurants = async () => {
       try {
         setLoading(true)
-        const params = { limit: 300, _ts: Date.now(), isRestaurant: "true" }
+        const params = { limit: 300, _ts: Date.now() }
         if (zoneId) {
           params.zoneId = zoneId
         }
@@ -66,7 +59,15 @@ export default function Restaurants() {
           []
         if (cancelled) return
 
-        const transformed = list.map((restaurant) => {
+        // Apply Takeaway filter if orderType is takeaway
+        const filteredList = list.filter((restaurant) => {
+          if (orderType === "takeaway") {
+            return restaurant.takeawaySettings?.isEnabled || restaurant.takeawayAvailable;
+          }
+          return true;
+        });
+
+        const transformed = filteredList.map((restaurant) => {
           const slug =
             restaurant?.slug ||
             String(restaurant?.name || "")
@@ -81,17 +82,14 @@ export default function Restaurants() {
             slug,
             name: restaurant?.name || "Unknown Restaurant",
             cuisine,
-            rating: Number(restaurant?.rating || 0),
-            deliveryTime: restaurant?.estimatedDeliveryTime || (restaurant?.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
+            rating: Number(restaurant?.rating || 0) || 4.5,
+            deliveryTime: (orderType === "takeaway")
+              ? (restaurant.preparationTime || "20-25 mins")
+              : restaurant?.estimatedDeliveryTime || (restaurant?.estimatedDeliveryTimeMinutes ? `${restaurant.estimatedDeliveryTimeMinutes} mins` : "25-30 mins"),
             distance: restaurant?.distance ? (typeof restaurant.distance === 'number' ? `${restaurant.distance.toFixed(1)} km` : restaurant.distance) : "1.2 km",
             priceRange: restaurant?.priceRange || "$$",
             image: pickRestaurantImage(restaurant),
-            isSponsored: restaurant?.isSponsored === true || restaurant?.isSponsored === "true",
           }
-        }).sort((a, b) => {
-          if (a.isSponsored && !b.isSponsored) return -1
-          if (!a.isSponsored && b.isSponsored) return 1
-          return 0
         })
 
         setRestaurants(transformed)
@@ -110,16 +108,16 @@ export default function Restaurants() {
     return () => {
       cancelled = true
     }
-  }, [zoneId])
+  }, [zoneId, orderType])
 
-  const hasRestaurants = useMemo(() => restaurants.length > 0, [restaurants.length])
+  const hasRestaurants = useMemo(() => visibleRestaurants.length > 0, [visibleRestaurants.length])
 
   return (
     <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 dark:from-[#0a0a0a] via-white dark:via-[#0a0a0a] to-orange-50/20 dark:to-[#0a0a0a]">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 space-y-4 sm:space-y-6 lg:space-y-8">
         <ScrollReveal>
           <div className="flex items-center gap-3 sm:gap-4 lg:gap-5 mb-4 lg:mb-6">
-            <Link to="/">
+            <Link to="/food/user">
               <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 hover:bg-gray-100 dark:hover:bg-gray-800">
                 <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-gray-900 dark:text-gray-100" />
               </Button>
@@ -138,7 +136,7 @@ export default function Restaurants() {
           <div className="py-16 text-center text-sm text-gray-500">No restaurants available right now.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5 xl:gap-6 pt-2 sm:pt-3 lg:pt-4">
-            {restaurants.map((restaurant, index) => {
+            {visibleRestaurants.map((restaurant, index) => {
               const favorite = isFavorite(restaurant.slug)
 
               const handleToggleFavorite = (e) => {
@@ -177,17 +175,9 @@ export default function Restaurants() {
                                     {restaurant.cuisine}
                                   </p>
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    {restaurant.isSponsored && (
-                                      <div className="flex items-center gap-1 bg-amber-500 text-white px-2 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider shadow-sm">
-                                        <Star className="h-3 w-3 fill-current" />
-                                        Sponsored
-                                      </div>
-                                    )}
                                     <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded-full">
                                       <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-yellow-400 text-yellow-400" />
-                                      <span className="font-bold text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">
-                                        {restaurant.rating > 0 ? restaurant.rating.toFixed(1) : "NEW"}
-                                      </span>
+                                      <span className="font-bold text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">{restaurant.rating.toFixed(1)}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -212,7 +202,7 @@ export default function Restaurants() {
                                   <span className="font-medium whitespace-nowrap">{restaurant.distance}</span>
                                 </div>
                               </div>
-                              <Button className="bg-primary-orange hover:opacity-90 dark:hover:opacity-80 text-white text-xs sm:text-sm h-7 sm:h-8 px-3 sm:px-4 flex-shrink-0 transition-opacity">
+                              <Button className="bg-[#DC2626] hover:opacity-90 dark:hover:opacity-80 text-white text-xs sm:text-sm h-7 sm:h-8 px-3 sm:px-4 flex-shrink-0 transition-opacity">
                                 Order Now
                               </Button>
                             </div>

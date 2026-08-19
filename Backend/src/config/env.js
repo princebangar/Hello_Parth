@@ -1,6 +1,12 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const backendRoot = path.resolve(__dirname, '..', '..');
+const uploadPath = process.env.UPLOAD_PATH || 'uploads/';
 
 const parseOrigins = (value) =>
     String(value || '')
@@ -59,7 +65,18 @@ export const config = {
     bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS || 10),
 
     // Uploads
-    uploadPath: process.env.UPLOAD_PATH || 'uploads/',
+    uploadPath,
+    uploadsRoot: path.isAbsolute(uploadPath)
+        ? path.normalize(uploadPath)
+        : path.resolve(backendRoot, uploadPath),
+    assetBaseUrl: String(
+        process.env.ASSET_BASE_URL ||
+        process.env.API_BASE_URL ||
+        `http://localhost:${process.env.PORT || 5000}`
+    ).replace(/\/+$/, ''),
+    uploadRemoteOrigin: String(process.env.UPLOAD_REMOTE_ORIGIN || '').replace(/\/+$/, ''),
+    uploadInternalSecret: process.env.UPLOAD_INTERNAL_SECRET || process.env.JWT_ACCESS_SECRET || '',
+    serveUploadsFromNode: process.env.SERVE_UPLOADS_FROM_NODE === 'true',
     requestJsonLimit: process.env.REQUEST_JSON_LIMIT || '2mb',
     requestUrlencodedLimit: process.env.REQUEST_URLENCODED_LIMIT || '2mb',
 

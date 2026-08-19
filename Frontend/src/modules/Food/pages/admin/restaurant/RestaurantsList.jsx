@@ -1,16 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2, Plus } from "lucide-react"
+import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2, Plus, ShieldCheck, CheckCircle2, Utensils, UtensilsCrossed, Store } from "lucide-react"
 import { adminAPI, restaurantAPI, uploadAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { formatRestaurantDisplayAddress, getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 
 // Import icons from Dashboard-icons
-import locationIcon from "@food/assets/Dashboard-icons/image1.png"
-import restaurantIcon from "@food/assets/Dashboard-icons/image2.png"
-import inactiveIcon from "@food/assets/Dashboard-icons/image3.png"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -21,19 +19,21 @@ const PLACEHOLDER_128 = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000
 
 const normalizeApprovalStatus = (restaurant) => {
   const raw = String(restaurant?.status || "").trim().toLowerCase()
-  if (raw === "approved" || raw === "pending" || raw === "rejected") return raw
+  if (raw === "approved" || raw === "pending" || raw === "rejected" || raw === "banned") return raw
   return "pending"
 }
 
 const approvalStatusLabel = (status) => {
   if (status === "approved") return "Approved"
   if (status === "rejected") return "Rejected"
+  if (status === "banned") return "Banned"
   return "Pending"
 }
 
 const approvalStatusBadgeClass = (status) => {
   if (status === "approved") return "bg-emerald-100 text-emerald-700"
   if (status === "rejected") return "bg-rose-100 text-rose-700"
+  if (status === "banned") return "bg-rose-100 text-rose-700"
   return "bg-amber-100 text-amber-700"
 }
 
@@ -85,6 +85,7 @@ const normalizeImageUrl = (image) => {
   return ""
 }
 
+
 const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
   const coverImages = Array.isArray(restaurant?.coverImages) ? restaurant.coverImages : []
   const firstCoverImage = coverImages.map(normalizeImageUrl).find(Boolean)
@@ -105,6 +106,12 @@ export default function RestaurantsList() {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [restaurants, setRestaurants] = useState([])
+  const [bannedRestaurants, setBannedRestaurants] = useState([])
+  const [rejectedRestaurants, setRejectedRestaurants] = useState([])
+  const [viewMode, setViewMode] = useState("active") // 'active' or 'banned'
+  const [bannedCount, setBannedCount] = useState(0)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [rejectedCount, setRejectedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedRestaurant, setSelectedRestaurant] = useState(null)
@@ -112,7 +119,6 @@ export default function RestaurantsList() {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [banConfirmDialog, setBanConfirmDialog] = useState(null) // { restaurant, action: 'ban' | 'unban' }
   const [banning, setBanning] = useState(false)
-  const [togglingIsSponsoredId, setTogglingIsSponsoredId] = useState(null)
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState(null) // { restaurant }
   const [deleting, setDeleting] = useState(false)
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" })
@@ -121,7 +127,6 @@ export default function RestaurantsList() {
   const [detailsForm, setDetailsForm] = useState({
     name: "",
     pureVegRestaurant: false,
-    pricingAttributes: [],
     ownerName: "",
     ownerEmail: "",
     ownerPhone: "",
@@ -204,20 +209,6 @@ export default function RestaurantsList() {
         setLoading(true)
         setError(null)
 
-        const response = await adminAPI.getApprovedRestaurants({})
-
-        if (cancelled) return
-
-        const body = response?.data
-        const data = body?.data
-        const rawList = Array.isArray(data?.restaurants)
-          ? data.restaurants
-          : Array.isArray(data)
-            ? data
-            : Array.isArray(body?.restaurants)
-              ? body.restaurants
-              : []
-
         const zoneLabelFromRestaurant = (restaurant) => {
           const zid = restaurant?.zoneId
           const zoneName =
@@ -245,6 +236,103 @@ export default function RestaurantsList() {
           )
         }
 
+        const extractRestaurantPayload = (apiResponse) => {
+          const body = apiResponse?.data
+          const data = body?.data
+          const list = Array.isArray(data?.restaurants)
+            ? data.restaurants
+            : Array.isArray(data)
+              ? data
+              : Array.isArray(body?.restaurants)
+                ? body.restaurants
+                : []
+          const total = Number(data?.total ?? body?.total ?? list.length) || list.length
+          return { list, total, body }
+        }
+
+        // APIs are paginated — pull a large page so list/stats are not truncated
+        const [response, bannedResponse, pendingResponse, rejectedOnlyResponse] = await Promise.all([
+          adminAPI.getApprovedRestaurants({ status: "approved", limit: 1000, page: 1 }),
+          adminAPI.getApprovedRestaurants({ status: "banned", limit: 1000, page: 1 }).catch(() => null),
+          adminAPI.getPendingRestaurants({ limit: 1000, page: 1 }).catch(() => null),
+          adminAPI.getApprovedRestaurants({ status: "rejected", limit: 1000, page: 1 }).catch(() => null),
+        ])
+
+        if (cancelled) return
+
+        let mappedBanned = []
+        let bannedCnt = 0
+        if (bannedResponse?.data) {
+          const { list: bannedList, total } = extractRestaurantPayload(bannedResponse)
+          bannedCnt = total
+          mappedBanned = bannedList.map((restaurant, index) => ({
+            id: restaurant._id || restaurant.id || index + 1,
+            _id: restaurant._id,
+            name: restaurant.name || restaurant.restaurantName || "N/A",
+            ownerName: restaurant.ownerName || "N/A",
+            ownerPhone: restaurant.ownerPhone || restaurant.phone || "N/A",
+            zone: zoneLabelFromRestaurant(restaurant),
+            approvalStatus: "banned",
+            isActive: false,
+            rating: restaurant.ratings?.average || restaurant.rating || 0,
+            logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            originalData: restaurant,
+          }))
+        }
+        if (!cancelled) {
+          setBannedCount(bannedCnt)
+          setBannedRestaurants(mappedBanned)
+        }
+
+        let pendingCnt = 0
+        let rejectedCnt = 0
+        let mappedRejectedList = []
+        if (pendingResponse?.data) {
+          const { list } = extractRestaurantPayload(pendingResponse)
+          pendingCnt = list.filter((r) => String(r.status || "").toLowerCase() === "pending").length
+        }
+        if (rejectedOnlyResponse?.data) {
+          const { list: rawRejected, total } = extractRestaurantPayload(rejectedOnlyResponse)
+          rejectedCnt = total
+          mappedRejectedList = rawRejected.map((restaurant, index) => ({
+            id: restaurant._id || restaurant.id || index + 1,
+            _id: restaurant._id,
+            name: restaurant.restaurantName || restaurant.name || "N/A",
+            ownerName: restaurant.ownerName || "N/A",
+            ownerPhone: restaurant.ownerPhone || restaurant.phone || "N/A",
+            zone: restaurant.zone || zoneLabelFromRestaurant(restaurant),
+            approvalStatus: "rejected",
+            isActive: false,
+            rating: restaurant.ratings?.average || restaurant.rating || 0,
+            logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            originalData: restaurant,
+          }))
+        } else if (pendingResponse?.data) {
+          const { list } = extractRestaurantPayload(pendingResponse)
+          const rawRejected = list.filter((r) => String(r.status || "").toLowerCase() === "rejected")
+          rejectedCnt = rawRejected.length
+          mappedRejectedList = rawRejected.map((restaurant, index) => ({
+            id: restaurant._id || restaurant.id || index + 1,
+            _id: restaurant._id,
+            name: restaurant.restaurantName || restaurant.name || "N/A",
+            ownerName: restaurant.ownerName || "N/A",
+            ownerPhone: restaurant.ownerPhone || restaurant.phone || "N/A",
+            zone: restaurant.zone || zoneLabelFromRestaurant(restaurant),
+            approvalStatus: "rejected",
+            isActive: false,
+            rating: restaurant.ratings?.average || restaurant.rating || 0,
+            logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            originalData: restaurant,
+          }))
+        }
+        if (!cancelled) {
+          setPendingCount(pendingCnt)
+          setRejectedCount(rejectedCnt)
+          setRejectedRestaurants(mappedRejectedList)
+        }
+
+        const { list: rawList, body } = extractRestaurantPayload(response)
+
         if (rawList.length > 0 || body?.success === true) {
           const mappedRestaurants = rawList.map((restaurant, index) => ({
             id: restaurant._id || restaurant.id || index + 1,
@@ -255,8 +343,6 @@ export default function RestaurantsList() {
             zone: zoneLabelFromRestaurant(restaurant),
             approvalStatus: normalizeApprovalStatus(restaurant),
             isActive: restaurant.isActive !== false,
-            isRestaurant: restaurant.isRestaurant !== false,
-            isSponsored: restaurant.isSponsored === true,
             rating: restaurant.ratings?.average || restaurant.rating || 0,
             logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
             originalData: restaurant,
@@ -309,7 +395,14 @@ export default function RestaurantsList() {
   })
 
   const filteredRestaurants = useMemo(() => {
-    let result = [...restaurants]
+    let result = []
+    if (viewMode === "active") {
+      result = [...restaurants]
+    } else if (viewMode === "banned") {
+      result = [...bannedRestaurants]
+    } else if (viewMode === "rejected") {
+      result = [...rejectedRestaurants]
+    }
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
@@ -373,7 +466,10 @@ export default function RestaurantsList() {
     }
 
     return result
-  }, [restaurants, searchQuery, filters, sortConfig])
+  }, [restaurants, bannedRestaurants, rejectedRestaurants, viewMode, searchQuery, filters, sortConfig])
+
+  const modalRestaurant = restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant
+  const detailsApprovalStatus = modalRestaurant ? normalizeApprovalStatus(modalRestaurant) : "pending"
 
   const handleSort = (key) => {
     let direction = "asc"
@@ -383,7 +479,7 @@ export default function RestaurantsList() {
     setSortConfig({ key, direction })
   }
 
-  const totalRestaurants = restaurants.length
+  const totalRestaurants = restaurants.length + bannedCount + pendingCount + rejectedCount
   const activeRestaurants = restaurants.filter(r => r.isActive === true).length
   const inactiveRestaurants = restaurants.filter(r => r.isActive !== true).length
 
@@ -418,18 +514,7 @@ export default function RestaurantsList() {
   }
 
   const formatLocationAddress = (location = {}, fallback = "N/A") => {
-    if (!location || typeof location !== "object") return fallback
-    if (location.formattedAddress) return location.formattedAddress
-    if (location.address) return location.address
-    const parts = [
-      location.addressLine1,
-      location.addressLine2,
-      location.area,
-      location.city,
-      location.state,
-      location.pincode || location.zipCode || location.postalCode,
-    ].filter(Boolean)
-    return parts.length > 0 ? parts.join(", ") : fallback
+    return formatRestaurantDisplayAddress(location) || fallback
   }
 
   const normalizeLocationFormFromRestaurant = (restaurant) => {
@@ -702,8 +787,13 @@ export default function RestaurantsList() {
     setZonesLoading(true)
     adminAPI.getZones({ limit: 1000 })
       .then((res) => {
-        const list = res?.data?.data?.zones || res?.data?.data?.data?.zones || res?.data?.data?.zones || res?.data?.data || []
-        setZones(Array.isArray(list) ? list : [])
+        const zoneData = res?.data?.data
+        const list = Array.isArray(zoneData?.zones)
+          ? zoneData.zones
+          : Array.isArray(zoneData)
+            ? zoneData
+            : []
+        setZones(list)
       })
       .catch(() => setZones([]))
       .finally(() => setZonesLoading(false))
@@ -726,7 +816,6 @@ export default function RestaurantsList() {
       return {
         name: "",
         pureVegRestaurant: false,
-        pricingAttributes: [],
         ownerName: "",
         ownerEmail: "",
         ownerPhone: "",
@@ -760,7 +849,6 @@ export default function RestaurantsList() {
         typeof restaurant.pureVegRestaurant === "boolean"
           ? restaurant.pureVegRestaurant
           : false,
-      pricingAttributes: Array.isArray(restaurant.pricingAttributes) ? restaurant.pricingAttributes : [],
       ownerName: restaurant.ownerName || "",
       ownerEmail: restaurant.ownerEmail || "",
       ownerPhone: restaurant.ownerPhone || restaurant.phone || "",
@@ -770,7 +858,6 @@ export default function RestaurantsList() {
       openingTime: openingTimeValue,
       closingTime: closingTimeValue,
       isActive: restaurant.isActive !== false,
-      isSponsored: restaurant.isSponsored === true,
     }
   }
 
@@ -799,7 +886,7 @@ export default function RestaurantsList() {
       let profileImage = undefined
       if (profileImageFile) {
         const uploadRes = await uploadAPI.uploadMedia(profileImageFile, {
-          folder: "hello-parth/restaurant/profile",
+          folder: "helloparth/restaurant/profile",
         })
         const media = uploadRes?.data?.data?.file || uploadRes?.data?.data || uploadRes?.data?.file
         if (media?.url) {
@@ -825,7 +912,6 @@ export default function RestaurantsList() {
       const payload = {
         name: detailsForm.name.trim(),
         pureVegRestaurant: detailsForm.pureVegRestaurant === true,
-        pricingAttributes: detailsForm.pricingAttributes || [],
         ownerName: detailsForm.ownerName.trim(),
         ownerEmail: detailsForm.ownerEmail.trim(),
         ownerPhone: detailsForm.ownerPhone.trim(),
@@ -835,7 +921,6 @@ export default function RestaurantsList() {
         openingTime: normalizedOpeningTime,
         closingTime: normalizedClosingTime,
         isActive: detailsForm.isActive,
-        isSponsored: detailsForm.isSponsored,
       }
 
       if (profileImage) {
@@ -857,7 +942,6 @@ export default function RestaurantsList() {
                 ownerPhone: updatedRestaurant.ownerPhone || updatedRestaurant.phone || item.ownerPhone,
                 zone: updatedRestaurant.location?.area || updatedRestaurant.location?.city || item.zone,
                 isActive: updatedRestaurant.isActive !== false,
-                isSponsored: updatedRestaurant.isSponsored === true,
                 approvalStatus: normalizeApprovalStatus(updatedRestaurant),
                 logo: getPrimaryRestaurantImage(updatedRestaurant, item.logo),
                 originalData: {
@@ -891,6 +975,7 @@ export default function RestaurantsList() {
     setRestaurantDetails(null)
   }
 
+
   // Handle ban/unban restaurant
   const handleBanRestaurant = (restaurant) => {
     const isBanned = !restaurant.isActive
@@ -906,41 +991,43 @@ export default function RestaurantsList() {
     const { restaurant, action } = banConfirmDialog
     const isBanning = action === 'ban'
     const newStatus = !isBanning // false for ban, true for unban
+    const restaurantId = restaurant._id || restaurant.id
 
     try {
       setBanning(true)
-      const restaurantId = restaurant._id || restaurant.id
 
       // Update restaurant status via API
       try {
         await adminAPI.updateRestaurantStatus(restaurantId, newStatus)
 
         // Update local state on success
-        setRestaurants(prevRestaurants =>
-          prevRestaurants.map(r =>
-            r.id === restaurant.id || r._id === restaurant._id
-              ? { ...r, isActive: newStatus }
-              : r
-          )
-        )
+        if (isBanning) {
+          setRestaurants(prev => prev.filter(r => r._id !== restaurantId && r.id !== restaurantId))
+          const bannedItem = {
+            ...restaurant,
+            isActive: false,
+            approvalStatus: 'rejected',
+          }
+          setBannedRestaurants(prev => [bannedItem, ...prev])
+          setBannedCount(prev => prev + 1)
+        } else {
+          setBannedRestaurants(prev => prev.filter(r => r._id !== restaurantId && r.id !== restaurantId))
+          setBannedCount(prev => Math.max(0, prev - 1))
+          const approvedItem = {
+            ...restaurant,
+            isActive: true,
+            approvalStatus: 'approved',
+          }
+          setRestaurants(prev => [approvedItem, ...prev])
+        }
 
         // Close dialog
         setBanConfirmDialog(null)
-
-        // Show success message
-        debugLog(`Restaurant ${isBanning ? 'banned' : 'unbanned'} successfully`)
+        alert(`Restaurant ${isBanning ? 'banned' : 'unbanned'} successfully`)
       } catch (apiErr) {
         debugError("API Error:", apiErr)
-        // If API fails, still update locally for better UX
-        setRestaurants(prevRestaurants =>
-          prevRestaurants.map(r =>
-            r.id === restaurant.id || r._id === restaurant._id
-              ? { ...r, isActive: newStatus }
-              : r
-          )
-        )
         setBanConfirmDialog(null)
-        alert(`Restaurant ${isBanning ? 'banned' : 'unbanned'} locally. Please check backend connection.`)
+        alert(apiErr.response?.data?.message || `Failed to ${action} restaurant.`)
       }
 
     } catch (err) {
@@ -953,43 +1040,6 @@ export default function RestaurantsList() {
 
   const cancelBanRestaurant = () => {
     setBanConfirmDialog(null)
-  }
-
-  const [togglingIsSponsoredId, setTogglingIsSponsoredId] = useState(null)
-  
-  const handleToggleIsSponsored = async (restaurant) => {
-    const restaurantId = restaurant._id || restaurant.id
-    if (!restaurantId) return
-
-    const nextValue = !restaurant.isSponsored
-    try {
-      setTogglingIsSponsoredId(restaurantId)
-      await adminAPI.updateRestaurant(restaurantId, { isSponsored: nextValue })
-      setRestaurants((prevRestaurants) =>
-        prevRestaurants.map((r) =>
-          r.id === restaurantId || r._id === restaurantId
-            ? { ...r, isSponsored: nextValue }
-            : r
-        )
-      )
-      setRestaurantDetails((prev) => {
-        if (prev && (prev._id === restaurantId || prev.id === restaurantId)) {
-          return { ...prev, isSponsored: nextValue }
-        }
-        return prev
-      })
-      setSelectedRestaurant((prev) => {
-        if (prev && (prev._id === restaurantId || prev.id === restaurantId)) {
-          return { ...prev, isSponsored: nextValue }
-        }
-        return prev
-      })
-    } catch (err) {
-      debugError("Error toggling isSponsored:", err)
-      alert("Failed to update sponsored status. Please try again.")
-    } finally {
-      setTogglingIsSponsoredId(null)
-    }
   }
 
   // Handle delete restaurant
@@ -1060,16 +1110,22 @@ export default function RestaurantsList() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
           {/* Total Restaurants */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600 mb-1">Total restaurants</p>
-                <p className="text-2xl font-bold text-slate-900">{totalRestaurants}</p>
+                <p className="text-2xl font-bold text-slate-900">
+                  {loading ? (
+                    <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
+                  ) : (
+                    totalRestaurants
+                  )}
+                </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                <img src={locationIcon} alt="Location" className="w-8 h-8" />
+                <Building2 className="w-6 h-6 text-blue-600" />
               </div>
             </div>
           </div>
@@ -1079,10 +1135,16 @@ export default function RestaurantsList() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600 mb-1">Active restaurants</p>
-                <p className="text-2xl font-bold text-slate-900">{activeRestaurants}</p>
+                <p className="text-2xl font-bold text-slate-900">
+                  {loading ? (
+                    <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
+                  ) : (
+                    activeRestaurants
+                  )}
+                </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
-                <img src={restaurantIcon} alt="Restaurant" className="w-8 h-8" />
+                <Utensils className="w-6 h-6 text-green-600" />
               </div>
             </div>
           </div>
@@ -1092,10 +1154,54 @@ export default function RestaurantsList() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600 mb-1">Inactive restaurants</p>
-                <p className="text-2xl font-bold text-slate-900">{inactiveRestaurants}</p>
+                <p className="text-2xl font-bold text-slate-900">
+                  {loading ? (
+                    <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
+                  ) : (
+                    inactiveRestaurants
+                  )}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center">
+                <UtensilsCrossed className="w-6 h-6 text-slate-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Rejected Restaurants */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-1">Rejected restaurants</p>
+                <p className="text-2xl font-bold text-slate-900">
+                  {loading ? (
+                    <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
+                  ) : (
+                    rejectedCount
+                  )}
+                </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center">
-                <img src={inactiveIcon} alt="Inactive" className="w-8 h-8" />
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Banned Restaurants */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-1">Banned restaurants</p>
+                <p className="text-2xl font-bold text-slate-900">
+                  {loading ? (
+                    <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
+                  ) : (
+                    bannedCount
+                  )}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
+                <ShieldX className="w-6 h-6 text-orange-600" />
               </div>
             </div>
           </div>
@@ -1104,16 +1210,52 @@ export default function RestaurantsList() {
         {/* Restaurants List Section */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Restaurants List</h2>
-
             <div className="flex items-center gap-3">
               <button
-                onClick={() => navigate("/admin/food/restaurants/add")}
-                className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all"
+                type="button"
+                onClick={() => setViewMode("active")}
+                className={`px-4 py-2.5 text-sm font-semibold rounded-lg border transition-all outline-none ${
+                  viewMode === "active"
+                    ? "border-blue-600 bg-blue-50/50 text-blue-600"
+                    : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
               >
-                <Plus className="w-4 h-4" />
-                <span>Add Restaurant</span>
+                Restaurants List
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("rejected")}
+                className={`px-4 py-2.5 text-sm font-semibold rounded-lg border transition-all outline-none ${
+                  viewMode === "rejected"
+                    ? "border-red-600 bg-red-50/50 text-red-600"
+                    : "border-red-200/80 bg-white text-red-500 hover:bg-red-50/50"
+                }`}
+              >
+                Rejected Restaurants
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("banned")}
+                className={`px-4 py-2.5 text-sm font-semibold rounded-lg border transition-all outline-none ${
+                  viewMode === "banned"
+                    ? "border-rose-600 bg-rose-50/50 text-rose-600"
+                    : "border-rose-200/80 bg-white text-rose-500 hover:bg-rose-50/50"
+                }`}
+              >
+                Banned Restaurants
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {viewMode === "active" && (
+                <button
+                  onClick={() => navigate("/admin/food/restaurants/add")}
+                  className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Restaurant</span>
+                </button>
+              )}
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"
@@ -1158,10 +1300,10 @@ export default function RestaurantsList() {
                 <p className="text-sm text-slate-500 mb-4">{error}</p>
                 <button
                   type="button"
-                  onClick={() => navigate("/admin/login", { replace: true, state: { from: "/admin/food/restaurants" } })}
+                  onClick={() => window.location.reload()}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Log in as admin
+                  Retry
                 </button>
               </div>
             ) : (
@@ -1214,11 +1356,6 @@ export default function RestaurantsList() {
                       </div>
                     </th>
                     <th
-                      className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider"
-                    >
-                      Sponsored
-                    </th>
-                    <th
                       className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
                       onClick={() => handleSort('status')}
                     >
@@ -1241,7 +1378,8 @@ export default function RestaurantsList() {
                       </td>
                     </tr>
                   ) : (
-                    filteredRestaurants.map((restaurant, index) => (
+                    filteredRestaurants.map((restaurant, index) => {
+                      return (
                       <tr
                         key={restaurant.id}
                         className="hover:bg-slate-50 transition-colors"
@@ -1293,32 +1431,35 @@ export default function RestaurantsList() {
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleIsSponsored(restaurant)}
-                            disabled={togglingIsSponsoredId === (restaurant._id || restaurant.id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              restaurant.isSponsored ? "bg-amber-500" : "bg-slate-300"
-                            } ${togglingIsSponsoredId === (restaurant._id || restaurant.id) ? "opacity-60 cursor-not-allowed" : ""}`}
-                            title={restaurant.isSponsored ? "Sponsored" : "Not Sponsored"}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                restaurant.isSponsored ? "translate-x-6" : "translate-x-1"
-                              }`}
-                            />
-                          </button>
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex flex-col gap-1">
-                            <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold ${approvalStatusBadgeClass(restaurant.approvalStatus)}`}>
-                              {approvalStatusLabel(restaurant.approvalStatus)}
-                            </span>
-                            <span className="text-[11px] text-slate-500">
-                              Outlet: {restaurant.isActive ? "Active" : "Inactive"}
-                            </span>
-                          </div>
+                          {viewMode === "banned" ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold bg-rose-100 text-rose-700">
+                                Banned
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                Outlet: Offline
+                              </span>
+                            </div>
+                          ) : viewMode === "rejected" ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold bg-red-100 text-red-700">
+                                Rejected
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                Outlet: Offline
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold ${approvalStatusBadgeClass(restaurant.approvalStatus)}`}>
+                                {approvalStatusLabel(restaurant.approvalStatus)}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                Outlet: {restaurant.isActive ? "Active" : "Inactive"}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -1329,27 +1470,40 @@ export default function RestaurantsList() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleBanRestaurant(restaurant)}
-                              className={`p-1.5 rounded transition-colors ${!restaurant.isActive
-                                ? "text-green-600 hover:bg-green-50"
-                                : "text-red-600 hover:bg-red-50"
-                                }`}
-                              title={!restaurant.isActive ? "Unban Restaurant" : "Ban Restaurant"}
-                            >
-                              <ShieldX className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteRestaurant(restaurant)}
-                              className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
-                              title="Delete Restaurant"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {viewMode === "banned" && (
+                              <button
+                                onClick={() => handleBanRestaurant(restaurant)}
+                                className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
+                                title="Unban Restaurant"
+                              >
+                                <ShieldCheck className="w-4 h-4" />
+                              </button>
+                            )}
+                            {viewMode === "active" && (
+                              <button
+                                onClick={() => handleBanRestaurant(restaurant)}
+                                className={`p-1.5 rounded transition-colors ${!restaurant.isActive
+                                  ? "text-green-600 hover:bg-green-50"
+                                  : "text-red-600 hover:bg-red-50"
+                                  }`}
+                                title={!restaurant.isActive ? "Unban Restaurant" : "Ban Restaurant"}
+                              >
+                                <ShieldX className="w-4 h-4" />
+                              </button>
+                            )}
+                            {viewMode !== "rejected" && (
+                              <button
+                                onClick={() => handleDeleteRestaurant(restaurant)}
+                                className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
+                                title="Delete Restaurant"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>
@@ -1375,53 +1529,33 @@ export default function RestaurantsList() {
                 <p className="text-sm text-slate-500 mt-1">Detailed overview and information</p>
               </div>
               <div className="flex items-center gap-2">
-                {!isEditingDetails ? (
-                  <>
-                    <div className="flex items-center gap-2 mr-2 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-100">
-                      <span className="text-sm font-semibold text-amber-700">Sponsored</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const rToToggle = restaurantDetails || selectedRestaurant
-                          if (rToToggle) handleToggleIsSponsored(rToToggle)
-                        }}
-                        disabled={togglingIsSponsoredId === ((selectedRestaurant || restaurantDetails)?._id || (selectedRestaurant || restaurantDetails)?.id)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                          (restaurantDetails || selectedRestaurant)?.isSponsored ? "bg-amber-500" : "bg-slate-300"
-                        } ${togglingIsSponsoredId === ((selectedRestaurant || restaurantDetails)?._id || (selectedRestaurant || restaurantDetails)?.id) ? "opacity-60 cursor-not-allowed" : ""}`}
-                      >
-                        <span
-                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                            (restaurantDetails || selectedRestaurant)?.isSponsored ? "translate-x-5" : "translate-x-1"
-                          }`}
-                        />
-                      </button>
-                    </div>
+                {normalizeApprovalStatus(restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant) !== "rejected" && (
+                  !isEditingDetails ? (
                     <button
                       onClick={handleStartEditDetails}
                       className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
                     >
                       Edit Details
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={handleCancelEditDetails}
-                      disabled={savingDetails}
-                      className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors disabled:opacity-60"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveDetails}
-                      disabled={savingDetails}
-                      className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-60 flex items-center gap-2"
-                    >
-                      {savingDetails && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {savingDetails ? "Saving..." : "Save Changes"}
-                    </button>
-                  </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleCancelEditDetails}
+                        disabled={savingDetails}
+                        className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveDetails}
+                        disabled={savingDetails}
+                        className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-60 flex items-center gap-2"
+                      >
+                        {savingDetails && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {savingDetails ? "Saving..." : "Save Changes"}
+                      </button>
+                    </>
+                  )
                 )}
                 <button
                   onClick={closeDetailsModal}
@@ -1434,6 +1568,7 @@ export default function RestaurantsList() {
 
             {/* Modal Content - Scrollable area */}
             <div className="p-8 overflow-y-auto">
+
               {loadingDetails && (
                 <div className="flex flex-col items-center justify-center py-24">
                   <div className="relative">
@@ -1506,49 +1641,6 @@ export default function RestaurantsList() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Pricing Perks (Optional)</label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const attrs = detailsForm.pricingAttributes || []
-                            setDetailsForm((prev) => ({
-                              ...prev,
-                              pricingAttributes: attrs.includes("same_price")
-                                ? attrs.filter(a => a !== "same_price")
-                                : [...attrs, "same_price"]
-                            }))
-                          }}
-                          className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                            (detailsForm.pricingAttributes || []).includes("same_price")
-                              ? "bg-emerald-600 text-white border-emerald-600 font-medium"
-                              : "bg-white text-slate-700 border-slate-300"
-                          }`}
-                        >
-                          Same price
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const attrs = detailsForm.pricingAttributes || []
-                            setDetailsForm((prev) => ({
-                              ...prev,
-                              pricingAttributes: attrs.includes("no_packaging")
-                                ? attrs.filter(a => a !== "no_packaging")
-                                : [...attrs, "no_packaging"]
-                            }))
-                          }}
-                          className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                            (detailsForm.pricingAttributes || []).includes("no_packaging")
-                              ? "bg-emerald-600 text-white border-emerald-600 font-medium"
-                              : "bg-white text-slate-700 border-slate-300"
-                          }`}
-                        >
-                          No packaging
-                        </button>
-                      </div>
-                    </div>
-                    <div>
                       <label className="block text-xs text-slate-500 mb-1">Restaurant Email</label>
                       <input type="email" value={detailsForm.email} onChange={(e) => setDetailsForm((prev) => ({ ...prev, email: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
@@ -1580,31 +1672,17 @@ export default function RestaurantsList() {
                       <label className="block text-xs text-slate-500 mb-1">Estimated Delivery Time</label>
                       <input type="text" value={detailsForm.estimatedDeliveryTime} onChange={(e) => setDetailsForm((prev) => ({ ...prev, estimatedDeliveryTime: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
-                    <div className="md:col-span-2 flex flex-col gap-3">
-                      <div className="flex items-center gap-3">
-                        <input
-                          id="restaurant-status-active"
-                          type="checkbox"
-                          checked={detailsForm.isActive}
-                          onChange={(e) => setDetailsForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                        />
-                        <label htmlFor="restaurant-status-active" className="text-sm text-slate-700">
-                          Restaurant is active
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          id="restaurant-status-sponsored"
-                          type="checkbox"
-                          checked={detailsForm.isSponsored}
-                          onChange={(e) => setDetailsForm((prev) => ({ ...prev, isSponsored: e.target.checked }))}
-                          className="h-4 w-4 rounded border-slate-300 text-amber-500"
-                        />
-                        <label htmlFor="restaurant-status-sponsored" className="text-sm text-slate-700">
-                          Restaurant is sponsored
-                        </label>
-                      </div>
+                    <div className="md:col-span-2 flex items-center gap-3">
+                      <input
+                        id="restaurant-status-active"
+                        type="checkbox"
+                        checked={detailsForm.isActive}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <label htmlFor="restaurant-status-active" className="text-sm text-slate-700">
+                        Restaurant is active
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1614,8 +1692,8 @@ export default function RestaurantsList() {
                 const detailsApprovalStatus = normalizeApprovalStatus(r)
                 const profileImgUrl = getPrimaryRestaurantImage(r)
                 const coverImages = Array.isArray(r?.coverImages) ? r.coverImages.map(normalizeImageUrl).filter(Boolean) : []
-                const hasFlatAddress = r?.addressLine1 || r?.area || r?.city || r?.state || r?.pincode
-                const flatAddress = [r?.addressLine1, r?.addressLine2, r?.area, r?.city, r?.state, r?.pincode, r?.landmark].filter(Boolean).join(", ")
+                const displayAddress = getRestaurantDisplayAddress(r)
+                const hasFlatAddress = Boolean(displayAddress)
                 const menuImages = Array.isArray(r?.menuImages) ? r.menuImages.map(normalizeImageUrl).filter(Boolean) : []
                 const cuisinesList =
                   (Array.isArray(r?.cuisines) && r.cuisines.length ? r.cuisines : null) ||
@@ -1665,6 +1743,12 @@ export default function RestaurantsList() {
                 const hasRegistrationDocuments = hasPanSection || hasGstSection || hasFssaiSection || hasBankSection
                 return (
                 <div className="space-y-10">
+                  {detailsApprovalStatus === "rejected" && r?.rejectionReason && (
+                    <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm font-medium">
+                      <p className="font-bold mb-1">Rejection Reason:</p>
+                      <p className="text-red-700 font-normal">{r.rejectionReason}</p>
+                    </div>
+                  )}
                   {/* Restaurant Basic Info */}
                   <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
                     <div className="w-32 h-32 rounded-3xl overflow-hidden bg-slate-50 shrink-0 shadow-inner group">
@@ -1683,13 +1767,17 @@ export default function RestaurantsList() {
                           {r?.restaurantName || r?.name || "N/A"}
                         </h3>
                         <div className="flex items-center justify-center md:justify-start gap-2">
-                          <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${r?.isActive !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {r?.isActive !== false ? 'Active' : 'Inactive'}
-                          </span>
-                          {r?.isSponsored && (
-                            <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 flex items-center gap-1">
-                              <Star className="w-3 h-3 fill-current" />
-                              Sponsored
+                          {detailsApprovalStatus === "banned" ? (
+                            <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700">
+                              Banned
+                            </span>
+                          ) : detailsApprovalStatus === "rejected" ? (
+                            <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-red-100 text-red-700">
+                              Rejected
+                            </span>
+                          ) : (
+                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${r?.isActive !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {r?.isActive !== false ? 'Active' : 'Inactive'}
                             </span>
                           )}
                         </div>
@@ -1770,13 +1858,13 @@ export default function RestaurantsList() {
                         ) : null}
                       </div>
                       <div className="space-y-3">
-                        {!isEditingLocation && (r?.location || hasFlatAddress) && (
+                        {!isEditingLocation && hasFlatAddress && (
                           <div className="flex items-start gap-3">
                             <MapPin className="w-5 h-5 text-slate-400 mt-0.5" />
                             <div>
                               <p className="text-xs text-slate-500">Address</p>
                               <p className="text-sm font-medium text-slate-900">
-                                {r?.location ? formatLocationAddress(r.location, selectedRestaurant?.zone) : flatAddress}
+                                {displayAddress}
                               </p>
                             </div>
                           </div>
@@ -1820,7 +1908,7 @@ export default function RestaurantsList() {
                             <div>
                               <p className="text-xs text-slate-500">Opening / Closing</p>
                               <p className="text-sm font-medium text-slate-900">
-                                {formatTime12Hour(openingTimeVal)} â€“ {formatTime12Hour(closingTimeVal)}
+                                {formatTime12Hour(openingTimeVal)} – {formatTime12Hour(closingTimeVal)}
                               </p>
                             </div>
                           </div>
@@ -1843,12 +1931,25 @@ export default function RestaurantsList() {
                         )}
                         <div>
                           <p className="text-xs text-slate-500 mb-1">Status</p>
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${approvalStatusBadgeClass(detailsApprovalStatus)}`}>
-                            {approvalStatusLabel(detailsApprovalStatus)}
-                          </span>
-                          <p className="mt-2 text-xs text-slate-500">
-                            Outlet: {(r?.isActive !== false) ? "Active" : "Inactive"}
-                          </p>
+                          {detailsApprovalStatus === "banned" ? (
+                            <>
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-rose-100 text-rose-700">
+                                Banned
+                              </span>
+                              <p className="mt-2 text-xs text-slate-500">
+                                Outlet: Offline
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${approvalStatusBadgeClass(detailsApprovalStatus)}`}>
+                                {approvalStatusLabel(detailsApprovalStatus)}
+                              </span>
+                              <p className="mt-2 text-xs text-slate-500">
+                                Outlet: {(r?.isActive !== false) ? "Active" : "Inactive"}
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2004,7 +2105,7 @@ export default function RestaurantsList() {
                     <div className="pt-6 border-t border-slate-200">
                       <h4 className="text-lg font-semibold text-slate-900 mb-4">Registration Documents</h4>
                       <div className="space-y-6">
-                        {/* PAN â€“ flat or onboarding.step3 */}
+                        {/* PAN – flat or onboarding.step3 */}
                         {hasPanSection && (
                           <div className="bg-slate-50 rounded-lg p-4">
                             <h5 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2038,7 +2139,7 @@ export default function RestaurantsList() {
                           </div>
                         )}
 
-                        {/* GST â€“ flat or onboarding.step3 */}
+                        {/* GST – flat or onboarding.step3 */}
                         {hasGstSection && (
                           <div className="bg-slate-50 rounded-lg p-4">
                             <h5 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2086,7 +2187,7 @@ export default function RestaurantsList() {
                           </div>
                         )}
 
-                        {/* FSSAI â€“ flat or onboarding.step3 */}
+                        {/* FSSAI – flat or onboarding.step3 */}
                         {hasFssaiSection && (
                           <div className="bg-slate-50 rounded-lg p-4">
                             <h5 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2122,7 +2223,7 @@ export default function RestaurantsList() {
                           </div>
                         )}
 
-                        {/* Bank â€“ flat or onboarding.step3 */}
+                        {/* Bank – flat or onboarding.step3 */}
                         {hasBankSection && (
                           <div className="bg-slate-50 rounded-lg p-4">
                             <h5 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2165,7 +2266,7 @@ export default function RestaurantsList() {
                   {hasFlatAddress && !r?.onboarding?.step1?.location && (
                     <div className="pt-6 border-t border-slate-200">
                       <h4 className="text-lg font-semibold text-slate-900 mb-4">Address (at registration)</h4>
-                      <p className="text-sm font-medium text-slate-900">{flatAddress}</p>
+                      <p className="text-sm font-medium text-slate-900">{displayAddress}</p>
                     </div>
                   )}
 
@@ -2477,18 +2578,21 @@ export default function RestaurantsList() {
 
       {/* Ban/Unban Confirmation Dialog */}
       {banConfirmDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={cancelBanRestaurant}>
+        <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={cancelBanRestaurant}>
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex items-center gap-4 mb-4">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${banConfirmDialog.action === 'ban' ? 'bg-red-100' : 'bg-green-100'
                   }`}>
-                  <AlertTriangle className={`w-6 h-6 ${banConfirmDialog.action === 'ban' ? 'text-red-600' : 'text-green-600'
-                    }`} />
+                  {banConfirmDialog.action === 'ban' ? (
+                    <AlertTriangle className="w-6 h-6 text-red-600" />
+                  ) : (
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">
-                    {banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unban Restaurant'}
+                    {banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unbanned Restaurant'}
                   </h3>
                   <p className="text-sm text-slate-600">
                     {banConfirmDialog.restaurant.name}
@@ -2499,7 +2603,7 @@ export default function RestaurantsList() {
               <p className="text-sm text-slate-700 mb-6">
                 {banConfirmDialog.action === 'ban'
                   ? 'Are you sure you want to ban this restaurant? They will not be able to receive orders or access their account.'
-                  : 'Are you sure you want to unban this restaurant? They will be able to receive orders and access their account again.'
+                  : 'Are you sure you want to unbanned this Restautant?'
                 }
               </p>
 
@@ -2525,7 +2629,7 @@ export default function RestaurantsList() {
                       {banConfirmDialog.action === 'ban' ? 'Banning...' : 'Unbanning...'}
                     </span>
                   ) : (
-                    banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unban Restaurant'
+                    banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unbanned Restaurant'
                   )}
                 </button>
               </div>
@@ -2536,7 +2640,7 @@ export default function RestaurantsList() {
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={cancelDeleteRestaurant}>
+        <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={cancelDeleteRestaurant}>
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex items-center gap-4 mb-4">
@@ -2585,6 +2689,5 @@ export default function RestaurantsList() {
     </div>
   )
 }
-
 
 

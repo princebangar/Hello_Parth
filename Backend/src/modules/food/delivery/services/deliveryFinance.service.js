@@ -7,7 +7,8 @@ import { FoodDeliveryPartner } from '../models/deliveryPartner.model.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
-import { createRazorpayCheckoutOrder, isRazorpayConfigured, verifyPaymentSignature } from '../../orders/helpers/razorpay.helper.js';
+import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature, fetchRazorpayPayment, assertRazorpayPaymentMatches } from '../../orders/helpers/razorpay.helper.js';
+import { config } from '../../../../config/env.js';
 
 /**
  * Enhanced wallet fetch for delivery partners.
@@ -26,7 +27,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const partner = await FoodDeliveryPartner.findById(partnerId).lean();
     if (!partner) throw new ValidationError('Delivery partner not found');
 
-    const [cashLimitSettings, earningsAgg, cashCollectedAgg, cashDepositsAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList] = await Promise.all([
+    const [cashLimitSettings, earningsAgg, cashCollectedAgg, cashDepositsAgg, pendingCashAgg, bonusAgg, withdrawalAgg, withdrawalsList, depositList] = await Promise.all([
         getDeliveryCashLimitSettings(),
         // 1. Total Earnings from Delivered Orders
         FoodOrder.aggregate([
@@ -53,6 +54,17 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
                 }
             },
             { $group: { _id: null, depositedCash: { $sum: { $ifNull: ['$amount', 0] } } } }
+        ]),
+        // 3b. Pending manual cash submissions (awaiting admin confirmation)
+        FoodDeliveryCashDeposit.aggregate([
+            {
+                $match: {
+                    deliveryPartnerId: partnerId,
+                    status: 'Pending',
+                    paymentMethod: 'cash',
+                },
+            },
+            { $group: { _id: null, pendingCash: { $sum: { $ifNull: ['$amount', 0] } } } },
         ]),
         // 4. Admin Bonuses
         DeliveryBonusTransaction.aggregate([
@@ -84,7 +96,9 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     const totalEarned = Number(earningsAgg?.[0]?.totalEarned) || 0;
     const grossCashCollected = Number(cashCollectedAgg?.[0]?.cashCollected) || 0;
     const totalDepositedCash = Number(cashDepositsAgg?.[0]?.depositedCash) || 0;
+    const pendingCashSubmission = Number(pendingCashAgg?.[0]?.pendingCash) || 0;
     const cashInHand = Math.max(0, grossCashCollected - totalDepositedCash);
+    const availableToDeposit = Math.max(0, cashInHand - pendingCashSubmission);
     const totalBonus = Number(bonusAgg?.[0]?.total) || 0;
     const totalWithdrawn = Number(withdrawalAgg?.[0]?.totalWithdrawn) || 0;
     const pendingWithdrawals = Number(withdrawalAgg?.[0]?.pendingWithdrawals) || 0;
@@ -96,45 +110,43 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
     // Wait, usually pocket balance subtracts pending too so user knows how much is "left" to request.
     const pocketBalance = Math.max(0, (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals));
 
+    // Most recent approved withdrawal for "Last Payout" on Pocket
+    const lastApprovedWithdrawal = (withdrawalsList || []).find((w) => w.status === 'approved') || null;
+    const lastPayout = lastApprovedWithdrawal
+        ? {
+            amount: Number(lastApprovedWithdrawal.amount) || 0,
+            date: lastApprovedWithdrawal.processedAt || lastApprovedWithdrawal.createdAt,
+            id: lastApprovedWithdrawal._id,
+          }
+        : null;
+
     // Fetch transactions for UI (Orders, Bonuses, Withdrawals)
     const [ordersTx] = await Promise.all([
         FoodOrder.find({ 'dispatch.deliveryPartnerId': partnerId, orderStatus: 'delivered' })
             .sort({ createdAt: -1 })
-            .select('orderId riderEarning riderBasePay riderDeliveryFeeShare riderSurgePay riderIncentivePay riderTotalPayout pricing payment orderStatus createdAt')
+            .select('orderId riderEarning payment orderStatus createdAt')
             .limit(20)
             .lean(),
     ]);
 
     const transactions = [
-        ...(ordersTx || []).map(o => {
-            const riderBasePay = Number(o.riderBasePay || o.pricing?.deliveryFeeBreakdown?.basePayout || 0);
-            const riderDeliveryFeeShare = Number(o.riderDeliveryFeeShare || o.pricing?.riderDeliveryEarningAfterAdminCommission || 0);
-            const riderSurgePay = Number(o.riderSurgePay || o.pricing?.surgeAmount || 0);
-            const riderIncentivePay = Number(o.riderIncentivePay || o.pricing?.deliveryPartnerIncentiveAmount || 0);
-            const computedPayout = Math.round((riderDeliveryFeeShare + riderSurgePay + riderIncentivePay) * 100) / 100;
-            const riderTotalPayout = Number(o.riderTotalPayout || computedPayout || o.riderEarning || 0);
-
-            return {
-                id: o._id,
-                type: 'payment',
-                amount: riderTotalPayout,
-                riderBasePay,
-                riderDeliveryFeeShare,
-                riderSurgePay,
-                riderIncentivePay,
-                riderTotalPayout,
-                status: 'Completed',
-                date: o.createdAt,
-                description: o.payment?.method === 'cash' ? 'COD delivery earning' : 'Online delivery earning',
-                orderId: o.orderId
-            };
-        }),
+        ...(ordersTx || []).map(o => ({
+            id: o._id,
+            type: 'payment',
+            amount: o.riderEarning || 0,
+            status: 'Completed',
+            date: o.createdAt,
+            description: o.payment?.method === 'cash' ? 'COD delivery earning' : 'Online delivery earning',
+            orderId: o.orderId
+        })),
         ...(withdrawalsList || []).map(w => ({
             id: w._id,
             type: 'withdrawal',
             amount: w.amount,
             status: w.status === 'pending' ? 'Pending' : (w.status === 'approved' ? 'Completed' : 'Rejected'),
             date: w.createdAt,
+            processedAt: w.processedAt || null,
+            failureReason: w.rejectionReason || null,
             description: `Withdrawal Request - ${w.paymentMethod}`,
             payoutMethod: w.paymentMethod
         })),
@@ -157,10 +169,13 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
         cashInHand, // COD to be deposited/deducted
         totalWithdrawn, // Actually paid out
         pendingWithdrawals, // In process
+        lastPayout,
         totalEarned,
         totalBonus,
         totalCashLimit,
         availableCashLimit: Math.max(0, totalCashLimit - cashInHand),
+        pendingCashSubmission,
+        availableToDeposit,
         deliveryWithdrawalLimit,
         transactions: transactions.slice(0, 50)
     };
@@ -212,8 +227,8 @@ export const createDeliveryCashDepositOrder = async (deliveryPartnerId, amountIn
         throw new ValidationError('Maximum deposit is ₹5,00,000');
     }
 
-    const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
-    if (amount > wallet.cashInHand) {
+    const { availableToDeposit } = await getDepositCapacity(deliveryPartnerId);
+    if (amount > availableToDeposit) {
         throw new ValidationError('Deposit amount cannot exceed cash in hand');
     }
 
@@ -221,15 +236,28 @@ export const createDeliveryCashDepositOrder = async (deliveryPartnerId, amountIn
     const receipt = `cash_deposit_${String(deliveryPartnerId).slice(-8)}_${Date.now()}`;
 
     if (!isRazorpayConfigured()) {
-        throw new ValidationError('Razorpay payment gateway is not configured');
+        if (config.nodeEnv === 'production') {
+            throw new ValidationError('Payment gateway is not configured');
+        }
+        return {
+            razorpay: {
+                key: getRazorpayKeyId() || 'rzp_test_dummy',
+                orderId: `order_dev_${Date.now()}`,
+                amount: amountPaise,
+                currency: 'INR'
+            }
+        };
     }
 
-    try {
-        const razorpay = await createRazorpayCheckoutOrder(amountPaise, 'INR', receipt);
-        return { razorpay };
-    } catch (error) {
-        throw new ValidationError(error?.message || 'Payment gateway error');
-    }
+    const order = await createRazorpayOrder(amountPaise, 'INR', receipt);
+    return {
+        razorpay: {
+            key: getRazorpayKeyId(),
+            orderId: String(order.id),
+            amount: Number(order.amount) || amountPaise,
+            currency: order.currency || 'INR'
+        }
+    };
 };
 
 export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payload = {}) => {
@@ -255,19 +283,29 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
         return { deposit: existing, wallet: await getDeliveryPartnerWalletEnhanced(deliveryPartnerId) };
     }
 
-    const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
-    if (amount > wallet.cashInHand) {
+    const { availableToDeposit } = await getDepositCapacity(deliveryPartnerId);
+    if (amount > availableToDeposit) {
         throw new ValidationError('Deposit amount cannot exceed cash in hand');
     }
 
     if (!isRazorpayConfigured()) {
-        throw new ValidationError('Razorpay payment gateway is not configured');
-    }
-
-    const isValid = verifyPaymentSignature(orderId, paymentId, signature);
-
-    if (!isValid) {
-        throw new ValidationError('Payment verification failed');
+        if (config.nodeEnv === 'production') {
+            throw new ValidationError('Payment gateway is not configured');
+        }
+    } else {
+        const isValid = verifyPaymentSignature(orderId, paymentId, signature);
+        if (!isValid) {
+            throw new ValidationError('Payment verification failed');
+        }
+        try {
+            const rzPayment = await fetchRazorpayPayment(paymentId);
+            assertRazorpayPaymentMatches(rzPayment, {
+                orderId,
+                amountPaise: Math.round(amount * 100),
+            });
+        } catch (err) {
+            throw new ValidationError(err?.message || 'Payment verification failed');
+        }
     }
 
     const deposit = existing
@@ -276,7 +314,7 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
             {
                 $set: {
                     amount,
-                    paymentMethod: 'razorpay',
+                    paymentMethod: isRazorpayConfigured() ? 'razorpay' : 'cash',
                     status: 'Completed',
                     razorpayOrderId: orderId,
                     razorpayPaymentId: paymentId
@@ -287,7 +325,7 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
         : await FoodDeliveryCashDeposit.create({
             deliveryPartnerId,
             amount,
-            paymentMethod: 'razorpay',
+            paymentMethod: isRazorpayConfigured() ? 'razorpay' : 'cash',
             status: 'Completed',
             razorpayOrderId: orderId,
             razorpayPaymentId: paymentId
@@ -298,3 +336,129 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
         wallet: await getDeliveryPartnerWalletEnhanced(deliveryPartnerId)
     };
 };
+
+async function getPendingCashSubmissionTotal(deliveryPartnerId) {
+    const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+    const agg = await FoodDeliveryCashDeposit.aggregate([
+        {
+            $match: {
+                deliveryPartnerId: partnerId,
+                status: 'Pending',
+                paymentMethod: 'cash',
+            },
+        },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+    ]);
+    return Number(agg?.[0]?.total) || 0;
+}
+
+async function getDepositCapacity(deliveryPartnerId) {
+    const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
+    const pendingCashSubmission = await getPendingCashSubmissionTotal(deliveryPartnerId);
+    const availableToDeposit = Math.max(0, wallet.cashInHand - pendingCashSubmission);
+    return { wallet, pendingCashSubmission, availableToDeposit };
+}
+
+export const submitCashDepositByHand = async (deliveryPartnerId, amountInr) => {
+    const amount = Number(amountInr);
+    if (!Number.isFinite(amount) || amount < 1) {
+        throw new ValidationError('Amount must be at least ₹1');
+    }
+    if (amount > 500000) {
+        throw new ValidationError('Maximum deposit is ₹5,00,000');
+    }
+
+    const { wallet, pendingCashSubmission, availableToDeposit } = await getDepositCapacity(deliveryPartnerId);
+    if (amount > availableToDeposit) {
+        const suffix = pendingCashSubmission > 0
+            ? ` (₹${pendingCashSubmission} already pending admin confirmation)`
+            : '';
+        throw new ValidationError(`Deposit amount cannot exceed cash in hand (₹${availableToDeposit})${suffix}`);
+    }
+
+    const deposit = await FoodDeliveryCashDeposit.create({
+        deliveryPartnerId,
+        amount,
+        paymentMethod: 'cash',
+        status: 'Pending',
+    });
+
+    const capacityAfter = await getDepositCapacity(deliveryPartnerId);
+
+    return {
+        deposit: deposit.toObject(),
+        wallet: {
+            ...capacityAfter.wallet,
+            pendingCashSubmission: capacityAfter.pendingCashSubmission,
+            availableToDeposit: capacityAfter.availableToDeposit,
+        },
+        pendingCashSubmission: capacityAfter.pendingCashSubmission,
+        availableToDeposit: capacityAfter.availableToDeposit,
+    };
+};
+
+export async function notifyDeliveryPartnerCashDepositStatus(deliveryPartnerId, { amount, status, wallet }) {
+    const partnerId = String(deliveryPartnerId);
+    const amt = Number(amount) || 0;
+    const availableLimit = Number(wallet?.availableCashLimit) || 0;
+    const cashInHand = Number(wallet?.cashInHand) || 0;
+
+    let title = 'Cash Deposit Update';
+    let body = '';
+    let category = 'cash_deposit';
+
+    if (status === 'Completed') {
+        title = 'Cash Deposit Confirmed';
+        body = cashInHand <= 0
+            ? `Your cash deposit of ₹${amt.toLocaleString('en-IN')} has been confirmed. Your cash limit has been fully restored.`
+            : `Your cash deposit of ₹${amt.toLocaleString('en-IN')} has been confirmed. Your available cash limit is now ₹${availableLimit.toLocaleString('en-IN')}.`;
+    } else if (status === 'Failed') {
+        title = 'Cash Not Received';
+        body = `The admin has not received ₹${amt.toLocaleString('en-IN')} in cash. Please submit it again.`;
+        category = 'cash_deposit_rejected';
+    } else {
+        return;
+    }
+
+    try {
+        const { notifyOwnerSafely } = await import('../../../../core/notifications/firebase.service.js');
+        const { createInboxNotifications } = await import('../../../../core/notifications/notification.service.js');
+
+        await notifyOwnerSafely(
+            { ownerType: 'DELIVERY_PARTNER', ownerId: partnerId },
+            {
+                sendToAllDevices: true,
+                title,
+                body,
+                data: {
+                    type: category,
+                    amount: String(amt),
+                    status: String(status),
+                    availableCashLimit: String(availableLimit),
+                    cashInHand: String(cashInHand),
+                    link: '/food/delivery/pocket',
+                },
+            },
+        );
+
+        await createInboxNotifications({
+            notifications: [{
+                ownerType: 'DELIVERY_PARTNER',
+                ownerId: partnerId,
+                title,
+                message: body,
+                link: '/food/delivery/pocket',
+                category,
+                source: 'ORDER_UPDATE',
+                metadata: {
+                    amount: amt,
+                    status,
+                    availableCashLimit: availableLimit,
+                    cashInHand,
+                },
+            }],
+        });
+    } catch (err) {
+        console.error('Failed to send cash deposit notification:', err?.message || err);
+    }
+}

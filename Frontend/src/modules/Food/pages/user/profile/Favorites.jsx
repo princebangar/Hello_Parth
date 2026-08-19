@@ -1,5 +1,5 @@
-﻿import { Link } from "react-router-dom"
-import { useState } from "react"
+import { Link, useLocation } from "react-router-dom"
+import { useMemo, useState } from "react"
 
 import { Heart, Star, Clock, MapPin, ArrowRight, ArrowLeft, Bookmark } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
@@ -8,11 +8,34 @@ import { Card, CardHeader, CardTitle, CardContent } from "@food/components/ui/ca
 import { Button } from "@food/components/ui/button"
 import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
+import {
+  filterDishesForVegMode,
+  filterRestaurantsForVegMode,
+} from "@food/utils/vegMode"
 
 export default function Favorites() {
-  const { getFavorites, removeFavorite, getDishFavorites, removeDishFavorite } = useProfile()
-  const restaurantFavorites = getFavorites()
-  const dishFavorites = getDishFavorites()
+  const location = useLocation()
+  const from = location.state?.from || "/food/user/profile"
+  const {
+    favorites,
+    dishFavorites: allDishFavorites,
+    removeFavorite,
+    removeDishFavorite,
+    vegMode,
+    vegModeOption,
+  } = useProfile()
+  const restaurantFavorites = useMemo(
+    () =>
+      filterRestaurantsForVegMode(favorites || [], {
+        vegMode,
+        vegModeOption,
+      }),
+    [favorites, vegMode, vegModeOption],
+  )
+  const dishFavorites = useMemo(
+    () => filterDishesForVegMode(allDishFavorites || [], vegMode),
+    [allDishFavorites, vegMode],
+  )
   const [activeTab, setActiveTab] = useState("restaurants")
 
   const handleRemoveFavorite = (e, slug) => {
@@ -41,7 +64,7 @@ export default function Favorites() {
         <div className="max-w-4xl mx-auto space-y-6">
           <ScrollReveal>
             <div className="flex items-center gap-3 sm:gap-4">
-              <Link to="/user/profile">
+              <Link to={from}>
                 <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10">
                   <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
@@ -54,7 +77,7 @@ export default function Favorites() {
             <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground text-lg mb-4">You haven't added any favorites yet</p>
             <Link to="/user">
-              <Button className="bg-gradient-to-r bg-primary-orange hover:opacity-90 text-white">
+              <Button className="bg-gradient-to-r bg-[#DC2626] hover:opacity-90 text-white">
                 Explore Restaurants
               </Button>
             </Link>
@@ -71,7 +94,7 @@ export default function Favorites() {
         <ScrollReveal>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3 sm:gap-4">
-              <Link to="/user/profile">
+              <Link to={from}>
                 <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10">
                   <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
@@ -92,7 +115,7 @@ export default function Favorites() {
             onClick={() => setActiveTab("restaurants")}
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === "restaurants"
-                ? "border-b-2 border-primary-orange text-primary-orange"
+                ? "border-b-2 border-[#DC2626] text-[#DC2626]"
                 : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             }`}
           >
@@ -102,7 +125,7 @@ export default function Favorites() {
             onClick={() => setActiveTab("dishes")}
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === "dishes"
-                ? "border-b-2 border-primary-orange text-primary-orange"
+                ? "border-b-2 border-[#DC2626] text-[#DC2626]"
                 : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             }`}
           >
@@ -118,7 +141,7 @@ export default function Favorites() {
                 <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground text-lg mb-4">No restaurants saved yet</p>
                 <Link to="/user">
-                  <Button className="bg-gradient-to-r bg-primary-orange hover:opacity-90 text-white">
+                  <Button className="bg-gradient-to-r bg-[#DC2626] hover:opacity-90 text-white">
                     Explore Restaurants
                   </Button>
                 </Link>
@@ -175,7 +198,7 @@ export default function Favorites() {
                         <span className="font-medium">{restaurant.distance}</span>
                       </div>
                     </div>
-                    <Button className="w-full bg-gradient-to-r bg-primary-orange hover:opacity-90 text-white text-xs py-1.5 h-8">
+                    <Button className="w-full bg-gradient-to-r bg-[#DC2626] hover:opacity-90 text-white text-xs py-1.5 h-8">
                       View Restaurant
                       <ArrowRight className="h-3 w-3 ml-1" />
                     </Button>
@@ -196,7 +219,7 @@ export default function Favorites() {
                 <Bookmark className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground text-lg mb-4">No dishes saved yet</p>
                 <Link to="/user">
-                  <Button className="bg-gradient-to-r bg-primary-orange hover:opacity-90 text-white">
+                  <Button className="bg-gradient-to-r bg-[#DC2626] hover:opacity-90 text-white">
                     Explore Dishes
                   </Button>
                 </Link>
@@ -246,17 +269,17 @@ export default function Favorites() {
                                   <div className="w-1.5 h-1.5 bg-green-600 rounded-full"></div>
                                 </div>
                               ) : (
-                                <div className="w-3 h-3 border-2 border-orange-600 flex items-center justify-center rounded-sm">
-                                  <div className="w-1.5 h-1.5 bg-orange-600 rounded-full"></div>
+                                <div className="w-3 h-3 border-2 border-#991B1B flex items-center justify-center rounded-sm">
+                                  <div className="w-1.5 h-1.5 bg-#991B1B rounded-full"></div>
                                 </div>
                               )}
                               <span className="text-muted-foreground font-medium text-xs">{dish.foodType || "N/A"}</span>
                             </div>
-                            <div className="text-sm font-bold text-primary-orange">
+                            <div className="text-sm font-bold text-[#DC2626]">
                               {"\u20B9"}{Math.round(dish.price || 0)}
                             </div>
                           </div>
-                          <Button className="w-full bg-gradient-to-r bg-primary-orange hover:opacity-90 text-white text-xs py-1.5 h-8">
+                          <Button className="w-full bg-gradient-to-r bg-[#DC2626] hover:opacity-90 text-white text-xs py-1.5 h-8">
                             View Dish
                             <ArrowRight className="h-3 w-3 ml-1" />
                           </Button>

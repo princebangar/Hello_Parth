@@ -1,9 +1,11 @@
 import { toast } from "sonner";
+import { showNotificationToast } from "@/shared/utils/customToasts";
 import { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/api";
 import { initializeApp, getApp, getApps } from "firebase/app";
-import fallbackNotificationSound from "@food/assets/audio/alert.mp3";
+const fallbackNotificationSound = "/assets/media/alert.mp3";
 
-const pushNotificationSoundPath = "/zomato_sms.mp3";
+const pushNotificationSoundPath = "/assets/media/zomato_sms.mp3";
+const restaurantAlertSoundPath = "/assets/media/restaurant_alert.mp3";
 
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: "",
@@ -14,6 +16,7 @@ const DEFAULT_FIREBASE_CONFIG = {
 };
 
 const tokenCachePrefix = "fcm_web_registered_token_";
+const fcmBackendSyncedPrefix = "fcm_backend_synced_";
 const pushSoundEnabledStorageKey = "push_sound_enabled";
 let publicEnvPromise = null;
 let foregroundListenerAttached = false;
@@ -25,12 +28,17 @@ let pushSoundAudio = null;
 let pushSoundUnlocked = false;
 let pushSoundContext = null;
 const PUSH_DEBUG_PREFIX = "[push-debug]";
-const notificationDedupWindowMs = 8000;
+const notificationDedupWindowMs = 30000;
+const OS_NOTIFICATION_DEDUP_STORAGE_KEY = "os_notification_dedup_v1";
 const pushDebugLog = (prefix, message, data = {}) => {
-  console.log(`${prefix} ${message}`, data);
+  if (typeof window !== "undefined" && localStorage.getItem("push_debug") === "true") {
+    console.log(`${prefix} ${message}`, data);
+  }
 };
 const pushDebugWarn = (prefix, message, data = {}) => {
-  console.warn(`${prefix} ${message}`, data);
+  if (typeof window !== "undefined" && localStorage.getItem("push_debug") === "true") {
+    console.warn(`${prefix} ${message}`, data);
+  }
 };
 
 function normalizeModuleFromPath(pathname = window.location.pathname) {
@@ -45,16 +53,29 @@ function isRecord(value) {
 }
 
 function getPushSoundSources(moduleName = normalizeModuleFromPath()) {
-  // Delivery and restaurant should always use the alert tone for FCM pushes.
-  if (moduleName === "delivery" || moduleName === "restaurant") {
-    return [fallbackNotificationSound];
+  if (moduleName === "restaurant") {
+    return [restaurantAlertSoundPath];
   }
-  return [pushNotificationSoundPath, fallbackNotificationSound];
+  if (moduleName === "delivery") {
+    return [restaurantAlertSoundPath, fallbackNotificationSound];
+  }
+  // User module: no audio alerts on push notifications/status updates
+  return [];
 }
 
 function isSupportedBrowser() {
+  if (typeof window === "undefined") return false;
+
+  // iOS check (Web Push is only supported on iOS Safari/Chrome if added to the Home Screen)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS) {
+    const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    if (!isStandalone) {
+      return false;
+    }
+  }
+
   return (
-    typeof window !== "undefined" &&
     "Notification" in window &&
     "serviceWorker" in navigator &&
     "PushManager" in window
@@ -69,12 +90,470 @@ function isFlutterWebView() {
   );
 }
 
-function normalizeFcmToken(value) {
-  const token =
-    typeof value === "string"
-      ? value
-      : value?.token || value?.fcmToken || value?.data?.token || value?.data?.fcmToken || "";
-  return String(token).trim();
+const FCM_BRIDGE_HANDLER_NAMES = [
+  "getFcmToken",
+  "getFCMToken",
+  "getPushToken",
+  "getFirebaseToken",
+];
+
+const FCM_PERMISSION_HANDLER_NAMES = [
+  "requestNotificationPermission",
+  "requestPushPermission",
+  "enableNotifications",
+];
+
+export function normalizeFcmBridgeToken(raw) {
+  if (raw == null) return "";
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    return trimmed.length >= 20 ? trimmed : "";
+  }
+
+  if (typeof raw === "object") {
+    const candidates = [
+      raw.token,
+      raw.fcmToken,
+      raw.fcm_token,
+      raw.deviceToken,
+      raw.pushToken,
+      raw.value,
+      raw.data,
+    ];
+    for (const candidate of candidates) {
+      const normalized = normalizeFcmBridgeToken(candidate);
+      if (normalized) return normalized;
+    }
+  }
+
+  return "";
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestNativeNotificationPermission(moduleName) {
+  if (!isFlutterWebView()) return false;
+
+  for (const handlerName of FCM_PERMISSION_HANDLER_NAMES) {
+    try {
+      await window.flutter_inappwebview.callHandler(handlerName, { module: moduleName });
+      return true;
+    } catch {
+      // Try next handler.
+    }
+  }
+  return false;
+}
+
+/** True when running inside the Flutter InAppWebView shell (no browser Allow popup). */
+export function isNativeAppWebView() {
+  return isFlutterWebView();
+}
+
+export const FCM_FAST_OPTIONS = { maxAttempts: 5, delayMs: 200 };
+export const FCM_COLLECT_TIMEOUT_MS = 2000;
+export const FCM_SUBMIT_COLLECT_TIMEOUT_MS = 6000;
+
+let fcmVisibilityListenerAttached = false;
+
+/**
+ * Collect FCM token quickly (max ~2 seconds) for signup/login flows.
+ * Pass skipCache: true when syncing to server so rotated tokens are picked up.
+ */
+export async function collectFcmTokenFast(moduleName, options = {}) {
+  const fastOptions = { ...FCM_FAST_OPTIONS, ...options };
+  const skipCache = options.skipCache === true;
+
+  if (!skipCache) {
+    const cached = getSavedToken(moduleName);
+    if (cached.length >= 20) {
+      return {
+        fcmToken: cached,
+        platform: isFlutterWebView() ? "mobile" : "web",
+      };
+    }
+  }
+
+  const collectTimeoutMs = options.collectTimeoutMs ?? FCM_COLLECT_TIMEOUT_MS;
+
+  const result = await Promise.race([
+    collectNativeFcmToken(moduleName, { ...fastOptions, ...options }),
+    sleep(collectTimeoutMs).then(() => ({
+      fcmToken: normalizeFcmBridgeToken(getSavedToken(moduleName)) || null,
+      platform: isFlutterWebView() ? "mobile" : "web",
+    })),
+  ]);
+
+  if (result.fcmToken) {
+    setSavedToken(moduleName, result.fcmToken);
+  }
+
+  return result;
+}
+
+/**
+ * Signup finish / complete — same flow that worked for delivery (commit 5f54105).
+ * 1) collectFcmTokenFast on button click (+ retry)
+ * 2) token sent in register API
+ * 3) finalize* → syncPendingPartnerFcmQuick saves again in background
+ */
+export async function collectFcmTokenForSignup(moduleName) {
+  if (isFlutterWebView()) {
+    await requestNativeNotificationPermission(moduleName);
+    const result = await collectNativeFcmToken(moduleName, { maxAttempts: 10, delayMs: 400 });
+    if (result.fcmToken) {
+      setSavedToken(moduleName, result.fcmToken);
+    }
+    return { fcmToken: result.fcmToken || null, platform: "mobile" };
+  }
+
+  let fcmToken = null;
+  let platform = "web";
+  try {
+    const collected = await collectFcmTokenFast(moduleName);
+    fcmToken = collected.fcmToken;
+    platform = collected.platform;
+    if (!fcmToken) {
+      const retry = await collectFcmTokenFast(moduleName, { maxAttempts: 8, delayMs: 250 });
+      fcmToken = retry.fcmToken;
+      platform = retry.platform;
+    }
+  } catch {
+    // Non-blocking — pending-save will retry on verification screen.
+  }
+  if (fcmToken) {
+    setSavedToken(moduleName, fcmToken);
+  }
+  return { fcmToken, platform };
+}
+
+/** @deprecated Use collectFcmTokenForSignup */
+export async function collectFcmTokenOnSignupSubmit(moduleName) {
+  return collectFcmTokenForSignup(moduleName);
+}
+
+/**
+ * Flutter shell: sync native FCM token after registration (no browser UI).
+ */
+export async function syncNativeAppPushToken(moduleName, phone) {
+  if (!isFlutterWebView() || !phone) return false;
+  await requestNativeNotificationPermission(moduleName);
+  const { fcmToken, platform } = await collectNativeFcmToken(moduleName, {
+    maxAttempts: 10,
+    delayMs: 400,
+  });
+  if (!fcmToken) return false;
+  setSavedToken(moduleName, fcmToken);
+  return persistPendingModuleFcmToken(moduleName, phone, {
+    fcmToken,
+    platform: platform || "mobile",
+    requestPermission: false,
+    maxAttempts: 3,
+  });
+}
+
+/**
+ * Onboarding submit fallback — cached token only (prefer collectFcmTokenOnSignupSubmit).
+ */
+export function getCachedFcmTokenForSubmit(moduleName) {
+  const cached = normalizeFcmBridgeToken(getSavedToken(moduleName));
+  return {
+    fcmToken: cached || null,
+    platform: isFlutterWebView() ? "mobile" : "web",
+  };
+}
+
+/**
+ * Collect FCM token from Flutter WebView (iPhone app) or web cache.
+ * Retries because the native bridge is often not ready on first call.
+ */
+export async function collectNativeFcmToken(moduleName, options = {}) {
+  const maxAttempts = options.maxAttempts ?? 8;
+  const delayMs = options.delayMs ?? 400;
+  let platform = "web";
+
+  if (isFlutterWebView()) {
+    platform = "mobile";
+    await requestNativeNotificationPermission(moduleName);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      for (const handlerName of FCM_BRIDGE_HANDLER_NAMES) {
+        try {
+          const raw = await window.flutter_inappwebview.callHandler(handlerName, {
+            module: moduleName,
+          });
+          const token = normalizeFcmBridgeToken(raw);
+          if (token) {
+            setSavedToken(moduleName, token);
+            return { fcmToken: token, platform };
+          }
+        } catch {
+          // Try next handler.
+        }
+      }
+
+      if (attempt < maxAttempts - 1) {
+        await sleep(delayMs);
+      }
+    }
+
+    const cached = getSavedToken(moduleName);
+    if (cached && cached.length >= 20) {
+      return { fcmToken: cached, platform: "mobile" };
+    }
+
+    return { fcmToken: null, platform: "mobile" };
+  }
+
+  const skipCache = options.skipCache === true;
+  if (!skipCache) {
+    const webCached = localStorage.getItem(`${tokenCachePrefix}${moduleName}`) || "";
+    if (webCached.length >= 20) {
+      return { fcmToken: webCached, platform };
+    }
+  }
+
+  const resolved = await resolveWebFcmToken(moduleName, options);
+  return {
+    fcmToken: resolved,
+    platform,
+  };
+}
+
+/** @deprecated Use collectFcmTokenFast("restaurant") — kept for older bundles */
+export function collectRestaurantFcmToken(options = {}) {
+  return collectFcmTokenFast("restaurant", options);
+}
+
+/** @deprecated Use collectFcmTokenFast("delivery") — kept for older bundles */
+export function collectDeliveryFcmToken(options = {}) {
+  return collectFcmTokenFast("delivery", options);
+}
+
+/**
+ * Save FCM token to backend when the user is logged in.
+ */
+export async function persistModuleFcmToken(moduleName, options = {}) {
+  let fcmToken = options.fcmToken || null;
+  let platform = options.platform || (isFlutterWebView() ? "mobile" : "web");
+
+  if (!fcmToken) {
+    const collected = await collectFcmTokenFast(moduleName, options);
+    fcmToken = collected.fcmToken;
+    platform = collected.platform;
+  }
+
+  if (!fcmToken) return false;
+
+  setSavedToken(moduleName, fcmToken);
+
+  const accessToken = localStorage.getItem(`${moduleName}_accessToken`);
+  if (!accessToken) {
+    pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token cached locally; no auth session to sync yet", {
+      moduleName,
+    });
+    return false;
+  }
+
+  try {
+    await saveTokenByModule(moduleName, fcmToken, platform);
+    pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token synced to backend", { moduleName, platform });
+    return true;
+  } catch (error) {
+    pushDebugWarn(PUSH_DEBUG_PREFIX, "Failed to sync FCM token to backend", {
+      moduleName,
+      error: error?.message || error,
+    });
+    return false;
+  }
+}
+
+/**
+ * Save FCM for pending partners using phone (no login required).
+ * Requires an existing restaurant/delivery record in DB (post-registration or pending OTP login).
+ */
+export async function persistPendingModuleFcmToken(moduleName, phone, options = {}) {
+  const hasKnownToken = Boolean(options.fcmToken);
+  const maxAttempts = options.maxAttempts ?? (hasKnownToken ? 1 : 2);
+  const retryDelayMs = options.retryDelayMs ?? 400;
+  const syncOptions = {
+    ...options,
+    skipCache: options.skipCache ?? true,
+    collectTimeoutMs: options.collectTimeoutMs ?? FCM_COLLECT_TIMEOUT_MS,
+    requestPermission: options.requestPermission ?? false,
+  };
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let fcmToken = options.fcmToken || null;
+    let platform = options.platform || (isFlutterWebView() ? "mobile" : "web");
+
+    if (!fcmToken) {
+      const collected = await collectFcmTokenFast(moduleName, syncOptions);
+      fcmToken = collected.fcmToken;
+      platform = collected.platform;
+    }
+
+    if (!fcmToken || !phone) {
+      if (attempt < maxAttempts - 1) {
+        await sleep(retryDelayMs);
+        continue;
+      }
+      return false;
+    }
+
+    setSavedToken(moduleName, fcmToken);
+
+    const normalizedPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+    if (!normalizedPhone) return false;
+
+    try {
+      const apiClient = (await import("@food/api")).default;
+      await apiClient.post("/fcm-tokens/pending-save", {
+        phone: normalizedPhone,
+        token: fcmToken,
+        platform,
+        role: moduleName,
+      });
+      pushDebugLog(PUSH_DEBUG_PREFIX, "Pending FCM token saved by phone", {
+        moduleName,
+        phone: normalizedPhone,
+        attempt: attempt + 1,
+      });
+      return true;
+    } catch (error) {
+      pushDebugWarn(PUSH_DEBUG_PREFIX, "Failed to save pending FCM token", {
+        moduleName,
+        attempt: attempt + 1,
+        error: error?.message || error,
+      });
+      if (attempt < maxAttempts - 1) {
+        options.fcmToken = null;
+        await sleep(retryDelayMs);
+      }
+    }
+  }
+
+  return false;
+}
+
+/** Warm FCM cache during onboarding (no permission popup). */
+export function prefetchModuleFcmToken(moduleName) {
+  void collectFcmTokenFast(moduleName, { requestPermission: false }).catch(() => {});
+}
+
+/**
+ * Drop local FCM prefetch when user leaves onboarding before profile submit.
+ * Server tokens are only stored after registration; nothing to remove remotely yet.
+ */
+export function clearOnboardingFcmLocal(moduleName) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.removeItem(`${tokenCachePrefix}${moduleName}`);
+}
+
+/**
+ * Background FCM sync after registration (delivery 5f54105 pattern).
+ */
+export function syncPendingPartnerFcmQuick(moduleName, phone, options = {}) {
+  if (!phone || typeof window === "undefined") return;
+
+  const runSync = () => {
+    void persistPendingModuleFcmToken(moduleName, phone, {
+      ...options,
+      maxAttempts: 3,
+      retryDelayMs: 500,
+    });
+  };
+
+  runSync();
+  [1500, 3500, 7000].forEach((delayMs) => {
+    window.setTimeout(runSync, delayMs);
+  });
+}
+
+/**
+ * Navigate to delivery pending screen immediately; persist FCM in background (restaurant parity).
+ */
+export function finalizeDeliveryPendingSubmission(
+  navigate,
+  phone,
+  { fcmToken, platform, status = "pending", message, rejectionReason } = {},
+  navigateState = {},
+) {
+  const normalizedPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+
+  if (normalizedPhone) {
+    sessionStorage.setItem("delivery_pendingPhone", normalizedPhone);
+  }
+  sessionStorage.setItem("delivery_pendingStatus", status);
+  if (message) {
+    sessionStorage.setItem("delivery_pendingMessage", message);
+  } else {
+    sessionStorage.removeItem("delivery_pendingMessage");
+  }
+  if (rejectionReason) {
+    sessionStorage.setItem("delivery_pendingRejectionReason", rejectionReason);
+  } else {
+    sessionStorage.removeItem("delivery_pendingRejectionReason");
+  }
+
+  try {
+    syncPendingPartnerFcmQuick("delivery", normalizedPhone, { fcmToken, platform });
+  } catch {}
+
+  if (typeof localStorage !== "undefined" && localStorage.getItem("delivery_accessToken")) {
+    try {
+      void persistModuleFcmToken("delivery", { fcmToken, platform });
+    } catch {}
+  }
+
+  navigate("/food/delivery/pending-verification", {
+    replace: true,
+    state: {
+      phone: normalizedPhone,
+      isRejected: status === "rejected",
+      message,
+      rejectionReason,
+      ...navigateState,
+    },
+  });
+}
+
+function setupFcmTokenRefreshOnVisibility(moduleName) {
+  if (typeof window === "undefined" || fcmVisibilityListenerAttached) return;
+  fcmVisibilityListenerAttached = true;
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    const activeModule = normalizeModuleFromPath(window.location.pathname);
+    if (activeModule === "admin") return;
+
+    const accessToken = localStorage.getItem(`${activeModule}_accessToken`);
+    if (accessToken) {
+      void persistModuleFcmToken(activeModule, {
+        skipCache: true,
+        requestPermission: false,
+      }).catch(() => {});
+      return;
+    }
+
+    const pendingPhone =
+      activeModule === "delivery"
+        ? sessionStorage.getItem("delivery_pendingPhone")
+        : localStorage.getItem("restaurant_pendingPhone");
+    if (
+      pendingPhone &&
+      (activeModule === "delivery" || activeModule === "restaurant") &&
+      window.location.pathname.includes("/pending-verification")
+    ) {
+      void persistPendingModuleFcmToken(activeModule, pendingPhone, {
+        requestPermission: true,
+        collectTimeoutMs: FCM_SUBMIT_COLLECT_TIMEOUT_MS,
+      }).catch(() => {});
+    }
+  });
 }
 
 function isSecureContextForPush() {
@@ -85,18 +564,69 @@ function sanitize(value) {
   return String(value || "").trim().replace(/^['"]|['"]$/g, "");
 }
 
+function buildOsNotificationDedupeKey(source = {}) {
+  const data = isRecord(source?.data) ? source.data : source;
+
+  if (data?.notificationId || data?.messageId || source?.messageId) {
+    return data?.notificationId || data?.messageId || source?.messageId;
+  }
+
+  const orderMongoId = String(
+    data?.orderMongoId || source?.orderMongoId || data?._id || source?._id || "",
+  ).trim();
+  const orderId = String(
+    data?.orderId || source?.orderId || source?.order_id || "",
+  ).trim();
+  const orderStatus = String(
+    data?.orderStatus || source?.orderStatus || source?.status || "",
+  ).trim();
+
+  // Same order event from socket + FCM should collapse to one OS notification.
+  if (orderMongoId || orderId) {
+    return [orderMongoId || orderId, orderStatus || "update"].join("::");
+  }
+
+  return [
+    String(data?.type || source?.type || ""),
+    String(data?.title || source?.title || source?.notification?.title || ""),
+    String(data?.targetUrl || data?.link || source?.targetUrl || ""),
+  ]
+    .filter(Boolean)
+    .join("::");
+}
+
 function getNotificationKey(payload = {}) {
-  return (
-    payload?.data?.notificationId ||
-    payload?.data?.messageId ||
-    payload?.messageId ||
-    [
-      payload?.notification?.title || "",
-      payload?.notification?.body || "",
-      payload?.data?.orderId || "",
-      payload?.data?.targetUrl || "",
-    ].join("::")
-  );
+  return buildOsNotificationDedupeKey(payload);
+}
+
+/**
+ * Returns true when the same OS notification was already handled recently
+ * (shared by FCM foreground/background handlers and socket fallbacks).
+ */
+export function shouldSkipDuplicateOsNotification(source = {}) {
+  const notificationKey = buildOsNotificationDedupeKey(source);
+  return wasRecentlyHandled(notificationKey);
+}
+
+function readSharedOsNotificationDedup() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(OS_NOTIFICATION_DEDUP_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSharedOsNotificationDedup(map) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(OS_NOTIFICATION_DEDUP_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore quota / private mode
+  }
 }
 
 function wasRecentlyHandled(notificationKey) {
@@ -109,12 +639,27 @@ function wasRecentlyHandled(notificationKey) {
     }
   }
 
+  const shared = readSharedOsNotificationDedup();
+  for (const [key, timestamp] of Object.entries(shared)) {
+    if (now - Number(timestamp) > notificationDedupWindowMs) {
+      delete shared[key];
+    }
+  }
+
+  const sharedTimestamp = Number(shared[notificationKey] || 0);
+  if (sharedTimestamp && now - sharedTimestamp < notificationDedupWindowMs) {
+    pushDebugLog(PUSH_DEBUG_PREFIX, "Duplicate notification skipped (shared)", { notificationKey });
+    return true;
+  }
+
   if (recentForegroundNotifications.has(notificationKey)) {
     pushDebugLog(PUSH_DEBUG_PREFIX, "Duplicate notification skipped", { notificationKey });
     return true;
   }
 
   recentForegroundNotifications.set(notificationKey, now);
+  shared[notificationKey] = now;
+  writeSharedOsNotificationDedup(shared);
   return false;
 }
 
@@ -202,6 +747,9 @@ export function isPushSoundEnabled() {
 }
 
 async function triggerWebViewNativeNotification(payload = {}) {
+  // Flutter shell already displays FCM alerts natively — avoid a second OS notification.
+  if (isFlutterWebView()) return false;
+
   if (typeof window === "undefined") return false;
 
   const bridgePayload = {
@@ -251,9 +799,11 @@ async function playPushSound(payload = {}) {
     });
     const usedNativeBridge = await triggerWebViewNativeNotification(payload);
 
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-      pushDebugLog(PUSH_DEBUG_PREFIX, "Triggering vibration");
-      navigator.vibrate([200, 100, 200, 100, 300]);
+    if (typeof window !== "undefined" && window.__userHasInteracted && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      try {
+        pushDebugLog(PUSH_DEBUG_PREFIX, "Triggering vibration");
+        navigator.vibrate([200, 100, 200, 100, 300]);
+      } catch (_) {}
     }
 
     if (usedNativeBridge) {
@@ -370,7 +920,7 @@ export async function enablePushNotificationSound() {
       pushSoundUnlocked = true;
       localStorage.setItem(pushSoundEnabledStorageKey, "true");
       window.dispatchEvent(new CustomEvent("push-sound-enabled"));
-    }
+      }
     catch (beepError) {
       pushDebugWarn(PUSH_DEBUG_PREFIX, "Synth beep fallback failed", {
         error: beepError?.message || beepError,
@@ -416,6 +966,76 @@ async function getFirebasePublicEnv() {
   return publicEnvPromise;
 }
 
+async function syncFirebaseConfigToServiceWorker(registration, firebasePublicEnv) {
+  if (!registration || !firebasePublicEnv) return;
+  const config = {
+    apiKey: firebasePublicEnv.apiKey,
+    authDomain: firebasePublicEnv.authDomain,
+    projectId: firebasePublicEnv.projectId,
+    appId: firebasePublicEnv.appId,
+    messagingSenderId: firebasePublicEnv.messagingSenderId,
+    storageBucket: firebasePublicEnv.storageBucket,
+    measurementId: firebasePublicEnv.measurementId,
+  };
+  if (!config.apiKey || !config.projectId || !config.appId || !config.messagingSenderId) return;
+
+  const post = (sw) => {
+    try {
+      sw?.postMessage({ type: "HELLOPARTH_FCM_CONFIG", config });
+    } catch {
+      // ignore
+    }
+  };
+
+  post(registration.active);
+  post(registration.waiting);
+  post(registration.installing);
+
+  try {
+    const ready = await navigator.serviceWorker.ready;
+    post(ready.active);
+  } catch {
+    // ignore
+  }
+}
+
+async function registerMessagingServiceWorker(firebasePublicEnv) {
+  // Cache-bust so closed-app background handler updates after deploys
+  const registration = await navigator.serviceWorker.register(
+    `/firebase-messaging-sw.js?v=20260724`,
+    {
+      scope: "/",
+      updateViaCache: "none",
+    },
+  );
+  await syncFirebaseConfigToServiceWorker(registration, firebasePublicEnv);
+  try {
+    await registration.update();
+  } catch {
+    // ignore
+  }
+  // Ensure the worker is active before getToken (critical for background delivery)
+  if (registration.installing) {
+    await new Promise((resolve) => {
+      const worker = registration.installing;
+      if (!worker) {
+        resolve();
+        return;
+      }
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "activated" || worker.state === "redundant") resolve();
+      });
+    });
+  }
+  try {
+    await navigator.serviceWorker.ready;
+  } catch {
+    // ignore
+  }
+  await syncFirebaseConfigToServiceWorker(registration, firebasePublicEnv);
+  return registration;
+}
+
 function getMessagingFirebaseApp(config) {
   const appConfig = {
     apiKey: config.apiKey,
@@ -441,60 +1061,127 @@ function getMessagingFirebaseApp(config) {
   }
 }
 
+function getSavedToken(moduleName) {
+  return localStorage.getItem(`${tokenCachePrefix}${moduleName}`) || "";
+}
+
 function setSavedToken(moduleName, token) {
   localStorage.setItem(`${tokenCachePrefix}${moduleName}`, token);
 }
 
-async function saveTokenByModule(moduleName, token, platform = "web") {
-  pushDebugLog(PUSH_DEBUG_PREFIX, "saveTokenByModule starting", { moduleName, platform });
+async function resolveWebFcmToken(moduleName, options = {}) {
+  const shouldRequestPermission = options.requestPermission !== false;
+
+  if (!isSupportedBrowser() || !isSecureContextForPush()) {
+    return null;
+  }
+
   try {
-    if (moduleName === "restaurant") {
-      await restaurantAPI.saveFcmToken(token, platform);
-      return;
+    const firebasePublicEnv = await getFirebasePublicEnv();
+    if (!firebasePublicEnv?.vapidKey) return null;
+
+    const app = getMessagingFirebaseApp(firebasePublicEnv);
+    if (!app) return null;
+
+    let permission = Notification.permission;
+    if (permission === "default") {
+      if (!shouldRequestPermission) return null;
+      permission = await Notification.requestPermission();
     }
-    if (moduleName === "delivery") {
-      await deliveryAPI.saveFcmToken(token, platform);
-      return;
-    }
-    if (moduleName === "user") {
-      await userAPI.saveFcmToken(token, { platform });
+
+    if (permission !== "granted") return null;
+
+    const { getMessaging, getToken, isSupported } = await import("firebase/messaging");
+    const supported = await isSupported().catch(() => false);
+    if (!supported) return null;
+
+    const registration = await registerMessagingServiceWorker(firebasePublicEnv);
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, {
+      vapidKey: firebasePublicEnv.vapidKey,
+      serviceWorkerRegistration: registration,
+    });
+
+    const normalized = normalizeFcmBridgeToken(token);
+    if (normalized) {
+      setSavedToken(moduleName, normalized);
+      return normalized;
     }
   } catch (error) {
-    // Stale local session: drop tokens so public browse stops retrying protected APIs.
-    if (error?.response?.status === 401) {
-      try {
-        localStorage.removeItem(`${moduleName}_accessToken`);
-        localStorage.removeItem(`${moduleName}_refreshToken`);
-      } catch (_) {}
-    }
-    throw error;
+    pushDebugWarn(PUSH_DEBUG_PREFIX, "resolveWebFcmToken failed", {
+      moduleName,
+      error: error?.message || error,
+    });
+  }
+
+  if (options.skipCache !== true) {
+    const cached = getSavedToken(moduleName);
+    if (cached.length >= 20) return cached;
+  }
+
+  return null;
+}
+
+function getBackendSyncedToken(moduleName) {
+  if (typeof sessionStorage === "undefined") return "";
+  try {
+    return sessionStorage.getItem(`${fcmBackendSyncedPrefix}${moduleName}`) || "";
+  } catch {
+    return "";
   }
 }
 
-async function registerNativeWebViewFcmToken(moduleName) {
-  if (!isFlutterWebView()) return;
-
-  const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
-  for (const handlerName of handlerNames) {
-    try {
-      const response = await window.flutter_inappwebview.callHandler(handlerName, {
-        module: moduleName,
-      });
-      const normalizedToken = normalizeFcmToken(response);
-      if (normalizedToken.length < 20) continue;
-
-      await saveTokenByModule(moduleName, normalizedToken, "mobile");
-      setSavedToken(moduleName, normalizedToken);
-
-      pushDebugLog(PUSH_DEBUG_PREFIX, "Registered native WebView FCM token", {
-        moduleName,
-        handlerName,
-      });
-      return;
-    } catch {
-      // Try next handler.
-    }
+function markBackendSyncedToken(moduleName, token) {
+  if (typeof sessionStorage === "undefined" || !token) return;
+  try {
+    sessionStorage.setItem(`${fcmBackendSyncedPrefix}${moduleName}`, token);
+  } catch {
+    /* ignore */
   }
+}
+
+export function clearFcmBackendSyncRecord(moduleName) {
+  if (typeof sessionStorage === "undefined" || !moduleName) return;
+  try {
+    sessionStorage.removeItem(`${fcmBackendSyncedPrefix}${moduleName}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function saveTokenByModule(moduleName, token, platform = "web") {
+  const normalizedToken = String(token || "").trim();
+  if (!normalizedToken) return;
+
+  if (getBackendSyncedToken(moduleName) === normalizedToken) {
+    pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token unchanged — skip backend save", {
+      moduleName,
+      platform,
+    });
+    return;
+  }
+
+  pushDebugLog(PUSH_DEBUG_PREFIX, "saveTokenByModule starting", {
+    moduleName,
+    platform,
+    tokenPreview: `${normalizedToken.slice(0, 10)}...`,
+  });
+
+  if (moduleName === "restaurant") {
+    await restaurantAPI.saveFcmToken(normalizedToken, platform);
+  } else if (moduleName === "delivery") {
+    await deliveryAPI.saveFcmToken(normalizedToken, platform);
+  } else if (moduleName === "user") {
+    await userAPI.saveFcmToken(normalizedToken, { platform });
+  } else {
+    return;
+  }
+
+  markBackendSyncedToken(moduleName, normalizedToken);
+}
+
+async function registerNativeWebViewFcmToken(moduleName) {
+  return persistModuleFcmToken(moduleName, { maxAttempts: 6, delayMs: 350 });
 }
 
 function showForegroundNotification(payload = {}) {
@@ -502,6 +1189,19 @@ function showForegroundNotification(payload = {}) {
     pushDebugWarn(PUSH_DEBUG_PREFIX, "Ignoring malformed foreground notification payload", { payload });
     return;
   }
+
+  // In the Flutter-wrapped app, native FCM handlers own all OS notifications.
+  if (isFlutterWebView()) {
+    const notificationType = String(payload?.data?.type || "").toLowerCase();
+    if (
+      notificationType === "cash_deposit" ||
+      notificationType === "cash_deposit_rejected"
+    ) {
+      window.dispatchEvent(new CustomEvent("delivery-wallet-refresh"));
+    }
+    return;
+  }
+
   const notificationKey = getNotificationKey(payload);
   pushDebugLog(PUSH_DEBUG_PREFIX, "showForegroundNotification received", { notificationKey, payload });
   if (wasRecentlyHandled(notificationKey)) {
@@ -523,9 +1223,27 @@ function showForegroundNotification(payload = {}) {
     payload?.data?.imageUrl ||
     undefined;
 
+  const notificationType = String(payload?.data?.type || "").toLowerCase();
+  if (
+    notificationType === "cash_deposit" ||
+    notificationType === "cash_deposit_rejected"
+  ) {
+    window.dispatchEvent(new CustomEvent("delivery-wallet-refresh"));
+  }
+
+  const isTabVisible =
+    typeof document !== "undefined" && document.visibilityState === "visible";
+
+  // Foreground: in-app toast + sound only (no duplicate OS banner while tab is open).
+  if (isTabVisible) {
+    playPushSound(payload);
+    showNotificationToast({ title, message: body });
+    return;
+  }
+
+  // Background tab: OS notification via service worker; sound optional.
   playPushSound(payload);
 
-  // Force system notification even when the tab is in focus
   if (typeof Notification !== "undefined" && Notification.permission === "granted") {
     try {
       pushDebugLog(PUSH_DEBUG_PREFIX, "Showing browser notification from page", {
@@ -534,32 +1252,32 @@ function showForegroundNotification(payload = {}) {
         image,
         notificationKey,
       });
-      // Use service worker to show native system notification to ensure it bypasses focus checks
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistration().then(registration => {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistration().then((registration) => {
           if (registration) {
             registration.showNotification(title, {
               body,
-              icon: "/hello-parth-logo.png",
+              icon: "/assets/images/Hello Parth Logo.png",
               image,
               tag: notificationKey || undefined,
+              renotify: false,
               data: payload?.data || {},
               requireInteraction: true,
-              vibrate: [200, 100, 200, 100, 300]
+              vibrate: [200, 100, 200, 100, 300],
             });
           } else {
             new Notification(title, {
               body,
-              icon: "/hello-parth-logo.png",
+              icon: "/assets/images/Hello Parth Logo.png",
               image,
               tag: notificationKey || undefined,
-              requireInteraction: true
+              requireInteraction: true,
             });
           }
         }).catch(() => {
           new Notification(title, {
             body,
-            icon: "/hello-parth-logo.png",
+            icon: "/assets/images/Hello Parth Logo.png",
             image,
             tag: notificationKey || undefined,
           });
@@ -567,7 +1285,7 @@ function showForegroundNotification(payload = {}) {
       } else {
         new Notification(title, {
           body,
-          icon: "/hello-parth-logo.png",
+          icon: "/assets/images/Hello Parth Logo.png",
           image,
           tag: notificationKey || undefined,
         });
@@ -576,15 +1294,6 @@ function showForegroundNotification(payload = {}) {
       pushDebugWarn(PUSH_DEBUG_PREFIX, "Browser notification creation failed", {
         error: error?.message || error,
       });
-    }
-  }
-
-  // Still show in-app toast for immediate context if we are in focus
-  if (typeof document !== "undefined" && document.visibilityState === "visible") {
-    if (body) {
-      toast.success(`${title}: ${body}`);
-    } else {
-      toast.success(title);
     }
   }
 }
@@ -660,6 +1369,8 @@ export function initPushNotificationClient() {
     soundEnabled: isPushSoundEnabled(),
   });
 
+  attachServiceWorkerMessageListener();
+
   if (moduleName === "admin") {
     return;
   }
@@ -669,7 +1380,84 @@ export function initPushNotificationClient() {
   }
 
   setupPushSoundUnlock();
-  attachServiceWorkerMessageListener();
+  setupFcmTokenRefreshOnVisibility(moduleName);
+}
+
+async function getMessagingAppForPush() {
+  const firebasePublicEnv = await getFirebasePublicEnv();
+  if (!firebasePublicEnv?.vapidKey) return null;
+  const app = getMessagingFirebaseApp(firebasePublicEnv);
+  if (!app) return null;
+  const { isSupported } = await import("firebase/messaging");
+  if (!(await isSupported().catch(() => false))) return null;
+  return { app, firebasePublicEnv };
+}
+
+export function getWebNotificationPermission() {
+  if (typeof window === "undefined" || typeof Notification === "undefined") return "unsupported";
+  return Notification.permission;
+}
+
+/**
+ * Pending verification screen: register service worker + foreground listener (no login).
+ * Without this, FCM delivers but the browser tab never shows the notification.
+ */
+export async function setupPendingVerificationPushListeners(moduleName) {
+  if (isFlutterWebView()) {
+    initPushNotificationClient();
+    return true;
+  }
+  if (!isSupportedBrowser() || !isSecureContextForPush()) return false;
+  initPushNotificationClient();
+  const ready = await getMessagingAppForPush();
+  if (!ready) return false;
+  try {
+    await registerMessagingServiceWorker(ready.firebasePublicEnv);
+    await attachForegroundListener(ready.app);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * User taps "Enable notifications" on pending screen (browser requires a click for Allow).
+ */
+export async function enablePendingVerificationPush(moduleName, phone) {
+  if (!phone || !moduleName) return false;
+  if (isFlutterWebView()) {
+    return syncNativeAppPushToken(moduleName, phone);
+  }
+  if (!isSupportedBrowser() || !isSecureContextForPush()) return false;
+
+  const ready = await getMessagingAppForPush();
+  if (!ready) return false;
+
+  let permission = Notification.permission;
+  if (permission === "default") {
+    permission = await Notification.requestPermission();
+  }
+  if (permission !== "granted") return false;
+
+  const registration = await registerMessagingServiceWorker(ready.firebasePublicEnv);
+  await attachForegroundListener(ready.app);
+
+  const { getMessaging, getToken } = await import("firebase/messaging");
+  const messaging = getMessaging(ready.app);
+  const token = await getToken(messaging, {
+    vapidKey: ready.firebasePublicEnv.vapidKey,
+    serviceWorkerRegistration: registration,
+  });
+
+  if (!token) return false;
+  setSavedToken(moduleName, token);
+
+  return persistPendingModuleFcmToken(moduleName, phone, {
+    fcmToken: token,
+    platform: "web",
+    requestPermission: false,
+    maxAttempts: 2,
+  });
 }
 
 async function attachForegroundListener(firebaseAppInstance) {
@@ -694,17 +1482,45 @@ async function attachForegroundListener(firebaseAppInstance) {
 export async function registerWebPushForCurrentModule(pathname = window.location.pathname) {
   const moduleName = normalizeModuleFromPath(pathname);
   if (moduleName === "admin") return;
+
   initPushNotificationClient();
 
-  const accessToken = localStorage.getItem(`${moduleName}_accessToken`);
-  if (!accessToken) return;
-
-  // Flutter wrappers must always store their native token as mobile, even when
-  // the embedded WebView happens to expose browser push APIs.
-  if (isFlutterWebView()) {
-    await registerNativeWebViewFcmToken(moduleName);
-    return null;
+  const cachedToken = getSavedToken(moduleName);
+  if (cachedToken && getBackendSyncedToken(moduleName) === cachedToken) {
+    pushDebugLog(PUSH_DEBUG_PREFIX, "FCM already synced this session — skip registration", {
+      moduleName,
+    });
+    return;
   }
+
+  if (isFlutterWebView()) {
+    await persistModuleFcmToken(moduleName, { maxAttempts: 6, delayMs: 350 });
+    return;
+  }
+
+  const isPendingPath = pathname.includes("/pending-verification");
+  const accessToken = localStorage.getItem(`${moduleName}_accessToken`);
+
+  if (
+    !accessToken &&
+    isPendingPath &&
+    (moduleName === "restaurant" || moduleName === "delivery")
+  ) {
+    const pendingPhone =
+      moduleName === "delivery"
+        ? sessionStorage.getItem("delivery_pendingPhone")
+        : localStorage.getItem("restaurant_pendingPhone");
+    void setupPendingVerificationPushListeners(moduleName);
+    if (pendingPhone && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      void persistPendingModuleFcmToken(moduleName, pendingPhone, {
+        requestPermission: false,
+        collectTimeoutMs: FCM_SUBMIT_COLLECT_TIMEOUT_MS,
+      });
+    }
+    return;
+  }
+
+  if (!accessToken) return;
 
   const supportsBrowserPush = isSupportedBrowser() && isSecureContextForPush();
 
@@ -714,13 +1530,13 @@ export async function registerWebPushForCurrentModule(pathname = window.location
     registrationInFlight = (async () => {
       const firebasePublicEnv = await getFirebasePublicEnv();
       if (!firebasePublicEnv?.vapidKey) {
-        console.warn("FCM web registration skipped: FIREBASE_VAPID_KEY is missing in env setup.");
+        pushDebugWarn(PUSH_DEBUG_PREFIX, "FCM web registration skipped: FIREBASE_VAPID_KEY is missing in env setup.");
         return;
       }
 
       const app = getMessagingFirebaseApp(firebasePublicEnv);
       if (!app) {
-        console.warn("FCM web registration skipped: Firebase public web config is incomplete.");
+        pushDebugWarn(PUSH_DEBUG_PREFIX, "FCM web registration skipped: Firebase public web config is incomplete.");
         return;
       }
 
@@ -730,7 +1546,7 @@ export async function registerWebPushForCurrentModule(pathname = window.location
           : Notification.permission;
 
       if (permission !== "granted") {
-        console.warn("FCM web registration skipped: Notification permission not granted.", permission);
+        pushDebugLog(PUSH_DEBUG_PREFIX, "FCM web registration skipped: Notification permission not granted.", { permission });
         return;
       }
 
@@ -738,52 +1554,49 @@ export async function registerWebPushForCurrentModule(pathname = window.location
       const supported = await isSupported().catch(() => false);
       if (!supported) return;
 
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      const registration = await registerMessagingServiceWorker(firebasePublicEnv);
       pushDebugLog(PUSH_DEBUG_PREFIX, "Service worker registered for push", {
         scope: registration.scope,
         moduleName,
       });
       const messaging = getMessaging(app);
 
-      let token = null;
-      try {
-        token = await getToken(messaging, {
-          vapidKey: firebasePublicEnv.vapidKey,
-          serviceWorkerRegistration: registration,
-        });
-      } catch (fcmErr) {
-        pushDebugWarn(PUSH_DEBUG_PREFIX, "FCM Web Push token generation failed (403 Forbidden or VAPID key mismatch)", {
-          error: fcmErr?.message || fcmErr,
-        });
-        return;
-      }
+      const token = await getToken(messaging, {
+        vapidKey: firebasePublicEnv.vapidKey,
+        serviceWorkerRegistration: registration,
+      });
 
       if (!token) return;
+      setSavedToken(moduleName, token);
       pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token resolved", {
         moduleName,
+        tokenPreview: `${token.slice(0, 12)}...`,
       });
 
       // Removed localStorage caching (getSavedToken/setSavedToken) as per user requirements.
       // The backend 'upsert' already handles duplicates efficiently.
       try {
-        pushDebugLog(PUSH_DEBUG_PREFIX, "Synchronizing FCM token with backend database", { moduleName });
+        pushDebugLog(PUSH_DEBUG_PREFIX, "Synchronizing FCM token with backend database", { moduleName, tokenPreview: `${token?.slice(0, 10)}...` });
         await saveTokenByModule(moduleName, token);
         pushDebugLog(PUSH_DEBUG_PREFIX, "FCM token synchronized with backend successfully");
       } catch (e) {
         pushDebugWarn(PUSH_DEBUG_PREFIX, "Failed to synchronize FCM token to backend", { error: e?.message || e, stack: e?.stack });
       }
-
+      
       await attachForegroundListener(app);
     })()
-      .catch((e) => {
-        console.error("FCM web registration failed:", e);
-      })
-      .finally(() => {
-        registrationInFlight = null;
-      });
+    .catch((e) => {
+      console.error("FCM web registration failed:", e);
+    })
+    .finally(() => {
+      registrationInFlight = null;
+    });
 
     return registrationInFlight;
   }
 
+  // Flutter WebView fallback: register native token when browser web push isn't available.
+  // This keeps restaurant/delivery FCM alerts working even when Web Push APIs are limited.
+  await registerNativeWebViewFcmToken(moduleName);
   return null;
 }

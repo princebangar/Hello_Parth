@@ -1,6 +1,6 @@
-﻿import { useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { exportToCSV, exportToExcel, exportToPDF, exportToJSON } from "./ordersExportUtils"
-import quickSpicyLogo from "@food/assets/hello-parth-logo.png"
+import quickSpicyLogo from "@food/assets/quicky-spicy-logo.png"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 const debugError = () => {}
 
@@ -88,8 +88,12 @@ const imageUrlToDataUrl = async (url) => {
   }
 }
 
-export function useOrdersManagement(orders, statusKey, title) {
-  const [searchQuery, setSearchQuery] = useState("")
+export function useOrdersManagement(orders, statusKey, title, options = {}) {
+  const serverSideSearch = options.serverSideSearch === true
+  const [internalSearchQuery, setInternalSearchQuery] = useState("")
+  const searchQuery =
+    options.searchQuery !== undefined ? options.searchQuery : internalSearchQuery
+  const setSearchQuery = options.setSearchQuery || setInternalSearchQuery
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isViewOrderOpen, setIsViewOrderOpen] = useState(false)
@@ -111,6 +115,8 @@ export function useOrdersManagement(orders, statusKey, title) {
     customer: true,
     restaurant: true,
     foodItems: true,
+    itemPrice: true,
+    deliveryCharge: true,
     totalAmount: true,
     paymentType: true,
     paymentCollectionStatus: true,
@@ -127,8 +133,8 @@ export function useOrdersManagement(orders, statusKey, title) {
   const filteredOrders = useMemo(() => {
     let result = [...orders]
 
-    // Apply search query
-    if (searchQuery.trim()) {
+    // Apply search query only when search is client-side
+    if (!serverSideSearch && searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter(order => {
         const safeTotal =
@@ -231,7 +237,7 @@ export function useOrdersManagement(orders, statusKey, title) {
     }
 
     return result
-  }, [orders, searchQuery, filters])
+  }, [orders, searchQuery, filters, serverSideSearch])
 
   const count = filteredOrders.length
 
@@ -355,11 +361,20 @@ export function useOrdersManagement(orders, statusKey, title) {
         order.dispatch?.deliveryPartnerId?.phone,
       )
       const orderStatus = formatDisplayText(order.orderStatus || order.status)
-      const paymentStatus = formatDisplayText(
+      const paymentStatusRaw = order.payment?.status
+      let resolvedPaymentStatus = "Pending"
+      if (paymentStatusRaw === "paid" || paymentStatusRaw === "captured" || paymentStatusRaw === "settled") resolvedPaymentStatus = "Paid"
+      else if (paymentStatusRaw === "cod_pending") resolvedPaymentStatus = "COD Pending"
+      else if (paymentStatusRaw === "refunded") resolvedPaymentStatus = "Refunded"
+      else if (paymentStatusRaw === "failed") resolvedPaymentStatus = "Failed"
+      else if (order.paymentStatus === "Collected" || order.paymentStatus === "Paid") resolvedPaymentStatus = "Paid"
+      else if (order.paymentStatus === "Not Collected" || order.paymentStatus === "COD Pending") resolvedPaymentStatus = "COD Pending"
+      else resolvedPaymentStatus = formatDisplayText(
         order.paymentStatus
           || order.paymentCollectionStatus
-          || (paymentType === "Cash on Delivery" ? "Not Collected" : null),
+          || (paymentType === "Cash on Delivery" ? "COD Pending" : null)
       )
+      const paymentStatus = resolvedPaymentStatus
       const customerName = formatDisplayText(order.customerName)
       const customerPhone = formatDisplayText(order.customerPhone)
       const restaurantName = formatDisplayText(order.restaurant)
@@ -598,6 +613,8 @@ export function useOrdersManagement(orders, statusKey, title) {
       customer: true,
       restaurant: true,
       foodItems: true,
+      itemPrice: true,
+      deliveryCharge: true,
       totalAmount: true,
       paymentType: true,
       paymentCollectionStatus: true,
@@ -616,6 +633,7 @@ export function useOrdersManagement(orders, statusKey, title) {
     isViewOrderOpen,
     setIsViewOrderOpen,
     selectedOrder,
+    setSelectedOrder,
     filters,
     setFilters,
     visibleColumns,
@@ -632,5 +650,4 @@ export function useOrdersManagement(orders, statusKey, title) {
     resetColumns,
   }
 }
-
 

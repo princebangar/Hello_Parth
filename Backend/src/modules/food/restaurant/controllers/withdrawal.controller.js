@@ -1,33 +1,28 @@
 import { sendResponse, sendError } from '../../../../utils/response.js';
 import { FoodRestaurantWithdrawal } from '../models/foodRestaurantWithdrawal.model.js';
-import { getRestaurantWithdrawalSettings } from '../../admin/services/admin.service.js';
+import { FoodRestaurant } from '../models/restaurant.model.js';
 import { getRestaurantFinance } from '../services/restaurantFinance.service.js';
 
 export const createWithdrawalRequestController = async (req, res, next) => {
     try {
         const restaurantId = req.user?.userId;
         const { amount, bankDetails } = req.body;
-        const parsedAmount = Number(amount);
 
         if (!restaurantId) return sendError(res, 401, 'Restaurant authentication required');
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return sendError(res, 400, 'Invalid withdrawal amount');
+        if (!amount || amount <= 0) return sendError(res, 400, 'Invalid withdrawal amount');
 
+        // Check if restaurant has enough balance
         const finance = await getRestaurantFinance(restaurantId);
-        const totalEarnings = Number(finance?.currentCycle?.netAvailable ?? finance?.currentCycle?.estimatedPayout ?? 0);
-        const withdrawalSettings = await getRestaurantWithdrawalSettings();
-        const minimumWithdrawalAmount = Number(withdrawalSettings?.minimumWithdrawalAmount) || 0;
+        const availableBalance = finance?.currentCycle?.estimatedPayout || 0;
 
-        if (parsedAmount < minimumWithdrawalAmount) {
-            return sendError(res, 400, `Minimum withdrawal amount is Rs ${minimumWithdrawalAmount.toLocaleString('en-IN')}`);
+        if (amount > availableBalance) {
+            return sendError(res, 400, `Insufficient balance. Available: ₹${availableBalance}`);
         }
 
-        if (parsedAmount > totalEarnings) {
-            return sendError(res, 400, `Insufficient balance. Available to withdraw: Rs ${totalEarnings.toLocaleString('en-IN')}`);
-        }
-
+        // Create the withdrawal request
         const withdrawal = new FoodRestaurantWithdrawal({
             restaurantId,
-            amount: parsedAmount,
+            amount,
             bankDetails,
             status: 'pending'
         });

@@ -1,10 +1,11 @@
-﻿import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Tag, UtensilsCrossed, Edit, X } from "lucide-react"
 import api, { adminAPI, uploadAPI } from "@food/api"
 import { getModuleToken } from "@food/utils/auth"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Button } from "@food/components/ui/button"
+import { prepareUploadFile } from "@/shared/utils/imageCompressor"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -102,7 +103,7 @@ export default function DiningManagement() {
             let imageUrl = editingCategoryImageUrl
 
             if (categoryFile) {
-                const uploadResponse = await uploadAPI.uploadMedia(categoryFile, { folder: "hello-parth/dining/categories" })
+                const uploadResponse = await uploadAPI.uploadMedia(categoryFile, { folder: "helloparth/dining/categories" })
                 imageUrl = uploadResponse?.data?.data?.url || ""
             }
 
@@ -162,7 +163,7 @@ export default function DiningManagement() {
         try {
             setBannersUploading(true)
             const formData = new FormData()
-            formData.append('files', bannerFile)
+            formData.append('files', await prepareUploadFile(bannerFile))
             if (bannerTagline.trim()) formData.append('title', bannerTagline.trim())
             if (bannerPercentageOff.trim()) formData.append('ctaText', bannerPercentageOff.trim())
 
@@ -373,5 +374,4 @@ export default function DiningManagement() {
         </div>
     )
 }
-
 

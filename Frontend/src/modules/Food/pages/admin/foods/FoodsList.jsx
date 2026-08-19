@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Search, Trash2, Loader2, Eye, Pencil, Plus, Save, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Trash2, Loader2, Eye, Pencil, Plus, Save, ChevronDown } from "lucide-react"
 import { adminAPI, uploadAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@food/components/ui/popover"
 import { getFoodDisplayPrice, getFoodVariants } from "@food/utils/foodVariants"
+import AdminListPagination from "@food/components/admin/AdminListPagination"
+import dishFallbackImage from "@food/assets/dish_fallback.webp"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -31,10 +33,69 @@ const createVariantDraft = (variant = {}) => ({
   price: variant?.price != null ? String(variant.price) : "",
 })
 
+const PLACEHOLDER_COLORS = [
+  "bg-rose-500",
+  "bg-orange-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-teal-500",
+  "bg-sky-500",
+  "bg-indigo-500",
+  "bg-violet-500",
+  "bg-fuchsia-500",
+  "bg-slate-500",
+]
+
+const isRealFoodImage = (url) => {
+  if (!url || typeof url !== "string") return false
+  const trimmed = url.trim()
+  if (!trimmed) return false
+  if (trimmed.includes("via.placeholder.com")) return false
+  if (trimmed.includes("placehold")) return false
+  return /^(https?:\/\/|blob:|data:)/i.test(trimmed)
+}
+
+const getFoodInitial = (name) => {
+  const letter = String(name || "").trim().charAt(0).toUpperCase()
+  return /[A-Z0-9]/.test(letter) ? letter : "?"
+}
+
+const getPlaceholderColor = (name) => {
+  const key = String(name || "")
+  let hash = 0
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash + key.charCodeAt(i) * (i + 1)) % PLACEHOLDER_COLORS.length
+  }
+  return PLACEHOLDER_COLORS[hash] || PLACEHOLDER_COLORS[0]
+}
+
+function FoodImageThumb({ name, src, size = "md", className = "" }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+  const hasImage = isRealFoodImage(src) && !failed
+  const sizeClass =
+    size === "lg" ? "w-20 h-20 rounded-xl text-2xl" : "w-10 h-10 rounded-full text-sm"
+
+  return (
+    <div className={`${sizeClass} overflow-hidden bg-slate-100 flex items-center justify-center ${className}`}>
+      <img
+        src={hasImage ? src : dishFallbackImage}
+        alt={name || "Food"}
+        className="w-full h-full object-cover"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  )
+}
+
 export default function FoodsList() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRestaurant, setSelectedRestaurant] = useState("all")
   const [foods, setFoods] = useState([])
+  const [totalFoods, setTotalFoods] = useState(0)
   const [restaurantsForFilter, setRestaurantsForFilter] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
@@ -51,8 +112,28 @@ export default function FoodsList() {
   const [selectedImageFile, setSelectedImageFile] = useState(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(() => Number(localStorage.getItem('admin_foods_pageSize')) || 20)
   const [imageVersion, setImageVersion] = useState(Date.now())
+
+  const isFormDirty = useMemo(() => {
+    if (foodFormMode === "edit") return true;
+    const defaultForm = createFoodForm()
+    const isBasicDirty = 
+      foodForm.restaurantId !== defaultForm.restaurantId ||
+      foodForm.categoryId !== defaultForm.categoryId ||
+      foodForm.categoryName !== defaultForm.categoryName ||
+      foodForm.name !== defaultForm.name ||
+      foodForm.price !== defaultForm.price ||
+      foodForm.description !== defaultForm.description ||
+      foodForm.foodType !== defaultForm.foodType ||
+      foodForm.isAvailable !== defaultForm.isAvailable ||
+      foodForm.preparationTime !== defaultForm.preparationTime;
+    
+    const hasVariants = foodForm.variants && foodForm.variants.length > 0;
+    const hasImage = selectedImageFile !== null;
+    
+    return isBasicDirty || hasVariants || hasImage;
+  }, [foodForm, selectedImageFile, foodFormMode]);
 
   const getItemCreatedMs = (item = {}) => {
     const direct = [item.createdAt, item.addedAt, item.requestedAt, item.updatedAt]
@@ -71,25 +152,27 @@ export default function FoodsList() {
 
   const toArray = (value) => (Array.isArray(value) ? value : [])
   const withImageVersion = (url) => {
-    if (!url || typeof url !== "string") return "https://via.placeholder.com/40"
+    if (!isRealFoodImage(url)) return ""
     return `${url}${url.includes("?") ? "&" : "?"}v=${imageVersion}`
   }
 
-  const fetchAllFoods = useCallback(async () => {
+  const fetchRestaurantsForFilter = useCallback(async () => {
     try {
-      setLoading(true)
-
       const [activeRestaurantsResponse, inactiveRestaurantsResponse] = await Promise.all([
         adminAPI.getRestaurants({ limit: 1000 }),
         adminAPI.getRestaurants({ limit: 1000, status: "inactive" }),
       ])
 
-      const activeRestaurants = activeRestaurantsResponse?.data?.data?.restaurants ||
-        activeRestaurantsResponse?.data?.restaurants ||
-        []
-      const inactiveRestaurants = inactiveRestaurantsResponse?.data?.data?.restaurants ||
-        inactiveRestaurantsResponse?.data?.restaurants ||
-        []
+      const extractRestaurants = (response) => {
+        const data = response?.data?.data ?? response?.data
+        return Array.isArray(data?.restaurants)
+          ? data.restaurants
+          : Array.isArray(data)
+            ? data
+            : []
+      }
+      const activeRestaurants = extractRestaurants(activeRestaurantsResponse)
+      const inactiveRestaurants = extractRestaurants(inactiveRestaurantsResponse)
 
       const restaurantsMap = new Map()
       ;[...activeRestaurants, ...inactiveRestaurants].forEach((restaurant) => {
@@ -105,18 +188,52 @@ export default function FoodsList() {
           .map((restaurant) => ({
             id: String(restaurant?._id || restaurant?.id || ""),
             name: restaurant?.name || restaurant?.restaurantName || "Unknown Restaurant",
+            pureVegRestaurant: restaurant?.pureVegRestaurant === true,
           }))
           .filter((restaurant) => restaurant.id)
           .sort((a, b) => a.name.localeCompare(b.name))
       )
+    } catch (error) {
+      debugError("Error fetching restaurants for filter:", error)
+    }
+  }, [])
 
-      if (restaurants.length === 0) {
-        setFoods([])
-        return
+  useEffect(() => {
+    fetchRestaurantsForFilter()
+  }, [fetchRestaurantsForFilter])
+
+  // Warn user before refreshing if form is open and dirty
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (showFoodFormModal && isFormDirty) {
+        e.preventDefault()
+        e.returnValue = ""
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [showFoodFormModal, isFormDirty])
+
+  const fetchAllFoods = useCallback(async () => {
+    try {
+      setLoading(true)
+
+      const params = {
+        page: currentPage,
+        limit: pageSize,
+        ...(searchQuery.trim() && { search: searchQuery.trim() }),
+        ...(selectedRestaurant !== "all" && { restaurantId: selectedRestaurant }),
       }
 
-      const foodsRes = await adminAPI.getFoods({ limit: 1000 })
-      const list = foodsRes?.data?.data?.foods || []
+      const foodsRes = await adminAPI.getFoods(params)
+      const data = foodsRes?.data?.data ?? foodsRes?.data
+      const list = Array.isArray(data?.foods)
+        ? data.foods
+        : Array.isArray(data)
+          ? data
+          : []
+      const total = data?.total ?? list.length
+
       const approvedOnly = Array.isArray(list)
         ? list.filter((f) => String(f?.approvalStatus || "").toLowerCase() === "approved")
         : []
@@ -126,7 +243,7 @@ export default function FoodsList() {
               id: String(f.id || f._id || ""),
               _id: f._id || f.id,
               name: f.name || "Unnamed Item",
-              image: f.image || "https://via.placeholder.com/40",
+              image: f.image || "",
               status: f.isAvailable !== false && String(f.approvalStatus || "").toLowerCase() !== "rejected",
               restaurantId: String(f.restaurantId || ""),
               restaurantName: f.restaurantName || "Unknown Restaurant",
@@ -144,20 +261,22 @@ export default function FoodsList() {
             }))
           : []
       )
+      setTotalFoods(total)
       setImageVersion(Date.now())
     } catch (error) {
       debugError("Error fetching foods:", error)
       toast.error("Failed to load foods")
       setFoods([])
-      setRestaurantsForFilter([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentPage, pageSize, searchQuery, selectedRestaurant])
 
   useEffect(() => {
-    fetchAllFoods()
-  }, [fetchAllFoods])
+    const delay = searchQuery ? 250 : 0
+    const t = setTimeout(fetchAllFoods, delay)
+    return () => clearTimeout(t)
+  }, [fetchAllFoods, searchQuery])
 
   const [searchParams] = useSearchParams()
   const productIdFromUrl = searchParams.get("productId")
@@ -205,35 +324,17 @@ export default function FoodsList() {
   }
 
   const filteredFoods = useMemo(() => {
-    let result = [...foods]
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(food =>
-        food.name.toLowerCase().includes(query) ||
-        food.id.toString().includes(query) ||
-        food.restaurantName?.toLowerCase().includes(query) ||
-        food.categoryName?.toLowerCase().includes(query)
-      )
-    }
-
-    if (selectedRestaurant !== "all") {
-      result = result.filter((food) => String(food.restaurantId) === selectedRestaurant)
-    }
-
-    result.sort((a, b) => getItemCreatedMs(b) - getItemCreatedMs(a))
-    return result
-  }, [foods, searchQuery, selectedRestaurant])
+    return foods
+  }, [foods])
 
   const totalPages = useMemo(() => {
-    if (filteredFoods.length === 0) return 1
-    return Math.ceil(filteredFoods.length / pageSize)
-  }, [filteredFoods.length, pageSize])
+    if (totalFoods === 0) return 1
+    return Math.ceil(totalFoods / pageSize)
+  }, [totalFoods, pageSize])
 
   const paginatedFoods = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return filteredFoods.slice(start, start + pageSize)
-  }, [filteredFoods, currentPage, pageSize])
+    return foods
+  }, [foods])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -249,12 +350,23 @@ export default function FoodsList() {
     return restaurantsForFilter
   }, [restaurantsForFilter])
 
+  const selectedFormRestaurant = useMemo(() => {
+    return restaurantOptions.find((r) => String(r.id) === String(foodForm.restaurantId || "")) || null
+  }, [restaurantOptions, foodForm.restaurantId])
+
+  const isSelectedRestaurantPureVeg = selectedFormRestaurant?.pureVegRestaurant === true
+
   const openAddFoodModal = () => {
     setFoodFormMode("add")
     setEditingFood(null)
+    const preselectedRestaurantId = selectedRestaurant !== "all" ? selectedRestaurant : ""
+    const preselectedRestaurant = restaurantOptions.find(
+      (r) => String(r.id) === String(preselectedRestaurantId),
+    )
     setFoodForm({
       ...createFoodForm(),
-      restaurantId: selectedRestaurant !== "all" ? selectedRestaurant : "",
+      restaurantId: preselectedRestaurantId,
+      foodType: preselectedRestaurant?.pureVegRestaurant === true ? "Veg" : "Non-Veg",
     })
     setSelectedImageFile(null)
     setImagePreviewUrl("")
@@ -266,6 +378,15 @@ export default function FoodsList() {
   const openEditFoodModal = (food) => {
     setFoodFormMode("edit")
     setEditingFood(food)
+    const restaurant = restaurantOptions.find(
+      (r) => String(r.id) === String(food.restaurantId || ""),
+    )
+    const nextFoodType =
+      restaurant?.pureVegRestaurant === true
+        ? "Veg"
+        : String(food.foodType || "Non-Veg") === "Veg"
+          ? "Veg"
+          : "Non-Veg"
     setFoodForm({
       restaurantId: String(food.restaurantId || ""),
       categoryId: String(food.categoryId || ""),
@@ -275,7 +396,7 @@ export default function FoodsList() {
       variants: getFoodVariants(food).map(createVariantDraft),
       description: String(food.description || ""),
       image: String(food.image || ""),
-      foodType: String(food.foodType || "Non-Veg"),
+      foodType: nextFoodType,
       isAvailable: food.isAvailable !== false,
       preparationTime: String(food.preparationTime || ""),
     })
@@ -285,6 +406,29 @@ export default function FoodsList() {
     setCategoryPopoverOpen(false)
     setShowFoodFormModal(true)
   }
+
+  useEffect(() => {
+    if (!showFoodFormModal || !isSelectedRestaurantPureVeg) return
+    setFoodForm((prev) => {
+      const next = { ...prev }
+      let changed = false
+      if (prev.foodType !== "Veg") {
+        next.foodType = "Veg"
+        changed = true
+      }
+      const selectedStillValid = categoryOptions.some(
+        (c) =>
+          String(c.id) === String(prev.categoryId || "") ||
+          String(c.name) === String(prev.categoryName || ""),
+      )
+      if ((prev.categoryId || prev.categoryName) && categoryOptions.length > 0 && !selectedStillValid) {
+        next.categoryId = ""
+        next.categoryName = ""
+        changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [showFoodFormModal, isSelectedRestaurantPureVeg, foodForm.foodType, foodForm.categoryId, foodForm.categoryName, categoryOptions])
 
   useEffect(() => {
     if (!showFoodFormModal) {
@@ -297,12 +441,24 @@ export default function FoodsList() {
     const loadCategoryOptions = async () => {
       try {
         const res = await adminAPI.getCategories({ limit: 1000 })
-        const list = res?.data?.data?.categories || []
-        const options = Array.isArray(list)
+        const categoryData = res?.data?.data ?? res?.data
+        const list = Array.isArray(categoryData?.categories)
+          ? categoryData.categories
+          : Array.isArray(categoryData)
+            ? categoryData
+            : []
+        let options = Array.isArray(list)
           ? list
-              .map((c) => ({ id: String(c.id || c._id || c.name), name: String(c.name || "").trim() }))
+              .map((c) => ({
+                id: String(c.id || c._id || c.name),
+                name: String(c.name || "").trim(),
+                foodTypeScope: String(c.foodTypeScope || "Both"),
+              }))
               .filter((c) => c.name)
           : []
+        if (isSelectedRestaurantPureVeg) {
+          options = options.filter((c) => c.foodTypeScope === "Veg")
+        }
         if (!cancelled) setCategoryOptions(options)
       } catch (error) {
         if (!cancelled) {
@@ -316,7 +472,7 @@ export default function FoodsList() {
     return () => {
       cancelled = true
     }
-  }, [showFoodFormModal])
+  }, [showFoodFormModal, isSelectedRestaurantPureVeg])
 
   const handleVariantChange = (variantId, field, value) => {
     setFoodForm((prev) => ({
@@ -381,6 +537,11 @@ export default function FoodsList() {
       return
     }
 
+    if (!selectedImageFile && !String(foodForm.image || "").trim()) {
+      toast.error("Please upload a food image")
+      return
+    }
+
     try {
       setSubmittingFood(true)
       let imageUrl = foodForm.image.trim()
@@ -408,7 +569,7 @@ export default function FoodsList() {
         })),
         description: foodForm.description.trim(),
         image: imageUrl,
-        foodType: foodForm.foodType === "Veg" ? "Veg" : "Non-Veg",
+        foodType: isSelectedRestaurantPureVeg || foodForm.foodType === "Veg" ? "Veg" : "Non-Veg",
         isAvailable: foodForm.isAvailable !== false,
         preparationTime: String(foodForm.preparationTime || "").trim(),
       }
@@ -478,8 +639,12 @@ export default function FoodsList() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-slate-900">Food List</h2>
-            <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-              {filteredFoods.length}
+            <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700 flex items-center justify-center min-w-[2.5rem] h-7">
+              {loading ? (
+                <span className="w-5 h-3 rounded bg-slate-300/80 animate-pulse" />
+              ) : (
+                totalFoods
+              )}
             </span>
           </div>
 
@@ -554,7 +719,7 @@ export default function FoodsList() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredFoods.length === 0 ? (
+              ) : foods.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
@@ -573,18 +738,11 @@ export default function FoodsList() {
                       <span className="text-sm font-medium text-slate-700">{(currentPage - 1) * pageSize + index + 1}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
-                        <img
-                          src={withImageVersion(food.image)}
-                          alt={food.name}
-                          className="w-full h-full object-cover"
-                          key={`${food.id}-${imageVersion}`}
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = "https://via.placeholder.com/40"
-                          }}
-                        />
-                      </div>
+                      <FoodImageThumb
+                        name={food.name}
+                        src={withImageVersion(food.image)}
+                        size="md"
+                      />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col">
@@ -638,55 +796,22 @@ export default function FoodsList() {
           </table>
         </div>
 
-        {!loading && filteredFoods.length > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
-            <div className="text-sm text-slate-600">
-              Showing{" "}
-              <span className="font-semibold text-slate-800">{(currentPage - 1) * pageSize + 1}</span>
-              {" "}to{" "}
-              <span className="font-semibold text-slate-800">
-                {Math.min(currentPage * pageSize, filteredFoods.length)}
-              </span>
-              {" "}of{" "}
-              <span className="font-semibold text-slate-800">{filteredFoods.length}</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="px-2.5 py-1.5 text-sm rounded-md border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-              >
-                <option value={10}>10 / page</option>
-                <option value={20}>20 / page</option>
-                <option value={50}>50 / page</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Prev
-              </button>
-
-              <span className="px-3 py-1.5 text-sm font-medium text-slate-700">
-                {currentPage} / {totalPages}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={currentPage >= totalPages}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+        {!loading && (
+          <AdminListPagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalItems={totalFoods}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              try {
+                localStorage.setItem("admin_foods_pageSize", String(size))
+              } catch {}
+              setCurrentPage(1)
+            }}
+            itemLabel="foods"
+            className="mt-4"
+          />
         )}
       </div>
 
@@ -698,13 +823,11 @@ export default function FoodsList() {
           {selectedFood && (
             <div className="p-6 space-y-5">
               <div className="flex items-center gap-4">
-                <img
-                          src={withImageVersion(selectedFood.image)}
-                          alt={selectedFood.name}
-                          className="w-20 h-20 rounded-xl object-cover border border-slate-200"
-                  onError={(e) => {
-                    e.target.src = "https://via.placeholder.com/64"
-                  }}
+                <FoodImageThumb
+                  name={selectedFood.name}
+                  src={withImageVersion(selectedFood.image)}
+                  size="lg"
+                  className="border border-slate-200"
                 />
                 <div>
                   <p className="text-lg font-semibold text-slate-900">{selectedFood.name}</p>
@@ -756,7 +879,15 @@ export default function FoodsList() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+        <DialogContent 
+          className="max-w-2xl p-0 overflow-hidden"
+          onInteractOutside={(e) => {
+            if (isFormDirty) e.preventDefault()
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isFormDirty) e.preventDefault()
+          }}
+        >
           <DialogHeader className="px-6 py-4 border-b border-slate-200 bg-slate-50">
             <DialogTitle className="text-lg font-semibold text-slate-900">
               {foodFormMode === "edit" ? "Edit Food" : "Add Food"}
@@ -768,7 +899,20 @@ export default function FoodsList() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Restaurant</label>
                 <select
                   value={foodForm.restaurantId}
-                  onChange={(e) => setFoodForm((prev) => ({ ...prev, restaurantId: e.target.value, categoryId: "", categoryName: "" }))}
+                  onChange={(e) => {
+                    const nextRestaurantId = e.target.value
+                    const nextRestaurant = restaurantOptions.find(
+                      (r) => String(r.id) === String(nextRestaurantId),
+                    )
+                    const forceVeg = nextRestaurant?.pureVegRestaurant === true
+                    setFoodForm((prev) => ({
+                      ...prev,
+                      restaurantId: nextRestaurantId,
+                      categoryId: "",
+                      categoryName: "",
+                      foodType: forceVeg ? "Veg" : prev.foodType,
+                    }))
+                  }}
                   disabled={foodFormMode === "edit"}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
                 >
@@ -859,16 +1003,22 @@ export default function FoodsList() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Food Type</label>
                 <select
-                  value={foodForm.foodType}
+                  value={isSelectedRestaurantPureVeg ? "Veg" : foodForm.foodType}
                   onChange={(e) => setFoodForm((prev) => ({ ...prev, foodType: e.target.value }))}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
+                  disabled={isSelectedRestaurantPureVeg}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100 disabled:text-slate-600"
                 >
                   <option value="Veg">Veg</option>
-                  <option value="Non-Veg">Non-Veg</option>
+                  {!isSelectedRestaurantPureVeg ? <option value="Non-Veg">Non-Veg</option> : null}
                 </select>
+                {isSelectedRestaurantPureVeg ? (
+                  <p className="mt-1 text-xs text-emerald-600">Pure veg restaurant — only Veg items allowed</p>
+                ) : null}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Upload Image</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Upload Image <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
                 <input
                   type="file"
                   accept="image/*"
@@ -883,6 +1033,7 @@ export default function FoodsList() {
                   }}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm"
                 />
+                <p className="mt-1 text-xs text-slate-500">Optional — food image</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Timing</label>

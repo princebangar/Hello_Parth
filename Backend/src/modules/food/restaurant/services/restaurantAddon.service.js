@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodAddon } from '../models/foodAddon.model.js';
+import { deleteReplacedAssets, deleteStoredAssets, extractAssetUrls } from '../../../../services/storage.service.js';
 
 const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -200,6 +201,16 @@ export async function updateRestaurantAddon(restaurantId, addonId, updateDto) {
         return existing ? normalizeAddonDoc(existing) : null;
     }
 
+    const existing = await FoodAddon.findOne({ _id, restaurantId: rid, isDeleted: { $ne: true } }).lean();
+    if (!existing) return null;
+
+    if (set['draft.image'] !== undefined) {
+        await deleteReplacedAssets(existing?.draft?.image, set['draft.image']);
+    }
+    if (set['draft.images'] !== undefined) {
+        await deleteReplacedAssets(existing?.draft?.images, set['draft.images']);
+    }
+
     const updated = await FoodAddon.findOneAndUpdate(
         { _id, restaurantId: rid, isDeleted: { $ne: true } },
         { $set: set },
@@ -222,6 +233,14 @@ export async function deleteRestaurantAddon(restaurantId, addonId) {
         { $set: { isDeleted: true } },
         { new: true }
     ).lean();
+    if (updated) {
+        await deleteStoredAssets([
+            ...extractAssetUrls(updated?.draft?.image),
+            ...extractAssetUrls(updated?.draft?.images),
+            ...extractAssetUrls(updated?.published?.image),
+            ...extractAssetUrls(updated?.published?.images)
+        ]);
+    }
     return updated ? { id: updated._id } : null;
 }
 

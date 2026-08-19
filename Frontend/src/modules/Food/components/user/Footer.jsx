@@ -1,9 +1,9 @@
-﻿import { Link } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { Facebook, Twitter, Instagram, Mail, Phone, MapPin, Heart } from "lucide-react"
 import { useState, useEffect } from "react"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import { useCompanyName } from "@food/hooks/useCompanyName"
-import quickSpicyLogo from "@food/assets/hello-parth-logo.png"
+import quickSpicyLogo from "@food/assets/quicky-spicy-logo.png"
 
 export default function Footer() {
   const companyName = useCompanyName()
@@ -53,8 +53,8 @@ export default function Footer() {
     support: [
       { name: "Help Center", href: "/user/help" },
       { name: "Contact Us", href: "/user/help" },
-      { name: "Privacy Policy", href: "/profile/privacy" },
-      { name: "Terms of Service", href: "/profile/terms" },
+      { name: "Privacy Policy", href: "/user/profile/privacy" },
+      { name: "Terms of Service", href: "/user/profile/terms" },
     ],
     user: [
       { name: "My Account", href: "/user/profile" },
@@ -64,7 +64,7 @@ export default function Footer() {
     ],
     restaurants: [
       { name: "Partner With Us", href: "/user/help" },
-      { name: "Restaurant Login", href: "/restaurant" },
+      { name: "Restaurant Login", href: "/food/restaurant" },
       { name: "Delivery", href: "/delivery" },
     ],
   }
@@ -203,7 +203,7 @@ export default function Footer() {
         >
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-slate-400 text-sm text-center md:text-left">
-              ï¿½ {currentYear} {companyName}. All rights reserved.
+              � {currentYear} {companyName}. All rights reserved.
             </p>
             <div className="flex items-center gap-1 text-slate-400 text-sm">
               <span>Made with</span>
@@ -231,5 +231,4 @@ export default function Footer() {
     </footer>
   )
 }
-
 

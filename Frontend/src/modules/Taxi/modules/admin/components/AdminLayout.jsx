@@ -58,7 +58,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import quickSpicyLogo from "@food/assets/hello-parth-logo.png";
+import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png";
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));

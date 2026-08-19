@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bell, HelpCircle, Menu, Search, SlidersHorizontal, Calendar, ChevronLeft, X, Loader2, ChevronRight, Star } from "lucide-react"
+import { Bell, HelpCircle, Menu, Search, SlidersHorizontal, Calendar, ChevronLeft, X, Loader2, ChevronRight, Star, ArrowLeft } from "lucide-react"
+import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 import { restaurantAPI } from "@food/api"
@@ -56,6 +57,9 @@ export default function Feedback() {
   const tabFromUrl = searchParams.get("tab")
   const [activeTab, setActiveTab] = useState(tabFromUrl === "complaints" ? "complaints" : "reviews")
   const navigate = useNavigate()
+  const location = useLocation()
+  const goBack = useRestaurantBackNavigation()
+  const showBack = location.state?.from
   const [isTransitioning, setIsTransitioning] = useState(false)
   
   // Update active tab when URL param changes
@@ -387,37 +391,32 @@ export default function Feedback() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-      <div className="sticky bg-white top-0 z-40 px-4 py-3 border-b border-gray-200">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a] flex flex-col" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+      <div className="sticky bg-white dark:bg-[#0a0a0a] top-0 z-40 px-4 py-3 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] tracking-wider text-gray-500 uppercase">Showing data for</p>
-            <p className="text-md font-bold text-gray-900">{restaurantData?.name || "Restaurant"}</p>
+          <div className="flex items-center gap-3">
+            {showBack && (
+              <button
+                onClick={goBack}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-900" />
+              </button>
+            )}
+            <div>
+              <p className="text-[10px] tracking-wider text-gray-500 uppercase">Showing data for</p>
+              <p className="text-md font-bold text-gray-900 dark:text-white">{restaurantData?.name || "Restaurant"}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => navigate("/food/restaurant/notifications")}
-              className="p-1 rounded-full hover:bg-gray-100 active:scale-95 transition-all"
-              aria-label="Open notifications"
-            >
-              <Bell className="w-6 h-6 text-gray-700" />
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/food/restaurant/help-centre/support")}
-              className="p-1 rounded-full hover:bg-gray-100 active:scale-95 transition-all"
+              onClick={() => navigate("/food/restaurant/help-centre/support", { state: { from: location.pathname } })}
+              className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"
               aria-label="Open support"
             >
-              <HelpCircle className="w-6 h-6 text-gray-700" />
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/food/restaurant/explore")}
-              className="p-1 rounded-full hover:bg-gray-100 active:scale-95 transition-all"
-              aria-label="Open explore"
-            >
-              <Menu className="w-6 h-6 text-gray-700" />
+              <HelpCircle className="w-6 h-6 text-gray-700 dark:text-gray-300" />
             </button>
           </div>
         </div>
@@ -427,11 +426,14 @@ export default function Feedback() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
-                activeTab === tab.id ? "bg-black text-white" : "bg-white text-gray-600 border border-gray-200"
+              className={`px-6 py-2 rounded-full text-sm font-bold transition-all relative ${
+                activeTab === tab.id ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white" : "bg-white dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-800"
               }`}
             >
               {tab.label}
+              {tab.id === 'complaints' && complaints.length > 0 && activeTab !== 'complaints' && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-full border-2 border-white dark:border-[#0a0a0a]" />
+              )}
             </button>
           ))}
         </div>
@@ -441,15 +443,15 @@ export default function Feedback() {
         {activeTab === "complaints" ? (
           <div className="space-y-4">
             <div className="flex gap-2">
-              <button onClick={() => setIsDateSelectorOpen(true)} className="flex-1 bg-white p-3 rounded-xl border border-gray-200 flex justify-between items-center">
+              <button onClick={() => setIsDateSelectorOpen(true)} className="flex-1 bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex justify-between items-center">
                 <div className="text-left">
-                  <p className="text-xs font-bold text-gray-900">{selectedDateRange}</p>
+                  <p className="text-xs font-bold text-gray-900 dark:text-white">{selectedDateRange}</p>
                   <p className="text-[10px] text-gray-500">Select date range</p>
                 </div>
                 <Calendar className="w-4 h-4 text-gray-400" />
               </button>
-              <button onClick={() => setIsComplaintsFilterOpen(true)} className="bg-white p-3 rounded-xl border border-gray-200">
-                <SlidersHorizontal className="w-4 h-4 text-gray-900" />
+              <button onClick={() => setIsComplaintsFilterOpen(true)} className="bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                <SlidersHorizontal className="w-4 h-4 text-gray-900 dark:text-white" />
               </button>
             </div>
 
@@ -463,33 +465,33 @@ export default function Feedback() {
               ) : (
                 <div className="space-y-4 pb-20">
                   {complaints.map((complaint) => (
-                    <div key={complaint._id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-3">
+                    <div key={complaint._id} className="bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
                       <div className="flex justify-between items-center">
                         <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${
-                          complaint.status === 'open' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'
+                          complaint.status === 'open' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600' : 'bg-green-100 dark:bg-green-900/30 text-green-600'
                         }`}>{complaint.status || 'open'}</span>
                         <span className="text-[10px] text-gray-400 font-bold">{new Date(complaint.createdAt).toLocaleDateString()}</span>
                       </div>
                       
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-400">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-gray-400">
                           {complaint.userId?.name?.[0] || 'U'}
                         </div>
                         <div>
-                          <p className="font-bold text-gray-900 text-sm">{complaint.userId?.name || 'Customer'}</p>
+                          <p className="font-bold text-gray-900 dark:text-white text-sm">{complaint.userId?.name || 'Customer'}</p>
                           <p className="text-[10px] text-gray-500 font-bold uppercase">Order #{complaint.orderId?.orderId || 'N/A'}</p>
                         </div>
                       </div>
-
-                      <div className="bg-gray-50 rounded-xl p-3 relative">
-                        <p className="text-[10px] font-black text-red-500 uppercase mb-1">{complaint.issueType}</p>
-                        <p className="text-sm text-gray-800 font-semibold leading-relaxed">{complaint.description}</p>
+ 
+                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 relative">
+                        <p className="text-[10px] font-black text-[#B80B3D] uppercase mb-1">{complaint.issueType}</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200 font-semibold leading-relaxed">{complaint.description}</p>
                       </div>
-
+ 
                       {complaint.adminResponse && (
-                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                          <p className="text-[9px] font-black text-blue-600 uppercase mb-1">Admin Response</p>
-                          <p className="text-sm text-blue-900 font-medium">{complaint.adminResponse}</p>
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-100 dark:border-blue-900/30">
+                          <p className="text-[9px] font-black text-[#B80B3D] dark:text-blue-400 uppercase mb-1">Admin Response</p>
+                          <p className="text-sm text-blue-900 dark:text-blue-200 font-medium">{complaint.adminResponse}</p>
                         </div>
                       )}
                     </div>
@@ -501,31 +503,31 @@ export default function Feedback() {
         ) : (
           <div className="space-y-4">
             <div className="flex gap-2">
-              <div className="flex-1 bg-white p-3 rounded-xl border border-gray-200 flex items-center gap-2">
+              <div className="flex-1 bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-2">
                 <Search className="w-4 h-4 text-gray-400" />
-                <input type="text" placeholder="Search reviews" className="flex-1 text-sm bg-transparent focus:outline-none" />
+                <input type="text" placeholder="Search reviews" className="flex-1 text-sm bg-transparent focus:outline-none dark:text-white" />
               </div>
-              <button onClick={() => setIsFilterOpen(true)} className="bg-white p-3 rounded-xl border border-gray-200">
-                <SlidersHorizontal className="w-4 h-4 text-gray-900" />
+              <button onClick={() => setIsFilterOpen(true)} className="bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                <SlidersHorizontal className="w-4 h-4 text-gray-900 dark:text-white" />
               </button>
             </div>
 
             <div className="space-y-4 pb-20">
               {displayedReviews.map((review) => (
-                <div key={review.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-3">
+                <div key={review.id} className="bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
                   <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase">
                     <span>Order #{review.orderNumber}</span>
                     <span>{review.date}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <img src={review.userImage} className="w-8 h-8 rounded-full border border-gray-100" />
-                    <p className="font-bold text-gray-900 text-sm">{review.userName}</p>
+                    <img src={review.userImage} className="w-8 h-8 rounded-full border border-gray-100 dark:border-gray-800" />
+                    <p className="font-bold text-gray-900 dark:text-white text-sm">{review.userName}</p>
                     <div className="ml-auto flex items-center gap-1 bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">
                       {review.rating} <Star className="w-2 h-2 fill-current" />
                     </div>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-sm text-gray-800 font-medium italic">"{review.reviewText}"</p>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+                    <p className="text-sm text-gray-800 dark:text-gray-200 font-medium italic">"{review.reviewText}"</p>
                   </div>
                 </div>
               ))}
@@ -533,7 +535,167 @@ export default function Feedback() {
           </div>
         )}
       </div>
+
+      {/* Date Selector Popup */}
+      <AnimatePresence>
+        {isDateSelectorOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-50"
+              onClick={() => setIsDateSelectorOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-t-3xl shadow-2xl z-50 p-4"
+            >
+              <div className="flex justify-center mb-4">
+                <div className="h-1 w-10 rounded-full bg-gray-300 dark:bg-gray-700" />
+              </div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold dark:text-white">Select Date Range</h3>
+                <button onClick={() => setIsDateSelectorOpen(false)}><X className="w-5 h-5 dark:text-white" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                {["today", "yesterday", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "last5days", "custom"].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => handleDateRangeSelect(range)}
+                    className={`py-3 rounded-xl border-2 text-sm font-bold capitalize transition-all ${
+                      selectedDateRange === range ? "border-black dark:border-white bg-gradient-to-br from-[#B80B3D] to-[#66001D] dark:bg-white text-white dark:text-black" : "border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0a0a0a] text-gray-600 dark:text-gray-400"
+                    }`}
+                  >
+                    {range === "last5days" ? "Last 5 Days" : range.replace(/([A-Z])/g, ' $1').trim()}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Date Range Picker */}
+      <AnimatePresence>
+        {isCustomDateOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-[60]"
+              onClick={() => setIsCustomDateOpen(false)}
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="fixed inset-0 m-auto w-[90%] max-w-sm h-fit bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-3xl shadow-2xl z-[60] p-6"
+            >
+              <DateRangeCalendar
+                startDate={customDateRange.start}
+                endDate={customDateRange.end}
+                onDateRangeChange={(start, end) => {
+                  setCustomDateRange({ start, end });
+                }}
+                onClose={() => setIsCustomDateOpen(false)}
+              />
+              <button
+                onClick={handleCustomDateApply}
+                className="w-full bg-gradient-to-br from-[#B80B3D] to-[#66001D] dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold mt-4 shadow-xl active:scale-[0.98] transition-all"
+              >
+                Apply Custom Range
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Complaints Filter Popup */}
+      <AnimatePresence>
+        {isComplaintsFilterOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50/40 z-50 backdrop-blur-sm"
+              onClick={() => setIsComplaintsFilterOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-t-[32px] shadow-2xl z-50 overflow-hidden"
+              style={{ maxHeight: "80vh" }}
+            >
+              <div className="p-6 flex flex-col h-full">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold font-primary text-slate-900 dark:text-white">Filters</h3>
+                  <button onClick={() => setIsComplaintsFilterOpen(false)} className="p-2 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-full transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-6 mb-6">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Issue Type</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {["Missing Item", "Wrong Item", "Quality Issue", "Delivery Delay", "Other"].map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => {
+                            const current = complaintsFilterValues.issueType || [];
+                            setComplaintsFilterValues({
+                              ...complaintsFilterValues,
+                              issueType: current.includes(type) ? [] : [type]
+                            });
+                          }}
+                          className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                            complaintsFilterValues.issueType?.includes(type)
+                              ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] dark:bg-white text-white dark:text-black shadow-lg shadow-slate-200 dark:shadow-none"
+                              : "bg-slate-50 dark:bg-gray-800 text-slate-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-700"
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-auto">
+                  <button
+                    onClick={handleComplaintsFilterReset}
+                    className="flex-1 py-4 rounded-2xl font-bold text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={handleComplaintsFilterApply}
+                    className="flex-[2] bg-gradient-to-br from-[#B80B3D] to-[#66001D] dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-xl shadow-slate-200 dark:shadow-none active:scale-[0.98] transition-all"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       <BottomNavOrders />
     </div>
   )
 }
+
+
+
+
+
+
+

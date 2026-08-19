@@ -1,10 +1,14 @@
 import mongoose from 'mongoose';
 import * as adminService from '../services/admin.service.js';
+import { logger } from '../../../../utils/logger.js';
+import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { invalidateCache, invalidateFoodBrowseCaches } from '../../../../middleware/cache.js';
+import { FoodRefreshToken } from '../../../../core/refreshTokens/refreshToken.model.js';
 import { validateCategoryListQuery, validateCategoryRejectDto, validateCategoryUpsertDto } from '../validators/category.validator.js';
 import { validateCreateOfferDto, validateUpdateOfferCartVisibilityDto } from '../validators/offer.validator.js';
 import { validateAddDeliveryBonusDto } from '../validators/deliveryBonus.validator.js';
 import { validateCheckCompletionsDto, validateEarningAddonHistoryActionDto, validateEarningAddonUpsertDto, validateToggleEarningAddonStatusDto } from '../validators/earningAddon.validator.js';
-import { validateDeliveryCommissionRuleDto, validateOptionalStatusDto, validateRestaurantCommissionUpsertDto, validateZoneSurgeUpsertDto } from '../validators/commission.validator.js';
+import { validateDeliveryCommissionRuleDto, validateOptionalStatusDto, validateRestaurantCommissionUpsertDto } from '../validators/commission.validator.js';
 import { validateFeeSettingsUpsertDto } from '../validators/feeSettings.validator.js';
 import { validateDeliveryEmergencyHelpUpsertDto } from '../validators/deliveryEmergencyHelp.validator.js';
 import { validateReferralSettingsUpsertDto } from '../validators/referralSettings.validator.js';
@@ -43,6 +47,21 @@ export async function updateCustomerStatus(req, res, next) {
         const updated = await adminService.updateCustomerStatus(id, isActive);
         if (!updated) return res.status(404).json({ success: false, message: 'Customer not found' });
         res.status(200).json({ success: true, message: 'Customer status updated successfully', data: { user: updated, customer: updated } });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateCustomerCodStatus(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid customer id' });
+        }
+        const isCodBlocked = req.body?.isCodBlocked;
+        const updated = await adminService.updateCustomerCodStatus(id, isCodBlocked);
+        if (!updated) return res.status(404).json({ success: false, message: 'Customer not found' });
+        res.status(200).json({ success: true, message: 'Customer COD status updated successfully', data: { user: updated, customer: updated } });
     } catch (error) {
         next(error);
     }
@@ -165,6 +184,19 @@ export async function getDashboardStats(req, res, next) {
     }
 }
 
+export async function getArchivedAccounts(req, res, next) {
+    try {
+        const data = await adminService.getArchivedAccounts();
+        res.status(200).json({
+            success: true,
+            message: 'Archived accounts fetched successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export async function getTransactionReport(req, res, next) {
     try {
         const data = await adminService.getTransactionReport(req.query || {});
@@ -274,6 +306,8 @@ export async function getRestaurantMenuById(req, res, next) {
     }
 }
 
+
+
 export async function updateRestaurantMenuById(req, res, next) {
     try {
         const { id } = req.params;
@@ -284,6 +318,10 @@ export async function updateRestaurantMenuById(req, res, next) {
         if (!menu) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
+        await invalidateCache('restaurant_menu:*');
+        await invalidateCache('search:*');
+        await invalidateCache('categories:*');
+        await invalidateCache('under_250:*');
         res.status(200).json({ success: true, message: 'Menu updated successfully', data: { menu } });
     } catch (error) {
         next(error);
@@ -300,6 +338,11 @@ export async function updateRestaurantById(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('under_250:*');
+        await invalidateCache('offers:*');
+        await invalidateCache('search:*');
         res.status(200).json({ success: true, message: 'Restaurant updated successfully', data: { restaurant: updated } });
     } catch (error) {
         next(error);
@@ -309,6 +352,7 @@ export async function updateRestaurantById(req, res, next) {
 export async function updateRestaurantStatus(req, res, next) {
     try {
         const { id } = req.params;
+        logger.info(`[ADMIN-STATUS] HTTP PATCH /restaurants/${id}/status body=${JSON.stringify(req.body || {})} admin=${req.user?.userId || 'unknown'}`);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ success: false, message: 'Invalid restaurant id' });
         }
@@ -316,6 +360,19 @@ export async function updateRestaurantStatus(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
+        
+        // If restaurant is being disabled/banned/rejected, delete their active refresh tokens to force logout.
+        const statusVal = req.body.status;
+        const isActiveVal = req.body.isActive;
+        if (statusVal === false || isActiveVal === false || statusVal === 'rejected' || statusVal === 'deleted') {
+            await FoodRefreshToken.deleteMany({ userId: id });
+        }
+
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('under_250:*');
+        await invalidateCache('offers:*');
+        await invalidateCache('search:*');
         res.status(200).json({ success: true, message: 'Restaurant status updated successfully', data: { restaurant: updated } });
     } catch (error) {
         next(error);
@@ -332,27 +389,11 @@ export async function updateRestaurantLocation(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('under_250:*');
+        await invalidateCache('search:*');
         res.status(200).json({ success: true, message: 'Restaurant location updated successfully', data: { restaurant: updated } });
-    } catch (error) {
-        next(error);
-    }
-}
-
-export async function updateRestaurantZoneFeaturedRank(req, res, next) {
-    try {
-        const { id } = req.params;
-        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: 'Invalid restaurant id' });
-        }
-        const result = await adminService.updateRestaurantZoneFeaturedRank(id, req.body || {});
-        if (result?.error) {
-            return res.status(400).json({ success: false, message: result.error });
-        }
-        res.status(200).json({
-            success: true,
-            message: 'Restaurant featured rank updated successfully',
-            data: { restaurant: result.restaurant }
-        });
     } catch (error) {
         next(error);
     }
@@ -424,6 +465,7 @@ export async function createCategory(req, res, next) {
     try {
         const body = validateCategoryUpsertDto(req.body || {});
         const created = await adminService.createCategory(body);
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(201).json({ success: true, message: 'Category created successfully', data: { category: created } });
     } catch (error) {
         next(error);
@@ -441,6 +483,7 @@ export async function updateCategory(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Category not found' });
         }
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(200).json({ success: true, message: 'Category updated successfully', data: { category: updated } });
     } catch (error) {
         next(error);
@@ -457,6 +500,7 @@ export async function deleteCategory(req, res, next) {
         if (!result) {
             return res.status(404).json({ success: false, message: 'Category not found' });
         }
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(200).json({ success: true, message: 'Category deleted successfully', data: result });
     } catch (error) {
         next(error);
@@ -473,6 +517,7 @@ export async function toggleCategoryStatus(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Category not found' });
         }
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(200).json({ success: true, message: 'Category status updated successfully', data: { category: updated } });
     } catch (error) {
         next(error);
@@ -489,6 +534,7 @@ export async function approveCategory(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Category not found or already approved' });
         }
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(200).json({ success: true, message: 'Category approved successfully', data: { category: updated } });
     } catch (error) {
         next(error);
@@ -506,6 +552,7 @@ export async function rejectCategory(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Category not found' });
         }
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(200).json({ success: true, message: 'Category rejected successfully', data: { category: updated } });
     } catch (error) {
         next(error);
@@ -522,6 +569,7 @@ export async function makeCategoryGlobal(req, res, next) {
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Category not found' });
         }
+        await invalidateFoodBrowseCaches(['categories', 'search']);
         res.status(200).json({ success: true, message: 'Category is now global', data: { category: updated } });
     } catch (error) {
         next(error);
@@ -547,6 +595,24 @@ export async function createAdminOffer(req, res, next) {
         next(error);
     }
 }
+
+export async function updateAdminOffer(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid offer id' });
+        }
+        const body = validateCreateOfferDto(req.body || {});
+        const updated = await adminService.updateAdminOffer(id, body);
+        if (!updated) {
+            return res.status(404).json({ success: false, message: 'Offer not found' });
+        }
+        res.status(200).json({ success: true, message: 'Offer updated successfully', data: { offer: updated } });
+    } catch (error) {
+        next(error);
+    }
+}
+
 
 export async function updateAdminOfferCartVisibility(req, res, next) {
     try {
@@ -606,11 +672,11 @@ export async function updateSupportTicketController(req, res, next) {
 
 export async function getPendingRestaurants(req, res, next) {
     try {
-        const pending = await adminService.getPendingRestaurants();
+        const data = await adminService.getPendingRestaurants(req.query || {});
         res.status(200).json({
             success: true,
             message: 'Pending restaurants fetched successfully',
-            data: pending
+            data
         });
     } catch (error) {
         next(error);
@@ -649,7 +715,7 @@ export async function getDeliveryEarnings(req, res, next) {
 // ----- Earning Addon (admin) -----
 export async function getEarningAddons(req, res, next) {
     try {
-        const data = await adminService.getEarningAddons();
+        const data = await adminService.getEarningAddons(req.query || {});
         res.status(200).json({ success: true, message: 'Earning addons fetched successfully', data });
     } catch (error) {
         next(error);
@@ -866,7 +932,8 @@ export async function toggleRestaurantCommissionStatus(req, res, next) {
 // ----- Delivery commission rules (admin) -----
 export async function getDeliveryCommissionRules(req, res, next) {
     try {
-        const data = await adminService.getDeliveryCommissionRules();
+        const zoneId = req.query?.zoneId || req.body?.zoneId;
+        const data = await adminService.getDeliveryCommissionRules(zoneId);
         res.status(200).json({ success: true, message: 'Commission rules fetched successfully', data });
     } catch (error) {
         next(error);
@@ -875,7 +942,7 @@ export async function getDeliveryCommissionRules(req, res, next) {
 
 export async function createDeliveryCommissionRule(req, res, next) {
     try {
-        const body = validateDeliveryCommissionRuleDto(req.body || {});
+        const body = validateDeliveryCommissionRuleDto(req.body || {}, { requireZoneId: true });
         const created = await adminService.createDeliveryCommissionRule(body);
         res.status(201).json({ success: true, message: 'Commission rule created successfully', data: { commission: created } });
     } catch (error) {
@@ -939,7 +1006,8 @@ export async function toggleDeliveryCommissionRuleStatus(req, res, next) {
 // ----- Fee Settings (admin) -----
 export async function getFeeSettings(req, res, next) {
     try {
-        const data = await adminService.getFeeSettings();
+        const zoneId = req.query?.zoneId || req.body?.zoneId;
+        const data = await adminService.getFeeSettings(zoneId);
         res.status(200).json({ success: true, message: 'Fee settings fetched successfully', data });
     } catch (error) {
         next(error);
@@ -995,19 +1063,21 @@ export async function updateDeliveryCashLimit(req, res, next) {
     }
 }
 
-export async function getRestaurantWithdrawalSetting(req, res, next) {
+// ----- Top Restaurants (admin) -----
+export async function getTopRestaurants(req, res, next) {
     try {
-        const data = await adminService.getRestaurantWithdrawalSettings();
-        res.status(200).json({ success: true, message: 'Restaurant withdrawal setting fetched successfully', data });
+        const data = await adminService.getTopRestaurantsForAdmin(req.query || {});
+        res.status(200).json({ success: true, message: 'Top restaurants fetched successfully', data });
     } catch (error) {
         next(error);
     }
 }
 
-export async function updateRestaurantWithdrawalSetting(req, res, next) {
+export async function saveTopRestaurants(req, res, next) {
     try {
-        const data = await adminService.upsertRestaurantWithdrawalSettings(req.body || {});
-        res.status(200).json({ success: true, message: 'Restaurant withdrawal setting updated successfully', data });
+        const adminId = req.user?.userId || null;
+        const data = await adminService.saveTopRestaurantsForAdmin(req.body || {}, adminId);
+        res.status(200).json({ success: true, message: 'Top restaurants updated successfully', data });
     } catch (error) {
         next(error);
     }
@@ -1036,6 +1106,7 @@ export async function createOrUpdateEmergencyHelp(req, res, next) {
 export async function approveRestaurant(req, res, next) {
     try {
         const { id } = req.params;
+        logger.info(`[ADMIN-APPROVE] HTTP PATCH /restaurants/${id}/approve admin=${req.user?.userId || 'unknown'}`);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
@@ -1049,6 +1120,11 @@ export async function approveRestaurant(req, res, next) {
                 message: 'Restaurant not found'
             });
         }
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('under_250:*');
+        await invalidateCache('offers:*');
+        await invalidateCache('search:*');
         res.status(200).json({
             success: true,
             message: 'Restaurant approved successfully',
@@ -1062,6 +1138,8 @@ export async function approveRestaurant(req, res, next) {
 export async function createRestaurant(req, res, next) {
     try {
         const restaurant = await adminService.createRestaurantByAdmin(req.body || {});
+        await invalidateCache('restaurants:*');
+        await invalidateCache('search:*');
         res.status(201).json({
             success: true,
             message: 'Restaurant created successfully',
@@ -1075,6 +1153,7 @@ export async function createRestaurant(req, res, next) {
 export async function rejectRestaurant(req, res, next) {
     try {
         const { id } = req.params;
+        logger.info(`[ADMIN-REJECT] HTTP PATCH /restaurants/${id}/reject admin=${req.user?.userId || 'unknown'}`);
         const { reason } = req.body || {};
         if (!id || !mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
@@ -1089,10 +1168,56 @@ export async function rejectRestaurant(req, res, next) {
                 message: 'Restaurant not found'
             });
         }
+        
+        // Banned/rejected restaurant - force logout
+        await FoodRefreshToken.deleteMany({ userId: id });
+
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('under_250:*');
+        await invalidateCache('offers:*');
+        await invalidateCache('search:*');
         res.status(200).json({
             success: true,
             message: 'Restaurant rejected successfully',
             data: restaurant
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function deleteRestaurant(req, res, next) {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid restaurant id'
+            });
+        }
+        const result = await adminService.deleteRestaurant(id);
+        if (!result) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        // Deleted restaurant - force logout
+        await FoodRefreshToken.deleteMany({ userId: id });
+
+        await invalidateCache('restaurants:*');
+        await invalidateCache('restaurant_detail:*');
+        await invalidateCache('under_250:*');
+        await invalidateCache('offers:*');
+        await invalidateCache('restaurant_menu:*');
+        await invalidateCache('search:*');
+        await invalidateCache('categories:*');
+        res.status(200).json({
+            success: true,
+            message: 'Restaurant and all associated data deleted successfully',
+            data: result
         });
     } catch (error) {
         next(error);
@@ -1221,6 +1346,7 @@ export async function getDeliveryPartnerById(req, res, next) {
 
 export async function approveDeliveryPartner(req, res, next) {
     try {
+        logger.info(`[ADMIN-APPROVE] HTTP PATCH /delivery/${req.params.id}/approve admin=${req.user?.userId || 'unknown'}`);
         const partner = await adminService.approveDeliveryPartner(req.params.id);
         if (!partner) {
             return res.status(404).json({
@@ -1240,6 +1366,7 @@ export async function approveDeliveryPartner(req, res, next) {
 
 export async function rejectDeliveryPartner(req, res, next) {
     try {
+        logger.info(`[ADMIN-REJECT] HTTP PATCH /delivery/${req.params.id}/reject admin=${req.user?.userId || 'unknown'}`);
         const reason = req.body?.reason != null ? String(req.body.reason).trim() : '';
         const partner = await adminService.rejectDeliveryPartner(req.params.id, reason);
         if (!partner) {
@@ -1371,7 +1498,7 @@ export async function processRefund(req, res, next) {
                 {
                     title: 'Refund Processed! 💸',
                     body: `Your refund of ₹${refundAmount || order.totalAmount || order.total || 0} for Order #${order.orderId} has been processed successfully.`,
-                    image: 'https://i.ibb.co/5GzXz7r/Hello Parth-Brand-Image.png',
+                    image: '/assets/images/Hello Parth Logo.png',
                     data: {
                         type: 'refund_processed',
                         orderId: String(order.orderId),
@@ -1442,48 +1569,32 @@ export async function getCashLimitSettlements(req, res, next) {
     }
 }
 
+export async function getCashConfirmations(req, res, next) {
+    try {
+        const data = await adminService.getCashConfirmations(req.query || {});
+        res.status(200).json({ success: true, message: 'Cash confirmations fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateCashLimitSettlement(req, res, next) {
+    try {
+        const data = await adminService.updateCashLimitSettlementStatus(
+            req.params.id,
+            req.body || {},
+            req.user,
+        );
+        res.status(200).json({ success: true, message: 'Settlement updated successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export async function getSidebarBadges(req, res, next) {
     try {
         const counts = await adminService.getSidebarBadges();
         res.status(200).json({ success: true, counts });
-    } catch (error) {
-        next(error);
-    }
-}
-
-export async function getDeliveryZoneSurgeConfigs(req, res, next) {
-    try {
-        const data = await adminService.getDeliveryZoneSurgeConfigs();
-        res.status(200).json({ success: true, message: 'Zone surge configs fetched successfully', data });
-    } catch (error) {
-        next(error);
-    }
-}
-
-export async function upsertDeliveryZoneSurgeConfig(req, res, next) {
-    try {
-        const body = validateZoneSurgeUpsertDto(req.body || {});
-        const adminId = req.user?.id || req.user?._id || null;
-        const surgeConfig = await adminService.upsertDeliveryZoneSurgeConfig(body, adminId);
-        res.status(200).json({ success: true, message: 'Zone surge config saved successfully', data: { surgeConfig } });
-    } catch (error) {
-        next(error);
-    }
-}
-
-export async function toggleDeliveryZoneSurgeStatus(req, res, next) {
-    try {
-        const { zoneId } = req.params;
-        if (!zoneId || !mongoose.Types.ObjectId.isValid(zoneId)) {
-            return res.status(400).json({ success: false, message: 'Invalid zone id' });
-        }
-        const { status } = validateOptionalStatusDto(req.body || {});
-        if (typeof status !== 'boolean') {
-            return res.status(400).json({ success: false, message: 'status is required' });
-        }
-        const adminId = req.user?.id || req.user?._id || null;
-        const surgeConfig = await adminService.toggleDeliveryZoneSurgeStatus(zoneId, status, adminId);
-        res.status(200).json({ success: true, message: 'Zone surge status updated successfully', data: { surgeConfig } });
     } catch (error) {
         next(error);
     }
@@ -1502,17 +1613,3 @@ export async function getExpiredFssaiNotifications(req, res, next) {
         next(error);
     }
 }
-export async function bulkApproveFoodItems(req, res, next) {
-    try {
-        const { restaurantId } = req.body;
-        const result = await adminService.bulkApproveFoodItems(restaurantId);
-        res.status(200).json({
-            success: true,
-            message: `Successfully approved ${result.modifiedCount} items`,
-            data: result
-        });
-    } catch (error) {
-        next(error);
-    }
-}
-

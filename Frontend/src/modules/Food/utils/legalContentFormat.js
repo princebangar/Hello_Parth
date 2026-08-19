@@ -129,3 +129,18 @@ export const legalHtmlToPlainText = (html) => {
   return text;
 };
 
+/** Admin CMS GET often returns `{ success, data: null }` on a fresh DB. */
+export const unwrapLegalPage = (responseData, fallback = {}) => {
+  const page =
+    responseData?.data && typeof responseData.data === "object"
+      ? responseData.data
+      : {};
+  return {
+    title: fallback.title || "",
+    content: "",
+    ...fallback,
+    ...page,
+    content: legalHtmlToPlainText(page.content || fallback.content || ""),
+  };
+};
+

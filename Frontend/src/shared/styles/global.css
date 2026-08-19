@@ -230,11 +230,11 @@ html[data-theme="dark"] {
 
 .curvy-active-tab::before {
   right: 100%;
-  background: radial-gradient(circle at 0% 0%, transparent 18px, var(--active-tab-bg, #FC6C00) 18.5px);
+  background: radial-gradient(circle at 0% 0%, transparent 18px, var(--active-tab-bg, #FF5C72) 18.5px);
 }
 
 .curvy-active-tab::after {
   left: 100%;
-  background: radial-gradient(circle at 100% 0%, transparent 18px, var(--active-tab-bg, #FC6C00) 18.5px);
+  background: radial-gradient(circle at 100% 0%, transparent 18px, var(--active-tab-bg, #FF5C72) 18.5px);
 }
 

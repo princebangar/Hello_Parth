@@ -3,6 +3,8 @@
  * Decode and extract information from JWT tokens
  */
 
+import { clearCategoryBrowseStorage } from "./categoryCache.js";
+
 /**
  * Decode JWT token without verification (client-side only)
  * @param {string} token - JWT token
@@ -19,7 +21,7 @@ export function decodeToken(token) {
     // Decode base64url encoded payload
     const payload = parts[1];
     const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-
+    
     return decoded;
   } catch (error) {
     console.error('Error decoding token:', error);
@@ -45,7 +47,7 @@ export function getRoleFromToken(token) {
 export function isTokenExpired(token) {
   const decoded = decodeToken(token);
   if (!decoded || !decoded.exp) return true;
-
+  
   // exp is in seconds, Date.now() is in milliseconds
   return decoded.exp * 1000 < Date.now();
 }
@@ -150,20 +152,78 @@ export function clearModuleAuth(module) {
   localStorage.removeItem(`${module}_refreshToken`);
   localStorage.removeItem(`${module}_authenticated`);
   localStorage.removeItem(`${module}_user`);
-  if (module === "user") {
-    localStorage.removeItem("userToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("userInfo");
-    localStorage.removeItem("role");
-    localStorage.removeItem("chatRole");
-  }
   // Clear cached FCM web token for this module
   localStorage.removeItem(`fcm_web_registered_token_${module}`);
+  try {
+    sessionStorage.removeItem(`fcm_backend_synced_${module}`);
+  } catch {
+    /* ignore */
+  }
+  localStorage.removeItem("app:isOnline");
+  
+  if (module === "user") {
+    clearUserSession();
+    sessionStorage.removeItem("userAuthData");
+  }
+  
   if (module === "restaurant") {
     clearRestaurantSessionCache();
+    sessionStorage.removeItem("restaurantAuthData");
+    sessionStorage.removeItem("restaurantLoginPhone");
   }
-  // Also clear any sessionStorage data
+
+  if (module === "delivery") {
+    sessionStorage.removeItem("deliveryAuthData");
+  }
+
+  if (module === "admin") {
+    // Reset admin-only UI state so a fresh login starts clean (e.g. the Top
+    // Restaurants selected-zone preference and any unsaved drafts).
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("top_restaurants_"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  // Also clear any standard naming conventions
   sessionStorage.removeItem(`${module}AuthData`);
+}
+
+/**
+ * Clear user-specific profile data to prevent data leakage across accounts.
+ */
+export function clearUserSession() {
+  if (typeof localStorage === "undefined") return;
+  const keys = [
+    "userProfile", 
+    "user_user", 
+    "user_edit_profile_draft",
+    "user",
+    "cart",
+    "userVegMode",
+    "userVegModeOption",
+    "food-under-250-filters",
+    "food-category-page-filters-v1",
+    "app:isOnline"
+  ];
+  keys.forEach((k) => localStorage.removeItem(k));
+  // Next login should fetch current GPS like a fresh app open.
+  try {
+    sessionStorage.removeItem("helloparth_location_session");
+    sessionStorage.removeItem("lastLoginLocationFetch");
+    localStorage.setItem("deliveryAddressMode", "current");
+  } catch {
+    /* ignore */
+  }
+  // Drop in-memory + session browse caches so next account starts clean
+  try {
+    clearCategoryBrowseStorage();
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -182,6 +242,8 @@ export function clearRestaurantSessionCache() {
     "restaurant_name",
     "restaurantName",
     "restaurant_pendingPhone",
+    "restaurant_pendingStatus",
+    "restaurant_pendingMessage",
   ];
 
   keys.forEach((key) => localStorage.removeItem(key));
@@ -251,8 +313,10 @@ export function setAuthData(module, token, user, refreshToken = null) {
     const authKey = `${module}_authenticated`;
     const userKey = `${module}_user`;
 
-    // Prevent stale restaurant profile data from previous account after re-login.
-    if (module === "restaurant") {
+    // Prevent stale profile data from previous accounts after re-login.
+    if (module === "user") {
+      clearUserSession();
+    } else if (module === "restaurant") {
       clearRestaurantSessionCache();
     }
 
@@ -277,14 +341,13 @@ export function setAuthData(module, token, user, refreshToken = null) {
         }
       } catch (userError) {
         console.warn('Failed to store user data, but token was stored:', userError);
-        // Don't throw - token storage is more important
       }
     }
 
     // Verify the token was stored correctly
     const storedToken = localStorage.getItem(tokenKey);
     const storedAuth = localStorage.getItem(authKey);
-
+    
     if (storedToken !== token) {
       console.error(`[setAuthData] Token mismatch:`, {
         expected: token?.substring(0, 20) + '...',
@@ -319,7 +382,7 @@ export function setAuthData(module, token, user, refreshToken = null) {
         if (user) {
           localStorage.setItem(`${module}_user`, JSON.stringify(user));
         }
-
+        
         // Verify again after retry
         const storedToken = localStorage.getItem(`${module}_accessToken`);
         if (storedToken !== token) {
@@ -336,14 +399,9 @@ export function setAuthData(module, token, user, refreshToken = null) {
   }
 }
 
-/**
- * Set unified authentication data for both Food and Taxi modules
- * @param {Object} data - Unified auth response data
- */
 export function setUnifiedAuthData(data) {
   if (!data) return;
 
-  // 1. Set Food Auth Data
   const foodToken = data.accessToken;
   const foodUser = data.user;
   const foodRefreshToken = data.refreshToken;
@@ -351,7 +409,6 @@ export function setUnifiedAuthData(data) {
     setAuthData("user", foodToken, foodUser, foodRefreshToken);
   }
 
-  // 2. Set Taxi Auth Data
   const taxiAuth = data.taxiAuth;
   if (taxiAuth && taxiAuth.token && taxiAuth.user) {
     localStorage.setItem("userToken", taxiAuth.token);
@@ -361,8 +418,6 @@ export function setUnifiedAuthData(data) {
     return;
   }
 
-  // Fallback bridge: when unified API doesn't return taxiAuth, reuse common USER session
-  // so taxi module does not force a second login.
   if (foodToken && foodUser) {
     localStorage.setItem("userToken", foodToken);
     localStorage.setItem("userInfo", JSON.stringify(foodUser));
@@ -371,10 +426,6 @@ export function setUnifiedAuthData(data) {
   }
 }
 
-/**
- * Check if user is authenticated for both Food and Taxi
- * @returns {boolean}
- */
 export function isUnifiedAuthenticated() {
   const foodToken = localStorage.getItem("user_accessToken");
   const taxiToken = localStorage.getItem("userToken");

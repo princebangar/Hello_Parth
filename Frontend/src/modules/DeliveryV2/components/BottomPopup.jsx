@@ -29,7 +29,7 @@ export default function BottomPopup({
   title,
   showCloseButton = true,
   closeOnBackdropClick = true,
-  maxHeight = "90vh",
+  maxHeight = "86vh",
   showHandle = true,
   disableSwipeToClose = false,
   collapsedContent = null, // Content to show when collapsed (e.g., Reached pickup button)
@@ -258,7 +258,7 @@ export default function BottomPopup({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={handleBackdropClick}
-              className="fixed inset-0 bg-black/50 z-[100]"
+              className="fixed inset-0 bg-black/50 z-100"
             />
           )}
 
@@ -294,7 +294,7 @@ export default function BottomPopup({
               }
               handlePopupClick(e)
             }}
-            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-[110] overflow-hidden flex flex-col"
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-110 overflow-hidden flex flex-col"
             style={{
               maxHeight: isCollapsed ? "120px" : maxHeight,
               touchAction: disableSwipeToClose ? 'auto' : 'none'
@@ -370,11 +370,11 @@ export default function BottomPopup({
 
             {/* Content */}
             {!isCollapsed ? (
-              <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 sm:py-4">
                 {children}
               </div>
             ) : (
-              <div className="px-4 py-4 pb-6">
+              <div className="px-3 sm:px-4 py-3 sm:py-4 pb-5 sm:pb-6">
                 {collapsedContent}
               </div>
             )}

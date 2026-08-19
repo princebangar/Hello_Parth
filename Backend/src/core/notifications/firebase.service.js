@@ -566,3 +566,13 @@ export const notifyOwnersSafely = async (targets = [], payload = {}) => {
         return [];
     }
 };
+
+export const broadcastPushToTargetsSafely = async (targets = [], payload = {}) => {
+    try {
+        logger.info(`[FCM Broadcast] Starting bulk push to ${targets.length} targets`);
+        return await notifyOwnersSafely(targets, payload);
+    } catch (error) {
+        logger.error(`[FCM Broadcast] Critical failure during bulk push: ${error.message}`);
+        return { successCount: 0, failureCount: 0, error: error.message };
+    }
+};

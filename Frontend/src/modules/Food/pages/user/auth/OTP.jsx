@@ -1,18 +1,14 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Loader2, Smartphone, AlertCircle } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Input } from "@food/components/ui/input"
 import { Button } from "@food/components/ui/button"
-import apiClient, { authAPI } from "@food/api"
+import { authAPI } from "@food/api"
 import { setAuthData as setUserAuthData } from "@food/utils/auth"
-import { useCompanyName } from "@food/hooks/useCompanyName"
-import { motion, AnimatePresence } from "framer-motion"
-import logoImg from "@food/assets/hello-parth-logo.png"
 
 export default function OTP() {
   const navigate = useNavigate()
-  const companyName = useCompanyName()
   const [otp, setOtp] = useState(["", "", "", ""]) // exactly 4 digits
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -22,11 +18,13 @@ export default function OTP() {
   const [showNameInput, setShowNameInput] = useState(false)
   const [name, setName] = useState("")
   const [nameError, setNameError] = useState("")
-  const [verifiedData, setVerifiedData] = useState(null)
+  const [verifiedOtp, setVerifiedOtp] = useState("")
   const [contactInfo, setContactInfo] = useState("")
   const [contactType, setContactType] = useState("phone")
   const [deviceToken, setDeviceToken] = useState(null)
   const [activePlatform, setActivePlatform] = useState("web")
+  const [showRestorePopup, setShowRestorePopup] = useState(false)
+  const [deletedAccountData, setDeletedAccountData] = useState(null)
   const inputRefs = useRef([])
   const submittingRef = useRef(false)
 
@@ -41,25 +39,32 @@ export default function OTP() {
     // Get auth data from sessionStorage
     const stored = sessionStorage.getItem("userAuthData")
     if (!stored) {
-      navigate("/food/user/auth/login", { replace: true })
+      // No auth data, redirect to sign in
+      navigate("/login", { replace: true })
       return
     }
     const data = JSON.parse(stored)
     setAuthData(data)
 
+    // Handle both phone and email
     if (data.method === "email" && data.email) {
       setContactType("email")
       setContactInfo(data.email)
     } else if (data.phone) {
       setContactType("phone")
+      // Extract and format phone number for display
       const phoneMatch = data.phone?.match(/(\+\d+)\s*(.+)/)
       if (phoneMatch) {
-        setContactInfo(`${phoneMatch[1]}-${phoneMatch[2].replace(/\D/g, "")}`)
+        const formattedPhone = `${phoneMatch[1]}-${phoneMatch[2].replace(/\D/g, "")}`
+        setContactInfo(formattedPhone)
       } else {
         setContactInfo(data.phone || "")
       }
+
+      // OTP auto-fill removed - user must manually enter OTP
     }
 
+    // Start resend timer (60 seconds)
     setResendTimer(60)
     const timer = setInterval(() => {
       setResendTimer((prev) => {
@@ -75,80 +80,40 @@ export default function OTP() {
   }, [navigate])
 
   useEffect(() => {
-    if (inputRefs.current[0] && !showNameInput) {
-      inputRefs.current[0].focus()
+    // Focus first input on mount + open mobile keyboard automatically
+    if (!showNameInput) {
+      const timer = setTimeout(() => {
+        const el = inputRefs.current[0]
+        if (el) {
+          el.focus({ preventScroll: true })
+          // In mobile WebView the soft keyboard often won't open on a
+          // programmatic focus alone, so also trigger a click to force it.
+          el.click()
+        }
+      }, 250)
+      return () => clearTimeout(timer)
     }
   }, [showNameInput])
 
-  const handleChange = (index, value) => {
-    const digits = String(value || "").replace(/\D/g, "")
-    const newOtp = [...otp]
-
-    if (!digits) {
-      newOtp[index] = ""
-      setOtp(newOtp)
-      setError("")
-      if (index > 0) inputRefs.current[index - 1]?.focus()
-      return
+  const handleSingleInputChange = (e) => {
+    let val = e.target.value.replace(/\D/g, "");
+    if (val.length > 4) val = val.slice(0, 4);
+    
+    if (val.length > 0) setError("");
+    
+    const newOtp = ["", "", "", ""];
+    for (let i = 0; i < val.length; i++) {
+      newOtp[i] = val[i];
     }
-
-    if (digits.length >= 4) {
-      const pasted = digits.slice(0, 4).split("")
-      const fullPastedOtp = ["", "", "", ""]
-      pasted.forEach((char, i) => { fullPastedOtp[i] = char })
-      setOtp(fullPastedOtp)
-      setError("")
-      inputRefs.current[3]?.focus()
-      if (!showNameInput) {
-        handleVerify(fullPastedOtp.join(""))
-      }
-      return
-    }
-
-    const newDigit = digits.slice(-1)
-    newOtp[index] = newDigit
-    setOtp(newOtp)
-    setError("")
-
-    if (newDigit && index < 3) {
-      inputRefs.current[index + 1]?.focus()
-    }
-
-    if (!showNameInput && newOtp.slice(0, 4).every((digit) => digit !== "")) {
-      handleVerify(newOtp.slice(0, 4).join(""))
+    setOtp(newOtp);
+    
+    if (!showNameInput && val.length === 4) {
+      handleVerify(val);
     }
   }
 
-  const handleKeyDown = (index, e) => {
-    if (e.key === "Backspace") {
-      if (!otp[index] && index > 0) {
-        e.preventDefault()
-        const newOtp = [...otp]
-        newOtp[index - 1] = ""
-        setOtp(newOtp)
-        inputRefs.current[index - 1]?.focus()
-      }
-    }
-  }
-
-  const handlePaste = (e) => {
-    e.preventDefault()
-    const pastedData = e.clipboardData.getData("text")
-    const digits = pastedData.replace(/\D/g, "").slice(0, 4).split("")
-    const newOtp = [...otp]
-    digits.forEach((digit, i) => {
-      if (i < 4) newOtp[i] = digit
-    })
-    setOtp(newOtp)
-    if (!showNameInput && digits.length === 4) {
-      handleVerify(newOtp.slice(0, 4).join(""))
-    } else {
-      inputRefs.current[Math.min(digits.length, 3)]?.focus()
-    }
-  }
-
-  const handleVerify = async (otpValue = null) => {
-    if (showNameInput) return
+  const handleVerify = async (otpValue = null, confirmAction = null) => {
+    if (showNameInput && !confirmAction) return
     if (submittingRef.current) return
 
     const code = (otpValue || otp.join("")).replace(/\D/g, "")
@@ -169,6 +134,7 @@ export default function OTP() {
       const providedName = authData?.isSignUp ? authData?.name || null : null
       const referralCode = authData?.referralCode || null
 
+      // Try to get FCM token before verifying OTP
       let fcmToken = null;
       let platform = "web";
       try {
@@ -178,18 +144,9 @@ export default function OTP() {
             const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
             for (const handlerName of handlerNames) {
               try {
-                const response = await window.flutter_inappwebview.callHandler(handlerName, { module: "user" });
-                const token =
-                  typeof response === "string"
-                    ? response
-                    : response?.token ||
-                      response?.fcmToken ||
-                      response?.data?.token ||
-                      response?.data?.fcmToken ||
-                      "";
-                const normalizedToken = String(token).trim();
-                if (normalizedToken.length > 20) {
-                  fcmToken = normalizedToken;
+                const t = await window.flutter_inappwebview.callHandler(handlerName, { module: "user" });
+                if (t && typeof t === "string" && t.length > 20) {
+                  fcmToken = t.trim();
                   break;
                 }
               } catch (e) {}
@@ -206,43 +163,83 @@ export default function OTP() {
       setActivePlatform(platform);
 
       const response = await authAPI.verifyOTP(
-        phone, code4, purpose, providedName, email, "user", null, referralCode, fcmToken, platform
+        phone,
+        code4,
+        purpose,
+        providedName,
+        email,
+        "user",
+        null,
+        referralCode,
+        fcmToken,
+        platform,
+        null,
+        confirmAction
       )
       const data = response?.data?.data || response?.data || {}
+
+      // Handle deleted account found
+      if (data.deletedAccountFound) {
+        setDeletedAccountData(data)
+        setShowRestorePopup(true)
+        setIsLoading(false)
+        submittingRef.current = false
+        return
+      }
+
       const accessToken = data.accessToken
       const refreshToken = data.refreshToken ?? null
       const user = data.user
 
-      if (!accessToken || !user || !refreshToken) {
+      if (!accessToken || !user) {
         throw new Error("Invalid response from server")
       }
+      if (!refreshToken) {
+        throw new Error("Invalid response from server: missing refresh token")
+      }
 
+      // Check if user needs name prompt (isNewUser flag or missing name)
       const hasName = user.name && String(user.name).trim().length > 0 && String(user.name).toLowerCase() !== "null";
-      const needsName =
-        authData?.expectedNewUser === true ||
-        data.isNewUser === true ||
-        data.needsNamePrompt === true ||
-        !hasName;
+      const needsName = data.isNewUser === true || !hasName;
 
       if (needsName) {
-        setVerifiedData(data)
+        setVerifiedOtp(code4)
         setShowNameInput(true)
         setIsLoading(false)
         submittingRef.current = false
         return
       }
 
+      // Clear auth data from sessionStorage
       sessionStorage.removeItem("userAuthData")
+
       setUserAuthData("user", accessToken, user, refreshToken)
-      window.dispatchEvent(new Event("userAuthChanged"))
+
+      // Dispatch custom event for same-tab updates
+      window.dispatchEvent(new Event("userLoginSuccess"))
+
       setSuccess(true)
-      setTimeout(() => navigate("/food/user"), 600)
+
+      // Redirect to user home after short delay
+      setTimeout(() => {
+        navigate("/food/user")
+      }, 500)
     } catch (err) {
       const status = err?.response?.status
-      let message = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Verification failed."
-      if (status === 401) message = "Invalid or expired code."
+      let message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to verify OTP. Please try again."
+      if (status === 401) {
+        // Friendlier copy for deactivated users or auth errors
+        if (/deactivat(ed|e)/i.test(String(message))) {
+          message = "Your account is deactivated. Please contact support."
+        } else {
+          message = "Invalid or expired code, or account not active."
+        }
+      }
       setError(message)
-    } finally {
       setIsLoading(false)
       submittingRef.current = false
     }
@@ -250,8 +247,18 @@ export default function OTP() {
 
   const handleSubmitName = async () => {
     const trimmedName = name.trim()
-    if (!trimmedName || trimmedName.length < 2) {
-      setNameError("Please enter a valid name")
+    if (!trimmedName) {
+      setNameError("Name is required")
+      return
+    }
+
+    if (trimmedName.length < 2) {
+      setNameError("Name must be at least 2 characters")
+      return
+    }
+
+    if (!verifiedOtp) {
+      setError("OTP verification step missing. Please request a new OTP.")
       return
     }
 
@@ -260,222 +267,305 @@ export default function OTP() {
     setNameError("")
 
     try {
-      const { accessToken, refreshToken, user } = verifiedData
+      const phone = authData?.method === "phone" ? authData.phone : null
+      const email = authData?.method === "email" ? authData.email : null
+      const purpose = authData?.isSignUp ? "register" : "login"
+      const referralCode = authData?.referralCode || null
 
-      // Update name via profile API
-      try {
-        await apiClient.patch("/food/user/profile", 
-          { name: trimmedName },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        )
-      } catch (e) {
-        console.error("Failed to update name on backend, but proceeding with login", e)
+      // Second call with name to auto-register and login
+      const response = await authAPI.verifyOTP(
+        phone,
+        verifiedOtp,
+        purpose,
+        trimmedName,
+        email,
+        "user",
+        null,
+        referralCode,
+        deviceToken,
+        activePlatform
+      )
+      const data = response?.data?.data || response?.data || {}
+
+      const accessToken = data.accessToken
+      const refreshToken = data.refreshToken ?? null
+      const user = data.user
+
+      if (!accessToken || !user) {
+        throw new Error("Invalid response from server")
+      }
+      if (!refreshToken) {
+        throw new Error("Invalid response from server: missing refresh token")
       }
 
       sessionStorage.removeItem("userAuthData")
-      setUserAuthData("user", accessToken, { ...user, name: trimmedName }, refreshToken)
-      window.dispatchEvent(new Event("userAuthChanged"))
+
+      setUserAuthData("user", accessToken, user, refreshToken)
+
+      window.dispatchEvent(new Event("userLoginSuccess"))
+
       setSuccess(true)
-      setTimeout(() => navigate("/food/user"), 600)
+
+      setTimeout(() => {
+        navigate("/food/user")
+      }, 500)
     } catch (err) {
-      setError("Failed to complete registration. Please try again.")
-    } finally {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to complete registration. Please try again."
+      setError(message)
       setIsLoading(false)
     }
   }
 
   const handleResend = async () => {
     if (resendTimer > 0 || isLoading) return
+
     setIsLoading(true)
     setError("")
+
     try {
       const phone = authData?.method === "phone" ? authData.phone : null
       const email = authData?.method === "email" ? authData.email : null
       const purpose = authData?.isSignUp ? "register" : "login"
+
+      // Call backend to resend OTP
       await authAPI.sendOTP(phone, purpose, email)
-      setResendTimer(60)
     } catch (err) {
-      setError("Failed to resend OTP.")
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to resend OTP. Please try again."
+      setError(message)
     } finally {
       setIsLoading(false)
     }
+
+    // Reset timer to 60 seconds
+    setResendTimer(60)
+    const timer = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
     setOtp(["", "", "", ""])
+    setShowNameInput(false)
+    setName("")
+    setNameError("")
+    setVerifiedOtp("")
+    inputRefs.current[0]?.focus()
   }
 
-  if (!authData) return null
+  const handleRestoreAction = async (action) => {
+    setShowRestorePopup(false)
+    const code = otp.join("")
+    await handleVerify(code, action)
+  }
+
+  if (!authData) {
+    return null
+  }
 
   return (
-    <AnimatedPage className="min-h-[100dvh] bg-white dark:bg-[#0A0A0B] flex flex-col font-sans overflow-hidden">
-      {/* Top Branding Section - 35% height */}
-      <div className="relative h-[35dvh] w-full bg-gradient-to-br from-[#07143A] via-[#0D2A6B] to-[#133A8A] overflow-hidden flex flex-col items-center justify-center">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-0 left-0 w-64 h-64 border border-white/20 rounded-full -ml-20 -mt-20" />
-          <div className="absolute bottom-10 right-0 w-32 h-32 border border-white/10 rounded-full -mr-16" />
-        </div>
-
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6 }}
-          className="relative z-10 flex flex-col items-center gap-4 px-6 text-center"
-        >
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center border border-white/25 shadow-lg mb-2 overflow-hidden">
-            <img src={logoImg} alt={`${companyName} logo`} className="w-full h-full object-cover scale-110" />
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-white font-black text-3xl tracking-tight italic">
-              {showNameInput ? "ONE LAST STEP" : "VERIFICATION"}
-            </h1>
-            <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em]">
-              {showNameInput ? "Tell us your name" : `Sent to ${contactInfo}`}
-            </p>
-          </div>
-        </motion.div>
+    <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] flex items-center justify-center p-4">
+      {/* Background decoration (desktop only) */}
+      <div className="fixed inset-0 z-0 hidden md:block opacity-40">
+        <img src={loginBanner} alt="" className="w-full h-full object-cover blur-sm" />
+        <div className="absolute inset-0 bg-white/60 dark:bg-black/80" />
       </div>
 
-      {/* Bottom Content Section - 65% height */}
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="flex-1 bg-white dark:bg-[#0A0A0B] rounded-t-[40px] -mt-10 relative z-20 shadow-[0_-20px_40px_rgba(0,0,0,0.05)] px-6 pt-12 pb-6 flex flex-col"
-      >
-        <div className="max-w-md mx-auto w-full flex flex-col h-full">
-          <AnimatePresence mode="wait">
-            {!showNameInput ? (
-              <motion.div
-                key="otp-view"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-10"
-              >
-                <div className="flex justify-center gap-4">
-                  {otp.map((digit, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ delay: 0.1 * index }}
-                      className="relative"
-                    >
-                      <input
-                        ref={(el) => (inputRefs.current[index] = el)}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleChange(index, e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(index, e)}
-                        onPaste={index === 0 ? handlePaste : undefined}
-                        disabled={isLoading}
-                        className="w-16 h-20 text-center text-3xl font-black bg-zinc-100 dark:bg-zinc-900 border-2 border-transparent focus:border-[#0D2A6B] rounded-2xl text-zinc-900 dark:text-white transition-all outline-none shadow-sm"
-                      />
-                      {digit && (
-                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[#0D2A6B] rounded-full" />
-                      )}
-                    </motion.div>
-                  ))}
+      <div className="w-full max-w-[450px] bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl relative z-10 overflow-hidden border border-gray-100 dark:border-gray-800">
+        {/* Header */}
+        <div className="flex items-center px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() => navigate("/login")}
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+          </button>
+          <span className="ml-4 font-bold text-gray-900 dark:text-white">
+            {showNameInput ? "Welcome!" : "OTP Verification"}
+          </span>
+        </div>
+
+        <div className="p-6 sm:p-8 md:p-10 space-y-6 md:space-y-8">
+          {/* Message */}
+          <div className="text-center space-y-4">
+            {showNameInput && (
+              <div className="flex justify-center">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                  <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/30 text-white">
+                    <Smartphone className="h-5 w-5" />
+                  </div>
                 </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
+                {showNameInput 
+                  ? "Help us know you better" 
+                  : contactType === "email"
+                    ? "Verify your email"
+                    : "Verify your phone"}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">
+                {showNameInput
+                  ? "We're excited to have you join us! Please tell us your full name to get started."
+                  : `We've sent a 4-digit code to ${contactInfo}`}
+              </p>
+            </div>
+          </div>
 
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-center gap-2 text-xs font-bold text-[#0D2A6B] bg-[#0D2A6B]/5 py-4 px-4 rounded-2xl border border-[#0D2A6B]/10"
-                  >
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{error}</span>
-                  </motion.div>
-                )}
+          {/* OTP Input Fields */}
+          {!showNameInput && (
+            <div className="space-y-6">
+                  <div className="relative flex justify-between gap-3 w-full">
+                    <input
+                      ref={(el) => (inputRefs.current[0] = el)}
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={4}
+                      required
+                      disabled={isLoading}
+                      autoFocus
+                      value={otp.join("")}
+                      onChange={handleSingleInputChange}
+                      className="absolute inset-0 w-full h-full bg-transparent text-transparent caret-transparent outline-none focus:outline-none focus:ring-0 z-10 cursor-text text-[16px]"
+                    />
+                    {[0, 1, 2, 3].map((index) => (
+                      <div
+                        key={index}
+                        className={`flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 text-center text-xl font-bold border-2 rounded-xl transition-all outline-none bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-white
+                          ${isLoading ? "opacity-50" : 
+                            (otp.join("").length === index && !isLoading) ? "border-primary ring-1 ring-primary" : 
+                            (otp[index] ? "border-primary" : "border-gray-200 dark:border-gray-700")}
+                        `}
+                      >
+                        {otp[index]}
+                      </div>
+                    ))}
+                  </div>
 
-                <div className="text-center space-y-6">
+              {error && (
+                <div className="flex items-center justify-center gap-1.5 text-xs text-red-500 bg-red-50 dark:bg-red-900/10 py-2 rounded-lg">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* Resend Section */}
+              <div className="text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Didn't get the OTP?{" "}
                   {resendTimer > 0 ? (
-                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                      Resend code in <span className="text-zinc-900 dark:text-white">{resendTimer}s</span>
-                    </p>
+                    <span className="font-medium text-gray-900 dark:text-white">Retry in {resendTimer}s</span>
                   ) : (
                     <button
                       type="button"
                       onClick={handleResend}
                       disabled={isLoading}
-                      className="text-xs font-black text-[#0D2A6B] uppercase tracking-[0.2em] px-6 py-2 rounded-full bg-[#0D2A6B]/5 hover:bg-[#0D2A6B]/10 transition-colors"
+                      className="text-primary hover:text-[#991B1B] font-bold transition-colors disabled:opacity-50"
                     >
-                      Resend Now
+                      Resend SMS
                     </button>
                   )}
+                </p>
+              </div>
+            </div>
+          )}
 
-                  <Button
-                    onClick={() => navigate("/food/user/auth/login")}
-                    variant="ghost"
-                    className="text-zinc-400 dark:text-zinc-600 font-bold text-[10px] uppercase tracking-widest hover:bg-transparent hover:text-zinc-900"
-                  >
-                    Edit Phone Number
-                  </Button>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="name-view"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="space-y-8"
+          {/* Name Input */}
+          {showNameInput && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Input
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    if (nameError) setNameError("")
+                  }}
+                  disabled={isLoading}
+                  placeholder="Full Name"
+                  className={`h-12 md:h-14 text-lg bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 rounded-xl focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary ${nameError ? "border-red-500" : ""} transition-all`}
+                />
+                {nameError && (
+                  <p className="text-xs text-red-500 pl-1">
+                    {nameError}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                onClick={handleSubmitName}
+                disabled={isLoading}
+                className="w-full h-12 md:h-14 bg-primary hover:bg-[#991B1B] text-white font-bold text-lg rounded-xl transition-all hover:shadow-lg active:scale-[0.98]"
               >
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] ml-1">
-                      Full Name
-                    </label>
-                    <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus-within:border-[#0D2A6B]/50 focus-within:ring-4 focus-within:ring-[#0D2A6B]/5 transition-all overflow-hidden">
-                      <Input
-                        type="text"
-                        value={name}
-                        onChange={(e) => {
-                          setName(e.target.value)
-                          if (nameError) setNameError("")
-                        }}
-                        disabled={isLoading}
-                        placeholder="e.g. Aman Kuril"
-                        className="h-16 bg-transparent border-0 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-xl font-black placeholder:text-zinc-300 dark:placeholder:text-zinc-700 px-6"
-                      />
-                    </div>
-                  </div>
-                  {nameError && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-xs font-bold text-[#0D2A6B] pl-2"
-                    >
-                      {nameError}
-                    </motion.p>
-                  )}
-                </div>
+                {isLoading ? "Getting things ready..." : "Finish Registration"}
+              </Button>
+            </div>
+          )}
 
-                <Button
-                  onClick={handleSubmitName}
-                  disabled={isLoading || name.trim().length < 2}
-                  className="w-full h-16 bg-[#0D2A6B] hover:bg-[#07143A] text-white font-black text-base uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_12px_24px_rgba(13,42,107,0.3)] active:scale-[0.98]"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Saving Profile...</span>
-                    </div>
-                  ) : (
-                    "Complete Setup"
-                  )}
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <footer className="mt-auto pt-10 text-center">
-            <p className="text-[9px] text-zinc-300 dark:text-zinc-700 font-black uppercase tracking-[0.4em]">
-              Hello Parth Secure Network
-            </p>
-          </footer>
+          {/* Verification Loading Overlay */}
+          {isLoading && !showNameInput && (
+            <div className="flex justify-center pt-2">
+              <Loader2 className="h-6 w-6 text-primary animate-spin" />
+            </div>
+          )}
         </div>
-      </motion.div>
+        
+        {/* Footer info */}
+        <div className="p-6 bg-gray-50 dark:bg-[#1f1f1f] text-center">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-bold">
+                Hello Parth Food Delivery
+            </p>
+        </div>
+      </div>
+
+      {/* Restore/New Account Popup */}
+      {showRestorePopup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 overflow-y-auto py-10">
+          <div 
+            className="w-full max-w-sm bg-white dark:bg-[#1a1a1a] rounded-3xl shadow-2xl overflow-hidden p-6 text-center border border-gray-100 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Smartphone className="h-8 w-8 text-primary" />
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Account Found!</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              A deleted account for <span className="font-bold text-gray-900 dark:text-white">{contactInfo}</span> was found. 
+              Do you want to restore your old data or start fresh with a new account?
+            </p>
+
+            <div className="space-y-3">
+              <Button
+                onClick={() => handleRestoreAction("restore")}
+                className="w-full h-12 bg-primary hover:bg-[#991B1B] text-white font-bold rounded-xl shadow-lg shadow-primary/20"
+              >
+                Restore My Account
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleRestoreAction("new")}
+                className="w-full h-12 border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl"
+              >
+                Create New Account
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AnimatedPage>
   )
 }

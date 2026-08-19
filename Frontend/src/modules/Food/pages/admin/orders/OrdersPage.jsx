@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom"
 import io from "socket.io-client"
 import { FileText, Calendar, Package } from "lucide-react"
 import { adminAPI } from "@food/api"
-import { API_BASE_URL, resolveSocketOrigin } from "@food/api/config"
+import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import OrdersTopbar from "@food/components/admin/orders/OrdersTopbar"
 import OrdersTable from "@food/components/admin/orders/OrdersTable"
@@ -13,10 +13,10 @@ import SettingsDialog from "@food/components/admin/orders/SettingsDialog"
 import RefundModal from "@food/components/admin/orders/RefundModal"
 import { useOrdersManagement } from "@food/components/admin/orders/useOrdersManagement"
 import { Loader2 } from "lucide-react"
-import { OrdersDashboardSkeleton } from "@food/components/ui/loading-skeletons"
-import { useDelayedLoading } from "@food/hooks/useDelayedLoading"
-import alertSound from "@food/assets/audio/alert.mp3"
-import originalSound from "@food/assets/audio/original.mp3"
+import { OrdersDashboardSkeleton, TableSkeleton } from "@food/components/ui/loading-skeletons"
+import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+const alertSound = "/assets/media/alert.mp3"
+const originalSound = "/assets/media/original.mp3"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -42,12 +42,23 @@ export default function OrdersPage({ statusKey = "all" }) {
   const config = statusConfig[statusKey] || statusConfig["all"]
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    try {
+      return Number(localStorage.getItem("admin_orders_pageSize")) || 20
+    } catch {
+      return 20
+    }
+  })
+  const [totalOrders, setTotalOrders] = useState(0)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [processingRefund, setProcessingRefund] = useState(null)
   const [processingActionOrderId, setProcessingActionOrderId] = useState(null)
+  const [actionLoadingType, setActionLoadingType] = useState(null) // 'accept' | 'reject'
   const [deletingOrderId, setDeletingOrderId] = useState(null)
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [selectedOrderForRefund, setSelectedOrderForRefund] = useState(null)
-  const showLoadingSkeleton = useDelayedLoading(isLoading, { delay: 120, minDuration: 360 })
   const seenOrderIdsRef = useRef(new Set())
   const isFirstLoadRef = useRef(true)
   const fallbackAudioRef = useRef(null)
@@ -59,6 +70,7 @@ export default function OrdersPage({ statusKey = "all" }) {
   const activeOrderAlertRef = useRef(null)
   const alertLoopTimerRef = useRef(null)
   const alertLoopStartedAtRef = useRef(0)
+  const lastSidebarBadgeRefreshAtRef = useRef(0)
   const ALERT_LOOP_INTERVAL_MS = 4500
   const ALERT_LOOP_MAX_MS = 120000
 
@@ -86,8 +98,10 @@ export default function OrdersPage({ statusKey = "all" }) {
         notificationAudioRef.current.load()
       }
 
-      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-        navigator.vibrate([200, 100, 200, 100, 300])
+      if (typeof window !== "undefined" && window.__userHasInteracted && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        try {
+          navigator.vibrate([200, 100, 200, 100, 300])
+        } catch (_) {}
       }
 
       notificationAudioRef.current.muted = false
@@ -175,6 +189,13 @@ export default function OrdersPage({ statusKey = "all" }) {
     alertLoopStartedAtRef.current = 0
   }, [])
 
+  // Fully stop the new-order alert (sound + loop). Called when an order is
+  // accepted/rejected by admin, or accepted by the restaurant.
+  const stopOrderAlert = useCallback(() => {
+    activeOrderAlertRef.current = null
+    stopAlertLoop()
+  }, [stopAlertLoop])
+
   const startAlertLoop = useCallback(() => {
     stopAlertLoop()
     alertLoopStartedAtRef.current = Date.now()
@@ -204,7 +225,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         requireInteraction: true,
         silent: false,
         vibrate: [200, 100, 200, 100, 300],
-        icon: "/hello-parth-logo.png",
+        icon: "/assets/images/Hello Parth Logo.png",
         data: { targetUrl: "/admin/orders/all" },
       }
 
@@ -312,77 +333,6 @@ export default function OrdersPage({ statusKey = "all" }) {
     }
   }, [statusKey])
 
-  const fetchOrders = useCallback(async (options = {}) => {
-    const { silent = false, withRingCheck = false } = options
-
-    try {
-      if (!silent) setIsLoading(true)
-      const params = {
-        page: 1,
-        limit: 1000,
-        status:
-          statusKey === "all"
-            ? undefined
-            : statusKey === "restaurant-cancelled"
-              ? "cancelled"
-              : statusKey,
-        cancelledBy: statusKey === "restaurant-cancelled" ? "restaurant" : undefined,
-      }
-
-      const response = await adminAPI.getOrders(params)
-
-      const rawOrders =
-        response?.data?.data?.orders ??
-        response?.data?.orders ??
-        response?.data?.data?.docs ??
-        response?.data?.data
-      const nextOrders = Array.isArray(rawOrders) ? rawOrders : []
-
-      if (response.data?.success) {
-        const nextOrderIds = new Set(
-          nextOrders
-            .map((order) => order.id || order._id || order.orderId)
-            .filter(Boolean),
-        )
-
-        if (withRingCheck && !isFirstLoadRef.current && statusKey === "all") {
-          const hasNewOrder = [...nextOrderIds].some(
-            (id) => !seenOrderIdsRef.current.has(id),
-          )
-          if (hasNewOrder) {
-            activeOrderAlertRef.current = { orderId: "polling-new-order" }
-            playDefaultRing()
-            startAlertLoop()
-            if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-              showBrowserNotification(
-                "New order received",
-                "A new order arrived",
-                `admin-order-poll-${Date.now()}`,
-              )
-            }
-            toast.info("New order received")
-          }
-        }
-
-        seenOrderIdsRef.current = nextOrderIds
-        isFirstLoadRef.current = false
-        setOrders(nextOrders)
-      } else {
-        debugError("Failed to fetch orders:", response.data)
-        if (!silent) toast.error("Failed to fetch orders")
-        setOrders([])
-      }
-    } catch (error) {
-      debugError("Error fetching orders:", error)
-      if (!silent) {
-        toast.error(error.response?.data?.message || "Failed to fetch orders")
-      }
-      setOrders([])
-    } finally {
-      if (!silent) setIsLoading(false)
-    }
-  }, [statusKey, playDefaultRing, showBrowserNotification, startAlertLoop])
-
   const normalizedOrders = useMemo(() => {
     const safeOrders = Array.isArray(orders) ? orders : []
 
@@ -398,6 +348,7 @@ export default function OrdersPage({ statusKey = "all" }) {
             day: "2-digit",
             month: "short",
             year: "numeric",
+            timeZone: "Asia/Kolkata",
           }).toUpperCase()
         : ""
       const time = createdAt
@@ -405,47 +356,72 @@ export default function OrdersPage({ statusKey = "all" }) {
             hour: "2-digit",
             minute: "2-digit",
             hour12: true,
+            timeZone: "Asia/Kolkata",
           }).toUpperCase()
         : ""
 
       const pricing = order.pricing || {}
       const subtotal = Number(pricing.subtotal || 0)
+      let baseSubtotal = Number(
+        pricing.baseSubtotal != null ? pricing.baseSubtotal : NaN,
+      )
+      let markupTotal = Math.max(0, Number(pricing.markupTotal || 0))
       const deliveryFee = Number(pricing.deliveryFee || 0)
       const platformFee = Number(pricing.platformFee || 0)
       const taxAmount = Number(pricing.tax || 0)
       const discountAmount = Number(pricing.discount || 0)
-      const deliveryPartnerTip = Number(pricing.deliveryPartnerTip || 0)
-      const computedTotal = subtotal + deliveryFee + platformFee + taxAmount + deliveryPartnerTip - discountAmount
+      const computedTotal = subtotal + deliveryFee + platformFee + taxAmount - discountAmount
       const totalAmount = Number(
         pricing.total != null ? pricing.total : computedTotal
       )
 
-      const paymentMethod = order.payment?.method || order.paymentMethod || ""
+      const paymentMethod = order.payment?.method || order.paymentMethod || order.payment?.paymentMethod || ""
       let paymentType = order.paymentType
       if (!paymentType) {
-        if (paymentMethod === "cash" || paymentMethod === "cod") paymentType = "Cash on Delivery"
+        if (paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "cash on delivery") paymentType = "Cash on Delivery"
         else if (paymentMethod === "wallet") paymentType = "Wallet"
         else if (paymentMethod) paymentType = "Online"
         else paymentType = "N/A"
       }
 
-      const paymentStatusRaw = order.payment?.status || ""
+      const backendStatus = String(order.orderStatus || "").toLowerCase()
+      const method = String(paymentMethod).toLowerCase();
+      const hasRazorpayId = !!(order.payment?.razorpay_payment_id || order.payment?.razorpayPaymentId);
+      const isQrPayment = method === "razorpay_qr" || method === "qr" || (method === "cod" && hasRazorpayId) || (method === "cash" && hasRazorpayId);
+      
       let paymentStatus = order.paymentStatus
-      if (!paymentStatus) {
-        const s = String(paymentStatusRaw || "").toLowerCase()
-        if (s === "refunded") paymentStatus = "Refunded"
-        else if (s === "paid" || s === "authorized" || s === "captured" || s === "settled") paymentStatus = "Paid"
-        else if (s === "failed") paymentStatus = "Failed"
-        else paymentStatus = "Pending"
+      if (paymentStatus === "Collected") paymentStatus = "Paid"
+      if (paymentStatus === "Not Collected") paymentStatus = "COD Pending"
+      const paymentStatusRaw = order.payment?.status || ""
+      const s = String(paymentStatusRaw || "").toLowerCase()
+      if (s === "refunded") paymentStatus = "Refunded"
+      else if (s === "paid" || s === "authorized" || s === "captured" || s === "settled") paymentStatus = "Paid"
+      else if (s === "failed") paymentStatus = "Failed"
+      else if (s === "cod_pending") paymentStatus = "COD Pending"
+      else if (isQrPayment && s !== "cod_pending" && s !== "pending") paymentStatus = "Paid"
+      else if (!paymentStatus) paymentStatus = "Pending"
+
+      // Method detail for COD orders as requested by user
+      let paymentMethodDetail = "COD"
+      if (isQrPayment) {
+        paymentMethodDetail = "COD/QR"
+      } else if (method === "wallet") {
+        paymentMethodDetail = "Wallet"
+      } else if (method !== "cash" && method !== "cod" && method !== "cash on delivery" && method !== "") {
+        paymentMethodDetail = "Online"
       }
 
-      const backendStatus = String(order.orderStatus || "").toLowerCase()
+
       let displayStatus = order.orderStatus
-      if (!backendStatus || backendStatus === "created" || backendStatus === "confirmed") {
+      if (!backendStatus || backendStatus === "created") {
         displayStatus = "Pending"
-      } else if (backendStatus === "preparing" || backendStatus === "ready_for_pickup") {
+      } else if (backendStatus === "confirmed") {
+        displayStatus = "Accepted"
+      } else if (backendStatus === "preparing") {
         displayStatus = "Processing"
-      } else if (backendStatus === "picked_up") {
+      } else if (backendStatus === "ready_for_pickup" || backendStatus === "reached_pickup") {
+        displayStatus = "Ready for Pickup"
+      } else if (backendStatus === "picked_up" || backendStatus === "reached_drop") {
         displayStatus = "Food On The Way"
       } else if (backendStatus === "delivered") {
         displayStatus = "Delivered"
@@ -468,15 +444,81 @@ export default function OrdersPage({ statusKey = "all" }) {
         ""
 
       const items = Array.isArray(order.items)
-        ? order.items.map((item) => ({
-            quantity: item.quantity || 1,
-            name: item.name || item.foodName || item.title || "Item",
-            price: item.price || 0,
-          }))
+        ? order.items.map((item) => {
+            const selling = Number(item.price || item.variantPrice || 0) || 0
+            let base =
+              item.basePrice != null && Number.isFinite(Number(item.basePrice))
+                ? Number(item.basePrice)
+                : null
+            let markup =
+              item.markupAmount != null && Number.isFinite(Number(item.markupAmount))
+                ? Math.max(0, Number(item.markupAmount))
+                : 0
+
+            if (!(markup > 0) && base != null && selling > base + 0.01) {
+              markup = Math.round((selling - base) * 100) / 100
+            }
+
+            // Recover base when older orders stored selling price in both fields
+            if (
+              (base == null || Math.abs(base - selling) < 0.01) &&
+              markup <= 0
+            ) {
+              const type = String(item.appliedPricingType || "").toUpperCase()
+              const value = Number(item.appliedPricingValue)
+              if (type === "FIXED" && value > 0 && selling > value) {
+                base = Math.round((selling - value) * 100) / 100
+                markup = value
+              } else if (type === "PERCENTAGE" && value > 0) {
+                base = Math.round((selling / (1 + value / 100)) * 100) / 100
+                markup = Math.round((selling - base) * 100) / 100
+              }
+            }
+
+            if (base == null) base = selling
+
+            return {
+              quantity: item.quantity || 1,
+              name: item.name || item.foodName || item.title || "Item",
+              price: selling,
+              basePrice: base,
+              markupAmount: markup,
+              otherPrice: item.otherPrice != null ? item.otherPrice : selling,
+              pricingScope: item.pricingScope || item.pricingRule?.scope || null,
+              appliedPricingType: item.appliedPricingType || null,
+              appliedPricingValue: item.appliedPricingValue ?? null,
+              variantName: item.variantName || item.variant || item.selectedVariant?.name || "",
+              variantId: item.variantId || item.selectedVariant?.id || "",
+              isVeg: item.isVeg,
+              description: item.description || "",
+              addons: item.addons || item.addOns || [],
+            }
+          })
         : []
+
+      if (!Number.isFinite(baseSubtotal) || baseSubtotal < 0) {
+        baseSubtotal = items.reduce((sum, item) => {
+          const qty = Number(item.quantity || 1) || 1
+          return sum + Number(item.basePrice || 0) * qty
+        }, 0)
+      }
+      if (!(markupTotal > 0)) {
+        markupTotal = items.reduce((sum, item) => {
+          const qty = Number(item.quantity || 1) || 1
+          return sum + Number(item.markupAmount || 0) * qty
+        }, 0)
+      }
+      if (!(markupTotal > 0) && subtotal > baseSubtotal + 0.01) {
+        markupTotal = Math.round((subtotal - baseSubtotal) * 100) / 100
+      }
 
       const customerName = order.customerName || order.userId?.name || "N/A"
       const customerPhone = order.customerPhone || order.userId?.phone || "N/A"
+      const customerId =
+        order.customerId ||
+        order.userId?._id ||
+        order.userId?.id ||
+        (typeof order.userId === "string" ? order.userId : null)
       const restaurant =
         order.restaurant ||
         order.restaurantName ||
@@ -491,19 +533,22 @@ export default function OrdersPage({ statusKey = "all" }) {
         time,
         customerName,
         customerPhone,
+        customerId,
         restaurant,
         items,
         subtotal,
+        baseSubtotal,
+        markupTotal,
         totalItemAmount: subtotal,
         couponDiscount: discountAmount,
         itemDiscount: 0,
         deliveryCharge: deliveryFee,
         vatTax: taxAmount,
         platformFee,
-        deliveryPartnerTip,
         totalAmount,
         paymentType,
         paymentStatus,
+        paymentMethodDetail,
         orderStatus: displayStatus,
         deliveryPartnerName,
         deliveryPartnerPhone,
@@ -516,8 +561,8 @@ export default function OrdersPage({ statusKey = "all" }) {
   }, [orders])
 
   const {
-    searchQuery,
-    setSearchQuery,
+    searchQuery: _ignoredSearchQuery,
+    setSearchQuery: _ignoredSetSearchQuery,
     isFilterOpen,
     setIsFilterOpen,
     isSettingsOpen,
@@ -525,6 +570,7 @@ export default function OrdersPage({ statusKey = "all" }) {
     isViewOrderOpen,
     setIsViewOrderOpen,
     selectedOrder,
+    setSelectedOrder,
     filters,
     setFilters,
     visibleColumns,
@@ -539,20 +585,166 @@ export default function OrdersPage({ statusKey = "all" }) {
     handlePrintOrder,
     toggleColumn,
     resetColumns,
-  } = useOrdersManagement(normalizedOrders, statusKey, config.title)
+  } = useOrdersManagement(normalizedOrders, statusKey, config.title, {
+    serverSideSearch: true,
+    searchQuery,
+    setSearchQuery,
+  })
+
+  const fetchOrders = useCallback(async (options = {}) => {
+    const { silent = false, withRingCheck = false } = options
+
+    try {
+      if (!silent) setIsLoading(true)
+      const params = {
+        page: currentPage,
+        limit: pageSize,
+        status:
+          statusKey === "all"
+            ? undefined
+            : statusKey === "restaurant-cancelled"
+              ? "cancelled"
+              : statusKey,
+        cancelledBy: statusKey === "restaurant-cancelled" ? "restaurant" : undefined,
+        search: debouncedSearch || undefined,
+        restaurantId: filters.restaurant || undefined,
+        startDate: filters.fromDate || undefined,
+        endDate: filters.toDate || undefined,
+        minAmount: filters.minAmount || undefined,
+        maxAmount: filters.maxAmount || undefined,
+      }
+
+      const response = await adminAPI.getOrders(params)
+
+      const payload = response?.data?.data || response?.data || {}
+      const rawOrders =
+        payload?.orders ??
+        payload?.docs ??
+        payload?.data ??
+        (Array.isArray(payload) ? payload : [])
+      const nextOrders = Array.isArray(rawOrders) ? rawOrders : []
+      const meta = payload?.meta || payload?.pagination || {}
+      const nextTotal = Number(meta.total ?? payload?.total ?? nextOrders.length) || 0
+
+      if (response.data?.success) {
+        const nextOrderIds = new Set(
+          nextOrders
+            .map((order) => order.id || order._id || order.orderId)
+            .filter(Boolean),
+        )
+
+        if (statusKey === "all") {
+          // If no order is still pending (created), there is nothing to alert about —
+          // stop any ongoing alert (e.g. after restaurant/admin accepted the order).
+          const hasPendingOrder = nextOrders.some((order) => {
+            const status = String(order.orderStatus || order.status || "").toLowerCase()
+            return !status || status === "created" || status === "pending"
+          })
+          if (!hasPendingOrder) {
+            stopOrderAlert()
+          }
+        }
+
+        let detectedNewOrder = false
+        if (withRingCheck && !isFirstLoadRef.current && statusKey === "all" && currentPage === 1) {
+          detectedNewOrder = [...nextOrderIds].some(
+            (id) => !seenOrderIdsRef.current.has(id),
+          )
+          if (detectedNewOrder) {
+            activeOrderAlertRef.current = { orderId: "polling-new-order" }
+            playDefaultRing()
+            startAlertLoop()
+            if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+              showBrowserNotification(
+                "New order received",
+                "A new order arrived",
+                `admin-order-poll-${Date.now()}`,
+              )
+            }
+            toast.info("New order received")
+          }
+        }
+
+        seenOrderIdsRef.current = nextOrderIds
+        isFirstLoadRef.current = false
+        setOrders(nextOrders)
+        setTotalOrders(nextTotal)
+
+        if (detectedNewOrder) {
+          const now = Date.now()
+          if (now - lastSidebarBadgeRefreshAtRef.current >= 20000) {
+            lastSidebarBadgeRefreshAtRef.current = now
+            refreshSidebarBadges(undefined, { reloadNotifications: false })
+          }
+        }
+      } else {
+        debugError("Failed to fetch orders:", response.data)
+        if (!silent) toast.error("Failed to fetch orders")
+        setOrders([])
+        setTotalOrders(0)
+      }
+    } catch (error) {
+      debugError("Error fetching orders:", error)
+      const status = Number(error?.response?.status || 0)
+      if (!silent && status !== 429) {
+        toast.error(error.response?.data?.message || "Failed to fetch orders")
+      }
+      if (!silent && status !== 429) {
+        setOrders([])
+        setTotalOrders(0)
+      }
+    } finally {
+      if (!silent) setIsLoading(false)
+    }
+  }, [statusKey, currentPage, pageSize, debouncedSearch, filters, playDefaultRing, showBrowserNotification, startAlertLoop, stopOrderAlert])
 
   useEffect(() => {
+    const t = setTimeout(() => {
+      const next = searchQuery.trim()
+      setDebouncedSearch((prev) => {
+        if (prev !== next) {
+          // Reset to first page when the effective search term changes
+          setTimeout(() => setCurrentPage(1), 0)
+        }
+        return next
+      })
+    }, 350)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setCurrentPage(1)
+    setSearchQuery("")
+    setDebouncedSearch("")
     isFirstLoadRef.current = true
     seenOrderIdsRef.current = new Set()
+  }, [statusKey])
+
+  useEffect(() => {
     fetchOrders({ silent: false, withRingCheck: false })
   }, [fetchOrders])
+
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (typeof document !== "undefined") {
+        const mainElement = document.querySelector("main")
+        if (mainElement) {
+          mainElement.scrollTop = 0
+        }
+      }
+    }
+    handleScroll()
+    const timer = setTimeout(handleScroll, 100)
+    return () => clearTimeout(timer)
+  }, [statusKey])
 
   useEffect(() => {
     if (statusKey !== "all") return undefined
 
     const pollId = setInterval(() => {
       fetchOrders({ silent: true, withRingCheck: true })
-    }, 5000)
+    }, 8000)
 
     return () => clearInterval(pollId)
   }, [statusKey, fetchOrders])
@@ -560,7 +752,11 @@ export default function OrdersPage({ statusKey = "all" }) {
   useEffect(() => {
     if (statusKey !== "all") return undefined
 
-    const backendUrl = resolveSocketOrigin(API_BASE_URL)
+    const backendUrl = API_BASE_URL.replace(/\/api\/?$/, "")
+    // Backend disconnected - do not open Socket.IO (new backend in progress)
+    if (!API_BASE_URL || !backendUrl || !backendUrl.startsWith("http")) {
+      return undefined
+    }
 
     const socket = io(backendUrl, {
       transports: ["websocket", "polling"],
@@ -606,19 +802,30 @@ export default function OrdersPage({ statusKey = "all" }) {
       fetchOrders({ silent: true, withRingCheck: false })
     }
 
+    // When an order leaves the pending state (restaurant/admin accepted, or it
+    // was cancelled), stop the admin-side new-order alert so it doesn't keep ringing.
+    const handleOrderStatusUpdate = (payload = {}) => {
+      const status = String(payload?.orderStatus || payload?.status || "").toLowerCase()
+      if (!status || status === "created" || status === "pending") return
+      stopOrderAlert()
+      fetchOrders({ silent: true, withRingCheck: false })
+    }
+
     socket.on("connect", () => {
       socket.emit("join-admin-orders")
     })
     socket.on("admin_new_order", handleIncomingRealtimeOrder)
     socket.on("play_notification_sound", handleIncomingRealtimeOrder)
+    socket.on("order_status_update", handleOrderStatusUpdate)
 
     return () => {
       socket.off("admin_new_order", handleIncomingRealtimeOrder)
       socket.off("play_notification_sound", handleIncomingRealtimeOrder)
+      socket.off("order_status_update", handleOrderStatusUpdate)
       socket.disconnect()
       socketRef.current = null
     }
-  }, [statusKey, fetchOrders, playDefaultRing, showBrowserNotification, startAlertLoop])
+  }, [statusKey, fetchOrders, playDefaultRing, showBrowserNotification, startAlertLoop, stopOrderAlert])
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -661,8 +868,12 @@ export default function OrdersPage({ statusKey = "all" }) {
 
     try {
       setProcessingActionOrderId(order.id || order.orderId)
+      setActionLoadingType('accept')
+      // Admin acted on the order — stop the new-order alert immediately.
+      stopOrderAlert()
       const response = await adminAPI.acceptOrder(orderIdToUse)
       if (response.data?.success) {
+        refreshSidebarBadges("orders")
         toast.success(response.data?.message || `Order ${order.orderId} accepted`)
         await fetchOrders({ silent: true, withRingCheck: false })
       } else {
@@ -673,6 +884,7 @@ export default function OrdersPage({ statusKey = "all" }) {
       toast.error(error.response?.data?.message || "Failed to accept order")
     } finally {
       setProcessingActionOrderId(null)
+      setActionLoadingType(null)
     }
   }
 
@@ -692,8 +904,12 @@ export default function OrdersPage({ statusKey = "all" }) {
 
     try {
       setProcessingActionOrderId(order.id || order.orderId)
+      setActionLoadingType('reject')
+      // Admin acted on the order — stop the new-order alert immediately.
+      stopOrderAlert()
       const response = await adminAPI.rejectOrder(orderIdToUse, reason)
       if (response.data?.success) {
+        refreshSidebarBadges("orders")
         toast.success(response.data?.message || `Order ${order.orderId} rejected`)
         await fetchOrders({ silent: true, withRingCheck: false })
       } else {
@@ -704,6 +920,7 @@ export default function OrdersPage({ statusKey = "all" }) {
       toast.error(error.response?.data?.message || "Failed to reject order")
     } finally {
       setProcessingActionOrderId(null)
+      setActionLoadingType(null)
     }
   }
 
@@ -876,66 +1093,105 @@ export default function OrdersPage({ statusKey = "all" }) {
     }
   }
 
-  if (showLoadingSkeleton) {
-    return (
-      <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 p-4 lg:p-6">
-        <OrdersDashboardSkeleton />
-      </div>
-    )
-  }
-
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen w-full max-w-full overflow-x-hidden">
       <OrdersTopbar 
         title={config.title} 
-        count={count} 
+        count={totalOrders !== null && totalOrders !== undefined ? totalOrders : count} 
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onFilterClick={() => setIsFilterOpen(true)}
         activeFiltersCount={activeFiltersCount}
         onExport={handleExport}
         onSettingsClick={() => setIsSettingsOpen(true)}
+        isLoading={isLoading}
       />
-      <FilterPanel
-        isOpen={isFilterOpen}
-        onClose={() => setIsFilterOpen(false)}
-        filters={filters}
-        setFilters={setFilters}
-        onApply={handleApplyFilters}
-        onReset={handleResetFilters}
-        restaurants={restaurants}
-      />
-      <SettingsDialog
-        isOpen={isSettingsOpen}
-        onOpenChange={setIsSettingsOpen}
-        visibleColumns={visibleColumns}
-        toggleColumn={toggleColumn}
-        resetColumns={resetColumns}
-      />
-      <ViewOrderDialog
-        isOpen={isViewOrderOpen}
-        onOpenChange={setIsViewOrderOpen}
-        order={selectedOrder}
-      />
-      <RefundModal
-        isOpen={refundModalOpen}
-        onOpenChange={setRefundModalOpen}
-        order={selectedOrderForRefund}
-        onConfirm={handleRefundConfirm}
-        isProcessing={processingRefund !== null}
-      />
-      <OrdersTable 
-        orders={filteredOrders} 
-        visibleColumns={visibleColumns}
-        onViewOrder={handleViewOrder}
-        onPrintOrder={handlePrintOrder}
-        onRefund={handleRefund}
-        onDeleteOrder={statusKey === "all" ? handleDeleteOrder : undefined}
-        onAcceptOrder={statusKey === "all" || statusKey === "pending" ? handleAcceptOrder : undefined}
-        onRejectOrder={statusKey === "all" || statusKey === "pending" ? handleRejectOrder : undefined}
-        actionLoadingOrderId={processingActionOrderId}
-        deletingOrderId={deletingOrderId}
-      />
+      {isLoading ? (
+        <TableSkeleton rows={8} columns={7} />
+      ) : (
+        <>
+          <FilterPanel
+            isOpen={isFilterOpen}
+            onClose={() => setIsFilterOpen(false)}
+            filters={filters}
+            setFilters={setFilters}
+            onApply={() => {
+              setCurrentPage(1);
+              handleApplyFilters();
+            }}
+            onReset={() => {
+              setCurrentPage(1);
+              handleResetFilters();
+            }}
+            restaurants={restaurants}
+          />
+          <SettingsDialog
+            isOpen={isSettingsOpen}
+            onOpenChange={setIsSettingsOpen}
+            visibleColumns={visibleColumns}
+            toggleColumn={toggleColumn}
+            resetColumns={resetColumns}
+          />
+          <ViewOrderDialog
+            isOpen={isViewOrderOpen}
+            onOpenChange={setIsViewOrderOpen}
+            order={selectedOrder}
+            onOrderUpdated={(updatedOrder) => {
+              if (!updatedOrder) return
+              setSelectedOrder(updatedOrder)
+              setOrders((prev) => {
+                if (!Array.isArray(prev)) return prev
+                const key = String(
+                  updatedOrder.id || updatedOrder._id || updatedOrder.orderId || "",
+                )
+                if (!key) return prev
+                return prev.map((item) => {
+                  const itemKey = String(item.id || item._id || item.orderId || "")
+                  if (itemKey !== key) return item
+                  return {
+                    ...item,
+                    ...updatedOrder,
+                    orderStatus: updatedOrder.orderStatus || item.orderStatus,
+                    paymentStatus: updatedOrder.paymentStatus || item.paymentStatus,
+                    payment: updatedOrder.payment || item.payment,
+                  }
+                })
+              })
+              fetchOrders({ silent: true, withRingCheck: false })
+            }}
+          />
+          <RefundModal
+            isOpen={refundModalOpen}
+            onOpenChange={setRefundModalOpen}
+            order={selectedOrderForRefund}
+            onConfirm={handleRefundConfirm}
+            isProcessing={processingRefund !== null}
+          />
+          <OrdersTable 
+            orders={filteredOrders} 
+            visibleColumns={visibleColumns}
+            onViewOrder={handleViewOrder}
+            onPrintOrder={handlePrintOrder}
+            onRefund={handleRefund}
+            onAcceptOrder={(statusKey === "all" || statusKey === "pending") ? handleAcceptOrder : undefined}
+            onRejectOrder={(statusKey === "all" || statusKey === "pending") ? handleRejectOrder : undefined}
+            actionLoadingOrderId={processingActionOrderId}
+            actionLoadingType={actionLoadingType}
+            deletingOrderId={deletingOrderId}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalItems={totalOrders}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              try {
+                localStorage.setItem("admin_orders_pageSize", String(size))
+              } catch {}
+              setCurrentPage(1)
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }

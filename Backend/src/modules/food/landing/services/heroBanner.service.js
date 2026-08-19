@@ -1,8 +1,34 @@
 import { FoodHeroBanner } from '../models/heroBanner.model.js';
-import { v2 as cloudinary } from 'cloudinary';
+import { storeImageBuffer, deleteStoredAsset } from '../../../../services/storage.service.js';
 
-export const listHeroBanners = async () => {
-    return FoodHeroBanner.find().sort({ sortOrder: 1, createdAt: -1 }).lean();
+export const listHeroBanners = async (zoneId = null) => {
+    let query = zoneId ? { zoneId } : { zoneId: null };
+    const banners = await FoodHeroBanner.find(query)
+        .populate({
+            path: 'linkedRestaurantIds',
+            select: 'restaurantName name restaurantId profileImage rating'
+        })
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .lean();
+
+    return banners.map((b) => {
+        const { linkedRestaurantIds, ...rest } = b;
+        const linked = Array.isArray(linkedRestaurantIds)
+            ? linkedRestaurantIds.map((r) => {
+                if (typeof r === 'object' && r !== null) {
+                    return {
+                        ...r,
+                        name: r.restaurantName || r.name || ''
+                    };
+                }
+                return r;
+            })
+            : [];
+        return {
+            ...rest,
+            linkedRestaurants: linked
+        };
+    });
 };
 
 export const createHeroBannersFromFiles = async (files, meta = {}) => {
@@ -14,16 +40,7 @@ export const createHeroBannersFromFiles = async (files, meta = {}) => {
 
     for (const file of files) {
         try {
-            const uploadResult = await new Promise((resolve, reject) => {
-                const stream = cloudinary.uploader.upload_stream(
-                    { folder: 'food/hero-banners', resource_type: 'image' },
-                    (error, result) => {
-                        if (error) return reject(error);
-                        return resolve(result);
-                    }
-                );
-                stream.end(file.buffer);
-            });
+            const uploadResult = await storeImageBuffer(file.buffer, 'food/hero-banners');
 
             const banner = await FoodHeroBanner.create({
                 imageUrl: uploadResult.secure_url,
@@ -33,6 +50,7 @@ export const createHeroBannersFromFiles = async (files, meta = {}) => {
                 ctaLink: meta.ctaLink,
                 linkedRestaurantIds: meta.linkedRestaurantIds || [],
                 sortOrder: meta.sortOrder ?? 0,
+                zoneId: meta.zoneId || null,
                 isActive: true
             });
 
@@ -45,19 +63,46 @@ export const createHeroBannersFromFiles = async (files, meta = {}) => {
     return results;
 };
 
+export const linkRestaurantsToHeroBanner = async (id, restaurantIds) => {
+    const updatedBanner = await FoodHeroBanner.findByIdAndUpdate(
+        id,
+        { linkedRestaurantIds: restaurantIds },
+        { new: true }
+    )
+        .populate({
+            path: 'linkedRestaurantIds',
+            select: 'restaurantName name restaurantId profileImage rating'
+        })
+        .lean();
+
+    if (!updatedBanner) return null;
+
+    const { linkedRestaurantIds, ...rest } = updatedBanner;
+    const linked = Array.isArray(linkedRestaurantIds)
+        ? linkedRestaurantIds.map((r) => {
+            if (typeof r === 'object' && r !== null) {
+                return {
+                    ...r,
+                    name: r.restaurantName || r.name || ''
+                };
+            }
+            return r;
+        })
+        : [];
+    return {
+        ...rest,
+        linkedRestaurants: linked
+    };
+};
+
 export const deleteHeroBanner = async (id) => {
     const doc = await FoodHeroBanner.findById(id);
     if (!doc) {
         return { deleted: false };
     }
 
-    if (doc.publicId) {
-        try {
-            await cloudinary.uploader.destroy(doc.publicId);
-        } catch {
-            // ignore cloudinary deletion errors to avoid blocking deletion
-        }
-    }
+    // Never let a failed file cleanup block the record deletion.
+    await deleteStoredAsset(doc.imageUrl || doc.publicId);
 
     await doc.deleteOne();
     return { deleted: true };
@@ -73,11 +118,12 @@ export const updateHeroBannerOrder = async (id, sortOrder) => {
 };
 
 export const toggleHeroBannerStatus = async (id, isActive) => {
-    const updated = await FoodHeroBanner.findByIdAndUpdate(
-        id,
-        { isActive },
-        { new: true }
-    ).lean();
-    return updated;
+    const banner = await FoodHeroBanner.findById(id);
+    if (!banner) return null;
+
+    const newStatus = typeof isActive === 'boolean' ? isActive : !banner.isActive;
+    banner.isActive = newStatus;
+    await banner.save();
+    return banner.toObject();
 };
 

@@ -15,16 +15,28 @@ import WeekSelector from "@delivery/components/WeekSelector";
 import { deliveryAPI } from "@food/api";
 import { motion, AnimatePresence } from "framer-motion";
 import useDeliveryBackNavigation from "../../hooks/useDeliveryBackNavigation";
+import { Skeleton } from "@food/components/ui/skeleton";
+
+const toLocalDateKey = (date) => {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export const PocketDetailsV2 = () => {
   const goBack = useDeliveryBackNavigation();
 
-  // Current week range (Sunday–Saturday)
+  // Monday → Sunday (matches backend getWeekRange / Pocket earnings card)
   const getInitialWeekRange = () => {
     const now = new Date();
+    const day = now.getDay(); // Sun=0 ... Sat=6
+    const mondayOffset = (day + 6) % 7;
     const start = new Date(now);
-    start.setDate(now.getDate() - now.getDay());
     start.setHours(0, 0, 0, 0);
+    start.setDate(now.getDate() - mondayOffset);
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
     end.setHours(23, 59, 59, 999);
@@ -42,8 +54,9 @@ export const PocketDetailsV2 = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        const dateKey = toLocalDateKey(weekRange.start);
         const response = await deliveryAPI.getPocketDetails({
-          date: weekRange.start.toISOString(),
+          date: dateKey,
           limit: 2000
         });
 
@@ -120,31 +133,41 @@ export const PocketDetailsV2 = () => {
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
            <WeekSelector 
              onChange={setWeekRange}
-             weekStartsOn={0}
+             weekStartsOn={1}
            />
         </div>
 
         {/* ─── SUMMARY CARD ─── */}
-        <div className="bg-black rounded-3xl p-6 shadow-2xl relative overflow-hidden group">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/10 transition-colors" />
+        <div className="bg-white dark:bg-black border border-gray-100 dark:border-transparent rounded-3xl p-6 shadow-sm dark:shadow-2xl relative overflow-hidden group">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-gray-100/60 dark:bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-gray-200/60 dark:group-hover:bg-white/10 transition-colors" />
            <div className="relative z-10">
               <div className="flex justify-between items-center mb-6">
                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-1">Total Payout</p>
-                    <h2 className="text-4xl font-black text-white tracking-tighter">{formatCurrency(summary.grandTotal)}</h2>
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-[0.2em] mb-1">Total Payout</p>
+                    <h2 className="text-4xl font-black text-gray-950 dark:text-white tracking-tighter min-h-[2.5rem] flex items-center">
+                      {loading ? (
+                        <Skeleton className="h-9 w-36" />
+                      ) : (
+                        formatCurrency(summary.grandTotal)
+                      )}
+                    </h2>
                  </div>
-                 <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/5 backdrop-blur-md">
+                 <div className="w-12 h-12 bg-gray-100 dark:bg-white/10 rounded-2xl flex items-center justify-center border border-gray-200 dark:border-white/5 backdrop-blur-md">
                     <TrendingUp className="w-6 h-6 text-[#ff8100]" />
                  </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                 <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Trip Earnings</p>
-                    <p className="text-lg font-black text-white">{formatCurrency(summary.totalEarning)}</p>
+                    <div className="text-lg font-black text-gray-950 dark:text-white min-h-[1.5rem]">
+                      {loading ? <Skeleton className="h-5 w-20" /> : formatCurrency(summary.totalEarning)}
+                    </div>
                  </div>
-                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                 <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Weekly Bonus</p>
-                    <p className="text-lg font-black text-green-500">+{formatCurrency(summary.totalBonus)}</p>
+                    <div className="text-lg font-black text-green-500 min-h-[1.5rem]">
+                      {loading ? <Skeleton className="h-5 w-20" /> : `+${formatCurrency(summary.totalBonus)}`}
+                    </div>
                  </div>
               </div>
            </div>

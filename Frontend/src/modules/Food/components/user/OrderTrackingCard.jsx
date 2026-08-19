@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { UtensilsCrossed, ChevronRight, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, usePresence } from "framer-motion";
 
 const CookingAnimation = memo(() => (
   <div className="relative w-12 h-12 flex items-center justify-center rounded-xl bg-orange-50 border border-orange-100 overflow-visible shadow-[0_4px_15px_rgba(235,89,14,0.15)] shrink-0">
     <div className="absolute -top-3 flex gap-1.5">
-      <motion.div animate={{ opacity: [0, 0.8, 0], y: [0, -8, -12], scale: [0.8, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0, ease: "easeOut" }} className="w-1.5 h-3 bg-orange-400/60 rounded-full blur-[1px]" />
-      <motion.div animate={{ opacity: [0, 0.8, 0], y: [0, -10, -15], scale: [0.8, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.5, ease: "easeOut" }} className="w-1.5 h-3 bg-orange-400/60 rounded-full blur-[1px]" />
-      <motion.div animate={{ opacity: [0, 0.8, 0], y: [0, -8, -12], scale: [0.8, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 1, ease: "easeOut" }} className="w-1.5 h-3 bg-orange-400/60 rounded-full blur-[1px]" />
+      <motion.div animate={{ opacity: [0, 0.8, 0], y: [0, -8, -12], scale: [0.8, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0, ease: "easeOut" }} className="w-1.5 h-3 bg-orange-400/50 rounded-full" />
+      <motion.div animate={{ opacity: [0, 0.8, 0], y: [0, -10, -15], scale: [0.8, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.5, ease: "easeOut" }} className="w-1.5 h-3 bg-orange-400/50 rounded-full" />
+      <motion.div animate={{ opacity: [0, 0.8, 0], y: [0, -8, -12], scale: [0.8, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 1, ease: "easeOut" }} className="w-1.5 h-3 bg-orange-400/50 rounded-full" />
     </div>
-    <motion.div animate={{ rotate: [-2, 2, -2] }} transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }} className="relative z-10 mt-1">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500 drop-shadow-sm">
+    <motion.div animate={{ rotate: [-2, 2, -2] }} transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }} className="relative z-10 mt-1" style={{ transformOrigin: "center center" }}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#DC2626]" style={{ shapeRendering: "geometricPrecision" }}>
         {/* Cooker Body */}
         <path d="M6 10h12v6a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4v-6z" />
         {/* Lid Rim */}
@@ -27,21 +27,32 @@ const CookingAnimation = memo(() => (
     </motion.div>
     {/* Flame below */}
     <motion.div animate={{ opacity: [0.4, 0.8, 0.4], scaleX: [0.8, 1.2, 0.8] }} transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }} className="absolute bottom-0 w-full flex justify-center z-0">
-      <div className="w-4 h-1 bg-orange-500 blur-[2px] rounded-full" />
+      <div className="w-4 h-1 bg-[#DC2626] rounded-full" />
     </motion.div>
   </div>
 ));
 
 import { useOrders } from "@food/context/OrdersContext";
+import { useProfile } from "@food/context/ProfileContext";
 import { orderAPI } from "@food/api";
+import { isModuleAuthenticated } from "@food/utils/auth";
 
 const getOrderKey = (order) => order?.id || order?._id || order?.orderId || null;
 
+const normalizeOrderToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
 const getOrderStatus = (order) =>
-  String(order?.orderStatus || order?.status || order?.deliveryState?.status || "").toLowerCase();
+  normalizeOrderToken(
+    order?.orderStatus || order?.status || order?.deliveryState?.status || order?.deliveryStatus || "",
+  );
 
 const getOrderPhase = (order) =>
-  String(order?.deliveryState?.currentPhase || "").toLowerCase();
+  normalizeOrderToken(order?.deliveryState?.currentPhase || order?.currentPhase || "");
 
 const ACTIVE_PHASES = new Set([
   "created",
@@ -56,17 +67,22 @@ const ACTIVE_PHASES = new Set([
   "en_route_to_delivery",
   "at_pickup",
   "at_drop",
+  "reached_drop",
 ]);
 
 /** Orders that should show the live tracking strip (any in-flight order, not terminal). */
 const TERMINAL_STATUSES = new Set([
   "delivered",
   "cancelled",
+  "canceled",
   "completed",
   "failed",
   "cancelled_by_user",
+  "canceled_by_user",
   "cancelled_by_restaurant",
+  "canceled_by_restaurant",
   "cancelled_by_admin",
+  "canceled_by_admin",
 ]);
 
 const isActiveOrder = (order) => {
@@ -75,25 +91,57 @@ const isActiveOrder = (order) => {
   const phase = getOrderPhase(order);
   if (TERMINAL_STATUSES.has(status)) return false;
   if (phase === "completed" || phase === "delivered") return false;
+
+  // Don't show live tracker for scheduled orders that haven't started yet
+  // They stay in 'confirmed' status until the restaurant starts preparing them.
+  if (order.scheduledAt && (status === "confirmed" || status === "created" || status === "pending")) {
+    return false;
+  }
+
   // Some refresh payloads provide live phase but sparse status; keep tracking visible.
   if (!status && phase) return ACTIVE_PHASES.has(phase);
   if (!status) return false;
   return true;
 };
 
+const parsePrepMinutes = (preparationTime) => {
+  if (!preparationTime) return null;
+  const num = Number(preparationTime);
+  if (Number.isFinite(num) && num > 0) return num;
+  // Parse strings like "10-20 mins", "25-35 mins" → take the max value
+  const match = String(preparationTime).match(/(\d+)\s*-\s*(\d+)/);
+  if (match) return Number(match[2]); // use upper bound
+  const single = String(preparationTime).match(/(\d+)/);
+  if (single) return Number(single[1]);
+  return null;
+};
+
 const getTimeRemaining = (order) => {
   if (!order) return null;
 
+  // If preparationTime is set by the restaurant, use acceptedAt + preparationTime
+  const prepMins = parsePrepMinutes(order.preparationTime);
+  if (prepMins && order.acceptedAt) {
+    const acceptTime = new Date(order.acceptedAt);
+    const targetTime = new Date(acceptTime.getTime() + prepMins * 60000);
+    const diff = (targetTime - new Date()) / 60000;
+    return Math.ceil(diff);
+  }
+
+  // Use scheduled time if available, fallback to creation time
   const orderTime = new Date(
-    order.createdAt || order.orderDate || order.created_at || order.date || Date.now(),
+    order.scheduledAt || order.createdAt || order.orderDate || order.created_at || order.date || Date.now(),
   );
-  const estimatedMinutes =
-    order.estimatedDeliveryTime ||
-    order.estimatedTime ||
-    order.estimated_delivery_time ||
-    35;
+
+  // For non-scheduled orders, we add the estimated delivery time to the creation time.
+  // For scheduled orders, scheduledAt is already the target time.
+  const isScheduled = !!order.scheduledAt;
+  const estimatedMinutes = isScheduled 
+    ? 0 
+    : (order.estimatedDeliveryTime || order.estimatedTime || order.estimated_delivery_time || 35);
+
   const deliveryTime = new Date(orderTime.getTime() + estimatedMinutes * 60000);
-  return Math.max(0, Math.floor((deliveryTime - new Date()) / 60000));
+  return Math.max(0, Math.ceil((deliveryTime - new Date()) / 60000));
 };
 
 /** Cheap fingerprint so we skip setState when list content is unchanged (fewer re-renders). */
@@ -107,6 +155,7 @@ function ordersFingerprint(orders) {
 function OrderTrackingCardInner({ hasBottomNav = true }) {
   const navigate = useNavigate();
   const { orders: contextOrders } = useOrders();
+  const { orderType } = useProfile();
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [apiOrders, setApiOrders] = useState([]);
   const [hasFetchedApi, setHasFetchedApi] = useState(false);
@@ -116,16 +165,24 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
   const activeOrderKeyRef = useRef("");
   const activeOrderSnapshotRef = useRef(null);
   const [invalidOrderIds, setInvalidOrderIds] = useState(new Set());
+  // Guard: track which order keys are currently being verified to prevent concurrent duplicate calls
+  const verifyingKeysRef = useRef(new Set());
+  const lastVerifyTimeRef = useRef({});
+  // Guard: prevent concurrent fetchOrders calls (StrictMode double-invoke / event storms)
+  const isFetchingOrdersRef = useRef(false);
+  const lastFetchOrdersTimeRef = useRef(0);
 
   const fetchOrders = useCallback(async () => {
-    const hasToken = Boolean(
-      localStorage.getItem("user_accessToken") ||
-      localStorage.getItem("accessToken")
-    );
-    if (!hasToken) {
+    if (!isModuleAuthenticated("user")) {
       setHasFetchedApi(true);
       return;
     }
+    // Drop duplicate concurrent calls — only one fetch at a time
+    if (isFetchingOrdersRef.current) return;
+    // Throttle: don't re-fetch within 2 seconds of the last completed fetch
+    const now = Date.now();
+    if (now - lastFetchOrdersTimeRef.current < 2000) return;
+    isFetchingOrdersRef.current = true;
     try {
       const response = await orderAPI.getOrders({ limit: 10, page: 1 });
       let nextOrders = [];
@@ -158,13 +215,15 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
         setApiOrders([]);
       }
     } finally {
+      lastFetchOrdersTimeRef.current = Date.now();
+      isFetchingOrdersRef.current = false;
       setHasFetchedApi(true);
     }
   }, []);
 
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 30000);
+    const interval = setInterval(fetchOrders, 60000); // 60s — live updates via Socket.IO anyway
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
@@ -198,13 +257,19 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
   }, [contextOrders, apiOrders, invalidOrderIds, hasFetchedApi]);
 
   const activeOrder = useMemo(() => {
-    const candidate = uniqueOrders.find((order) => isActiveOrder(order)) || null;
+    const currentTabType = orderType || "delivery";
+    const filteredOrders = uniqueOrders.filter((order) => {
+      const type = order?.orderType || "delivery";
+      return type === currentTabType;
+    });
+
+    const candidate = filteredOrders.find((order) => isActiveOrder(order)) || null;
     if (!candidate) return null;
     const overrideKey = getOrderKey(activeOrderOverride);
     const candidateKey = getOrderKey(candidate);
     if (overrideKey && candidateKey && overrideKey === candidateKey) return activeOrderOverride;
     return candidate;
-  }, [uniqueOrders, activeOrderOverride]);
+  }, [uniqueOrders, activeOrderOverride, orderType]);
 
   useEffect(() => {
     const key = String(getOrderKey(activeOrder) || "");
@@ -289,7 +354,17 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
     const isRecentlyConfirmed = apiOrders.some((o) => getOrderKey(o) === key);
     if (isRecentlyConfirmed) return;
 
+    // Prevent concurrent duplicate calls for the same key
+    if (verifyingKeysRef.current.has(key)) return;
+
+    // Cooldown: don't re-verify the same key more than once per 8 seconds
+    const now = Date.now();
+    const lastVerify = lastVerifyTimeRef.current[key] || 0;
+    if (now - lastVerify < 8000) return;
+
     const verifyOrderExists = async () => {
+      verifyingKeysRef.current.add(key);
+      lastVerifyTimeRef.current[key] = Date.now();
       try {
         await orderAPI.getOrderDetails(key);
       } catch (error) {
@@ -300,6 +375,8 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
             return next;
           });
         }
+      } finally {
+        verifyingKeysRef.current.delete(key);
       }
     };
 
@@ -308,98 +385,229 @@ function OrderTrackingCardInner({ hasBottomNav = true }) {
 
   const [dismissedKey, setDismissedKey] = useState(null);
 
-  if (!activeOrder) {
-    return null;
-  }
+  const shouldShow = useMemo(() => {
+    if (!activeOrder) return false;
+    const currentOrderKey = activeOrder.id || activeOrder._id || activeOrder.orderId;
+    if (dismissedKey === currentOrderKey) return false;
 
-  const currentOrderKey = activeOrder.id || activeOrder._id || activeOrder.orderId;
-  if (dismissedKey === currentOrderKey) {
-    return null;
-  }
+    const orderStatus = getOrderStatus(activeOrder) || "preparing";
+    const orderPhase = getOrderPhase(activeOrder);
+    if (TERMINAL_STATUSES.has(orderStatus) || orderPhase === "cancelled" || orderPhase === "canceled") {
+      return false;
+    }
+    return true;
+  }, [activeOrder, dismissedKey]);
 
-  const orderStatus = getOrderStatus(activeOrder) || "preparing";
-  const orderPhase = getOrderPhase(activeOrder);
-  if (orderStatus === "delivered" || orderStatus === "completed") {
-    return null;
-  }
+  const currentOrderKey = activeOrder ? (activeOrder.id || activeOrder._id || activeOrder.orderId) : null;
 
-  const restaurantName =
-    activeOrder.restaurant || activeOrder.restaurantName || "Restaurant";
-  const statusText = (() => {
-    const s = String(orderStatus).toLowerCase();
-    const p = String(orderPhase).toLowerCase();
+  const restaurantName = useMemo(() => {
+    if (!activeOrder) return "Restaurant";
+    return (
+      activeOrder.restaurant || 
+      activeOrder.restaurantName || 
+      activeOrder.restaurantId?.restaurantName || 
+      activeOrder.restaurantId?.name || 
+      "Restaurant"
+    );
+  }, [activeOrder]);
 
-    if (s === "confirmed") return "Order confirmed";
-    if (s === "preparing" || s === "created" || s === "pending") {
-      if (p === "at_pickup" || s === "reached_pickup") {
-        return "Partner waiting at restaurant (Food preparing)";
+  const orderStatus = activeOrder ? getOrderStatus(activeOrder) : "preparing";
+  const orderPhase = activeOrder ? getOrderPhase(activeOrder) : "";
+
+  // Detect preparing-expired: timer set, expired, but status still preparing/accepted
+  const isPreparingExpired = useMemo(() => {
+    const s = String(orderStatus);
+    const isPreparing = s === "preparing" || s === "accepted" || s === "processed";
+    return isPreparing && activeOrder?.preparationTime && activeOrder?.acceptedAt && timeRemaining !== null && timeRemaining <= 0;
+  }, [orderStatus, activeOrder, timeRemaining]);
+
+  const statusText = useMemo(() => {
+    if (!activeOrder) return "";
+    const s = String(orderStatus);
+    const p = String(orderPhase);
+
+    if (s === "confirmed" || s === "placed" || s === "created" || s === "pending") {
+      return "Waiting for restaurant to accept";
+    }
+    if (s === "preparing" || s === "accepted" || s === "processed") {
+      // If prep time expired but restaurant hasn't marked ready yet
+      if (activeOrder?.preparationTime && activeOrder?.acceptedAt && timeRemaining !== null && timeRemaining <= 0) {
+        return "Waiting for restaurant";
       }
       return "Preparing your order";
     }
-    if (s === "ready_for_pickup" || s === "ready") return "Food ready for pickup 🟢";
+    if (s === "ready_for_pickup" || s === "ready") return "Ready for pickup";
 
-    if (s === "reached_pickup" || p === "at_pickup") return "Partner reached restaurant";
-    if (s === "picked_up" || p === "en_route_to_delivery") return "On the way";
-    if (s === "reached_drop" || p === "at_drop") return "Arrived near you";
+    if (s === "reached_pickup" || p === "at_pickup") return "Delivery partner reached restaurant";
+    if (s === "picked_up" || p === "en_route_to_delivery" || s === "out_for_delivery") return "On the way";
+    if (s === "reached_drop" || p === "at_drop" || s === "at_drop") return "Arrived near you";
 
     if (s === "delivered" || p === "delivered" || p === "completed") return "Delivered";
-    return "Preparing your order";
-  })();
+    return "Waiting for restaurant to accept";
+  }, [activeOrder, orderStatus, orderPhase, timeRemaining]);
 
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className={`fixed ${hasBottomNav ? "bottom-24" : "bottom-6"} left-4 right-4 z-[9999]`}
-      >
-        <div
-          onClick={() =>
-            navigate(
-              `/food/user/orders/${activeOrder.id || activeOrder._id || activeOrder.orderId}`,
-            )
-          }
-          className="relative bg-white/95 backdrop-blur-xl rounded-[20px] p-4 shadow-[0_8px_30px_rgba(235,89,14,0.15)] border border-orange-100/60 overflow-visible cursor-pointer group"
-        >
-          {/* Subtle gradient background mesh */}
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-50/50 via-white/40 to-white/80 opacity-60 pointer-events-none rounded-[20px]" />
-
-          <button
-            onClick={(e) => { e.stopPropagation(); setDismissedKey(currentOrderKey); }}
-            className="absolute top-2 right-2 p-1.5 rounded-full bg-orange-50/80 text-orange-400 hover:text-orange-600 hover:bg-orange-100/80 transition-colors z-20 shadow-sm"
-          >
-            <X className="w-3.5 h-3.5 pointer-events-none" />
-          </button>
-
-          <div className="flex items-center gap-4 relative z-10 w-full">
-            <CookingAnimation />
-
-            <div className="flex-1 min-w-0 pr-4">
-              <p className="text-gray-900 font-bold text-base md:text-lg truncate tracking-tight">{restaurantName}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <p className="text-gray-500 font-medium text-xs md:text-sm truncate">{statusText}</p>
-                <ChevronRight className="w-3.5 h-3.5 text-orange-500 shrink-0 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-[#EB590E] to-[#D94E0A] shadow-lg shadow-orange-500/20 rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border border-orange-200">
-              <p className="text-orange-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
-                arriving in
-              </p>
-              <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm">
-                {timeRemaining !== null && !isNaN(timeRemaining) && Number.isFinite(timeRemaining) && timeRemaining > 0
-                  ? `${Math.max(1, Math.round(timeRemaining))} min`
-                  : "--"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+      {shouldShow && (
+        <TrackingCardContent
+          activeOrder={activeOrder}
+          currentOrderKey={currentOrderKey}
+          hasBottomNav={hasBottomNav}
+          timeRemaining={timeRemaining}
+          statusText={statusText}
+          restaurantName={restaurantName}
+          orderStatus={orderStatus}
+          orderType={orderType}
+          isPreparingExpired={isPreparingExpired}
+          setDismissedKey={setDismissedKey}
+          navigate={navigate}
+        />
+      )}
     </AnimatePresence>
   );
 }
-``
+
+const TrackingCardContent = memo(({
+  activeOrder,
+  currentOrderKey,
+  hasBottomNav,
+  timeRemaining,
+  statusText,
+  restaurantName,
+  orderStatus,
+  orderType,
+  isPreparingExpired,
+  setDismissedKey,
+  navigate
+}) => {
+  const [isPresent] = usePresence();
+  const [animationCompleted, setAnimationCompleted] = useState(false);
+
+  const shouldClearTransform = animationCompleted && isPresent;
+
+  return (
+    <motion.div
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 100, opacity: 0 }}
+      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+      onAnimationComplete={() => setAnimationCompleted(true)}
+      className={`fixed ${hasBottomNav ? "bottom-32" : "bottom-6"} left-4 right-4 z-40 pointer-events-none antialiased`}
+      style={{
+        transform: shouldClearTransform ? "none" : undefined,
+        transformStyle: shouldClearTransform ? "flat" : "preserve-3d",
+      }}
+    >
+      <div 
+        onClick={(e) => {
+          e.stopPropagation();
+          navigate(
+            `/food/user/orders/${activeOrder.id || activeOrder._id || activeOrder.orderId}`,
+          );
+        }}
+        className="relative pointer-events-auto bg-white rounded-[20px] p-4 shadow-[0_8px_30px_rgba(235,89,14,0.15)] border border-orange-100/60 overflow-visible cursor-pointer group select-none"
+        style={{
+          WebkitFontSmoothing: "antialiased",
+          MozOsxFontSmoothing: "grayscale",
+        }}
+      >
+        {/* Subtle gradient background mesh */}
+        <div className="absolute inset-0 bg-gradient-to-r from-orange-50/50 via-white/40 to-white/80 opacity-60 pointer-events-none rounded-[20px]" />
+        
+        <button 
+           onClick={(e) => { e.stopPropagation(); setDismissedKey(currentOrderKey); }}
+           className="absolute top-2 right-2 p-1.5 rounded-full bg-orange-50/80 text-orange-400 hover:text-[#991B1B] hover:bg-orange-100/80 transition-colors z-20 shadow-sm"
+        >
+          <X className="w-3.5 h-3.5 pointer-events-none" />
+        </button>
+
+        <div className="flex items-center gap-4 relative z-10 w-full">
+          <CookingAnimation />
+
+          <div className="flex-1 min-w-0 pr-4">
+            <p className="text-gray-900 font-bold text-base md:text-lg truncate tracking-tight">{restaurantName}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <p className="text-gray-500 font-medium text-xs md:text-sm truncate">{statusText}</p>
+              <ChevronRight className="w-3.5 h-3.5 text-[#DC2626] shrink-0 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {(() => {
+            const isTakeawayOrDining = orderType === "takeaway" || orderType === "dining" || activeOrder?.orderType === "takeaway" || activeOrder?.orderType === "dining";
+            const rawStatus = getOrderStatus(activeOrder);
+            const rawPhase = getOrderPhase(activeOrder);
+            const isReadyOrder = rawStatus === "ready" || rawStatus === "ready_for_pickup" || orderStatus === "ready" || orderStatus === "ready_for_pickup";
+            const isAccepted = !["created", "pending", "confirmed", "placed", ""].includes(rawStatus);
+
+            if (!isAccepted) {
+              return (
+                <div className="bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-orange-500/20 rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border border-amber-400">
+                  <p className="text-orange-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
+                    order
+                  </p>
+                  <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm uppercase">
+                    placed
+                  </p>
+                </div>
+              );
+            }
+
+            if (isTakeawayOrDining && isReadyOrder) {
+              return (
+                <div className="bg-gradient-to-br from-green-600 to-emerald-500 shadow-lg shadow-green-600/20 rounded-xl px-4 py-2.5 shrink-0 flex items-center justify-center border border-green-400">
+                  <p className="text-white text-xs md:text-sm font-black tracking-wider uppercase drop-shadow-sm">
+                    Pick Now
+                  </p>
+                </div>
+              );
+            }
+
+            // When prep time expired but restaurant hasn't marked ready → show "Preparing" badge
+            if (isPreparingExpired) {
+              return (
+                <div className="bg-gradient-to-br from-[#DC2626] to-[#D94E0A] shadow-lg shadow-[#DC2626]/20 rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border border-orange-200">
+                  <p className="text-orange-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
+                    Order
+                  </p>
+                  <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm">
+                    Preparing
+                  </p>
+                </div>
+              );
+            }
+
+            // Delivery boy reached customer location
+            if (rawStatus === 'reached_drop' || orderStatus === 'reached_drop' || rawPhase === 'at_drop') {
+              return (
+                <div className="bg-gradient-to-br from-green-600 to-emerald-500 shadow-lg shadow-green-600/20 rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border border-green-400">
+                  <p className="text-green-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
+                    Rider
+                  </p>
+                  <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm">
+                    Arrived!
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-gradient-to-br from-[#DC2626] to-[#D94E0A] shadow-lg shadow-[#DC2626]/20 rounded-xl px-4 py-2 shrink-0 flex flex-col items-center justify-center border border-orange-200">
+                <p className="text-orange-50 text-[10px] font-bold uppercase tracking-wider opacity-95 leading-tight mb-[2px]">
+                  {isTakeawayOrDining ? "ready in" : "arriving in"}
+                </p>
+                <p className="text-white text-base md:text-[17px] font-black leading-tight drop-shadow-sm">
+                  {timeRemaining !== null && timeRemaining > 0
+                    ? `${timeRemaining} min`
+                    : "--"}
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
 const OrderTrackingCard = memo(OrderTrackingCardInner);
 export default OrderTrackingCard;

@@ -1,25 +1,22 @@
-﻿import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bell, Menu, ChevronDown, Calendar, Download, FileText, Wallet, X } from "lucide-react"
+import { Bell, Menu, ChevronDown, Calendar, Download, ArrowRight, FileText, Wallet, X, ArrowLeft } from "lucide-react"
+import { useLocation } from "react-router-dom"
+import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 import { restaurantAPI } from "@food/api"
-import { toast } from "sonner"
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
-
-const formatCurrency = (value) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value) || 0)
+import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
+const debugLog = (...args) => { }
+const debugWarn = (...args) => { }
+const debugError = (...args) => { }
 
 
 export default function HubFinance() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const goBack = useRestaurantBackNavigation()
+  const showBack = location.state?.from
   const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = searchParams.get("tab")
@@ -28,6 +25,9 @@ export default function HubFinance() {
   const [selectedDateRange, setSelectedDateRange] = useState("Last 30 days")
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const [showDateRangePicker, setShowDateRangePicker] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
+  const [startDate, setStartDate] = useState(null)
+  const [endDate, setEndDate] = useState(null)
   const downloadMenuRef = useRef(null)
   const dateRangePickerRef = useRef(null)
   const [financeData, setFinanceData] = useState(null)
@@ -35,7 +35,16 @@ export default function HubFinance() {
   const [pastCyclesData, setPastCyclesData] = useState(null)
   const [loadingPastCycles, setLoadingPastCycles] = useState(false)
   const [restaurantData, setRestaurantData] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(true)
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false)
+  useEffect(() => {
+    if (showWithdrawalModal || showDateRangePicker || showCalendar) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [showWithdrawalModal, showDateRangePicker, showCalendar])
   const [withdrawalAmount, setWithdrawalAmount] = useState('')
   const [submittingWithdrawal, setSubmittingWithdrawal] = useState(false)
   const [withdrawalRequests, setWithdrawalRequests] = useState([])
@@ -121,18 +130,18 @@ export default function HubFinance() {
   // Format restaurant ID to REST###### format (e.g., REST005678)
   const formatRestaurantId = (restaurantId) => {
     if (!restaurantId) return ''
-    
+
     // Extract numeric part from the end (e.g., "REST-1768762345335-5678" -> "5678")
     const strId = String(restaurantId)
     const numericMatch = strId.match(/(\d+)$/)
-    
+
     if (numericMatch) {
       const numericPart = numericMatch[1]
       // Take last 6 digits and pad with zeros if needed
       const lastDigits = numericPart.slice(-6).padStart(6, '0')
       return `REST${lastDigits}`
     }
-    
+
     // Fallback: if no numeric part found, use original
     return strId
   }
@@ -157,7 +166,7 @@ export default function HubFinance() {
 
   const invoiceOrders = useMemo(() => {
     const allOrdersMap = new Map()
-    
+
     // Add current cycle orders first
     const current = financeData?.currentCycle?.orders || []
     current.forEach(order => {
@@ -166,7 +175,7 @@ export default function HubFinance() {
         allOrdersMap.set(id, order)
       }
     })
-    
+
     // Add past cycles orders, avoiding duplicates already in current map
     const past = pastCyclesData?.orders || []
     past.forEach(order => {
@@ -175,7 +184,7 @@ export default function HubFinance() {
         allOrdersMap.set(id, order)
       }
     })
-    
+
     return Array.from(allOrdersMap.values())
   }, [financeData, pastCyclesData])
 
@@ -187,7 +196,7 @@ export default function HubFinance() {
   }, [invoiceOrders])
 
   const handleViewDetails = () => {
-    navigate("/restaurant/finance-details", { state: { financeData, restaurantData } })
+    navigate("/food/restaurant/finance-details", { state: { financeData, restaurantData, from: location.pathname } })
   }
 
   const getWithdrawalStatusClass = (statusRaw) => {
@@ -216,28 +225,6 @@ export default function HubFinance() {
       hour12: true
     })
   }
-
-  const withdrawableAmount = Number(
-    financeData?.currentCycle?.netAvailable ??
-    (financeData?.currentCycle?.estimatedPayout || 0)
-  ) || 0
-  const minimumWithdrawalAmount = Number(financeData?.currentCycle?.minimumWithdrawalAmount || 0) || 0
-  const parsedWithdrawalAmount = Number(withdrawalAmount)
-  const hasWithdrawalAmount = withdrawalAmount !== ""
-  const isAmountBelowMinimum =
-    hasWithdrawalAmount &&
-    Number.isFinite(parsedWithdrawalAmount) &&
-    parsedWithdrawalAmount > 0 &&
-    parsedWithdrawalAmount < minimumWithdrawalAmount
-  const isAmountAboveWithdrawable =
-    hasWithdrawalAmount &&
-    Number.isFinite(parsedWithdrawalAmount) &&
-    parsedWithdrawalAmount > withdrawableAmount
-  const isWithdrawalAmountInvalid =
-    !Number.isFinite(parsedWithdrawalAmount) ||
-    parsedWithdrawalAmount <= 0 ||
-    isAmountBelowMinimum ||
-    isAmountAboveWithdrawable
 
   // Parse date range string to extract start and end dates
   const parseDateRange = (dateRangeStr) => {
@@ -269,33 +256,35 @@ export default function HubFinance() {
 
       const parts = dateRangeStr.split(' - ')
       if (parts.length !== 2) return null
-      
-      const startStr = parts[0].trim() // "14 Nov"
-      const endStr = parts[1].trim().replace("'", " ") // "14 Dec 25"
-      
+
+      const startStr = parts[0].trim().replace("'", " ")
+      const endStr = parts[1].trim().replace("'", " ")
+
       const currentYear = new Date().getFullYear()
       const startParts = startStr.split(' ')
       const endParts = endStr.split(' ')
-      
+
       if (startParts.length < 2 || endParts.length < 2) return null
-      
+
       const monthMap = {
         'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
         'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
       }
-      
+
       const startDay = parseInt(startParts[0])
       const startMonth = monthMap[startParts[1]]
       const endDay = parseInt(endParts[0])
       const endMonth = monthMap[endParts[1]]
-      const year = endParts.length > 2 ? parseInt('20' + endParts[2]) : currentYear
       
+      const startYear = startParts.length > 2 ? parseInt('20' + startParts[2]) : currentYear
+      const endYear = endParts.length > 2 ? parseInt('20' + endParts[2]) : currentYear
+
       if (startMonth === undefined || endMonth === undefined || isNaN(startDay) || isNaN(endDay)) {
         return null
       }
-      
-      const start = new Date(year, startMonth, startDay)
-      const end = new Date(year, endMonth, endDay)
+
+      const start = new Date(startYear, startMonth, startDay)
+      const end = new Date(endYear, endMonth, endDay)
 
       return {
         startDate: start.toISOString(),
@@ -319,17 +308,22 @@ export default function HubFinance() {
       // Validate dates and format as ISO strings
       const startDateObj = startDate instanceof Date ? startDate : new Date(startDate)
       const endDateObj = endDate instanceof Date ? endDate : new Date(endDate)
-      
+
       // Check if dates are valid
       if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
         debugError('Invalid date values:', { startDate, endDate })
         setPastCyclesData(null)
         return
       }
-      
-      const startDateISO = startDateObj.toISOString().split('T')[0]
-      const endDateISO = endDateObj.toISOString().split('T')[0]
-      
+
+      const formatLocalISO = (d) => {
+        const pad = (n) => String(n).padStart(2, '0')
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      }
+
+      const startDateISO = formatLocalISO(startDateObj)
+      const endDateISO = formatLocalISO(endDateObj)
+
       const response = await restaurantAPI.getFinance({
         startDate: startDateISO,
         endDate: endDateISO
@@ -370,10 +364,10 @@ export default function HubFinance() {
     const restaurantName = financeData?.restaurant?.name || "Restaurant"
     const restaurantId = financeData?.restaurant?.restaurantId || "N/A"
     const currentCycle = financeData?.currentCycle || {}
-    
+
     // Get all orders (current cycle + past cycles) - DEDUPLICATED
     const allOrdersMap = new Map()
-    
+
     // Add current cycle orders first
     if (financeData?.currentCycle?.orders && Array.isArray(financeData.currentCycle.orders)) {
       financeData.currentCycle.orders.forEach(order => {
@@ -385,7 +379,7 @@ export default function HubFinance() {
         }
       })
     }
-    
+
     // Add past cycles orders (ignoring duplicates already in current map)
     if (pastCyclesData?.orders && Array.isArray(pastCyclesData.orders)) {
       pastCyclesData.orders.forEach(order => {
@@ -397,9 +391,9 @@ export default function HubFinance() {
         }
       })
     }
-    
+
     const allOrders = Array.from(allOrdersMap.values())
-    
+
     return {
       restaurantName,
       restaurantId,
@@ -409,7 +403,7 @@ export default function HubFinance() {
         end: currentCycleDates.end,
         month: currentCycleDates.month,
         year: currentCycleDates.year,
-        estimatedPayout: formatCurrency(currentCycle.estimatedPayout || 0),
+        estimatedPayout: `₹${(currentCycle.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         orders: currentCycle.totalOrders || 0,
         payoutDate: currentCycle.payoutDate ? new Date(currentCycle.payoutDate).toLocaleDateString('en-IN') : "-"
       },
@@ -568,29 +562,29 @@ export default function HubFinance() {
               </thead>
               <tbody>
                 ${reportData.allOrders.map(order => {
-                  const orderDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : (order.deliveredAt ? new Date(order.deliveredAt).toLocaleDateString('en-IN') : 'N/A')
-                  const foodItems = order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'
-                  const itemQuantities = order.items ? order.items.map(item => (item.quantity || 1).toString()).join(', ') : 'N/A'
-                  const orderAmount = order.totalAmount || order.orderTotal || order.amount || 0
-                  const earning = order.payout || order.restaurantEarning || 0
-                  
-                  return `
+      const orderDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : (order.deliveredAt ? new Date(order.deliveredAt).toLocaleDateString('en-IN') : 'N/A')
+      const foodItems = order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'
+      const itemQuantities = order.items ? order.items.map(item => (item.quantity || 1).toString()).join(', ') : 'N/A'
+      const orderAmount = order.totalAmount || order.orderTotal || order.amount || 0
+      const earning = order.payout || order.restaurantEarning || 0
+
+      return `
                     <tr>
                       <td>${order.cycle || 'N/A'}</td>
                       <td>${order.orderId || 'N/A'}</td>
                       <td>${orderDate}</td>
                       <td>${foodItems}</td>
                       <td>${itemQuantities}</td>
-                      <td>${formatCurrency(orderAmount)}</td>
-                      <td>${formatCurrency(earning)}</td>
+                      <td>₹${orderAmount.toFixed(2)}</td>
+                      <td>₹${earning.toFixed(2)}</td>
                     </tr>
                   `
-                }).join('')}
+    }).join('')}
               </tbody>
               <tfoot>
                 <tr style="background-color: #e8f5e9; font-weight: bold;">
                   <td colspan="5" style="text-align: right;">Total Earnings:</td>
-                  <td colspan="2">${formatCurrency(reportData.allOrders.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0))}</td>
+                  <td colspan="2">₹${reportData.allOrders.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0).toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -604,7 +598,7 @@ export default function HubFinance() {
 
         <div class="footer">
           <p>This is an auto-generated report. For detailed information, please visit the Finance section.</p>
-          <p>Total Orders: ${reportData.allOrders?.length || 0} | Total Earnings: ${formatCurrency(reportData.allOrders?.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0))}</p>
+          <p>Total Orders: ${reportData.allOrders?.length || 0} | Total Earnings: ₹${reportData.allOrders?.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0).toFixed(2) || '0.00'}</p>
         </div>
       </body>
       </html>
@@ -615,12 +609,12 @@ export default function HubFinance() {
   const downloadPDF = async () => {
     try {
       setShowDownloadMenu(false)
-      
-    const reportData = getReportData()
-    const htmlContent = generateHTMLContent(reportData)
-    
+
+      const reportData = getReportData()
+      const htmlContent = generateHTMLContent(reportData)
+
       debugLog('?? Generating PDF...')
-      
+
       // Create a temporary hidden iframe to render HTML properly
       const iframe = document.createElement('iframe')
       iframe.style.position = 'absolute'
@@ -630,12 +624,12 @@ export default function HubFinance() {
       iframe.style.height = '297mm'
       iframe.style.border = 'none'
       document.body.appendChild(iframe)
-      
+
       // Write HTML to iframe
       iframe.contentDocument.open()
       iframe.contentDocument.write(htmlContent)
       iframe.contentDocument.close()
-      
+
       // Wait for iframe content to load
       await new Promise((resolve) => {
         if (iframe.contentDocument.readyState === 'complete') {
@@ -645,18 +639,18 @@ export default function HubFinance() {
           setTimeout(resolve, 1000) // Fallback timeout
         }
       })
-      
+
       // Wait a bit more for styles to apply
       await new Promise(resolve => setTimeout(resolve, 500))
-      
+
       // Import html2canvas and jsPDF dynamically
       debugLog('?? Loading libraries...')
       const html2canvas = (await import('html2canvas')).default
       const { default: jsPDF } = await import('jspdf')
-    
+
       // Get the body element from iframe
       const iframeBody = iframe.contentDocument.body
-      
+
       debugLog('?? Converting to canvas...')
       // Convert HTML to canvas
       const canvas = await html2canvas(iframeBody, {
@@ -668,28 +662,30 @@ export default function HubFinance() {
         width: iframeBody.scrollWidth,
         height: iframeBody.scrollHeight
       })
-      
+
       debugLog('? Canvas created:', canvas.width, 'x', canvas.height)
-      
+
       // Remove temporary iframe
-      document.body.removeChild(iframe)
-    
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe)
+      }
+
       // Calculate PDF dimensions
       const imgWidth = 210 // A4 width in mm
       const pageHeight = 297 // A4 height in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width
-      
+
       debugLog('?? PDF dimensions:', imgWidth, 'x', imgHeight, 'mm')
-      
+
       // Create PDF
       const pdf = new jsPDF('p', 'mm', 'a4')
       let heightLeft = imgHeight
       let position = 0
-      
+
       // Add first page
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight)
       heightLeft -= pageHeight
-      
+
       // Add additional pages if content is longer than one page
       while (heightLeft > 0) {
         position = heightLeft - imgHeight
@@ -697,7 +693,7 @@ export default function HubFinance() {
         pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight)
         heightLeft -= pageHeight
       }
-      
+
       // Download PDF
       const fileName = `finance-report-${reportData.dateRange.replace(/\s+/g, '-').replace(/'/g, '')}_${new Date().toISOString().split("T")[0]}.pdf`
       debugLog('?? Downloading PDF:', fileName)
@@ -707,7 +703,7 @@ export default function HubFinance() {
       debugError('? Error downloading PDF:', error)
       debugError('Error details:', error.stack)
       alert(`Failed to download PDF: ${error.message}. Please check console for details.`)
-    setShowDownloadMenu(false)
+      setShowDownloadMenu(false)
     }
   }
 
@@ -718,11 +714,11 @@ export default function HubFinance() {
         setShowDownloadMenu(false)
       }
     }
-    
+
     if (showDownloadMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
-    
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
@@ -730,10 +726,18 @@ export default function HubFinance() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* ... (Existing Navbar) */}
-
+      {/* Navbar */}
       <div className="sticky bg-white top-0 z-40 px-4 py-3 border-b border-gray-200">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
+          {showBack && (
+            <button
+              onClick={goBack}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-900" />
+            </button>
+          )}
           <div className="flex-1 min-w-0 flex items-start gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
@@ -755,7 +759,7 @@ export default function HubFinance() {
                     const shortAddress = address.length > 40 ? address.substring(0, 40) + '...' : address
                     parts.push(shortAddress)
                   }
-                  return parts.length > 0 ? parts.join(' â€¢ ') : 'Loading...'
+                  return parts.length > 0 ? parts.join(' • ') : 'Loading...'
                 })()}
               </p>
             </div>
@@ -763,20 +767,20 @@ export default function HubFinance() {
           <div className="flex items-center gap-1 ml-2">
             <button
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/withdrawal-history")}
+              onClick={() => navigate("/food/restaurant/withdrawal-history", { state: { from: location.pathname } })}
               title="Withdrawal History"
             >
               <Wallet className="w-5 h-5 text-gray-700" />
             </button>
             <button
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/notifications")}
+              onClick={() => navigate("/food/restaurant/notifications", { state: { from: location.pathname } })}
             >
               <Bell className="w-5 h-5 text-gray-700" />
             </button>
             <button
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/explore")}
+              onClick={() => navigate("/food/restaurant/explore")}
             >
               <Menu className="w-5 h-5 text-gray-700" />
             </button>
@@ -789,21 +793,19 @@ export default function HubFinance() {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab("payouts")}
-            className={`flex-1 py-3 px-4 rounded-full font-medium text-sm transition-colors ${
-              activeTab === "payouts"
-                ? "bg-black text-white"
+            className={`flex-1 py-3 px-4 rounded-full font-medium text-sm transition-colors ${activeTab === "payouts"
+                ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white"
                 : "bg-white text-gray-600 border border-gray-300"
-            }`}
+              }`}
           >
             Payouts
           </button>
           <button
             onClick={() => setActiveTab("invoices")}
-            className={`flex-1 py-3 px-4 rounded-full font-medium text-sm transition-colors ${
-              activeTab === "invoices"
-                ? "bg-black text-white"
+            className={`flex-1 py-3 px-4 rounded-full font-medium text-sm transition-colors ${activeTab === "invoices"
+                ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white"
                 : "bg-white text-gray-600 border border-gray-300"
-            }`}
+              }`}
           >
             Invoices & Taxes
           </button>
@@ -823,21 +825,18 @@ export default function HubFinance() {
                 ) : (
                   <>
                     <p className="text-4xl font-bold text-gray-900 mb-2">
-                      {formatCurrency(financeData?.currentCycle?.estimatedPayout || 0)}
+                      ₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                     <p className="text-sm text-gray-600 mb-4">
                       {financeData?.currentCycle?.totalOrders || 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'}
                     </p>
                     <button
-                      onClick={() => {
-                        setShowWithdrawalModal(true);
-                      }}
+                      onClick={() => { setWithdrawalAmount(''); setShowWithdrawalModal(true) }}
                       disabled={!(financeData?.currentCycle?.estimatedPayout > 0)}
-                      className={`w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 mt-4 transition-colors ${
-                        financeData?.currentCycle?.estimatedPayout > 0
-                          ? "bg-black text-white hover:bg-gray-800"
+                      className={`w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 mt-4 transition-colors ${financeData?.currentCycle?.estimatedPayout > 0
+                          ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      }`}
+                        }`}
                     >
                       <Wallet className="h-5 w-5" />
                       Withdraw
@@ -867,7 +866,7 @@ export default function HubFinance() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(request?.amount || 0)}
+                                ₹{Number(request?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                               <p className="text-xs text-gray-500 mt-1">
                                 Requested: {formatDateTime(request?.createdAt || request?.requestedAt)}
@@ -888,7 +887,7 @@ export default function HubFinance() {
                     {withdrawalRequests.length > 8 ? (
                       <button
                         type="button"
-                        onClick={() => navigate("/restaurant/withdrawal-history")}
+                        onClick={() => navigate("/food/restaurant/withdrawal-history")}
                         className="w-full text-sm font-medium text-black hover:underline pt-1"
                       >
                         View all requests
@@ -905,44 +904,63 @@ export default function HubFinance() {
               <div className="space-y-3">
                 <div className="flex gap-2">
                   <div className="flex-1 relative" ref={dateRangePickerRef}>
-                    <button 
+                    <button
                       onClick={() => setShowDateRangePicker(!showDateRangePicker)}
                       className="w-full bg-white rounded-lg px-4 py-3 flex items-center justify-between border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer"
                     >
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-600" />
-                      <span className="text-sm font-medium text-gray-900">{selectedDateRange}</span>
-                    </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-900">{selectedDateRange}</span>
+                      </div>
                       <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${showDateRangePicker ? 'rotate-180' : ''}`} />
                     </button>
-                    
+
                     {/* Date Range Picker Dropdown */}
                     <AnimatePresence>
                       {showDateRangePicker && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
-                        >
-                          <div className="p-4">
-                            <h3 className="text-sm font-semibold text-gray-900 mb-3">Select Date Range</h3>
-                            <div className="space-y-2">
-                              {(() => {
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 z-[60]"
+                            onClick={() => setShowDateRangePicker(false)}
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                            onClick={() => setShowDateRangePicker(false)}
+                          >
+                            <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-sm max-h-[80vh] flex flex-col">
+                              <div className="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+                                <h3 className="text-lg font-bold text-gray-900">Select Date Range</h3>
+                                <button onClick={() => setShowDateRangePicker(false)} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+                                  <X className="w-5 h-5 text-gray-500" />
+                                </button>
+                              </div>
+                              <div className="p-2 overflow-y-auto custom-scrollbar">
+                                <div className="space-y-1">
+                                  {(() => {
                                 const getDateRanges = () => {
                                   const today = new Date()
                                   today.setHours(23, 59, 59, 999)
-                                  
+
+                                  // Today
+                                  const todayStart = new Date(today)
+                                  todayStart.setHours(0, 0, 0, 0)
+
                                   // Last 7 days
                                   const last7DaysStart = new Date(today)
                                   last7DaysStart.setDate(today.getDate() - 7)
                                   last7DaysStart.setHours(0, 0, 0, 0)
-                                  
+
                                   // Last 30 days
                                   const last30DaysStart = new Date(today)
                                   last30DaysStart.setDate(today.getDate() - 30)
                                   last30DaysStart.setHours(0, 0, 0, 0)
-                                  
+
                                   // This week (Monday to Sunday)
                                   const currentDay = today.getDay()
                                   const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1
@@ -952,23 +970,24 @@ export default function HubFinance() {
                                   const thisWeekEnd = new Date(thisWeekStart)
                                   thisWeekEnd.setDate(thisWeekStart.getDate() + 6)
                                   thisWeekEnd.setHours(23, 59, 59, 999)
-                                  
+
                                   // Last week
                                   const lastWeekStart = new Date(thisWeekStart)
                                   lastWeekStart.setDate(thisWeekStart.getDate() - 7)
                                   const lastWeekEnd = new Date(thisWeekEnd)
                                   lastWeekEnd.setDate(thisWeekEnd.getDate() - 7)
-                                  
+
                                   // This month
                                   const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1)
                                   const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999)
-                                  
+
                                   // Last month
                                   const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1)
                                   const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999)
-                                  
+
                                   return {
                                     today,
+                                    todayStart,
                                     last7DaysStart,
                                     last30DaysStart,
                                     thisWeekStart,
@@ -981,90 +1000,158 @@ export default function HubFinance() {
                                     lastMonthEnd
                                   }
                                 }
-                                
+
                                 const formatDateForDisplay = (date) => {
                                   const day = date.getDate()
                                   const month = date.toLocaleString('en-US', { month: 'short' })
                                   const year = date.getFullYear().toString().slice(-2)
                                   return `${day} ${month}'${year}`
                                 }
-                                
+
                                 const formatDateRange = (start, end) => {
                                   return `${formatDateForDisplay(start)} - ${formatDateForDisplay(end)}`
                                 }
-                                
+
                                 const ranges = getDateRanges()
                                 const dateOptions = [
-                                  { 
-                                    label: "Last 7 days", 
+                                  {
+                                    label: "Today",
+                                    range: formatDateRange(ranges.todayStart, ranges.today),
+                                    startDate: ranges.todayStart,
+                                    endDate: ranges.today
+                                  },
+                                  {
+                                    label: "Last 7 days",
                                     range: formatDateRange(ranges.last7DaysStart, ranges.today),
                                     startDate: ranges.last7DaysStart,
                                     endDate: ranges.today
                                   },
-                                  { 
-                                    label: "Last 30 days", 
+                                  {
+                                    label: "Last 30 days",
                                     range: formatDateRange(ranges.last30DaysStart, ranges.today),
                                     startDate: ranges.last30DaysStart,
                                     endDate: ranges.today
                                   },
-                                  { 
-                                    label: "This week", 
+                                  {
+                                    label: "This week",
                                     range: formatDateRange(ranges.thisWeekStart, ranges.thisWeekEnd),
                                     startDate: ranges.thisWeekStart,
                                     endDate: ranges.thisWeekEnd
                                   },
-                                  { 
-                                    label: "Last week", 
+                                  {
+                                    label: "Last week",
                                     range: formatDateRange(ranges.lastWeekStart, ranges.lastWeekEnd),
                                     startDate: ranges.lastWeekStart,
                                     endDate: ranges.lastWeekEnd
                                   },
-                                  { 
-                                    label: "This month", 
+                                  {
+                                    label: "This month",
                                     range: formatDateRange(ranges.thisMonthStart, ranges.thisMonthEnd),
                                     startDate: ranges.thisMonthStart,
                                     endDate: ranges.thisMonthEnd
                                   },
-                                  { 
-                                    label: "Last month", 
+                                  {
+                                    label: "Last month",
                                     range: formatDateRange(ranges.lastMonthStart, ranges.lastMonthEnd),
                                     startDate: ranges.lastMonthStart,
                                     endDate: ranges.lastMonthEnd
+                                  },
+                                  {
+                                    label: "Custom date range",
+                                    custom: true
                                   }
                                 ]
-                                
+
                                 return dateOptions.map((option, index) => (
                                   <button
                                     key={index}
                                     onClick={() => {
-                                      setSelectedDateRange(option.range)
-                                      setShowDateRangePicker(false)
-                                      // Fetch data for selected range
-                                      fetchPastCyclesData(option.startDate, option.endDate)
+                                      if (option.custom) {
+                                        setShowDateRangePicker(false)
+                                        setShowCalendar(true)
+                                      } else {
+                                        setSelectedDateRange(option.range)
+                                        setStartDate(option.startDate)
+                                        setEndDate(option.endDate)
+                                        setShowDateRangePicker(false)
+                                        fetchPastCyclesData(option.startDate, option.endDate)
+                                      }
                                     }}
                                     className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-sm"
                                   >
                                     <div className="font-medium text-gray-900">{option.label}</div>
-                                    <div className="text-xs text-gray-500">{option.range}</div>
-                  </button>
+                                    {!option.custom && <div className="text-xs text-gray-500">{option.range}</div>}
+                                  </button>
                                 ))
                               })()}
                             </div>
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+
+              {/* Custom Date Range Calendar */}
+              <AnimatePresence>
+                {showCalendar && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="fixed inset-0 bg-black/50 z-[60]"
+                      onClick={() => setShowCalendar(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                      transition={{ duration: 0.2 }}
+                      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                      onClick={() => setShowCalendar(false)}
+                    >
+                      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm">
+                        <DateRangeCalendar
+                          startDate={startDate}
+                          endDate={endDate}
+                          onDateRangeChange={(start, end) => {
+                            setStartDate(start)
+                            setEndDate(end)
+                            
+                            if (start && end) {
+                              const formatDateForDisplay = (date) => {
+                                const day = date.getDate()
+                                const month = date.toLocaleString('en-US', { month: 'short' })
+                                const year = date.getFullYear().toString().slice(-2)
+                                return `${day} ${month}'${year}`
+                              }
+                              
+                              setSelectedDateRange(`${formatDateForDisplay(start)} - ${formatDateForDisplay(end)}`)
+                              setShowCalendar(false)
+                              fetchPastCyclesData(start, end)
+                            }
+                          }}
+                          onClose={() => setShowCalendar(false)}
+                        />
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+
+              </div>
                   <div className="relative" ref={downloadMenuRef}>
-                    <button 
+                    <button
                       onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                      className="bg-black text-white rounded-lg px-4 py-3 flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
+                      className="bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white rounded-lg px-4 py-3 flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
                     >
                       <Download className="w-4 h-4" />
                       <span className="text-sm font-medium">Get report</span>
                       <ChevronDown className="w-4 h-4" />
                     </button>
-                    
+
                     <AnimatePresence>
                       {showDownloadMenu && (
                         <motion.div
@@ -1079,7 +1166,7 @@ export default function HubFinance() {
                             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                           >
                             <div className="w-6 h-6 rounded-md bg-red-50 flex items-center justify-center">
-                              <FileText className="w-4 h-4 text-red-600" />
+                              <FileText className="w-4 h-4 text-[#B80B3D]" />
                             </div>
                             <span>Download PDF</span>
                           </button>
@@ -1088,6 +1175,14 @@ export default function HubFinance() {
                     </AnimatePresence>
                   </div>
                 </div>
+                
+                {/* Order count */}
+                {!loadingPastCycles && pastCyclesData && pastCyclesData.orders && (
+                  <p className="text-sm font-medium text-gray-500 mb-3 px-1">
+                    {pastCyclesData.orders.length} orders found
+                  </p>
+                )}
+
                 {loadingPastCycles ? (
                   <div className="bg-white rounded-lg p-4">
                     <p className="text-sm text-gray-600 text-center">Loading past cycles...</p>
@@ -1104,13 +1199,16 @@ export default function HubFinance() {
                                 <p className="text-sm font-semibold text-gray-900 mb-1">
                                   Order ID: {order.orderId || 'N/A'}
                                 </p>
+                                <p className="text-xs text-gray-500 mb-1">
+                                  {formatDateTime(order.createdAt || order.deliveredAt)}
+                                </p>
                                 <p className="text-xs text-gray-600">
                                   {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
                                 </p>
                               </div>
                               <div className="text-right ml-4">
                                 <p className="text-sm font-bold text-gray-900">
-                                  {formatCurrency(order.payout || 0)}
+                                  ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                                 <p className="text-xs text-gray-500">
                                   Earning
@@ -1136,13 +1234,16 @@ export default function HubFinance() {
                                 <p className="text-sm font-semibold text-gray-900 mb-1">
                                   Order ID: {order.orderId || 'N/A'}
                                 </p>
+                                <p className="text-xs text-gray-500 mb-1">
+                                  {formatDateTime(order.createdAt || order.deliveredAt)}
+                                </p>
                                 <p className="text-xs text-gray-600">
                                   {order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'}
                                 </p>
                               </div>
                               <div className="text-right ml-4">
                                 <p className="text-sm font-bold text-gray-900">
-                                  {formatCurrency(order.payout || 0)}
+                                  ₹{(order.payout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                                 <p className="text-xs text-gray-500">
                                   Earning
@@ -1153,15 +1254,15 @@ export default function HubFinance() {
                         ))}
                       </div>
                     )}
-                    
-                    {(!pastCyclesData || (!pastCyclesData.orders || pastCyclesData.orders.length === 0)) && 
-                     (!financeData?.currentCycle?.orders || financeData.currentCycle.orders.length === 0) && 
-                     !loadingPastCycles && !loading && (
-                      <div className="bg-white rounded-lg p-12 text-center border border-gray-200">
-                        <p className="text-gray-400 mb-2">No transaction history available</p>
-                        <p className="text-xs text-gray-500">Your earnings and order payouts will appear here.</p>
-                      </div>
-                    )}
+
+                    {(!pastCyclesData || (!pastCyclesData.orders || pastCyclesData.orders.length === 0)) &&
+                      (!financeData?.currentCycle?.orders || financeData.currentCycle.orders.length === 0) &&
+                      !loadingPastCycles && !loading && (
+                        <div className="bg-white rounded-lg p-12 text-center border border-gray-200">
+                          <p className="text-gray-400 mb-2">No transaction history available</p>
+                          <p className="text-xs text-gray-500">Your earnings and order payouts will appear here.</p>
+                        </div>
+                      )}
                   </>
                 )}
               </div>
@@ -1180,15 +1281,15 @@ export default function HubFinance() {
                 </div>
                 <div className="rounded-md bg-gray-50 p-3">
                   <p className="text-xs text-gray-600">Earnings</p>
-                  <p className="text-base font-semibold text-gray-900">{formatCurrency(invoiceSummary.earnings)}</p>
+                  <p className="text-base font-semibold text-gray-900">₹{invoiceSummary.earnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 <div className="rounded-md bg-gray-50 p-3">
                   <p className="text-xs text-gray-600">Commission</p>
-                  <p className="text-base font-semibold text-gray-900">{formatCurrency(invoiceSummary.commission)}</p>
+                  <p className="text-base font-semibold text-gray-900">₹{invoiceSummary.commission.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 <div className="rounded-md bg-gray-50 p-3">
                   <p className="text-xs text-gray-600">Gross amount</p>
-                  <p className="text-base font-semibold text-gray-900">{formatCurrency(invoiceSummary.gross)}</p>
+                  <p className="text-base font-semibold text-gray-900">₹{invoiceSummary.gross.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               </div>
             </div>
@@ -1212,7 +1313,7 @@ export default function HubFinance() {
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-semibold text-gray-900">
-                            {formatCurrency(order.totalAmount || 0)}
+                            ₹{(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                           <p className="text-xs text-gray-500">Total</p>
                         </div>
@@ -1257,48 +1358,36 @@ export default function HubFinance() {
                     <X className="w-5 h-5 text-gray-600" />
                   </button>
                 </div>
-                
-                <div className="mb-5">
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                        Available
-                      </p>
-                      <p className="mt-1 text-base font-bold text-gray-900">
-                        {formatCurrency(withdrawableAmount)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                        Minimum
-                      </p>
-                      <p className="mt-1 text-base font-bold text-gray-900">
-                        {formatCurrency(minimumWithdrawalAmount)}
-                      </p>
-                    </div>
-                  </div>
 
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    Enter withdrawal amount
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-2">
+                    Available Balance: <span className="font-semibold text-gray-900">₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter Amount to Withdraw
                   </label>
                   <input
-                    type="number"
-                    min={Math.max(minimumWithdrawalAmount, 0.01)}
-                      max={withdrawableAmount}
-                      step="0.01"
-                      value={withdrawalAmount}
-                      onChange={(e) => setWithdrawalAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base text-gray-900 focus:ring-2 focus:ring-black focus:border-transparent outline-none"
-                    />
-                    {isAmountBelowMinimum && (
-                      <p className="text-sm text-red-600 mt-2">
-                        Minimum withdrawal amount is {formatCurrency(minimumWithdrawalAmount)}
-                      </p>
-                    )}
-                    {isAmountAboveWithdrawable && (
-                      <p className="text-sm text-red-600 mt-2">Amount exceeds your withdrawable limit</p>
-                    )}
+                    type="text"
+                    inputMode="decimal"
+                    value={withdrawalAmount}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/[^0-9.]/g, '')
+                      // Remove multiple dots
+                      const parts = val.split('.')
+                      if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('')
+                      // Remove leading zeros unless it's "0."
+                      if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+                        val = val.replace(/^0+/, '')
+                      }
+                      setWithdrawalAmount(val)
+                    }}
+                    autoComplete="off"
+                    placeholder="Enter amount"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent outline-none"
+                  />
+                  {withdrawalAmount && parseFloat(withdrawalAmount) > (financeData?.currentCycle?.estimatedPayout || 0) && (
+                    <p className="text-sm text-[#B80B3D] mt-1">Amount cannot exceed available balance</p>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
@@ -1307,25 +1396,27 @@ export default function HubFinance() {
                       setShowWithdrawalModal(false)
                       setWithdrawalAmount('')
                     }}
-                    className="flex-1 rounded-xl border border-gray-300 px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={async () => {
-                      const amount = Number(withdrawalAmount)
-                      if (!Number.isFinite(amount) || amount <= 0) return
-                      if (amount < minimumWithdrawalAmount) {
-                        toast.error(`Minimum withdrawal amount is ${formatCurrency(minimumWithdrawalAmount)}`)
+                      const amount = parseFloat(withdrawalAmount)
+                      if (!amount || amount <= 0) {
+                        alert('Please enter a valid amount')
                         return
                       }
-                      if (amount > withdrawableAmount) return
-                      
+                      if (amount > (financeData?.currentCycle?.estimatedPayout || 0)) {
+                        alert('Amount cannot exceed available balance')
+                        return
+                      }
+
                       try {
                         setSubmittingWithdrawal(true)
                         const response = await restaurantAPI.createWithdrawalRequest(amount)
                         if (response.data?.success) {
-                          // Professional success toast or similar would go here
+                          alert('Withdrawal request submitted successfully!')
                           setShowWithdrawalModal(false)
                           setWithdrawalAmount('')
                           // Refresh finance data
@@ -1342,20 +1433,17 @@ export default function HubFinance() {
                               : []
                           setWithdrawalRequests(withdrawalList)
                         } else {
-                          toast.error(response.data?.message || 'Failed to submit withdrawal request')
+                          alert(response.data?.message || 'Failed to submit withdrawal request')
                         }
                       } catch (error) {
                         debugError('Error submitting withdrawal request:', error)
-                        if (error.response?.status !== 401) {
-                           const message = error.response?.data?.message || 'Failed to submit withdrawal request'
-                           toast.error(message)
-                        }
+                        alert(error.response?.data?.message || 'Failed to submit withdrawal request. Please try again.')
                       } finally {
                         setSubmittingWithdrawal(false)
                       }
                     }}
-                    disabled={submittingWithdrawal || !hasWithdrawalAmount || isWithdrawalAmountInvalid}
-                    className="flex-1 rounded-xl bg-black px-4 py-3 font-medium text-white hover:bg-gray-800 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed shadow-lg"
+                    disabled={submittingWithdrawal || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > (financeData?.currentCycle?.estimatedPayout || 0)}
+                    className="flex-1 px-4 py-3 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
                     {submittingWithdrawal ? 'Submitting...' : 'Submit Request'}
                   </button>
@@ -1366,18 +1454,15 @@ export default function HubFinance() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {!showWithdrawalModal && (
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 20, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <BottomNavOrders />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <BottomNavOrders />
     </div>
   )
 }
+
+
+
+
+
+
+
+

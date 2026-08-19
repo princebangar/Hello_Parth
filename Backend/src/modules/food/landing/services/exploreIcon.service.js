@@ -1,13 +1,15 @@
 import { FoodExploreIcon } from '../models/exploreIcon.model.js';
-import { v2 as cloudinary } from 'cloudinary';
+import { storeImageBuffer, deleteStoredAsset } from '../../../../services/storage.service.js';
 
-const CLOUDINARY_FOLDER = 'food/explore-icons';
+const ICON_FOLDER = 'food/explore-icons';
+const ICON_MAX_WIDTH = 400;
 
 /**
  * List all explore icons (admin). Sorted by sortOrder.
  */
-export const listExploreIcons = async () => {
-    return FoodExploreIcon.find()
+export const listExploreIcons = async (zoneId = null) => {
+    let query = zoneId ? { zoneId } : { zoneId: null };
+    return FoodExploreIcon.find(query)
         .sort({ sortOrder: 1, createdAt: -1 })
         .lean();
 };
@@ -21,19 +23,13 @@ const getNextSortOrder = async () => {
 };
 
 /**
- * Upload buffer to Cloudinary and return { secure_url, public_id }.
+ * Store an icon on disk and return { secure_url, public_id }.
  */
-const uploadImageToCloudinary = (buffer) => {
-    return new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-            { folder: CLOUDINARY_FOLDER, resource_type: 'image' },
-            (err, result) => {
-                if (err) return reject(err);
-                resolve({ secure_url: result.secure_url, public_id: result.public_id });
-            }
-        );
-        stream.end(buffer);
+const uploadIcon = async (buffer) => {
+    const { secure_url, public_id } = await storeImageBuffer(buffer, ICON_FOLDER, {
+        maxWidth: ICON_MAX_WIDTH
     });
+    return { secure_url, public_id };
 };
 
 /**
@@ -50,16 +46,25 @@ export const createExploreIcon = async (file, meta) => {
         throw new Error('Label is required');
     }
 
-    const { secure_url, public_id } = await uploadImageToCloudinary(file.buffer);
+    const { secure_url, public_id } = await uploadIcon(file.buffer);
     const sortOrder = await getNextSortOrder();
+
+    // Infer linkType from label for known types
+    let linkType = 'custom';
+    const lowerLabel = label.toLowerCase();
+    if (lowerLabel === 'offers') linkType = 'offers';
+    else if (lowerLabel === 'gourmet') linkType = 'gourmet';
+    else if (lowerLabel === 'collections') linkType = 'collections';
+    else if (lowerLabel === 'under 250' || lowerLabel === 'under-250') linkType = 'under-250';
 
     const doc = await FoodExploreIcon.create({
         label,
         iconUrl: secure_url,
         publicId: public_id,
-        linkType: 'custom',
+        linkType,
         targetPath: (meta?.link || '').trim() || undefined,
         sortOrder,
+        zoneId: meta?.zoneId || null,
         isActive: true
     });
 
@@ -80,20 +85,23 @@ export const updateExploreIcon = async (id, payload) => {
     const updates = {};
 
     if (payload?.file?.buffer) {
-        try {
-            if (doc.publicId) {
-                await cloudinary.uploader.destroy(doc.publicId).catch(() => {});
-            }
-            const { secure_url, public_id } = await uploadImageToCloudinary(payload.file.buffer);
-            updates.iconUrl = secure_url;
-            updates.publicId = public_id;
-        } catch (e) {
-            throw new Error('Image upload failed');
-        }
+        const { secure_url, public_id } = await uploadIcon(payload.file.buffer);
+        await deleteStoredAsset(doc.iconUrl || doc.publicId);
+        updates.iconUrl = secure_url;
+        updates.publicId = public_id;
     }
 
     if (payload?.label !== undefined) {
-        updates.label = String(payload.label).trim();
+        const label = String(payload.label).trim();
+        updates.label = label;
+        
+        // Infer linkType from label for known types
+        const lowerLabel = label.toLowerCase();
+        if (lowerLabel === 'offers') updates.linkType = 'offers';
+        else if (lowerLabel === 'gourmet') updates.linkType = 'gourmet';
+        else if (lowerLabel === 'collections') updates.linkType = 'collections';
+        else if (lowerLabel === 'under 250' || lowerLabel === 'under-250') updates.linkType = 'under-250';
+        else updates.linkType = 'custom';
     }
     if (payload?.link !== undefined) {
         updates.targetPath = String(payload.link).trim() || undefined;
@@ -108,20 +116,14 @@ export const updateExploreIcon = async (id, payload) => {
 };
 
 /**
- * Delete explore icon and Cloudinary asset.
+ * Delete explore icon and its stored file.
  */
 export const deleteExploreIcon = async (id) => {
     const doc = await FoodExploreIcon.findById(id);
     if (!doc) {
         return { deleted: false };
     }
-    if (doc.publicId) {
-        try {
-            await cloudinary.uploader.destroy(doc.publicId);
-        } catch {
-            // ignore
-        }
-    }
+    await deleteStoredAsset(doc.iconUrl || doc.publicId);
     await doc.deleteOne();
     return { deleted: true };
 };

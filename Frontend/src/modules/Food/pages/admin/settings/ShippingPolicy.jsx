@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import api from "@food/api"
 import { API_ENDPOINTS } from "@food/api/config"
 import { Textarea } from "@food/components/ui/textarea"
-import { legalHtmlToPlainText, plainTextToLegalHtml } from "@food/utils/legalContentFormat"
+import { unwrapLegalPage, plainTextToLegalHtml } from "@food/utils/legalContentFormat"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -27,13 +27,7 @@ export default function ShippingPolicy() {
       setLoading(true)
       const response = await api.get(API_ENDPOINTS.ADMIN.SHIPPING, { contextModule: "admin" })
       if (response.data.success) {
-        const pageData = response.data.data || { title: 'Shipping Policy', content: '' }
-        const content = pageData.content || ''
-        const textContent = legalHtmlToPlainText(content)
-        setShippingData({
-          ...pageData,
-          content: textContent
-        })
+        setShippingData(unwrapLegalPage(response.data, { title: 'Shipping Policy' }))
       }
     } catch (error) {
       debugError('Error fetching shipping data:', error)
@@ -57,13 +51,7 @@ export default function ShippingPolicy() {
       )
       if (response.data.success) {
         toast.success('Shipping policy updated successfully')
-        // Convert HTML to plain text for display in textarea
-        const content = response.data.data.content || ''
-        const textContent = legalHtmlToPlainText(content)
-        setShippingData({
-          ...response.data.data,
-          content: textContent
-        })
+        setShippingData(unwrapLegalPage(response.data, { title: 'Shipping Policy' }))
       }
     } catch (error) {
       debugError('Error saving shipping policy:', error)

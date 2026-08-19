@@ -1,404 +1,348 @@
-import { useMemo, useState, useEffect } from "react"
-import { Save, Loader2, DollarSign, Plus, Pencil, Trash2 } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { Save, Loader2, DollarSign, Plus, Trash2, Edit, Check, X } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+const debugLog = (...args) => {}
+const debugWarn = (...args) => {}
+const debugError = (...args) => {}
 
-const toNum = (v, fallback = 0) => {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : fallback
-}
+const emptyFeeSettings = () => ({
+  deliveryFee: "",
+  deliveryFeeRanges: [],
+  freeDeliveryUpTo: "",
+  platformFee: "",
+  packagingFee: "",
+  gstRate: "",
+})
 
+const normalizeFeeSettings = (settings) => ({
+  deliveryFee: settings?.deliveryFee === "" || settings?.deliveryFee == null ? "" : Number(settings.deliveryFee),
+  freeDeliveryUpTo: settings?.freeDeliveryUpTo === "" || settings?.freeDeliveryUpTo == null ? "" : Number(settings.freeDeliveryUpTo),
+  platformFee: settings?.platformFee === "" || settings?.platformFee == null ? "" : Number(settings.platformFee),
+  packagingFee: settings?.packagingFee === "" || settings?.packagingFee == null ? "" : Number(settings.packagingFee),
+  gstRate: settings?.gstRate === "" || settings?.gstRate == null ? "" : Number(settings.gstRate),
+  deliveryFeeRanges: Array.isArray(settings?.deliveryFeeRanges)
+    ? settings.deliveryFeeRanges
+        .map((r) => ({
+          min: Number(r.min),
+          max: Number(r.max),
+          fee: Number(r.fee),
+        }))
+        .sort((a, b) => a.min - b.min)
+    : [],
+})
+
+const feeSettingsEqual = (a, b) =>
+  JSON.stringify(normalizeFeeSettings(a)) === JSON.stringify(normalizeFeeSettings(b))
+
+// Fee Settings Component - Range-based delivery fee configuration
 export default function FeeSettings() {
-  const [feeSettings, setFeeSettings] = useState({
-    deliveryFeeComputationMode: "distance_order_value",
-    distanceSlabAdminDeliveryCommission: [],
-    deliveryPartnerIncentiveRule: {
-      isEnabled: false,
-      minOrderAmount: "0",
-      incentivePercent: "0",
-    },
-    platformFee: "",
-    surgeTitle: "Surge Charge",
-    gstRate: "",
-    codLimit: "",
-  })
-  const [distanceRules, setDistanceRules] = useState([])
+  const [feeSettings, setFeeSettings] = useState(emptyFeeSettings)
+  const [savedFeeSettings, setSavedFeeSettings] = useState(emptyFeeSettings)
+  const [zones, setZones] = useState([])
+  const [selectedZoneId, setSelectedZoneId] = useState("")
+  const [zonesLoading, setZonesLoading] = useState(true)
   const [loadingFeeSettings, setLoadingFeeSettings] = useState(false)
   const [savingFeeSettings, setSavingFeeSettings] = useState(false)
+  const [editingRangeIndex, setEditingRangeIndex] = useState(null)
+  const [newRange, setNewRange] = useState({ min: '', max: '', fee: '' })
 
-  const [slabModalOpen, setSlabModalOpen] = useState(false)
-  const [editingRule, setEditingRule] = useState(null)
-  const [savingRule, setSavingRule] = useState(false)
-  const [form, setForm] = useState({
-    name: "",
-    minDistance: "0",
-    maxDistance: "",
-    maxDistanceUnlimited: false,
-    basePayout: "",
-    commissionPerKm: "",
-    status: true,
-  })
+  const isDirty = useMemo(
+    () => !feeSettingsEqual(feeSettings, savedFeeSettings),
+    [feeSettings, savedFeeSettings]
+  )
 
-  const [newRange, setNewRange] = useState({
-    minDistance: "0",
-    maxDistance: "",
-    maxDistanceUnlimited: false,
-    basePayout: "0",
-    commissionPerKm: "0",
-    adminCommissionPercent: "0",
-  })
-
-  const [zoneSurges, setZoneSurges] = useState([])
-  const [savingZoneId, setSavingZoneId] = useState("")
-  const [zoneSearchQuery, setZoneSearchQuery] = useState("")
-  const [zonePage, setZonePage] = useState(1)
-  const zonePageSize = 5
-
-  const getDistanceRuleAdminCommissionConfig = (ruleId) =>
-    feeSettings.distanceSlabAdminDeliveryCommission.find((r) => String(r.distanceRuleId) === String(ruleId)) || null
-
-  const setDistanceRuleAdminCommissionConfig = (ruleId, updater) => {
-    const prev = feeSettings.distanceSlabAdminDeliveryCommission
-    const idx = prev.findIndex((r) => String(r.distanceRuleId) === String(ruleId))
-    const next = [...prev]
-    if (idx === -1) {
-      next.push(updater({ distanceRuleId: String(ruleId), isEnabled: false, adminDeliveryCommissionPercent: 0 }))
-    } else {
-      next[idx] = updater(next[idx])
+  // Fetch fee settings for selected zone
+  const fetchFeeSettings = async (zoneId) => {
+    if (!zoneId) {
+      const empty = emptyFeeSettings()
+      setFeeSettings(empty)
+      setSavedFeeSettings(empty)
+      return
     }
-    setFeeSettings((s) => ({ ...s, distanceSlabAdminDeliveryCommission: next }))
-  }
-
-  const sortedDistanceRules = useMemo(() => {
-    return [...distanceRules].sort((a, b) => toNum(a.minDistance) - toNum(b.minDistance))
-  }, [distanceRules])
-
-  const filteredZoneSurges = useMemo(() => {
-    const q = String(zoneSearchQuery || "").trim().toLowerCase()
-    if (!q) return zoneSurges
-    return zoneSurges.filter((z) => String(z.zoneName || "").toLowerCase().includes(q))
-  }, [zoneSurges, zoneSearchQuery])
-
-  const zoneTotalPages = Math.max(1, Math.ceil(filteredZoneSurges.length / zonePageSize))
-  const paginatedZoneSurges = useMemo(() => {
-    const safePage = Math.min(zonePage, zoneTotalPages)
-    const start = (safePage - 1) * zonePageSize
-    return filteredZoneSurges.slice(start, start + zonePageSize)
-  }, [filteredZoneSurges, zonePage, zoneTotalPages])
-
-  const fetchFeeSettings = async () => {
     try {
       setLoadingFeeSettings(true)
-      const response = await adminAPI.getFeeSettings()
-      const saved = response?.data?.data?.feeSettings
-      if (saved) {
-        setFeeSettings({
-          deliveryFeeComputationMode: "distance_order_value",
-          distanceSlabAdminDeliveryCommission: saved.distanceSlabAdminDeliveryCommission || [],
-          deliveryPartnerIncentiveRule: {
-            isEnabled: saved.deliveryPartnerIncentiveRule?.isEnabled === true,
-            minOrderAmount: String(saved.deliveryPartnerIncentiveRule?.minOrderAmount ?? 0),
-            incentivePercent: String(saved.deliveryPartnerIncentiveRule?.incentivePercent ?? 0),
-          },
-          platformFee: saved.platformFee ?? "",
-          surgeTitle: saved.surgeTitle || "Surge Charge",
-          gstRate: saved.gstRate ?? "",
-          codLimit: saved.codLimit ?? "",
-        })
-      } else {
-        setFeeSettings({
-          deliveryFeeComputationMode: "distance_order_value",
-          distanceSlabAdminDeliveryCommission: [],
-          deliveryPartnerIncentiveRule: {
-            isEnabled: false,
-            minOrderAmount: "0",
-            incentivePercent: "0",
-          },
-          platformFee: "",
-          gstRate: "",
-          codLimit: "",
-        })
+      const response = await adminAPI.getFeeSettings({ zoneId })
+      if (response.data.success && response.data.data.feeSettings) {
+        const next = {
+          deliveryFee: response.data.data.feeSettings.deliveryFee ?? "",
+          deliveryFeeRanges: response.data.data.feeSettings.deliveryFeeRanges || [],
+          freeDeliveryUpTo: response.data.data.feeSettings.freeDeliveryUpTo ?? "",
+          platformFee: response.data.data.feeSettings.platformFee ?? "",
+          packagingFee: response.data.data.feeSettings.packagingFee ?? "",
+          gstRate: response.data.data.feeSettings.gstRate ?? "",
+        }
+        setFeeSettings(next)
+        setSavedFeeSettings(next)
+      } else if (response.data.success && response.data.data.feeSettings === null) {
+        // Not configured yet - keep empty fields (no defaults).
+        const empty = emptyFeeSettings()
+        setFeeSettings(empty)
+        setSavedFeeSettings(empty)
       }
-    } catch {
-      toast.error("Failed to load fee settings")
+    } catch (error) {
+      debugError('Error fetching fee settings:', error)
+      toast.error('Failed to load fee settings')
     } finally {
       setLoadingFeeSettings(false)
     }
   }
 
-  const fetchDistanceRules = async () => {
-    try {
-      const response = await adminAPI.getCommissionRules()
-      const rows = response?.data?.data?.commissions || []
-      setDistanceRules(Array.isArray(rows) ? rows : [])
-    } catch {
-      setDistanceRules([])
-      toast.error("Failed to load distance slabs")
-    }
-  }
-
-  const fetchZoneSurges = async () => {
-    try {
-      const response = await adminAPI.getZoneSurgeConfigs()
-      const rows = response?.data?.data?.surgeConfigs
-      setZoneSurges(Array.isArray(rows) ? rows : [])
-      setZonePage(1)
-    } catch {
-      setZoneSurges([])
-    }
-  }
-
   useEffect(() => {
-    fetchFeeSettings()
-    fetchDistanceRules()
-    fetchZoneSurges()
+    const fetchZones = async () => {
+      try {
+        setZonesLoading(true)
+        const res = await adminAPI.getZones({ limit: 1000 })
+        const zoneData = res?.data?.data
+        const list = Array.isArray(zoneData?.zones)
+          ? zoneData.zones
+          : Array.isArray(zoneData)
+            ? zoneData
+            : []
+        setZones(list)
+        if (list.length > 0) {
+          setSelectedZoneId(String(list[0]._id || list[0].id))
+        }
+      } catch (error) {
+        debugError("Error fetching zones:", error)
+        toast.error("Failed to load zones")
+        setZones([])
+      } finally {
+        setZonesLoading(false)
+      }
+    }
+    fetchZones()
   }, [])
 
-  const validateSlabPayload = ({ minDistance, maxDistance, basePayout, commissionPerKm }) => {
-    if (!Number.isFinite(minDistance) || minDistance < 0) return "Minimum distance must be 0 or greater"
-    if (maxDistance !== null && (!Number.isFinite(maxDistance) || maxDistance < minDistance)) return "Maximum distance must be greater than or equal to minimum distance"
-    if (!Number.isFinite(basePayout) || basePayout < 0) return "Base payout must be 0 or greater"
-    if (!Number.isFinite(commissionPerKm) || commissionPerKm < 0) return "Per km charge must be 0 or greater"
-    if (minDistance > 0 && commissionPerKm <= 0) return "Non-base slab must have per km charge > 0"
-    return null
-  }
+  useEffect(() => {
+    if (!selectedZoneId) return
+    fetchFeeSettings(selectedZoneId)
+    setEditingRangeIndex(null)
+    setNewRange({ min: '', max: '', fee: '' })
+  }, [selectedZoneId])
 
-  const openEditSlab = (rule) => {
-    setEditingRule(rule)
-    const isUnlimited = rule.maxDistance == null
-    setForm({
-      name: rule.name || "",
-      minDistance: String(rule.minDistance ?? 0),
-      maxDistance: isUnlimited ? "" : String(rule.maxDistance ?? ""),
-      maxDistanceUnlimited: isUnlimited,
-      basePayout: String(rule.basePayout ?? 0),
-      commissionPerKm: String(rule.commissionPerKm ?? 0),
-      status: Boolean(rule.status),
-    })
-    setSlabModalOpen(true)
-  }
-
-  const handleSaveSlab = async () => {
-    const minDistance = toNum(form.minDistance, NaN)
-    const maxDistance = form.maxDistanceUnlimited || form.maxDistance === "" ? null : toNum(form.maxDistance, NaN)
-    const basePayout = toNum(form.basePayout, NaN)
-    const commissionPerKm = toNum(form.commissionPerKm, NaN)
-    const validationError = validateSlabPayload({ minDistance, maxDistance, basePayout, commissionPerKm })
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
-    try {
-      setSavingRule(true)
-      const payload = {
-        name: String(form.name || "").trim() || (maxDistance == null ? `${minDistance}+ km` : `${minDistance}-${maxDistance} km`),
-        minDistance,
-        maxDistance,
-        userDeliveryFee: commissionPerKm,
-        basePayout,
-        commissionPerKm,
-        status: Boolean(form.status),
-      }
-      await adminAPI.updateCommissionRule(editingRule._id, payload)
-      toast.success("Distance slab updated")
-      setSlabModalOpen(false)
-      await fetchDistanceRules()
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to update distance slab")
-    } finally {
-      setSavingRule(false)
-    }
-  }
-
-  const handleAddRange = async () => {
-    const minDistance = toNum(newRange.minDistance, NaN)
-    const maxDistance = newRange.maxDistanceUnlimited || newRange.maxDistance === "" ? null : toNum(newRange.maxDistance, NaN)
-    const basePayout = toNum(newRange.basePayout, NaN)
-    const commissionPerKm = toNum(newRange.commissionPerKm, NaN)
-    const adminCommissionPercent = toNum(newRange.adminCommissionPercent, 0)
-    const validationError = validateSlabPayload({ minDistance, maxDistance, basePayout, commissionPerKm })
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
-    if (adminCommissionPercent < 0 || adminCommissionPercent > 100) {
-      toast.error("Admin commission must be between 0 and 100")
-      return
-    }
-    try {
-      setSavingRule(true)
-      const payload = {
-        name: maxDistance == null ? `${minDistance}+ km` : `${minDistance}-${maxDistance} km`,
-        minDistance,
-        maxDistance,
-        userDeliveryFee: commissionPerKm,
-        basePayout,
-        commissionPerKm,
-        status: true,
-      }
-      const response = await adminAPI.createCommissionRule(payload)
-      const created = response?.data?.data?.commission || response?.data?.commission
-      const newRuleId = created?._id
-      if (newRuleId) {
-        setDistanceRuleAdminCommissionConfig(newRuleId, () => ({
-          distanceRuleId: String(newRuleId),
-          isEnabled: adminCommissionPercent > 0,
-          adminDeliveryCommissionPercent: adminCommissionPercent,
-        }))
-      }
-      setNewRange({
-        minDistance: "0",
-        maxDistance: "",
-        maxDistanceUnlimited: false,
-        basePayout: "0",
-        commissionPerKm: "0",
-        adminCommissionPercent: "0",
-      })
-      await fetchDistanceRules()
-      toast.success("Distance slab added")
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to add distance slab")
-    } finally {
-      setSavingRule(false)
-    }
-  }
-
-  const handleDeleteSlab = async (rule) => {
-    if (!rule?._id) return
-    const ok = window.confirm(`Delete slab "${rule.name}"?`)
-    if (!ok) return
-    try {
-      await adminAPI.deleteCommissionRule(rule._id)
-      setFeeSettings((prev) => ({
-        ...prev,
-        distanceSlabAdminDeliveryCommission: (prev.distanceSlabAdminDeliveryCommission || []).filter(
-          (r) => String(r.distanceRuleId) !== String(rule._id)
-        ),
-      }))
-      await fetchDistanceRules()
-      toast.success("Distance slab deleted")
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to delete slab")
-    }
-  }
-
+  // Save fee settings
   const handleSaveFeeSettings = async () => {
+    if (!selectedZoneId) {
+      toast.error('Please select a zone first')
+      return
+    }
+    if (!isDirty) return
     try {
-      const invalidCommission = (feeSettings.distanceSlabAdminDeliveryCommission || []).find((row) =>
-        (!Number.isFinite(Number(row?.adminDeliveryCommissionPercent)) ||
-          Number(row?.adminDeliveryCommissionPercent) < 0 ||
-          Number(row?.adminDeliveryCommissionPercent) > 100)
-      )
-      if (invalidCommission) {
-        toast.error("Admin delivery commission must be between 0 and 100")
-        return
-      }
-      const incentiveThreshold = Number(feeSettings.deliveryPartnerIncentiveRule?.minOrderAmount || 0)
-      const incentivePercent = Number(feeSettings.deliveryPartnerIncentiveRule?.incentivePercent || 0)
-      if (!Number.isFinite(incentiveThreshold) || incentiveThreshold < 0) {
-        toast.error("Incentive threshold must be 0 or greater")
-        return
-      }
-      if (!Number.isFinite(incentivePercent) || incentivePercent < 0 || incentivePercent > 100) {
-        toast.error("Incentive percentage must be between 0 and 100")
-        return
-      }
-      const platformFee = Number(feeSettings.platformFee)
-      if (feeSettings.platformFee === "" || !Number.isFinite(platformFee) || platformFee < 0) {
-        toast.error("Platform fee must be 0 or greater")
-        return
-      }
-      const gstRate = Number(feeSettings.gstRate)
-      if (feeSettings.gstRate === "" || !Number.isFinite(gstRate) || gstRate < 0 || gstRate > 100) {
-        toast.error("GST rate must be between 0 and 100")
-        return
-      }
-      const codLimit =
-        feeSettings.codLimit === "" || feeSettings.codLimit == null
-          ? null
-          : Number(feeSettings.codLimit)
-      if (codLimit !== null && (!Number.isFinite(codLimit) || codLimit < 0)) {
-        toast.error("COD order limit must be 0 or greater")
-        return
-      }
-
       setSavingFeeSettings(true)
       const response = await adminAPI.createOrUpdateFeeSettings({
-        deliveryFeeComputationMode: "distance_order_value",
-        distanceSlabAdminDeliveryCommission: (feeSettings.distanceSlabAdminDeliveryCommission || []).map((r) => ({
-          distanceRuleId: r.distanceRuleId,
-          adminDeliveryCommissionPercent: Number(r.adminDeliveryCommissionPercent || 0),
-          isEnabled: Number(r.adminDeliveryCommissionPercent || 0) > 0,
-        })),
-        deliveryPartnerIncentiveRule: {
-          isEnabled: feeSettings.deliveryPartnerIncentiveRule?.isEnabled === true,
-          minOrderAmount: Number(feeSettings.deliveryPartnerIncentiveRule?.minOrderAmount || 0),
-          incentivePercent: Number(feeSettings.deliveryPartnerIncentiveRule?.incentivePercent || 0),
-        },
-        platformFee,
-        surgeTitle: String(feeSettings.surgeTitle || "").trim() || "Surge Charge",
-        gstRate,
-        codLimit,
+        zoneId: selectedZoneId,
+        deliveryFee: feeSettings.deliveryFee === "" ? undefined : Number(feeSettings.deliveryFee),
+        deliveryFeeRanges: feeSettings.deliveryFeeRanges,
+        freeDeliveryUpTo: feeSettings.freeDeliveryUpTo === "" ? undefined : Number(feeSettings.freeDeliveryUpTo),
+        platformFee: feeSettings.platformFee === "" ? undefined : Number(feeSettings.platformFee),
+        packagingFee: feeSettings.packagingFee === "" ? undefined : Number(feeSettings.packagingFee),
+        gstRate: feeSettings.gstRate === "" ? undefined : Number(feeSettings.gstRate),
         isActive: true,
       })
-      if (response?.data?.success) {
-        toast.success("Fee settings saved successfully")
-        await fetchFeeSettings()
+
+      if (response.data.success) {
+        toast.success('Fee settings saved successfully')
+        // Avoid an extra API call; update local state from response
+        const saved = response?.data?.data?.feeSettings
+        if (saved) {
+          const next = {
+            deliveryFee: saved.deliveryFee ?? "",
+            deliveryFeeRanges: saved.deliveryFeeRanges ?? [],
+            freeDeliveryUpTo: saved.freeDeliveryUpTo ?? "",
+            platformFee: saved.platformFee ?? "",
+            packagingFee: saved.packagingFee ?? "",
+            gstRate: saved.gstRate ?? "",
+          }
+          setFeeSettings(next)
+          setSavedFeeSettings(next)
+        } else {
+          setSavedFeeSettings(feeSettings)
+        }
       } else {
-        toast.error(response?.data?.message || "Failed to save fee settings")
+        toast.error(response.data.message || 'Failed to save fee settings')
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to save fee settings")
+      debugError('Error saving fee settings:', error)
+      toast.error(error.response?.data?.message || 'Failed to save fee settings')
     } finally {
       setSavingFeeSettings(false)
     }
   }
 
-  const updateZoneSurge = async (zoneId, next) => {
-    try {
-      setSavingZoneId(String(zoneId))
-      await adminAPI.upsertZoneSurgeConfig({
-        zoneId,
-        surgeAmount: Number(next.surgeAmount || 0),
-        surgeTitle: String(next.surgeTitle || "").trim() || "Surge Charge",
-        isEnabled: Boolean(next.isEnabled),
-      })
-      await fetchZoneSurges()
-      toast.success("Zone surge updated")
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to update zone surge")
-    } finally {
-      setSavingZoneId("")
+  // Add new delivery fee range
+  const handleAddRange = () => {
+    if (newRange.min === '' || newRange.max === '' || newRange.fee === '') {
+      toast.error('Please fill all fields (Min, Max, Fee)')
+      return
     }
+
+    const min = Number(newRange.min)
+    const max = Number(newRange.max)
+    const fee = Number(newRange.fee)
+
+    if (min < 0 || max < 0 || fee < 0) {
+      toast.error('All values must be positive numbers')
+      return
+    }
+
+    if (min >= max) {
+      toast.error('Min value must be less than Max value')
+      return
+    }
+
+    // Check for overlapping ranges
+    const ranges = [...feeSettings.deliveryFeeRanges]
+    for (const range of ranges) {
+      if ((min >= range.min && min < range.max) || (max > range.min && max <= range.max) || (min <= range.min && max >= range.max)) {
+        toast.error('This range overlaps with an existing range')
+        return
+      }
+    }
+
+    setFeeSettings({
+      ...feeSettings,
+      deliveryFeeRanges: [...ranges, { min, max, fee }].sort((a, b) => a.min - b.min)
+    })
+    setNewRange({ min: '', max: '', fee: '' })
+    toast.success('Range added successfully')
   }
 
-  const incentiveRule = feeSettings.deliveryPartnerIncentiveRule || {
-    isEnabled: false,
-    minOrderAmount: "0",
-    incentivePercent: "0",
+  // Delete delivery fee range
+  const handleDeleteRange = (index) => {
+    const newRanges = feeSettings.deliveryFeeRanges.filter((_, i) => i !== index)
+    setFeeSettings({
+      ...feeSettings,
+      deliveryFeeRanges: newRanges
+    })
+    toast.success('Range deleted successfully')
+  }
+
+  // Edit delivery fee range
+  const handleEditRange = (index) => {
+    const range = feeSettings.deliveryFeeRanges[index]
+    setNewRange({ min: range.min, max: range.max, fee: range.fee })
+    setEditingRangeIndex(index)
+  }
+
+  // Save edited range
+  const handleSaveEditRange = () => {
+    if (newRange.min === '' || newRange.max === '' || newRange.fee === '') {
+      toast.error('Please fill all fields')
+      return
+    }
+
+    const min = Number(newRange.min)
+    const max = Number(newRange.max)
+    const fee = Number(newRange.fee)
+
+    if (min < 0 || max < 0 || fee < 0) {
+      toast.error('All values must be positive numbers')
+      return
+    }
+
+    if (min >= max) {
+      toast.error('Min value must be less than Max value')
+      return
+    }
+
+    const ranges = [...feeSettings.deliveryFeeRanges]
+    // Remove the range being edited
+    ranges.splice(editingRangeIndex, 1)
+
+    // Check for overlapping ranges
+    for (const range of ranges) {
+      if ((min >= range.min && min < range.max) || (max > range.min && max <= range.max) || (min <= range.min && max >= range.max)) {
+        toast.error('This range overlaps with an existing range')
+        return
+      }
+    }
+
+    // Add updated range
+    ranges.push({ min, max, fee })
+    ranges.sort((a, b) => a.min - b.min)
+
+    setFeeSettings({
+      ...feeSettings,
+      deliveryFeeRanges: ranges
+    })
+    setNewRange({ min: '', max: '', fee: '' })
+    setEditingRangeIndex(null)
+    toast.success('Range updated successfully')
+  }
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setNewRange({ min: '', max: '', fee: '' })
+    setEditingRangeIndex(null)
   }
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
+      {/* Header Section */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-            <DollarSign className="w-6 h-6 text-white" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900">Delivery & Platform Fee</h1>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Delivery & Platform Fee</h1>
+          <div className="flex items-center gap-2">
+            <label htmlFor="fee-zone-select" className="text-sm font-medium text-slate-700 whitespace-nowrap">
+              Zone:
+            </label>
+            <select
+              id="fee-zone-select"
+              value={selectedZoneId}
+              onChange={(e) => setSelectedZoneId(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm min-w-[10rem]"
+              disabled={zonesLoading || zones.length === 0}
+            >
+              {zones.length === 0 ? (
+                <option value="">No zones</option>
+              ) : (
+                zones.map((zone) => (
+                  <option key={zone._id || zone.id} value={zone._id || zone.id}>
+                    {zone.name || zone.zoneName || "Unnamed Zone"}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
         </div>
+        <p className="text-sm text-slate-600">
+          Configure delivery fee, platform fee, and GST settings for the selected zone
+        </p>
       </div>
 
+      {/* Fee Settings Panel */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900">Fee Configuration</h2>
-              <p className="text-sm text-slate-500 mt-1">Set the fees and charges that will be applied to all orders</p>
+              <p className="text-sm text-slate-500 mt-1">
+                Set the fees and charges that will be applied to orders in this zone
+              </p>
             </div>
-            <Button onClick={handleSaveFeeSettings} disabled={savingFeeSettings || loadingFeeSettings} className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2">
-              {savingFeeSettings ? <><Loader2 className="w-4 h-4 animate-spin" />Saving...</> : <><Save className="w-4 h-4" />Save Settings</>}
+            <Button
+              onClick={handleSaveFeeSettings}
+              disabled={savingFeeSettings || loadingFeeSettings || !selectedZoneId || !isDirty}
+              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {savingFeeSettings ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save Settings
+                </>
+              )}
             </Button>
           </div>
 
@@ -408,396 +352,285 @@ export default function FeeSettings() {
             </div>
           ) : (
             <>
-              <h3 className="text-lg font-semibold text-slate-900 mb-1">Delivery Fee by Distance Range</h3>
-              <p className="text-sm text-slate-500 mb-4">Set different delivery fees based on distance ranges (in km)</p>
-
-              <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                <table className="w-full">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Min Distance (km)</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Max Distance (km)</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">User Delivery Fee (₹)</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Admin Commission (%)</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">DB Base Pay (₹)</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedDistanceRules.map((rule) => {
-                      const min = toNum(rule.minDistance, 0)
-                      const max = rule.maxDistance == null ? null : toNum(rule.maxDistance, 0)
-                      const isBase = min <= 0
-                      const adminCfg = getDistanceRuleAdminCommissionConfig(rule._id) || { adminDeliveryCommissionPercent: 0 }
-                      const userDeliveryFeeDisplay = `Rs.${toNum(rule.commissionPerKm, 0)}/km`
-                      return (
-                        <tr key={rule._id} className="border-t border-slate-200">
-                          <td className="px-4 py-3 text-slate-900">{min} km</td>
-                          <td className="px-4 py-3 text-slate-900">{max == null ? "Unlimited" : `${max} km`}</td>
-                          <td className="px-4 py-3 text-emerald-600 font-semibold">{userDeliveryFeeDisplay}</td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              value={adminCfg.adminDeliveryCommissionPercent ?? 0}
-                              onChange={(e) =>
-                                setDistanceRuleAdminCommissionConfig(rule._id, (cfg) => ({
-                                  ...cfg,
-                                  adminDeliveryCommissionPercent: e.target.value,
-                                  isEnabled: Number(e.target.value || 0) > 0,
-                                }))
-                              }
-                              className="w-28 px-2 py-1 border border-slate-300 rounded-md text-sm"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-slate-900">₹{toNum(rule.basePayout, 0)}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => openEditSlab(rule)} className="p-1.5 rounded text-blue-600 hover:bg-blue-50" title="Edit">
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button onClick={() => handleDeleteSlab(rule)} className="p-1.5 rounded text-red-600 hover:bg-red-50" title="Delete">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {sortedDistanceRules.length === 0 && (
-                      <tr>
-                        <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>No distance slabs found.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <h4 className="text-2sm font-semibold text-slate-800 flex items-center gap-2 mb-3">
-                  <Plus className="w-4 h-4 text-emerald-600" />
-                  Add New Range
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+              {/* Delivery Fee Ranges Section */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <label className="block text-sm text-slate-700 mb-1">Min Distance (km)</label>
-                    <input type="number" min="0" step="0.01" value={newRange.minDistance} onChange={(e) => setNewRange((p) => ({ ...p, minDistance: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-700 mb-1">Max Distance (km)</label>
-                    <input type="number" min="0" step="0.01" disabled={newRange.maxDistanceUnlimited} value={newRange.maxDistance} onChange={(e) => setNewRange((p) => ({ ...p, maxDistance: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg disabled:bg-slate-100" />
-                    <label className="inline-flex items-center gap-2 text-xs text-slate-600 mt-1">
-                      <input type="checkbox" checked={newRange.maxDistanceUnlimited} onChange={(e) => setNewRange((p) => ({ ...p, maxDistanceUnlimited: e.target.checked, maxDistance: e.target.checked ? "" : p.maxDistance }))} />
-                      Unlimited
-                    </label>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-700 mb-1">User Delivery Fee (Rs.)</label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={`Rs.${toNum(newRange.commissionPerKm, 0)}/km`}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-700 mb-1">Admin Commission (%)</label>
-                    <input type="number" min="0" max="100" step="0.01" value={newRange.adminCommissionPercent} onChange={(e) => setNewRange((p) => ({ ...p, adminCommissionPercent: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-700 mb-1">DB Base Pay (₹)</label>
-                    <input type="number" min="0" step="0.01" value={newRange.basePayout} onChange={(e) => setNewRange((p) => ({ ...p, basePayout: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-700 mb-1">Per Km Charge (₹)</label>
-                    <input type="number" min="0" step="0.01" value={newRange.commissionPerKm} onChange={(e) => setNewRange((p) => ({ ...p, commissionPerKm: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                  </div>
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <Button onClick={handleAddRange} disabled={savingRule} className="bg-green-600 hover:bg-green-700 text-white">
-                    {savingRule ? "Adding..." : "Add Range"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-8 border-t border-slate-200 pt-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">Zone-wise Surge Amount & Title</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Configure surge pricing amount and customer billing title for each zone</p>
-                  </div>
-                  <div className="relative w-full sm:max-w-xs">
-                    <input
-                      type="text"
-                      placeholder="Search zone..."
-                      value={zoneSearchQuery}
-                      onChange={(e) => setZoneSearchQuery(e.target.value)}
-                      className="pl-3 pr-4 py-2 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-                    />
-                  </div>
-                </div>
-
-                {/* Table Header Row */}
-                <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 mb-2 border border-slate-200">
-                  <div className="col-span-3">Zone Name</div>
-                  <div className="col-span-3">Surge Title (Label)</div>
-                  <div className="col-span-2">Surge Amount (₹)</div>
-                  <div className="col-span-2">Status</div>
-                  <div className="col-span-2 text-right">Action</div>
-                </div>
-
-                <div className="space-y-3">
-                  {paginatedZoneSurges.map((z) => (
-                    <div key={z.zoneId} className="grid grid-cols-12 gap-3 items-center p-3 border border-slate-200 rounded-lg bg-white hover:border-slate-300 transition-all">
-                      <div className="col-span-12 sm:col-span-3 text-sm font-medium text-slate-800">{z.zoneName || "Unnamed Zone"}</div>
-                      <div className="col-span-6 sm:col-span-3">
-                        <label className="block sm:hidden text-[10px] font-semibold text-slate-500 mb-1">Surge Title</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Rain Surge"
-                          value={z.surgeTitle ?? "Surge Charge"}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setZoneSurges((prev) => prev.map((r) => r.zoneId === z.zoneId ? { ...r, surgeTitle: value } : r))
-                          }}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-6 sm:col-span-2">
-                        <label className="block sm:hidden text-[10px] font-semibold text-slate-500 mb-1">Surge Amount (₹)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={z.surgeAmount ?? 0}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setZoneSurges((prev) => prev.map((r) => r.zoneId === z.zoneId ? { ...r, surgeAmount: value } : r))
-                          }}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs font-semibold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-3 sm:col-span-2">
-                        <button
-                          onClick={() => updateZoneSurge(z.zoneId, { ...z, isEnabled: !z.isEnabled })}
-                          className={`px-3 py-1.5 rounded-md text-xs font-semibold ${z.isEnabled ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"} transition-colors`}
-                        >
-                          {z.isEnabled ? "Enabled" : "Disabled"}
-                        </button>
-                      </div>
-                      <div className="col-span-3 sm:col-span-2 text-right">
-                        <button
-                          onClick={() => updateZoneSurge(z.zoneId, z)}
-                          disabled={savingZoneId === String(z.zoneId)}
-                          className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-60 transition-colors shadow-sm"
-                        >
-                          {savingZoneId === String(z.zoneId) ? "Saving..." : "Save"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <p className="text-xs text-slate-500">
-                    Showing {(filteredZoneSurges.length === 0) ? 0 : ((zonePage - 1) * zonePageSize + 1)}-
-                    {Math.min(zonePage * zonePageSize, filteredZoneSurges.length)} of {filteredZoneSurges.length}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setZonePage((prev) => Math.max(1, prev - 1))}
-                      disabled={zonePage <= 1}
-                      className="px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm text-slate-700">
-                      Page {zonePage} / {zoneTotalPages}
-                    </span>
-                    <button
-                      onClick={() => setZonePage((prev) => Math.min(zoneTotalPages, prev + 1))}
-                      disabled={zonePage >= zoneTotalPages}
-                      className="px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">Delivery Partner Incentive</h3>
-                    <p className="text-sm text-slate-600 mt-1">
-                      If subtotal reaches the threshold, the rider gets an extra payout based on the order subtotal.
+                    <h3 className="text-lg font-semibold text-slate-900">Delivery Fee by Distance Range (km)</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Set delivery fees based on distance slabs
                     </p>
                   </div>
-                  <label className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(incentiveRule.isEnabled)}
-                      onChange={(e) =>
-                        setFeeSettings((prev) => ({
-                          ...prev,
-                          deliveryPartnerIncentiveRule: {
-                            ...(prev.deliveryPartnerIncentiveRule || incentiveRule),
-                            isEnabled: e.target.checked,
-                          },
-                        }))
-                      }
-                    />
-                    Enable Incentive
-                  </label>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-700">Order Amount Threshold (₹)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={incentiveRule.minOrderAmount}
-                      onChange={(e) =>
-                        setFeeSettings((prev) => ({
-                          ...prev,
-                          deliveryPartnerIncentiveRule: {
-                            ...(prev.deliveryPartnerIncentiveRule || incentiveRule),
-                            minOrderAmount: e.target.value,
-                          },
-                        }))
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all bg-white"
-                      placeholder="500"
-                    />
+                {/* Ranges Table */}
+                {feeSettings.deliveryFeeRanges.length > 0 && (
+                  <div className="mb-4 overflow-x-auto">
+                    <table className="w-full border border-slate-200 rounded-lg">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700 border-b border-slate-200">Min (km)</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700 border-b border-slate-200">Max (km)</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700 border-b border-slate-200">Delivery Fee (₹)</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 border-b border-slate-200">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feeSettings.deliveryFeeRanges
+                          .map((range, originalIndex) => ({ range, originalIndex }))
+                          .sort((a, b) => a.range.min - b.range.min)
+                          .map(({ range, originalIndex }) => {
+                            const isEditing = editingRangeIndex === originalIndex;
+                            return (
+                              <tr key={originalIndex} className={`${isEditing ? 'bg-blue-50' : 'hover:bg-slate-50'} transition-colors`}>
+                                <td className="px-4 py-3 text-sm text-slate-900 border-b border-slate-100">
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      value={newRange.min}
+                                      onChange={(e) => setNewRange({ ...newRange, min: e.target.value })}
+                                      className="w-24 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                  ) : (
+                                    <>{range.min} km</>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-900 border-b border-slate-100">
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      value={newRange.max}
+                                      onChange={(e) => setNewRange({ ...newRange, max: e.target.value })}
+                                      className="w-24 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                  ) : (
+                                    <>{range.max} km</>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-sm font-medium text-green-600 border-b border-slate-100">
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-slate-400">₹</span>
+                                      <input
+                                        type="number"
+                                        value={newRange.fee}
+                                        onChange={(e) => setNewRange({ ...newRange, fee: e.target.value })}
+                                        className="w-24 px-2 py-1 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-green-600 font-medium"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <>₹{range.fee}</>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-center border-b border-slate-100">
+                                  <div className="flex items-center justify-center gap-2">
+                                    {isEditing ? (
+                                      <>
+                                        <button
+                                          onClick={handleSaveEditRange}
+                                          className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                          title="Save"
+                                        >
+                                          <Check className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={handleCancelEdit}
+                                          className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                          title="Cancel"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleEditRange(originalIndex)}
+                                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                          title="Edit"
+                                        >
+                                          <Edit className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteRange(originalIndex)}
+                                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                          title="Delete"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-700">Incentive Percentage (%)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={incentiveRule.incentivePercent}
-                      onChange={(e) =>
-                        setFeeSettings((prev) => ({
-                          ...prev,
-                          deliveryPartnerIncentiveRule: {
-                            ...(prev.deliveryPartnerIncentiveRule || incentiveRule),
-                            incentivePercent: e.target.value,
-                          },
-                        }))
-                      }
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all bg-white"
-                      placeholder="10"
-                    />
-                  </div>
-                </div>
+                )}
 
+                {/* Add New Range Form - Only show when NOT editing */}
+                {editingRangeIndex === null && (
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Plus className="w-4 h-4 text-green-600" />
+                      <h4 className="text-sm font-semibold text-slate-700">Add Distance Range</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Min Distance (km)</label>
+                        <input
+                          type="number"
+                          value={newRange.min}
+                          onChange={(e) => setNewRange({ ...newRange, min: e.target.value })}
+                          min="0"
+                          step="1"
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Max Distance (km)</label>
+                        <input
+                          type="number"
+                          value={newRange.max}
+                          onChange={(e) => setNewRange({ ...newRange, max: e.target.value })}
+                          min="0"
+                          step="1"
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                          placeholder="5"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Delivery Fee (₹)</label>
+                        <input
+                          type="number"
+                          value={newRange.fee}
+                          onChange={(e) => setNewRange({ ...newRange, fee: e.target.value })}
+                          min="0"
+                          step="1"
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                          placeholder="50"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          onClick={handleAddRange}
+                          className="bg-green-600 hover:bg-green-700 text-white text-sm w-full flex items-center justify-center gap-2"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Range
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2 italic">
+                      Example: Orders between 0 km and 5 km will have ₹50 delivery fee.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-200 pt-6 mt-6">
+
+                {/* Free Delivery Up To */}
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-700">Platform Fee (₹)</label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Free Delivery Up To (₹)
+                  </label>
                   <input
                     type="number"
-                    value={feeSettings.platformFee}
-                    onChange={(e) => setFeeSettings((s) => ({ ...s, platformFee: e.target.value }))}
+                    value={feeSettings.freeDeliveryUpTo}
+                    onChange={(e) => setFeeSettings({ ...feeSettings, freeDeliveryUpTo: e.target.value })}
                     min="0"
                     step="1"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                    placeholder="0"
+                    placeholder="500"
                   />
+                  <p className="text-xs text-slate-500">
+                    Orders at or above this amount get free delivery
+                  </p>
                 </div>
+
+                {/* Default Delivery Fee (Fallback) */}
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-700">Surge Amount Title (Billing Label)</label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Default Delivery Fee (₹) <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
                   <input
-                    type="text"
-                    value={feeSettings.surgeTitle || ""}
-                    onChange={(e) => setFeeSettings((s) => ({ ...s, surgeTitle: e.target.value }))}
+                    type="number"
+                    value={feeSettings.deliveryFee}
+                    onChange={(e) => setFeeSettings({ ...feeSettings, deliveryFee: e.target.value })}
+                    min="0"
+                    step="1"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                    placeholder="e.g. Rain Surge / Peak Hours Charge"
+                    placeholder="Leave empty to disable fallback"
                   />
-                  <p className="text-xs text-slate-500">Custom title shown to customers in bill breakdown</p>
+                  <p className="text-xs text-slate-500">
+                    Used only when no delivery fee range matches and free delivery threshold is not met
+                  </p>
                 </div>
+
+                {/* Platform Fee */}
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-700">GST Rate (%)</label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Platform Fee (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={feeSettings.platformFee}
+                    onChange={(e) => setFeeSettings({ ...feeSettings, platformFee: e.target.value })}
+                    min="0"
+                    step="1"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                    placeholder="5"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Platform service fee per order
+                  </p>
+                </div>
+                {/* Packaging Fee */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Packaging Charges Fee (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={feeSettings.packagingFee}
+                    onChange={(e) => setFeeSettings({ ...feeSettings, packagingFee: e.target.value })}
+                    min="0"
+                    step="1"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                    placeholder="10"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Packaging charges fee per order
+                  </p>
+                </div>
+
+                {/* GST Rate */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    GST Rate (%)
+                  </label>
                   <input
                     type="number"
                     value={feeSettings.gstRate}
-                    onChange={(e) => setFeeSettings((s) => ({ ...s, gstRate: e.target.value }))}
+                    onChange={(e) => setFeeSettings({ ...feeSettings, gstRate: e.target.value })}
                     min="0"
                     max="100"
                     step="0.1"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
                     placeholder="5"
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-700">COD order limit (₹)</label>
-                  <input
-                    type="number"
-                    value={feeSettings.codLimit}
-                    onChange={(e) => setFeeSettings((s) => ({ ...s, codLimit: e.target.value }))}
-                    min="0"
-                    step="1"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                    placeholder="Leave empty for no limit"
-                  />
+                  <p className="text-xs text-slate-500">
+                    GST percentage applied on order subtotal
+                  </p>
                 </div>
               </div>
-            </>
+          </>
           )}
         </div>
       </div>
-
-      {slabModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-slate-200 p-5">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Edit Distance Slab</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Rule Name</label>
-                <input className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Minimum Distance (km)</label>
-                <input type="number" min="0" step="0.01" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={form.minDistance} onChange={(e) => setForm((f) => ({ ...f, minDistance: e.target.value }))} />
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-semibold text-slate-700">Maximum Distance (km)</label>
-                  <label className="inline-flex items-center gap-2 text-xs text-slate-700">
-                    <input type="checkbox" checked={form.maxDistanceUnlimited} onChange={(e) => setForm((f) => ({ ...f, maxDistanceUnlimited: e.target.checked, maxDistance: e.target.checked ? "" : f.maxDistance }))} />
-                    Unlimited
-                  </label>
-                </div>
-                <input type="number" min="0" step="0.01" disabled={form.maxDistanceUnlimited} className="w-full px-3 py-2 border border-slate-300 rounded-lg disabled:bg-slate-100" value={form.maxDistance} onChange={(e) => setForm((f) => ({ ...f, maxDistance: e.target.value, maxDistanceUnlimited: false }))} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">DB Base Pay (Rs.)</label>
-                <input type="number" min="0" step="0.01" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={form.basePayout} onChange={(e) => setForm((f) => ({ ...f, basePayout: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Per Km Charge (₹)</label>
-                <input type="number" min="0" step="0.01" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={form.commissionPerKm} onChange={(e) => setForm((f) => ({ ...f, commissionPerKm: e.target.value }))} />
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" checked={Boolean(form.status)} onChange={(e) => setForm((f) => ({ ...f, status: e.target.checked }))} />
-                Active
-              </label>
-            </div>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setSlabModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveSlab} disabled={savingRule} className="bg-blue-600 hover:bg-blue-700 text-white">
-                {savingRule ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update Slab"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

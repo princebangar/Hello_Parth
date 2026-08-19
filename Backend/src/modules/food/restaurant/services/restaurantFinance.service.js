@@ -3,7 +3,6 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodTransaction } from '../../orders/models/foodTransaction.model.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
 import { FoodRestaurantWithdrawal } from '../models/foodRestaurantWithdrawal.model.js';
-import { getRestaurantWithdrawalSettings } from '../../admin/services/admin.service.js';
 
 function toTwoDigitYearString(dateObj) {
     const y = String(dateObj.getFullYear());
@@ -86,20 +85,25 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         status: { $in: ['captured', 'authorized'] },
         createdAt: { $gte: nowWindow.start, $lte: nowWindow.end }
     })
-        .populate('orderId', 'orderId createdAt items pricing deliveryState orderStatus')
+        .populate({ path: 'orderId', select: 'order_id createdAt items pricing deliveryState orderStatus' })
         .sort({ createdAt: -1 })
         .lean();
 
-    const currentCycleOrders = currentTransactions.map((tx) => {
+    const currentCycleOrders = currentTransactions
+        .filter((tx) => tx.orderId && ['delivered', 'completed'].includes(tx.orderId.orderStatus))
+        .map((tx) => {
         const order = tx.orderId || {};
         const items = Array.isArray(order.items) ? order.items : [];
         const foodNames = items.map((it) => it?.name).filter(Boolean).join(', ');
         const orderTotalExclTax = Math.max(
             0,
-            Number(order?.pricing?.total ?? 0) - Number(order?.pricing?.tax ?? 0) || 0
+            Number(
+              order?.pricing?.baseSubtotal ??
+                (Number(order?.pricing?.subtotal ?? 0) - Number(order?.pricing?.markupTotal ?? 0))
+            ) || 0
         );
         return {
-            orderId: order?.orderId || tx.orderReadableId,
+            orderId: order?.order_id || tx.orderReadableId,
             createdAt: tx.createdAt,
             items,
             foodNames,
@@ -123,39 +127,40 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         restaurantId: rid,
         status: { $in: ['captured', 'authorized'] },
         'settlement.isRestaurantSettled': { $ne: true }
-    }).select('amounts.restaurantShare').lean();
+    }).populate({ path: 'orderId', select: 'orderStatus' }).lean();
 
-    const globalEstimatedPayout = allUnsettledTransactions.reduce(
-        (sum, tx) => sum + (Number(tx.amounts?.restaurantShare) || 0),
-        0
-    );
+    const globalEstimatedPayout = allUnsettledTransactions
+        .filter((tx) => tx.orderId && ['delivered', 'completed'].includes(tx.orderId.orderStatus))
+        .reduce(
+            (sum, tx) => sum + (Number(tx.amounts?.restaurantShare) || 0),
+            0
+        );
 
-    // Block only pending withdrawals from available balance.
-    // Approved/rejected requests are processed records and should not keep locking payout.
-    const pendingWithdrawalsAgg = await FoodRestaurantWithdrawal.aggregate([
+    // Deduct all effective withdrawals from available balance.
+    // Both pending and approved reduce withdrawable amount; rejected should not.
+    const effectiveWithdrawalsAgg = await FoodRestaurantWithdrawal.aggregate([
         {
             $match: {
                 restaurantId: rid,
                 $expr: {
-                    $eq: [{ $toLower: { $trim: { input: '$status' } } }, 'pending']
+                    $in: [
+                        { $toLower: { $trim: { input: '$status' } } },
+                        ['pending', 'approved']
+                    ]
                 }
             }
         },
         { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
-    const totalPendingWithdrawals = Number(pendingWithdrawalsAgg?.[0]?.total || 0);
-    const availableBalance = Math.max(0, globalEstimatedPayout - totalPendingWithdrawals);
-    const withdrawalSettings = await getRestaurantWithdrawalSettings();
-    const minimumWithdrawalAmount = Number(withdrawalSettings?.minimumWithdrawalAmount) || 0;
+    const totalEffectiveWithdrawals = Number(effectiveWithdrawalsAgg?.[0]?.total || 0);
+    const availableBalance = Math.max(0, globalEstimatedPayout - totalEffectiveWithdrawals);
 
     const currentCycle = {
         start: { ...nowWindow.startMeta },
         end: { ...nowWindow.endMeta },
         totalEarnings: currentCycleEstimatedPayout, // We still show current cycle earnings label
-        totalWithdrawn: totalPendingWithdrawals,
-        estimatedPayout: availableBalance,
-        netAvailable: availableBalance,
-        minimumWithdrawalAmount,
+        totalWithdrawn: totalEffectiveWithdrawals,
+        estimatedPayout: availableBalance, // This is what UI shows as "Estimated Payout" (Available Balance)
         totalOrders: currentCycleOrders.length,
         payoutDate: null,
         orders: currentCycleOrders
@@ -180,11 +185,13 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             status: { $in: ['captured', 'authorized'] },
             createdAt: { $gte: startDate, $lte: endDate }
         })
-            .populate('orderId', 'orderId createdAt items pricing deliveryState orderStatus')
+            .populate({ path: 'orderId', select: 'order_id createdAt items pricing deliveryState orderStatus payment' })
             .sort({ createdAt: -1 })
             .lean();
 
-        const pastCycleOrders = pastTransactions.map((tx) => {
+        const pastCycleOrders = pastTransactions
+            .filter((tx) => tx.orderId && ['delivered', 'completed'].includes(tx.orderId.orderStatus))
+            .map((tx) => {
             const order = tx.orderId || {};
             const items = Array.isArray(order.items) ? order.items : [];
             const foodNames = items.map((it) => it?.name).filter(Boolean).join(', ');
@@ -194,7 +201,7 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             );
 
             return {
-                orderId: order?.orderId || tx.orderReadableId,
+                orderId: order?.order_id || tx.orderReadableId,
                 createdAt: tx.createdAt,
                 items,
                 foodNames,
@@ -225,4 +232,5 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         pastCycles: pastCyclesResult
     };
 }
+
 

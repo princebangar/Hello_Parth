@@ -1,735 +1,503 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, ChevronDown, Search, Mic, Bell, CheckCircle2, Tag, AlertCircle, BellOff, X, ShoppingBag } from 'lucide-react';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from "@food/components/ui/popover";
-import { Badge } from "@food/components/ui/badge";
-import foodIcon from "@food/assets/category-icons/food.png";
-import quickIcon from "@food/assets/category-icons/quick.png";
-import { useCart } from "@food/context/CartContext";
+import { MapPin, ChevronDown, Search, Mic, Wallet, Utensils, Soup, Bell } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from "@food/components/ui/avatar";
+import { useProfile } from "@food/context/ProfileContext";
 import useNotificationInbox from "@food/hooks/useNotificationInbox";
-import { getVerticalTheme } from "@/shared/constants/superAppVerticalTheme";
-import { syncThemeForPath } from "@/shared/utils/theme.js";
-import { calculateDistanceInKm, extractCoords } from "@food/utils/geoDistance";
+import VoiceSearchOverlay from "@food/components/user/VoiceSearchOverlay";
+import { useVoiceSearch } from "@food/hooks/useVoiceSearch";
+import { isModuleAuthenticated } from "@food/utils/auth";
+import SuperAppHomeHeader from "@/shared/components/SuperAppHomeHeader";
 
-const ICON_MAP = {
-  CheckCircle2,
-  Tag,
-  AlertCircle
+// Images for banner - exactly as in FestBanner.jsx
+const bannerImages = {
+  nonVeg: [
+    "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1544025162-d76694265947?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500&h=500&fit=crop",
+  ],
+  veg: [
+    "https://images.unsplash.com/photo-1585238341267-1cfec2046a55?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&h=500&fit=crop",
+    "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&h=500&fit=crop",
+  ]
 };
 
-const LOCATION_STORAGE_KEY = 'eqosy:lastLocation';
-const LOCATION_UPDATED_EVENT = 'eqosy:location-updated';
-
-const FOOD_PLACEHOLDERS = [
-  'Search "burger"',
-  'Search "biryani"',
-  'Search "pizza"',
-  'Search "chinese"',
-  'Search "momos"',
-];
-
-const TAXI_PLACEHOLDERS = [
-  'Search "airport cab"',
-  'Search "shared taxi"',
-  'Search "bike taxi"',
-  'Search "rental ride"',
-  'Search "outstation"',
-];
-
-function readHelloParthLocation() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(LOCATION_STORAGE_KEY) || '{}');
-    const address = String(saved?.address || '').trim();
-    if (!address) return null;
-    const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
-    return {
-      formattedAddress: address,
-      area: parts[0] || address,
-      city: parts.length > 2 ? parts[parts.length - 2] : parts[1] || '',
-      state: parts.length > 1 ? parts[parts.length - 1] : '',
-      address,
-    };
-  } catch {
-    return null;
-  }
+/** Session-level preload so rotation never re-hits the network for the same URLs */
+const preloadedBannerPools = new Set();
+function preloadBannerPool(pool, poolKey) {
+  if (!pool?.length || preloadedBannerPools.has(poolKey)) return;
+  preloadedBannerPools.add(poolKey);
+  pool.forEach((src) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+  });
 }
-
-const FALLBACK_BANNER_IMAGES = [
-  "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=900&h=500&fit=crop",
-  "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=900&h=500&fit=crop",
-  "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=900&h=500&fit=crop",
-];
-
-function BurgerIcon({ isActive }) {
-  if (isActive) {
-    return (
-      <svg className="w-8 h-8 filter drop-shadow-sm" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 30C12 18 20 12 32 12C44 12 52 18 52 30H12Z" fill="#F4A261" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M10 32C10 32 14 36 21 36C28 36 30 32 35 32C40 32 43 36 48 36C53 36 54 32 54 32" fill="#2A9D8F" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M10 36L14 40L50 40L54 36" fill="#E9C46A" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <rect x="14" y="40" width="36" height="6" rx="3" fill="#8B5E3C" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M16 46C16 52 22 54 32 54C42 54 48 52 48 46H16Z" fill="#F4A261" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    );
-  }
-  return (
-    <svg className="w-8 h-8 opacity-65 text-white" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 30C12 18 20 12 32 12C44 12 52 18 52 30H12Z" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M10 32C10 32 14 36 21 36C28 36 30 32 35 32C40 32 43 36 48 36C53 36 54 32 54 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M10 36L14 40L50 40L54 36" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <rect x="14" y="40" width="36" height="6" rx="3" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M16 46C16 52 22 54 32 54C42 54 48 52 48 46H16Z" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-function TaxiIcon({ isActive }) {
-  if (isActive) {
-    return (
-      <svg className="w-8 h-8 filter drop-shadow-sm" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="22" y="10" width="20" height="7" rx="2" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
-        <rect x="26" y="11.5" width="12" height="4" rx="1" fill="#FBBF24" />
-        <path d="M14 24H50L46 17H18L14 24Z" fill="#2563EB" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
-        <path d="M12 24H52C54.2 24 56 25.8 56 28V38C56 40.2 54.2 42 52 42H12C9.8 42 8 40.2 8 38V28C8 25.8 9.8 24 12 24Z" fill="#3B82F6" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
-        <path d="M18 28H46" stroke="#93C5FD" strokeWidth="2" strokeLinecap="round" />
-        <rect x="20" y="30" width="10" height="6" rx="1" fill="#DBEAFE" stroke="#0F172A" strokeWidth="1.5" />
-        <rect x="34" y="30" width="10" height="6" rx="1" fill="#DBEAFE" stroke="#0F172A" strokeWidth="1.5" />
-        <circle cx="18" cy="42" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
-        <circle cx="46" cy="42" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
-        <circle cx="18" cy="42" r="2" fill="#E2E8F0" />
-        <circle cx="46" cy="42" r="2" fill="#E2E8F0" />
-        <rect x="28" y="44" width="8" height="3" rx="1" fill="#64748B" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="w-8 h-8 opacity-70 text-white" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="22" y="10" width="20" height="7" rx="2" stroke="currentColor" strokeWidth="2.5" />
-      <path d="M14 24H50L46 17H18L14 24Z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-      <path d="M12 24H52C54.2 24 56 25.8 56 28V38C56 40.2 54.2 42 52 42H12C9.8 42 8 40.2 8 38V28C8 25.8 9.8 24 12 24Z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-      <circle cx="18" cy="42" r="5" stroke="currentColor" strokeWidth="2.5" />
-      <circle cx="46" cy="42" r="5" stroke="currentColor" strokeWidth="2.5" />
-    </svg>
-  );
-}
-
-const renderVerticalIcon = (id, isActive) => {
-  if (id === 'food') return <BurgerIcon isActive={isActive} />;
-  if (id === 'taxi') return <TaxiIcon isActive={isActive} />;
-  return null;
-};
-
-const foodTheme = getVerticalTheme('food');
-const taxiTheme = getVerticalTheme('taxi');
-
-const VERTICALS = [
-  {
-    id: 'food',
-    name: 'Hello Parth Food',
-    path: '/food/user',
-    icon: foodIcon,
-    themeBg: foodTheme.themeBg,
-    activeTabBg: foodTheme.activeTabBg,
-    inactiveTabBg: foodTheme.inactiveTabBg,
-  },
-  {
-    id: 'taxi',
-    name: 'Hello Parth Taxi',
-    path: '/taxi/user',
-    icon: quickIcon,
-    themeBg: taxiTheme.themeBg,
-    activeTabBg: taxiTheme.activeTabBg,
-    inactiveTabBg: taxiTheme.inactiveTabBg,
-  },
-];
 
 export default function HomeHeader({
-  activeVertical: activeVerticalProp,
-  onVerticalChange,
-  location: locationProp,
-  savedAddressText,
-  locationTitle,
-  locationSubtitle,
-  handleLocationClick,
+  location,
   handleSearchFocus,
-  placeholderIndex: placeholderIndexProp,
-  placeholders: placeholdersProp,
+  placeholderIndex,
+  placeholders,
+  vegMode = false,
   handleVegModeChange,
-  isVegMode,
   vegModeToggleRef,
-  isCategoryStuck = false,
-  heroBannerImages = [],
+  handleVoiceSearchClick,
+  isTabActive = true,
+  // Banner Props integrated
+  videoUrl = "",
+  hideFoodImages = false,
+  showBanner = false,
+  activeVertical = "food",
   hideSearchRow = false,
 }) {
+  if (activeVertical === "taxi" || hideSearchRow) {
+    return <SuperAppHomeHeader activeVertical="taxi" location={location} />;
+  }
   const navigate = useNavigate();
-  const reactLocation = useLocation();
-  const locationPath = reactLocation.pathname;
-  const { itemCount } = useCart();
-
-  const isControlled = typeof onVerticalChange === 'function';
-
-  let routeVertical = 'food';
-  if (locationPath.startsWith('/taxi/')) {
-    routeVertical = 'taxi';
-  } else if (['food', 'taxi'].includes(activeVerticalProp)) {
-    routeVertical = activeVerticalProp;
+  const routerLocation = useLocation();
+  const { userProfile } = useProfile();
+  const [isVoiceOverlayOpen, setIsVoiceOverlayOpen] = useState(false);
+  const voiceSearch = useVoiceSearch((transcript) => {
+    navigate(`/food/user/search?q=${encodeURIComponent(transcript)}&mode=delivery`);
+    setIsVoiceOverlayOpen(false);
+  });
+  const { unreadCount: broadcastUnread } = useNotificationInbox("user", {
+    pollMs: 60000,
+    enabled: isTabActive,
+  });
+  const readUnreadFromStorage = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('food_user_notifications') || '[]')
+      if (!Array.isArray(saved)) return 0
+      return saved.filter((n) => {
+        if (n?.read) return false
+        const id = String(n?.id || '')
+        const title = String(n?.title || '')
+        const message = String(n?.message || '')
+        if (id === '1' || id === '2') return false
+        if (title === 'Order Confirmed' && message.includes('#12345')) return false
+        if (title === 'Special Offer' && message.includes('50% off')) return false
+        return true
+      }).length
+    } catch { return 0 }
   }
 
-  const activeVertical = isControlled
-    ? (['food', 'taxi'].includes(activeVerticalProp) ? activeVerticalProp : 'food')
-    : (activeVerticalProp ?? routeVertical);
-  const isFood = activeVertical === 'food';
-  const isTaxi = activeVertical === 'taxi';
-
-  const handleVerticalTabClick = useCallback((verticalId) => {
-    if (isControlled) {
-      onVerticalChange(verticalId);
-      return;
-    }
-    if (verticalId === 'food') {
-      navigate('/food/user');
-      return;
-    }
-    if (verticalId === 'taxi') {
-      syncThemeForPath('/taxi/user');
-      navigate('/taxi/user');
-      return;
-    }
-    navigate('/food/user');
-  }, [isControlled, onVerticalChange, navigate]);
-
-  const currentVertical = VERTICALS.find((v) => v.id === activeVertical) || VERTICALS[0];
-  const verticalTheme = getVerticalTheme(activeVertical);
-  const bannerImages = heroBannerImages.length > 0 ? heroBannerImages : FALLBACK_BANNER_IMAGES;
-
-  const [storedLocation, setStoredLocation] = useState(() => readHelloParthLocation());
-  const [internalPlaceholderIndex, setInternalPlaceholderIndex] = useState(0);
+  const [localUnread, setLocalUnread] = useState(readUnreadFromStorage);
 
   useEffect(() => {
-    const syncLocation = () => setStoredLocation(readHelloParthLocation());
-    syncLocation();
-    window.addEventListener('storage', syncLocation);
-    window.addEventListener(LOCATION_UPDATED_EVENT, syncLocation);
+    const handler = (e) => setLocalUnread(e?.detail?.count ?? readUnreadFromStorage())
+    window.addEventListener('notificationsUpdated', handler)
+    window.addEventListener('focus', handler)
     return () => {
-      window.removeEventListener('storage', syncLocation);
-      window.removeEventListener(LOCATION_UPDATED_EVENT, syncLocation);
-    };
+      window.removeEventListener('notificationsUpdated', handler)
+      window.removeEventListener('focus', handler)
+    }
   }, []);
 
-  const location = locationProp ?? storedLocation;
+  useEffect(() => {
+    setLocalUnread(readUnreadFromStorage())
+  }, [routerLocation.pathname]);
 
-  const selectedAddressDistanceKm = useMemo(() => {
-    const deliveryAddressMode = localStorage.getItem("deliveryAddressMode") || "saved";
-    if (deliveryAddressMode === "current") return 0;
+  const unreadCount = broadcastUnread + localUnread;
 
-    let liveCoords = null;
-    try {
-      const raw = localStorage.getItem("userLocation");
-      if (raw) {
-        liveCoords = extractCoords(JSON.parse(raw));
-      }
-    } catch {
-      // ignore
-    }
+  // FestBanner Logic
+  const [imgIndex, setImgIndex] = useState(0);
+  const currentPool = vegMode ? bannerImages.veg : bannerImages.nonVeg;
+  const poolKey = vegMode ? "veg" : "nonVeg";
 
-    const addressCoords = extractCoords(location);
-    if (!liveCoords || !addressCoords) return 0;
-
-    return calculateDistanceInKm(
-      liveCoords.latitude,
-      liveCoords.longitude,
-      addressCoords.latitude,
-      addressCoords.longitude
-    );
-  }, [location]);
-
-  const resolvedPlaceholders = useMemo(() => {
-    if (placeholdersProp?.length) return placeholdersProp;
-    if (isTaxi) return TAXI_PLACEHOLDERS;
-    return FOOD_PLACEHOLDERS;
-  }, [placeholdersProp, isTaxi]);
-
-  const placeholderIndex = placeholderIndexProp ?? internalPlaceholderIndex;
+  // Load every banner URL once per mode — animation keeps running from cache
+  useEffect(() => {
+    preloadBannerPool(currentPool, poolKey);
+  }, [currentPool, poolKey]);
 
   useEffect(() => {
-    if (placeholderIndexProp !== undefined && placeholderIndexProp !== null) return undefined;
+    if (!showBanner || !isTabActive) return undefined;
     const timer = setInterval(() => {
-      setInternalPlaceholderIndex((prev) => (prev + 1) % resolvedPlaceholders.length);
-    }, 3500);
-    return () => clearInterval(timer);
-  }, [placeholderIndexProp, resolvedPlaceholders.length]);
-
-  const onLocationClick = useCallback(() => {
-    if (handleLocationClick) {
-      handleLocationClick();
-      return;
-    }
-    if (isTaxi) {
-      navigate('/taxi/user/ride/select-location');
-    }
-  }, [handleLocationClick, isTaxi, navigate]);
-
-  const onSearchFocus = useCallback(() => {
-    if (handleSearchFocus) {
-      handleSearchFocus();
-      return;
-    }
-    if (isTaxi) {
-      navigate('/taxi/user/ride/select-location');
-      return;
-    }
-    if (isFood) {
-      navigate('/food/user/search');
-    }
-  }, [handleSearchFocus, isTaxi, isFood, navigate]);
-
-  const walletPath = isTaxi ? '/taxi/user/wallet' : '/food/user/wallet';
-
-  const displayTitle = useMemo(() => {
-    if (locationTitle?.trim()) return locationTitle.trim();
-    if (savedAddressText?.trim()) {
-      const firstPart = savedAddressText.split(',')[0]?.trim();
-      return firstPart || savedAddressText;
-    }
-    if (location?.area && location?.city) return `${location.area}, ${location.city}`;
-    return location?.area || location?.city || location?.formattedAddress?.split(',')[0] || "Select Location";
-  }, [locationTitle, savedAddressText, location]);
-
-  const displaySubtitle = useMemo(() => {
-    if (locationSubtitle?.trim()) return locationSubtitle.trim();
-    const parts = [location?.state, location?.zipCode || location?.postalCode].filter(Boolean);
-    return parts.join(", ");
-  }, [locationSubtitle, location]);
-
-  const [notifications, setNotifications] = useState(() => {
-    if (typeof window === 'undefined') return [];
-    const saved = localStorage.getItem('food_user_notifications');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const {
-    items: broadcastNotifications,
-    unreadCount: broadcastUnreadCount,
-    dismiss: dismissBroadcastNotification,
-  } = useNotificationInbox(isFood ? "user" : null, { limit: 20 });
-
-  useEffect(() => {
-    if (!isFood) return undefined;
-    const syncNotifications = () => {
-      const saved = localStorage.getItem('food_user_notifications');
-      setNotifications(saved ? JSON.parse(saved) : []);
-    };
-    window.addEventListener('notificationsUpdated', syncNotifications);
-    return () => window.removeEventListener('notificationsUpdated', syncNotifications);
-  }, [isFood]);
-
-  const mergedNotifications = useMemo(() => {
-    const localItems = Array.isArray(notifications)
-      ? notifications.map((item) => ({ ...item, source: "local" }))
-      : [];
-    const broadcastItems = (broadcastNotifications || []).map((item) => ({
-      ...item,
-      source: "broadcast",
-      time: item.createdAt
-        ? new Date(item.createdAt).toLocaleString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          })
-        : "Just now",
-      type: "broadcast",
-      icon: "Bell",
-      iconColor: "text-blue-600",
-    }));
-
-    return [...broadcastItems, ...localItems].sort(
-      (a, b) =>
-        new Date(b.createdAt || b.timestamp || 0).getTime() -
-        new Date(a.createdAt || a.timestamp || 0).getTime()
-    );
-  }, [broadcastNotifications, notifications]);
-
-  const unreadCount = notifications.filter(n => !n.read).length + broadcastUnreadCount;
-
-  const handleDeleteNotification = (id, source = "local") => {
-    if (source === "broadcast") {
-      dismissBroadcastNotification(id);
-      return;
-    }
-    setNotifications((prev) => {
-      const next = prev.filter((notification) => notification.id !== id);
-      localStorage.setItem('food_user_notifications', JSON.stringify(next));
-      window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { count: next.filter((n) => !n.read).length } }));
-      return next;
-    });
-  };
-
-  const [currentSlide, setCurrentSlide] = useState(0);
-
-  useEffect(() => {
-    if (!isFood) return undefined;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % Math.max(bannerImages.length, 3));
+      setImgIndex(prev => (prev + 1) % currentPool.length);
     }, 4000);
     return () => clearInterval(timer);
-  }, [bannerImages.length, isFood]);
+  }, [currentPool.length, showBanner, isTabActive]);
 
-  const slideBanners = [
-    {
-      id: 0,
-      content: (
-        <div className="px-4 pt-5 pb-1">
-          <h2 className="text-white text-[26px] font-black leading-[1.05] drop-shadow-lg">
-            FLAT <br />
-            <span className="text-[40px]">50% OFF</span>
-          </h2>
-          <p className="text-white text-[16px] font-bold mt-1 drop-shadow-md">with FREE delivery</p>
-        </div>
-      ),
-    },
-    {
-      id: 1,
-      content: (
-        <div className="px-4 pt-5 pb-1">
-          <h2 className="text-white text-[26px] font-black leading-[1.05] drop-shadow-lg">
-            FLAT <br />
-            <span className="text-[40px]">₹150 OFF</span>
-          </h2>
-          <p className="text-white text-[16px] font-bold mt-1 drop-shadow-md">on Premium Dining</p>
-        </div>
-      ),
-    },
-    {
-      id: 2,
-      content: (
-        <div className="px-4 pt-5 pb-1">
-          <h2 className="text-white text-[26px] font-black leading-[1.05] drop-shadow-lg">
-            FREE <br />
-            <span className="text-[40px]">Delivery</span>
-          </h2>
-          <p className="text-white text-[16px] font-bold mt-1 drop-shadow-md">on orders above ₹199</p>
-        </div>
-      ),
-    },
+  useEffect(() => {
+    setImgIndex(0);
+  }, [vegMode]);
+
+  const displayImages = [
+    currentPool[(imgIndex) % currentPool.length],
+    currentPool[(imgIndex + 1) % currentPool.length],
+    currentPool[(imgIndex + 2) % currentPool.length]
   ];
-
   return (
-    <>
-      {/* Container 1: Location + Vertical Navigation Tabs */}
-    <div
-      className="relative z-10 w-full transition-colors duration-500 ease-in-out"
-      style={{ backgroundColor: verticalTheme.theme }}
-    >
-        <div className="relative z-20 px-4 pt-4 pb-2 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
-            onClick={onLocationClick}
+    <div className="relative z-10 w-full pb-2 transition-all duration-700 overflow-hidden">
+      <div className="relative z-10">
+        {/* Row 1: Location + actions (top of unified header — match Taxi header spacing) */}
+        <div className="flex items-start gap-3 px-4 pt-4 pb-2">
+          {/* Left: Location Selector */}
+          <Link
+            to="/food/user/address-selector"
+            state={{ from: window.location.pathname }}
+            className="flex items-center gap-2 cursor-pointer group min-w-0 flex-1 relative z-50 text-left no-underline"
           >
-            <MapPin className="h-5 w-5 flex-shrink-0" strokeWidth={1.5} style={{ color: verticalTheme.accent, fill: verticalTheme.accent }} />
-            <div className="flex flex-col min-w-0 text-white">
-              <div className="flex items-center gap-0.5 min-w-0">
-                <span className="text-[14px] font-bold truncate drop-shadow-sm">
-                  {displayTitle}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 opacity-90" />
-              </div>
-              {displaySubtitle ? (
-                <span className="text-[11px] font-medium truncate opacity-80 max-w-[210px]">
-                  {displaySubtitle}
-                </span>
-              ) : null}
+            <div className="bg-white/10 p-1.5 rounded-xl group-active:scale-95 transition-all">
+              <MapPin className="h-4 w-4 text-white/90 fill-white/20" />
             </div>
-          </button>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-[15px] font-black text-white truncate drop-shadow-sm">
+                  {(() => {
+                    const area = location?.area || location?.subLocality || location?.mainTitle || location?.neighborhood;
+                    const city = (location?.city || "").toLowerCase();
+                    const state = (location?.state || "").toLowerCase();
 
-          <div className="flex items-center gap-2.5 flex-shrink-0">
-            <button
-              type="button"
-              className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white shadow-sm hover:bg-gray-50 transition-all"
-              onClick={() => navigate(walletPath)}
-              aria-label="Wallet"
-            >
-              <div className="w-5 h-5 border-2 border-gray-800 rounded flex items-center justify-center">
-                <span className="text-gray-800 text-[10px] font-bold font-serif">₹</span>
-              </div>
-            </button>
-
-            {!isTaxi && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5 text-gray-800" />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-yellow-400 rounded-full border-2 border-white" />
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80 p-0 overflow-hidden border-none shadow-2xl rounded-2xl mt-2" align="end">
-                <div className="bg-white dark:bg-gray-900">
-                  <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
-                    <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                      Notifications
-                      {unreadCount > 0 && (
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-600 border-none text-[10px] h-4">
-                          {unreadCount} New
-                        </Badge>
-                      )}
-                    </h3>
-                    <Link to="/food/user/notifications" className="text-xs font-bold text-orange-600 hover:text-orange-700">
-                      {mergedNotifications.length > 0 ? "View All" : ""}
-                    </Link>
-                  </div>
-                  <div className="max-h-96 overflow-y-auto">
-                    {mergedNotifications.length > 0 ? (
-                      mergedNotifications.slice(0, 5).map((notif) => {
-                        const Icon = ICON_MAP[notif.icon] || Bell;
-                        return (
-                          <div
-                            key={notif.id}
-                            className={`p-4 flex items-start gap-3 border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer ${!notif.read ? 'bg-orange-50/20' : ''}`}
-                          >
-                            <div className={`mt-1 p-2 rounded-full ${notif.type === "order" ? "bg-green-100/50 text-green-600" : "bg-orange-100/50 text-orange-600"}`}>
-                              <Icon className="h-4 w-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2 mb-0.5">
-                                <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{notif.title}</span>
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] text-gray-400 whitespace-nowrap">{notif.time}</span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleDeleteNotification(notif.id, notif.source);
-                                    }}
-                                    className="rounded-full p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
-                                {notif.message}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="p-8 text-center flex flex-col items-center gap-2">
-                        <BellOff className="h-10 w-10 text-gray-200" />
-                        <p className="text-xs text-gray-400 font-medium">All caught up!</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-            )}
-
-            {!isTaxi && (
-            <button
-              type="button"
-              className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white shadow-sm hover:bg-gray-50 transition-all"
-              onClick={() => navigate('/food/user/cart')}
-              aria-label="Cart"
-            >
-              <ShoppingBag className="h-5 w-5 text-gray-800" />
-              {itemCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center border-2 border-white" style={{ backgroundColor: verticalTheme.accent }}>
-                  <span className="text-[9px] font-bold text-white leading-none">
-                    {itemCount > 9 ? "9+" : itemCount}
-                  </span>
-                </span>
-              )}
-            </button>
-            )}
-          </div>
-        </div>
-
-        <div className="relative z-20 px-3 pb-0">
-          <div className="flex w-full gap-1">
-            {VERTICALS.map((vertical) => {
-              const isActive = vertical.id === activeVertical;
-              return (
-                <div key={vertical.id} className={`flex-1 relative flex flex-col items-center ${isActive ? 'z-20' : 'z-10'}`}>
-                  <button
-                    type="button"
-                    onClick={() => handleVerticalTabClick(vertical.id)}
-                    style={isActive ? { '--active-tab-bg': verticalTheme.activeTab } : {}}
-                    className={`w-full flex flex-col items-center justify-center px-2 transition-all duration-300 ${
-                      isActive
-                        ? `${currentVertical.activeTabBg} curvy-active-tab pt-2.5 pb-2.5 rounded-t-[1.75rem] shadow-sm`
-                        : `${currentVertical.inactiveTabBg} rounded-t-[1.25rem] pt-2.5 pb-2.5`
-                    }`}
-                  >
-                    <div className="mb-1.5 flex items-center justify-center">
-                      {renderVerticalIcon(vertical.id, isActive)}
-                    </div>
-                    <span className={`text-[10px] font-bold leading-none ${isActive ? 'text-white' : 'text-white/75'}`}>
-                      {vertical.name}
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Container 2: Search Row — Sticky at top-0 */}
-      {!hideSearchRow && (
-        <div
-          className={`w-full px-3 pt-2.5 transition-all duration-300 sticky top-0 z-[50] ${
-            isCategoryStuck && isFood
-              ? 'shadow-md pb-3'
-              : `shadow-[0_10px_40px_rgba(0,0,0,0.18)] ${
-                  isFood ? 'pb-3' : 'rounded-b-[1.75rem] pb-4'
-                }`
-          }`}
-          style={{ backgroundColor: verticalTheme.theme }}
-        >
-          <div className="flex items-center gap-2.5">
-            {isTaxi ? (
-              <button
-                type="button"
-                onClick={onSearchFocus}
-                className="flex w-full items-center gap-2 rounded-[18px] border border-white/80 bg-white/92 px-3.5 py-3 text-left shadow-[0_12px_26px_rgba(15,23,42,0.06)] active:scale-[0.99] transition-transform"
-              >
-                <Search className="h-4 w-4 text-slate-500 flex-shrink-0" strokeWidth={2.5} />
-                <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-500">
-                  Search destination
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600 flex-shrink-0">
-                  Go
-                </span>
-              </button>
-            ) : (
-              <>
-                <div
-                  className="flex-1 min-w-0 rounded-[14px] flex items-center px-3 py-2 bg-white dark:bg-[#1a1a1a] shadow-[0_4px_16px_rgba(0,0,0,0.15)] cursor-pointer active:scale-[0.99] transition-all duration-200 overflow-hidden"
-                  onClick={onSearchFocus}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSearchFocus();
+                    if (area && !/^-?\d+(\.\d+)?$/.test(area.trim())) {
+                      const areaLower = area.toLowerCase();
+                      if (areaLower !== city && areaLower !== state) {
+                        return area;
+                      }
                     }
-                  }}
+
+                    if (location?.address && location.address !== "Select location") {
+                      const parts = location.address.split(',').map(p => p.trim());
+                      for (const part of parts) {
+                        const partLower = part.toLowerCase();
+                        if (partLower &&
+                          partLower !== city &&
+                          partLower !== state &&
+                          !/^-?\d/.test(part) &&
+                          part.length > 2) {
+                          return part;
+                        }
+                      }
+                    }
+
+                    return location?.area || location?.city || "Select Location";
+                  })()}
+                </span>
+                <ChevronDown className="h-3 w-3 text-white/70" />
+              </div>
+
+              <span className="text-[10px] font-medium text-white/80 truncate leading-tight mt-0.5">
+                {(() => {
+                  const state = location?.state || "";
+                  const pincode = location?.pincode || "";
+
+                  if (state && pincode) return `${state}, ${pincode}`;
+                  if (state) return state;
+                  if (pincode) return pincode;
+
+                  const addr = location?.address || "";
+                  if (addr && addr.length > 10) {
+                    return addr.split(',').slice(1, 3).join(',').trim() || "Pinpoint location";
+                  }
+
+                  return "Pinpoint location";
+                })()}
+              </span>
+            </div>
+          </Link>
+
+          {/* Right: Actions Column (Wallet, Profile, Veg Toggle) */}
+          <div className="flex flex-col items-end gap-3 shrink-0">
+            {/* Row 1: Bell, Wallet, Profile */}
+            <div className="flex items-center gap-3">
+              {/* Notification Bell */}
+              <button
+                onClick={() => {
+                  if (!isModuleAuthenticated('user')) {
+                    window.dispatchEvent(new CustomEvent('show-login-required'))
+                  } else {
+                    navigate('/food/user/notifications')
+                  }
+                }}
+                className="relative flex items-center justify-center p-1.5 active:scale-90 transition-all transform-gpu translate-z-0 overflow-visible"
+              >
+                <Bell className="h-[24px] w-[24px] text-white antialiased" strokeWidth={2} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] bg-green-400 text-white text-[8px] font-semibold rounded-full flex items-center justify-center px-[3px] leading-none border border-white/80 shadow z-10">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              <Link
+                to="/food/user/wallet"
+                state={{ from: '/food/user' }}
+                onClick={(e) => {
+                  if (!isModuleAuthenticated('user')) {
+                    e.preventDefault();
+                    window.dispatchEvent(new CustomEvent('show-login-required'));
+                  }
+                }}
+                className="flex items-center justify-center p-1.5 active:scale-90 transition-all transform-gpu translate-z-0"
+              >
+                <Wallet className="h-[26px] w-[26px] text-white antialiased" strokeWidth={2.2} />
+              </Link>
+
+              {/* Profile Photo - Increased size for better clarity */}
+              <Link
+                to="/food/user/profile"
+                state={{ from: routerLocation.pathname }}
+                onClick={(e) => {
+                  if (!isModuleAuthenticated('user')) {
+                    e.preventDefault();
+                    window.dispatchEvent(new CustomEvent('show-login-required'));
+                  }
+                }}
+                className="h-9 w-9 relative flex items-center justify-center rounded-full border-[1.5px] border-white shadow-none cursor-pointer active:scale-95 transition-all overflow-hidden transform-gpu translate-z-0"
+              >
+                <Avatar className="h-full w-full bg-[#FFF5E6]">
+                  <AvatarImage 
+                    src={userProfile?.profileImage || "/assets/images/profile_avatar.webp"} 
+                    alt="Profile" 
+                    className="object-cover"
+                  />
+                  <AvatarFallback className="bg-[#FFF5E6] text-[20px] font-black text-[#DC2626] leading-none tracking-tighter antialiased">
+                    <img src="/assets/images/profile_avatar.webp" alt="Profile" className="object-cover w-full h-full" />
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Hello Parth Food / Taxi tabs */}
+        <SuperAppHomeHeader activeVertical="food" tabsOnly embedded location={location} />
+
+        {/* Below tabs: fixed 255px — same as Taxi SuperAppHero */}
+        <div className="flex h-[255px] flex-col overflow-hidden px-4 pb-2 pt-2.5">
+          {/* Search + Veg toggle */}
+          <div className="mb-0 flex shrink-0 items-center gap-3">
+          <div
+            className="flex-1 relative bg-white rounded-2xl flex items-center px-4 py-3 shadow-xl border border-black/5 cursor-pointer active:scale-[0.98] transition-all duration-300"
+            onClick={handleSearchFocus}
+          >
+            <Search className="h-5 w-5 text-[#DC2626] mr-2 shrink-0" strokeWidth={3} />
+
+            <div className="flex-1 overflow-hidden relative h-5">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={placeholderIndex}
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -10, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-0 text-[15px] font-bold text-gray-400 truncate flex items-center"
                 >
-                  <Search className="h-[18px] w-[18px] mr-2 flex-shrink-0" strokeWidth={2.5} style={{ color: verticalTheme.accent }} />
-                  <div className="flex-1 relative h-5 min-w-0">
-                    <AnimatePresence mode="wait">
-                      <motion.span
-                        key={placeholderIndex}
-                        initial={{ y: 12, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: -12, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: 'easeOut' }}
-                        className="absolute inset-0 text-[14px] font-medium text-gray-400 truncate"
-                      >
-                        {resolvedPlaceholders?.[placeholderIndex] || 'Search "chinese"'}
-                      </motion.span>
-                    </AnimatePresence>
-                  </div>
-                  <div className="h-5 w-px bg-gray-200 mx-2.5 flex-shrink-0" />
-                  <div
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all"
-                    style={{ backgroundColor: verticalTheme.accentSoft }}
-                  >
-                    <Mic className="h-[18px] w-[18px]" strokeWidth={2.5} style={{ color: verticalTheme.accent }} />
-                  </div>
+                  {placeholders?.[placeholderIndex] || 'Search'}
+                </motion.span>
+              </AnimatePresence>
+            </div>
+
+            <div className="flex items-center gap-3 pl-3 border-l border-gray-100 ml-1">
+              <Mic
+                className="h-5 w-5 text-gray-400"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  voiceSearch.clearError();
+                  void voiceSearch.startListening();
+                  setIsVoiceOverlayOpen(true);
+                  handleVoiceSearchClick?.();
+                }}
+              />
+            </div>
+          </div>
+
+          <VoiceSearchOverlay
+            isOpen={isVoiceOverlayOpen}
+            onClose={() => {
+              voiceSearch.stopListening();
+              setIsVoiceOverlayOpen(false);
+            }}
+            onSearchResult={(transcript) => {
+              navigate(`/food/user/search?q=${encodeURIComponent(transcript)}&mode=delivery`);
+            }}
+            voiceSearch={voiceSearch}
+            autoStart={false}
+          />
+
+          <div
+            ref={vegModeToggleRef}
+            className="flex flex-col items-center gap-1 shrink-0 antialiased"
+          >
+            <span className="text-[9px] font-black text-white uppercase tracking-[0.1em] drop-shadow-md leading-none">Veg Mode</span>
+            <div
+              className={`w-11 h-5 rounded-full relative transition-all duration-500 cursor-pointer border border-white/20 shadow-lg ${vegMode ? 'bg-[#48c479]' : 'bg-gray-500/60'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleVegModeChange?.(!vegMode);
+              }}
+            >
+              <motion.div
+                animate={{ x: vegMode ? 24 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-md"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Fest promo — title, pill & animation fill space below search */}
+        {showBanner && (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-between text-center overflow-hidden pt-5">
+            {!hideFoodImages && (
+              <>
+            <motion.div
+              key={vegMode ? 'veg-title' : 'nonveg-title'}
+              className="shrink-0"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", damping: 10, stiffness: 100 }}
+            >
+              <h2
+                className="text-[1.5rem] sm:text-[1.65rem] font-black text-[#fff200] italic uppercase leading-none drop-shadow-md"
+                style={{ WebkitTextStroke: '1px #5a0000' }}
+              >
+                {vegMode ? 'VEGGIE DELIGHT' : 'FLAVOUR FEST'}
+              </h2>
+            </motion.div>
+
+            <div
+              className="relative flex shrink-0 items-center gap-2 px-4 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 shadow-xl"
+            >
+              <div className="relative">
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex gap-0.5">
+                  <div className="w-0.5 h-2 bg-[#fff200] rotate-[-20deg] rounded-full" />
+                  <div className="w-0.5 h-2.5 bg-[#fff200] rounded-full" />
+                  <div className="w-0.5 h-2 bg-[#fff200] rotate-[20deg] rounded-full" />
+                </div>
+                <Utensils className="h-5 w-5 text-[#fff200]" />
+              </div>
+
+              <div className="relative px-2">
+                <svg className="absolute -top-1.5 left-0 w-full h-1.5" viewBox="0 0 100 10" preserveAspectRatio="none">
+                  <path d="M0 5 Q 25 0, 50 5 T 100 5" fill="none" stroke="#fff200" strokeWidth="2" opacity="0.6" />
+                </svg>
+                <span className="text-sm sm:text-base font-bold italic text-white leading-none whitespace-nowrap drop-shadow-md">
+                  {vegMode ? 'Pure Veg Magic!' : 'Good Food, Great Mood!'}
+                </span>
+                <svg className="absolute -bottom-1.5 left-0 w-full h-1.5" viewBox="0 0 100 10" preserveAspectRatio="none">
+                  <path d="M0 5 Q 25 10, 50 5 T 100 5" fill="none" stroke="#fff200" strokeWidth="2" opacity="0.6" />
+                </svg>
+              </div>
+
+              <div className="relative">
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex gap-0.5">
+                  <div className="w-0.5 h-2 bg-[#fff200] rotate-[-20deg] rounded-full" />
+                  <div className="w-0.5 h-2.5 bg-[#fff200] rounded-full" />
+                  <div className="w-0.5 h-2 bg-white rotate-[20deg] rounded-full" />
+                </div>
+                <Soup className="h-6 w-6 text-[#fff200]" />
+              </div>
+            </div>
+
+            <div className="flex h-[4.5rem] shrink-0 items-end justify-center gap-3 sm:gap-4 relative w-full">
+                {/* Keep entire pool mounted once so rotate never re-downloads */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute w-px h-px overflow-hidden opacity-0"
+                >
+                  {currentPool.map((src) => (
+                    <img key={src} src={src} alt="" decoding="async" />
+                  ))}
                 </div>
 
-                {isFood && (
-                  <div
-                    className="flex flex-col items-center justify-center cursor-pointer flex-shrink-0 w-[52px]"
-                    onClick={() => handleVegModeChange && handleVegModeChange(!isVegMode)}
-                    ref={vegModeToggleRef}
+                <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-48 h-10 blur-[40px] rounded-full transition-colors duration-700 ${vegMode ? 'bg-emerald-500/40' : 'bg-yellow-400/40'}`} />
+
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.div
+                    key={`img-left-${vegMode}-${imgIndex}`}
+                    className="w-[3.25rem] h-[3.25rem] sm:w-14 sm:h-14 z-10"
+                    initial={{ x: -100, opacity: 0, rotate: -45, scale: 0.5 }}
+                    animate={{
+                      x: 0,
+                      opacity: 1,
+                      rotate: -15,
+                      scale: 1,
+                      y: [0, -5, 0]
+                    }}
+                    exit={{ x: -100, opacity: 0, rotate: -45, scale: 0.5 }}
+                    transition={{
+                      y: { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
+                      default: { duration: 0.8, type: "spring", damping: 15 }
+                    }}
                   >
-                    <span className="text-[9px] font-black uppercase tracking-wide leading-tight text-white text-center">
-                      Veg
-                    </span>
-                    <span className="text-[9px] font-black uppercase tracking-wide leading-tight text-white text-center mb-1">
-                      Mode
-                    </span>
-                    <div className={`w-9 h-[18px] rounded-full relative transition-colors ${isVegMode ? 'bg-[#065f46]' : 'bg-white/40'}`}>
-                      <div className={`absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-transform ${isVegMode ? 'translate-x-[18px]' : 'translate-x-[2px]'} shadow-sm`} />
+                    <img
+                      src={displayImages[0]}
+                      alt="food"
+                      decoding="async"
+                      loading="eager"
+                      className="w-full h-full object-cover rounded-2xl border-[3px] border-white shadow-2xl rotate-12"
+                    />
+                  </motion.div>
+
+                  <motion.div
+                    key={`img-center-${vegMode}-${imgIndex}`}
+                    className="w-[4.5rem] h-[4.5rem] sm:w-[4.75rem] sm:h-[4.75rem] z-30"
+                    initial={{ y: 100, opacity: 0, scale: 0.5 }}
+                    animate={{
+                      y: 0,
+                      opacity: 1,
+                      scale: 1,
+                      rotate: [0, 5, -5, 0]
+                    }}
+                    exit={{ y: 50, opacity: 0, scale: 0.5 }}
+                    transition={{
+                      rotate: { duration: 6, repeat: Infinity, ease: "easeInOut" },
+                      default: { duration: 0.8, type: "spring", damping: 12, stiffness: 100 }
+                    }}
+                  >
+                    <div className="relative h-full w-full">
+                      <div className={`absolute -inset-2.5 blur-3xl rounded-full animate-pulse transition-colors duration-700 ${vegMode ? 'bg-white/40' : 'bg-yellow-400/40'}`} />
+                      <img
+                        src={displayImages[1]}
+                        alt="food"
+                        decoding="async"
+                        loading="eager"
+                        className="relative w-full h-full object-cover rounded-[2.5rem] border-[4px] border-white shadow-[0_22px_55px_rgba(0,0,0,0.4)]"
+                      />
                     </div>
-                  </div>
-                )}
+                  </motion.div>
+
+                  <motion.div
+                    key={`img-right-${vegMode}-${imgIndex}`}
+                    className="w-[3.25rem] h-[3.25rem] sm:w-14 sm:h-14 z-10"
+                    initial={{ x: 100, opacity: 0, rotate: 45, scale: 0.5 }}
+                    animate={{
+                      x: 0,
+                      opacity: 1,
+                      rotate: 15,
+                      scale: 1,
+                      y: [0, -5, 0]
+                    }}
+                    exit={{ x: 100, opacity: 0, rotate: 45, scale: 0.5 }}
+                    transition={{
+                      y: { duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.4 },
+                      default: { duration: 0.8, type: "spring", damping: 15 }
+                    }}
+                  >
+                    <img
+                      src={displayImages[2]}
+                      alt="food"
+                      decoding="async"
+                      loading="eager"
+                      className="w-full h-full object-cover rounded-2xl border-[3px] border-white shadow-2xl -rotate-12 bg-white"
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              </div>
               </>
             )}
           </div>
+        )}
         </div>
-      )}
-
-      {/* Selected Address Far Distance Warning Banner */}
-      {selectedAddressDistanceKm > 0.5 && isFood && (
-        <div className="bg-amber-100 dark:bg-amber-950/70 border-b border-amber-200 dark:border-amber-900/50 px-4 py-2 flex items-center justify-between text-xs font-semibold text-amber-900 dark:text-amber-200 relative z-[40]">
-          <div className="flex items-center gap-2 max-w-7xl mx-auto">
-            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <span>
-              Selected address is <span className="underline font-bold">{selectedAddressDistanceKm} km</span> away from your location
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Container 3: Slide Banners — rounded corners and shadow at the bottom */}
-      {isFood && (
-        <div
-          className="relative z-10 w-full overflow-hidden rounded-b-[1.75rem] shadow-[0_10px_40px_rgba(0,0,0,0.18)]"
-          style={{ backgroundColor: verticalTheme.theme }}
-        >
-          <div className="relative w-full h-[168px] overflow-hidden">
-            <div
-              className="absolute inset-0 flex transition-transform duration-700 ease-in-out"
-              style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-            >
-              {slideBanners.map((banner, index) => {
-                const image = bannerImages[index % bannerImages.length];
-                return (
-                  <div key={banner.id} className="relative w-full h-full shrink-0">
-                    <img
-                      src={image}
-                      alt=""
-                      className="absolute inset-0 w-full h-full object-cover"
-                      loading={index === 0 ? "eager" : "lazy"}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
-                    <div className="relative z-10 h-full flex items-center">
-                      {banner.content}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="absolute bottom-2.5 inset-x-0 flex justify-center gap-1.5 z-20">
-              {slideBanners.map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${i === currentSlide ? 'bg-white w-5' : 'bg-white/45 w-1.5'}`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }

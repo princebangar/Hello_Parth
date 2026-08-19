@@ -4,11 +4,19 @@ import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation
 import { MapPin, Search, Save, Loader2, ArrowLeft } from "lucide-react"
 import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar"
 import { restaurantAPI } from "@food/api"
+import { reverseGeocodeWithGoogle } from "@food/utils/googleGeocoding"
+import {
+  buildRestaurantLocationUpdatePayload,
+  dispatchRestaurantLocationUpdated,
+  formatRestaurantDisplayAddress,
+  normalizeRestaurantLocationFields,
+} from "@food/utils/restaurantLocation"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
+import { toast } from "sonner"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+const debugError = (...args) => console.error("[ZoneSetup]", ...args)
 
 const parseCoordinate = (value) => {
   const parsed = Number(value)
@@ -56,244 +64,127 @@ export default function ZoneSetup() {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markerRef = useRef(null)
-  const autocompleteInputRef = useRef(null)
-  const autocompleteRef = useRef(null)
-  const autocompleteServiceRef = useRef(null)
-  const placesServiceRef = useRef(null)
-  const geocoderRef = useRef(null)
-  const suggestionsDebounceRef = useRef(null)
-  
+  const sessionTokenRef = useRef(null)
+  const debounceRef = useRef(null)
+  const geocodeDebounceRef = useRef(null)
+  const locationRef = useRef(null)
+
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState("")
   const [mapLoading, setMapLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
   const [restaurantData, setRestaurantData] = useState(null)
-  const [locationSearch, setLocationSearch] = useState("")
   const [selectedLocation, setSelectedLocation] = useState(null)
-  const [selectedAddress, setSelectedAddress] = useState("")
-  const [searchSuggestions, setSearchSuggestions] = useState([])
+  const [locationSearch, setLocationSearch] = useState("")
+  const [suggestions, setSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [mapError, setMapError] = useState("")
+
+  const applyResolvedLocation = (fields) => {
+    const next = normalizeRestaurantLocationFields(fields)
+    if (!next) return
+    locationRef.current = next
+    setSelectedLocation(next)
+    if (next.latitude != null) updateMarker(next.latitude, next.longitude, formatRestaurantDisplayAddress(next))
+  }
+
+  const updateLocationFromCoords = async (nextLat, nextLng) => {
+    if (geocodeDebounceRef.current) clearTimeout(geocodeDebounceRef.current)
+
+    geocodeDebounceRef.current = setTimeout(async () => {
+      try {
+        setGeocoding(true)
+        const parsed = await reverseGeocodeWithGoogle(nextLat, nextLng)
+        applyResolvedLocation(parsed.locationFields || {
+          ...(locationRef.current || {}),
+          latitude: nextLat,
+          longitude: nextLng,
+          formattedAddress: `${nextLat.toFixed(6)}, ${nextLng.toFixed(6)}`,
+        })
+      } catch (error) {
+        debugError("Reverse geocode failed:", error)
+        applyResolvedLocation({
+          ...(locationRef.current || {}),
+          latitude: nextLat,
+          longitude: nextLng,
+          formattedAddress: `${nextLat.toFixed(6)}, ${nextLng.toFixed(6)}`,
+        })
+      } finally {
+        setGeocoding(false)
+      }
+    }, 450)
+  }
 
   useEffect(() => {
     fetchRestaurantData()
     loadGoogleMaps()
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (suggestionsDebounceRef.current) {
-        clearTimeout(suggestionsDebounceRef.current)
-        suggestionsDebounceRef.current = null
-      }
+  // Fetch place suggestions from the new Places API (AutocompleteSuggestion).
+  // We keep our own styled input + dropdown; the legacy Autocomplete widget is
+  // blocked by Google for projects created after March 1st 2025.
+  const fetchSuggestions = async (input) => {
+    if (!input || input.trim().length < 2) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
     }
-  }, [])
+    if (!window.google?.maps?.importLibrary) return
 
-  const isCoordinateAddress = (value) => {
-    const text = String(value || "").trim()
-    if (!text) return true
-    return /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(text)
-  }
-
-  const normalizeAddressLabel = (value) => {
-    const text = String(value || "").trim()
-    if (!text || isCoordinateAddress(text)) return ""
-    return text
-  }
-
-  const ensurePlacesLibrary = async () => {
-    if (!window.google?.maps) return false
     try {
-      if (!window.google.maps.places && typeof window.google.maps.importLibrary === "function") {
+      const { AutocompleteSuggestion, AutocompleteSessionToken } =
         await window.google.maps.importLibrary("places")
-      }
-      return Boolean(window.google.maps.places)
-    } catch (error) {
-      debugError("Failed to load Google Places library:", error)
-      return false
-    }
-  }
 
-  const reverseGeocodeCoordinates = async (lat, lng) => {
-    if (!window.google?.maps) return ""
-
-    try {
-      if (!geocoderRef.current) {
-        geocoderRef.current = new window.google.maps.Geocoder()
+      if (!sessionTokenRef.current) {
+        sessionTokenRef.current = new AutocompleteSessionToken()
       }
 
-      const result = await geocoderRef.current.geocode({
-        location: { lat, lng }
-      })
+      const { suggestions: results } =
+        await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input,
+          sessionToken: sessionTokenRef.current,
+          includedRegionCodes: ["in"], // Restrict to India
+        })
 
-      const formatted = result?.results?.[0]?.formatted_address || ""
-      return normalizeAddressLabel(formatted)
-    } catch (error) {
-      debugWarn("Reverse geocode failed:", error)
-      return ""
+      const mapped = (results || [])
+        .map((s) => s.placePrediction)
+        .filter(Boolean)
+      setSuggestions(mapped)
+      setShowSuggestions(mapped.length > 0)
+    } catch (err) {
+      debugError("Error fetching suggestions:", err)
+      setSuggestions([])
+      setShowSuggestions(false)
     }
   }
 
-  const applySelectedLocation = (lat, lng, rawAddress = "") => {
-    const address = normalizeAddressLabel(rawAddress) || "Pinned location on map"
-    setLocationSearch(address)
-    setSelectedAddress(address)
-    setSelectedLocation({ lat, lng, address })
-    setShowSuggestions(false)
-    setSearchSuggestions([])
-    if (mapInstanceRef.current && window.google?.maps) {
-      updateMarker(lat, lng, address)
-    }
-  }
-
-  const handleSuggestionSelect = (suggestion) => {
-    if (!suggestion) return
-
-    // Fallback suggestions (e.g. Nominatim) can directly provide coordinates.
-    const fallbackLat = Number(suggestion.lat)
-    const fallbackLng = Number(suggestion.lng)
-    if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng)) {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.setCenter({ lat: fallbackLat, lng: fallbackLng })
-        mapInstanceRef.current.setZoom(17)
-      }
-      applySelectedLocation(fallbackLat, fallbackLng, suggestion.description || suggestion.main_text || "")
-      return
-    }
-
-    if (!suggestion?.place_id || !placesServiceRef.current) return
-
-    placesServiceRef.current.getDetails(
-      {
-        placeId: suggestion.place_id,
-        fields: ["geometry", "formatted_address", "name"]
-      },
-      (place, status) => {
-        if (
-          status === window.google?.maps?.places?.PlacesServiceStatus?.OK &&
-          place?.geometry?.location &&
-          mapInstanceRef.current
-        ) {
-          const lat = place.geometry.location.lat()
-          const lng = place.geometry.location.lng()
-          const address = place.formatted_address || place.name || ""
-          mapInstanceRef.current.setCenter({ lat, lng })
-          mapInstanceRef.current.setZoom(17)
-          applySelectedLocation(lat, lng, address)
-        }
-      }
-    )
-  }
-
-  const fetchSearchSuggestions = async (query) => {
-    const q = String(query || "").trim()
-    if (!q) {
-      setSearchSuggestions([])
-      return
-    }
-
-    if (autocompleteServiceRef.current) {
-      autocompleteServiceRef.current.getPlacePredictions(
-        {
-          input: q,
-          componentRestrictions: { country: "in" },
-          types: ["geocode"]
-        },
-        (predictions = [], status) => {
-          const ok = status === window.google?.maps?.places?.PlacesServiceStatus?.OK
-          setSearchSuggestions(ok ? predictions.slice(0, 6) : [])
-        }
-      )
-      return
-    }
-
-    // Fallback: lightweight suggestions from Nominatim when Google Places is unavailable.
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`,
-        { headers: { Accept: "application/json" } }
-      )
-      if (!response.ok) throw new Error(`Nominatim ${response.status}`)
-      const rows = await response.json()
-      const normalized = Array.isArray(rows)
-        ? rows.map((item, idx) => ({
-            place_id: `nominatim-${item.place_id || idx}`,
-            description: item.display_name || "",
-            main_text: String(item.display_name || "").split(",")[0] || "Location",
-            lat: Number(item.lat),
-            lng: Number(item.lon)
-          }))
-        : []
-      setSearchSuggestions(normalized)
-    } catch (error) {
-      debugWarn("Fallback suggestions failed:", error)
-      setSearchSuggestions([])
-    }
-  }
-
-  const handleSearchChange = (event) => {
-    const value = event.target.value
+  const handleSearchChange = (value) => {
     setLocationSearch(value)
-    setShowSuggestions(true)
-
-    if (suggestionsDebounceRef.current) {
-      clearTimeout(suggestionsDebounceRef.current)
-      suggestionsDebounceRef.current = null
-    }
-
-    suggestionsDebounceRef.current = setTimeout(() => {
-      fetchSearchSuggestions(value).catch(() => {})
-    }, 180)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => fetchSuggestions(value), 300)
   }
 
-  // Initialize Places Autocomplete when map is loaded
-  useEffect(() => {
-    let isMounted = true
+  const handleSelectSuggestion = async (prediction) => {
+    try {
+      const place = prediction.toPlace()
+      await place.fetchFields({ fields: ["location", "formattedAddress", "displayName"] })
+      if (!mapInstanceRef.current) return
 
-    const setupPlaces = async () => {
-      if (mapLoading || !autocompleteInputRef.current || autocompleteRef.current) {
-        return
-      }
+      const loc = place.location
+      const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat
+      const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng
 
-      const placesReady = await ensurePlacesLibrary()
-      if (!isMounted || !placesReady) return
+      mapInstanceRef.current.setCenter({ lat, lng })
+      mapInstanceRef.current.setZoom(17)
 
-      if (window.google?.maps?.places?.AutocompleteService) {
-        autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService()
-      }
-      if (window.google?.maps?.places?.PlacesService) {
-        const host = mapInstanceRef.current || document.createElement("div")
-        placesServiceRef.current = new window.google.maps.places.PlacesService(host)
-      }
-
-      if (window.google?.maps?.places?.Autocomplete) {
-        const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
-          componentRestrictions: { country: "in" }
-        })
-
-        autocomplete.addListener("place_changed", () => {
-          const place = autocomplete.getPlace()
-          if (place.geometry && place.geometry.location) {
-            const location = place.geometry.location
-            const lat = location.lat()
-            const lng = location.lng()
-            const address = place.formatted_address || place.name || ""
-            if (mapInstanceRef.current) {
-              mapInstanceRef.current.setCenter(location)
-              mapInstanceRef.current.setZoom(17)
-            }
-            applySelectedLocation(lat, lng, address)
-          }
-        })
-
-        autocompleteRef.current = autocomplete
-      }
+      setLocationSearch(place.formattedAddress || place.displayName || "")
+      setSuggestions([])
+      setShowSuggestions(false)
+      sessionTokenRef.current = null
+      await updateLocationFromCoords(lat, lng)
+    } catch (err) {
+      debugError("Error resolving selected place:", err)
     }
-
-    setupPlaces()
-    return () => {
-      isMounted = false
-    }
-  }, [mapLoading])
+  }
 
   // Load existing restaurant location when data is fetched
   useEffect(() => {
@@ -306,15 +197,13 @@ export default function ZoneSetup() {
         const locationObj = new window.google.maps.LatLng(lat, lng)
         mapInstanceRef.current.setCenter(locationObj)
         mapInstanceRef.current.setZoom(17)
-        
-        const address = normalizeAddressLabel(
-          location.formattedAddress || location.address || formatAddress(location) || ""
-        )
-        setLocationSearch(address)
-        setSelectedAddress(address)
-        setSelectedLocation({ lat, lng, address })
-        
-        updateMarker(lat, lng, address)
+
+        const normalized = normalizeRestaurantLocationFields(location)
+        if (normalized) {
+          applyResolvedLocation(normalized)
+        } else {
+          updateLocationFromCoords(lat, lng)
+        }
       }
     }
   }, [restaurantData, mapLoading])
@@ -344,13 +233,13 @@ export default function ZoneSetup() {
         if (!apiKey || apiKey.trim() === "") {
           debugError("? API key is empty or not found in database")
           setMapLoading(false)
-          setMapError("Map unavailable: Google Maps API key missing. Search suggestions still work.")
+          alert("Google Maps API key not found in database. Please contact administrator to add the API key in admin panel.")
           return
         }
       } catch (apiKeyError) {
         debugError("? Error fetching API key from database:", apiKeyError)
         setMapLoading(false)
-        setMapError("Map unavailable right now. Search suggestions still work.")
+        alert("Failed to fetch Google Maps API key from database. Please check your connection or contact administrator.")
         return
       }
       
@@ -377,20 +266,33 @@ export default function ZoneSetup() {
       if (!mapRef.current) {
         debugError("? mapRef.current is still null after waiting")
         setMapLoading(false)
-        setMapError("Map failed to initialize. Search suggestions still work.")
+        alert("Failed to initialize map container. Please refresh the page.")
         return
       }
 
-      // If Google Maps is already loaded, use it directly
-      if (window.google && window.google.maps) {
-        debugLog("? Google Maps already loaded from main.jsx, initializing map...")
+      // If Google Maps is already loaded WITH the Places library, use it directly.
+      // The Places library is required for the search/autocomplete to work.
+      if (window.google?.maps?.places?.Autocomplete) {
+        debugLog("? Google Maps (with Places) already loaded, initializing map...")
         initializeMap(window.google)
         return
       }
 
-      // If Google Maps is not loaded yet and we have an API key, use Loader as fallback
+      // If Maps was loaded by another page WITHOUT the Places library, that stale
+      // script must be removed so we can reload it with libraries=places. Otherwise
+      // the search bar autocomplete silently fails (window.google.maps.places is undefined).
+      const mapsScript = Array.from(document.getElementsByTagName("script"))
+        .find(s => s.src?.includes("maps.googleapis.com/maps/api/js"))
+      if (mapsScript && !mapsScript.src.includes("libraries=places")) {
+        debugWarn("Found Google Maps script without Places library, reloading with Places...")
+        mapsScript.remove()
+        // Best-effort clear so the Loader re-injects a fresh script
+        try { delete window.google } catch (e) { window.google = undefined }
+      }
+
+      // Load (or reload) Google Maps with the Places library via Loader.
       if (apiKey) {
-        debugLog("?? Google Maps not loaded from main.jsx, loading with Loader...")
+        debugLog("?? Loading Google Maps with Places library via Loader...")
         const loader = new Loader({
           apiKey: apiKey,
           version: "weekly",
@@ -403,12 +305,12 @@ export default function ZoneSetup() {
       } else {
         debugError("? No API key available")
         setMapLoading(false)
-        setMapError("Map unavailable right now. Search suggestions still work.")
+        alert("Google Maps API key not found. Please contact administrator.")
       }
     } catch (error) {
       debugError("? Error loading Google Maps:", error)
       setMapLoading(false)
-      setMapError("Failed to load map. Search suggestions still work.")
+      alert(`Failed to load Google Maps: ${error.message}. Please refresh the page or contact administrator.`)
     }
   }
 
@@ -443,15 +345,14 @@ export default function ZoneSetup() {
       })
 
       mapInstanceRef.current = map
-      setMapError("")
       debugLog("? Map initialized successfully")
 
       // Add click listener to place marker
-      map.addListener('click', async (event) => {
+      map.addListener('click', (event) => {
         const lat = event.latLng.lat()
         const lng = event.latLng.lng()
-        const address = await reverseGeocodeCoordinates(lat, lng)
-        applySelectedLocation(lat, lng, address)
+        updateMarker(lat, lng, "Resolving address...")
+        updateLocationFromCoords(lat, lng)
       })
 
       setMapLoading(false)
@@ -459,7 +360,7 @@ export default function ZoneSetup() {
     } catch (error) {
       debugError("? Error in initializeMap:", error)
       setMapLoading(false)
-      setMapError("Map failed to initialize. Search suggestions still work.")
+      alert("Failed to initialize map. Please refresh the page.")
     }
   }
 
@@ -495,81 +396,48 @@ export default function ZoneSetup() {
     })
 
     // Update location when marker is dragged
-    marker.addListener('dragend', async (event) => {
+    marker.addListener('dragend', (event) => {
       const newLat = event.latLng.lat()
       const newLng = event.latLng.lng()
-      const newAddress = await reverseGeocodeCoordinates(newLat, newLng)
-      applySelectedLocation(newLat, newLng, newAddress)
+      updateLocationFromCoords(newLat, newLng)
     })
 
     markerRef.current = marker
   }
 
-  const formatAddress = (location) => {
-    if (!location) return ""
-    
-    if (location.formattedAddress && location.formattedAddress.trim() !== "") {
-      return location.formattedAddress.trim()
-    }
-    
-    if (location.address && location.address.trim() !== "") {
-      return location.address.trim()
-    }
-    
-    const parts = []
-    if (location.addressLine1) parts.push(location.addressLine1.trim())
-    if (location.addressLine2) parts.push(location.addressLine2.trim())
-    if (location.area) parts.push(location.area.trim())
-    if (location.city) parts.push(location.city.trim())
-    if (location.state) parts.push(location.state.trim())
-    if (location.zipCode || location.pincode) parts.push((location.zipCode || location.pincode).trim())
-    
-    return parts.length > 0 ? parts.join(", ") : ""
-  }
-
   const handleSaveLocation = async () => {
-    if (!selectedLocation) {
-      alert("Please select a location on the map first")
+    if (!selectedLocation?.latitude || !selectedLocation?.longitude) {
+      toast.error("Please select a location on the map first")
       return
     }
 
     try {
       setSaving(true)
-      
-      const { lat, lng } = selectedLocation
-      const address = normalizeAddressLabel(selectedLocation.address) || "Pinned location on map"
-      
-      // Update restaurant location
+
       const response = await restaurantAPI.updateProfile({
-        location: {
-          ...(restaurantData?.location || {}),
-          latitude: lat,
-          longitude: lng,
-          coordinates: [lng, lat], // GeoJSON format: [longitude, latitude]
-          formattedAddress: address
-        }
+        location: buildRestaurantLocationUpdatePayload(selectedLocation),
       })
 
       if (response?.data?.data?.restaurant) {
         setRestaurantData(response.data.data.restaurant)
-        alert("Location saved successfully!")
-        
-        // Refresh the page to update navbar
-        window.location.reload()
+        toast.success("Location saved successfully. Awaiting admin approval.", { duration: 4000 })
+        dispatchRestaurantLocationUpdated()
       } else {
         throw new Error("Failed to save location")
       }
     } catch (error) {
       debugError("Error saving location:", error)
-      alert(error.response?.data?.message || "Failed to save location. Please try again.")
+      toast.error(error.response?.data?.message || "Failed to save location. Please try again.")
     } finally {
       setSaving(false)
     }
   }
 
+  const selectedAddress = formatRestaurantDisplayAddress(selectedLocation, restaurantData)
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <RestaurantNavbar />
+      <RestaurantNavbar hideSearch />
       <div className="p-4 md:p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
@@ -582,7 +450,7 @@ export default function ZoneSetup() {
             >
               <ArrowLeft className="w-5 h-5 text-gray-700" />
             </button>
-            <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#B80B3D] to-[#66001D] flex items-center justify-center">
               <MapPin className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -593,63 +461,60 @@ export default function ZoneSetup() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-          {mapError ? (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {mapError}
-            </div>
-          ) : null}
-          <div className="flex items-stretch gap-2 sm:gap-3">
-            <div className="flex-1 min-w-0 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-6 overflow-visible">
+          <div className="flex flex-col gap-3">
+            <div className="relative w-full min-w-0">
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 z-10 pointer-events-none" />
               <input
-                ref={autocompleteInputRef}
                 type="text"
                 value={locationSearch}
-                onChange={handleSearchChange}
-                onFocus={() => {
-                  if (searchSuggestions.length > 0) setShowSuggestions(true)
-                }}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                 placeholder="Search for your restaurant location..."
-                className="w-full pl-10 pr-3 sm:pr-4 py-2.5 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                className="w-full min-w-0 pl-10 sm:pl-12 pr-4 py-3.5 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#B80B3D] focus:border-transparent"
               />
-              {showSuggestions && searchSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto">
-                  {searchSuggestions.map((suggestion) => (
-                    <button
-                      key={suggestion.place_id}
-                      type="button"
-                      className="w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b last:border-b-0 border-gray-100"
-                      onClick={() => handleSuggestionSelect(suggestion)}
-                    >
-                      <p className="text-sm text-gray-800 truncate">
-                        {suggestion.structured_formatting?.main_text || suggestion.main_text || suggestion.description}
-                      </p>
-                      {(suggestion.structured_formatting?.secondary_text || suggestion.description) && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">
-                          {suggestion.structured_formatting?.secondary_text || suggestion.description}
-                        </p>
-                      )}
-                    </button>
-                  ))}
-                </div>
+              {showSuggestions && suggestions.length > 0 && (
+                <ul className="absolute z-[200] left-0 right-0 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                  {suggestions.map((prediction, idx) => {
+                    const main = prediction.mainText?.text || prediction.text?.text || ""
+                    const secondary = prediction.secondaryText?.text || ""
+                    return (
+                      <li
+                        key={prediction.placeId || idx}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          handleSelectSuggestion(prediction)
+                        }}
+                        className="flex items-start gap-2.5 px-3 sm:px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <MapPin className="w-4 h-4 text-[#B80B3D] mt-0.5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 font-medium leading-snug break-words">{main}</p>
+                          {secondary && (
+                            <p className="text-xs text-gray-500 mt-0.5 leading-snug break-words">{secondary}</p>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
             </div>
             <button
               onClick={handleSaveLocation}
               disabled={!selectedLocation || saving}
-              className="shrink-0 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
+              className="w-full sm:w-auto sm:self-end flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white text-sm sm:text-base font-semibold rounded-lg hover:opacity-95 transition-opacity disabled:bg-gray-400 disabled:cursor-not-allowed shrink-0"
             >
               {saving ? (
                 <>
-                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                  <span className="hidden sm:inline">Saving...</span>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Saving...</span>
                 </>
               ) : (
                 <>
-                  <Save className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="hidden xs:inline sm:inline">Save</span>
-                  <span className="hidden sm:inline">Location</span>
+                  <Save className="w-5 h-5" />
+                  <span>Save Location</span>
                 </>
               )}
             </button>
@@ -657,12 +522,14 @@ export default function ZoneSetup() {
           {selectedLocation && (
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm text-gray-700">
-                <strong>Selected Location:</strong>{" "}
-                {normalizeAddressLabel(selectedAddress) || "Pinned location on map"}
+                <strong>Selected Location:</strong> {selectedAddress || "Resolving address..."}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Coordinates: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                Coordinates: {Number(selectedLocation.latitude).toFixed(6)}, {Number(selectedLocation.longitude).toFixed(6)}
               </p>
+              {geocoding && (
+                <p className="text-xs text-[#B80B3D] mt-1">Updating address details...</p>
+              )}
             </div>
           )}
         </div>
@@ -685,7 +552,7 @@ export default function ZoneSetup() {
           {mapLoading && (
             <div className="absolute inset-0 bg-white flex items-center justify-center z-10">
               <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-red-600 mx-auto mb-2" />
+                <Loader2 className="w-8 h-8 animate-spin text-[#B80B3D] mx-auto mb-2" />
                 <p className="text-gray-600">Loading map...</p>
                 <p className="text-xs text-gray-400 mt-2">If this takes too long, please refresh the page</p>
               </div>
@@ -696,4 +563,11 @@ export default function ZoneSetup() {
     </div>
   )
 }
+
+
+
+
+
+
+
 

@@ -4,6 +4,7 @@
  */
 
 import apiClient from "./axios.js";
+import { EMAIL_REGEX } from "@/shared/utils/emailValidation";
 
 const AUTH = {
   USER_REQUEST_OTP: "/food/auth/user/request-otp",
@@ -11,73 +12,16 @@ const AUTH = {
   ADMIN_LOGIN: "/food/auth/admin/login",
   RESTAURANT_REQUEST_OTP: "/food/auth/restaurant/request-otp",
   RESTAURANT_VERIFY_OTP: "/food/auth/restaurant/verify-otp",
+  RESTAURANT_REAPPLY: "/food/auth/restaurant/reapply",
   DELIVERY_REQUEST_OTP: "/food/auth/delivery/request-otp",
   DELIVERY_VERIFY_OTP: "/food/auth/delivery/verify-otp",
   REFRESH_TOKEN: "/food/auth/refresh-token",
   LOGOUT: "/food/auth/logout",
+  LOGOUT_ALL: "/food/auth/logout-all",
+  DELETE_ACCOUNT: "/food/auth/delete-account",
+  CHECK_BALANCE: "/food/auth/delete-account/check-balance",
   ME: "/food/auth/me",
-  UNIFIED_REQUEST_OTP: "/auth/unified/request-otp",
-  UNIFIED_VERIFY_OTP: "/auth/unified/verify-otp",
-  FCM_SAVE_WEB: "/fcm-tokens/save",
-  FCM_SAVE_MOBILE: "/fcm-tokens/mobile/save",
 };
-
-/**
- * Request Unified OTP for both Food and Taxi.
- */
-export function requestUnifiedOtp(phone) {
-  const digits = normalizePhone(phone);
-  const normalized = digits.length > USER_PHONE_LENGTH ? digits.slice(-USER_PHONE_LENGTH) : digits;
-  if (normalized.length !== USER_PHONE_LENGTH) {
-    return Promise.reject(new Error("Phone number must be exactly 10 digits"));
-  }
-  return apiClient.post(AUTH.UNIFIED_REQUEST_OTP, { phone: normalized });
-}
-
-/**
- * Verify Unified OTP for both Food and Taxi.
- */
-export function verifyUnifiedOtp(phone, otp, ref, name, fcmToken, platform) {
-  const digits = normalizePhone(phone);
-  const normalized = digits.length > USER_PHONE_LENGTH ? digits.slice(-USER_PHONE_LENGTH) : digits;
-  const otpStr = String(otp ?? "").replace(/\D/g, "").slice(0, 4);
-
-  const payload = {
-    phone: normalized,
-    otp: otpStr,
-  };
-
-  const refValue = typeof ref === "string" ? ref.trim() : "";
-  if (refValue) payload.ref = refValue;
-  if (typeof name === "string" && name.trim()) payload.name = name.trim();
-  if (typeof fcmToken === "string" && fcmToken.trim()) {
-    payload.fcmToken = fcmToken.trim();
-    payload.platform = platform === "mobile" ? "mobile" : "web";
-  } else if (platform === "mobile") {
-    payload.platform = "mobile";
-  }
-
-  return apiClient.post(AUTH.UNIFIED_VERIFY_OTP, payload);
-}
-
-export function saveLoginFcmToken(token, platform = "web") {
-  const normalizedToken = String(token || "").trim();
-  if (!normalizedToken) {
-    return Promise.reject(new Error("FCM token is required"));
-  }
-  const normalizedPlatform = platform === "mobile" ? "mobile" : "web";
-  const route =
-    normalizedPlatform === "mobile" ? AUTH.FCM_SAVE_MOBILE : AUTH.FCM_SAVE_WEB;
-  if (normalizedPlatform === "mobile") {
-    return apiClient.post(route, {
-      token: normalizedToken,
-    });
-  }
-  return apiClient.post(route, {
-    token: normalizedToken,
-    platform: "web",
-  });
-}
 
 /**
  * Normalize phone to digits only (for backend 8–15 digits).
@@ -91,7 +35,6 @@ function normalizePhone(phone) {
 
 /** User phone: exactly 10 digits, numeric only. */
 const USER_PHONE_LENGTH = 10;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Request OTP for user login.
@@ -131,6 +74,7 @@ export function verifyUserOtp(
   name = null,
   fcmToken = null,
   platform = "web",
+  confirmAction = null,
 ) {
   const digits = normalizePhone(phone);
   if (!digits) {
@@ -159,6 +103,7 @@ export function verifyUserOtp(
     ...(refValue ? { ref: refValue } : {}),
     ...(name ? { name } : {}),
     ...(fcmToken ? { fcmToken, platform } : {}),
+    ...(confirmAction ? { confirmAction } : {}),
   });
 }
 
@@ -214,7 +159,48 @@ export function logout(refreshToken, fcmToken = null, platform = "web") {
     payload.platform = platform;
   }
 
+  clearMeCache();
   return apiClient.post(AUTH.LOGOUT, payload);
+}
+
+/**
+ * Logout from all devices (invalidates all refresh tokens and FCM tokens for the user).
+ * @param {string} [module] - "user" | "admin" | "restaurant" | "delivery"
+ */
+export function logoutFromAllDevices(module = "user") {
+  const m = String(module || "user");
+  clearMeCache();
+  return apiClient.post(AUTH.LOGOUT_ALL, {}, { contextModule: m });
+}
+
+/**
+ * Delete account (invalidate and destroy everything).
+ * @param {string} [module] - "user" | "admin" | "restaurant" | "delivery"
+ */
+export function deleteAccount(module = "user") {
+  const m = String(module || "user");
+  return apiClient.delete(AUTH.DELETE_ACCOUNT, { contextModule: m }).then((res) => {
+    meCache.delete(m);
+    meInFlight.delete(m);
+  });
+}
+
+/**
+ * Check account balance before deletion.
+ * @param {string} [module] - "user" | "restaurant" | "delivery"
+ * @returns {Promise<{ data: { success: boolean, balance: number, type: string } }>}
+ */
+export function checkAccountBalance(module = "user") {
+  const m = String(module || "user");
+  return apiClient.get(AUTH.CHECK_BALANCE, { contextModule: m });
+}
+
+/** 
+ * Clear all local /me caches (resets on logout or new login) 
+ */
+export function clearMeCache() {
+  meCache.clear();
+  meInFlight.clear();
 }
 
 /**
@@ -247,7 +233,7 @@ const BACKOFF_MS = 10000; // 10s wait on 429
 
 function getMeOnce(module) {
   const now = Date.now();
-
+  
   // 1. Check Backoff (e.g. from previous 429)
   const backoff = meBackoff.get(module);
   if (backoff && now < backoff) {
@@ -300,7 +286,7 @@ export function requestRestaurantOtp(phone) {
   return apiClient.post(AUTH.RESTAURANT_REQUEST_OTP, { phone: normalized });
 }
 
-export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web") {
+export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web", confirmAction = null) {
   const normalized = normalizePhone(phone);
   const otpStr = String(otp).replace(/\D/g, "").slice(0, 6);
   if (!normalized || otpStr.length < 4) {
@@ -310,7 +296,16 @@ export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web
     phone: normalized,
     otp: otpStr,
     ...(fcmToken ? { fcmToken, platform } : {}),
+    ...(confirmAction ? { confirmAction } : {}),
   });
+}
+
+export function reapplyRestaurant(phone) {
+  const normalized = normalizePhone(phone);
+  if (!normalized) {
+    return Promise.reject(new Error("Phone number is required"));
+  }
+  return apiClient.post(AUTH.RESTAURANT_REAPPLY, { phone: normalized });
 }
 
 /**
@@ -324,7 +319,7 @@ export function requestDeliveryOtp(phone) {
   return apiClient.post(AUTH.DELIVERY_REQUEST_OTP, { phone: normalized });
 }
 
-export function verifyDeliveryOtp(phone, otp, fcmToken = null, platform = "web") {
+export function verifyDeliveryOtp(phone, otp, fcmToken = null, platform = "web", confirmAction = null) {
   const normalized = normalizePhone(phone);
   const otpStr = String(otp).replace(/\D/g, "").slice(0, 6);
   if (!normalized || otpStr.length < 4) {
@@ -334,5 +329,6 @@ export function verifyDeliveryOtp(phone, otp, fcmToken = null, platform = "web")
     phone: normalized,
     otp: otpStr,
     ...(fcmToken ? { fcmToken, platform } : {}),
+    ...(confirmAction ? { confirmAction } : {}),
   });
 }

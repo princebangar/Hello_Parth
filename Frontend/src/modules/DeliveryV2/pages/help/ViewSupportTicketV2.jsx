@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Clock, CheckCircle, XCircle, 
@@ -105,10 +105,9 @@ export const ViewSupportTicketV2 = () => {
 
          <div className="mt-10 flex flex-col items-center justify-center opacity-20 gap-4">
             <Mail className="w-12 h-12" />
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-center">Hello Parth Support Fleet</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-center">Hello Parth Food Support Fleet</p>
          </div>
       </div>
     </div>
   );
 };
-

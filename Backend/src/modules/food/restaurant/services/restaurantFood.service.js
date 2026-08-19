@@ -14,6 +14,7 @@ import {
     categoryAllowsFoodType,
     GLOBAL_CATEGORY_FILTER
 } from '../../shared/categoryWorkflow.js';
+import { deleteReplacedAssets, deleteStoredAssets } from '../../../../services/storage.service.js';
 
 const toStr = (v) => (v != null ? String(v).trim() : '');
 const APPROVED_CATEGORY_FILTER = [
@@ -29,9 +30,6 @@ const normalizeFoodType = (v) => {
     if (t === 'Egg') return 'Non-Veg';
     return 'Non-Veg';
 };
-
-const normalizeRecommendedFlag = (value) =>
-    value === true || value === 1 || String(value).trim().toLowerCase() === 'true';
 
 const getCreateFoodPricing = (body = {}) => {
     const variants = normalizeFoodVariantsInput(extractRawFoodVariants(body));
@@ -190,9 +188,7 @@ export async function createRestaurantFood(restaurantId, body = {}) {
 
     const description = toStr(body.description);
     const image = toStr(body.image);
-    const isActive = body.isActive !== false && body.isAvailable !== false;
-    const isAvailable = isActive;
-    const isRecommended = normalizeRecommendedFlag(body.isRecommended);
+    const isAvailable = body.isAvailable !== false;
     const foodType = normalizeFoodType(body.foodType);
     const preparationTime = toStr(body.preparationTime);
     const { categoryObjectId, categoryName } = await resolveCategoryForRestaurant(context, { ...body, foodType });
@@ -207,18 +203,30 @@ export async function createRestaurantFood(restaurantId, body = {}) {
         variants,
         image,
         foodType,
-        isActive,
         isAvailable,
-        isRecommended,
+        isRecommended: body.isRecommended === true,
         preparationTime,
         approvalStatus: 'pending',
-        requestedAt: new Date()
+        requestedAt: new Date(),
+        actionType: 'NEW',
+        oldData: null,
+        newData: {
+            name,
+            description,
+            price,
+            variants,
+            image,
+            foodType,
+            preparationTime,
+            categoryName: categoryName || '',
+            isRecommended: body.isRecommended === true
+        }
     });
 
     try {
         const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
         void notifyAdminsSafely({
-            title: 'New Product Approval Request 🍔',
+            title: 'New Product Approval Request ðŸ”',
             body: `Restaurant has submitted a new item "${doc.name}" for approval.`,
             data: {
                 type: 'approval_request',
@@ -235,19 +243,37 @@ export async function createRestaurantFood(restaurantId, body = {}) {
 }
 
 export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
-    const context = await getRestaurantContext(restaurantId);
+    if (!restaurantId || !mongoose.Types.ObjectId.isValid(String(restaurantId))) {
+        throw new ValidationError('Invalid restaurant id');
+    }
     if (!foodId || !mongoose.Types.ObjectId.isValid(String(foodId))) {
         throw new ValidationError('Invalid food id');
     }
 
+    // ⚡ Fast path: isAvailable / isRecommended only — skip heavy context + findOne
+    const bodyKeys = Object.keys(body).filter(k => body[k] !== undefined);
+    const isSimpleToggle = bodyKeys.length > 0 && bodyKeys.every(k => k === 'isAvailable' || k === 'isRecommended');
+
+    if (isSimpleToggle) {
+        const fastUpdate = {};
+        if (body.isAvailable !== undefined) fastUpdate.isAvailable = body.isAvailable !== false;
+        if (body.isRecommended !== undefined) fastUpdate.isRecommended = body.isRecommended === true;
+
+        const updated = await FoodItem.findOneAndUpdate(
+            { _id: foodId, restaurantId },
+            { $set: fastUpdate },
+            { new: true }
+        ).lean();
+
+        return updated;
+    }
+
+    // Full path for content changes
+    const context = await getRestaurantContext(restaurantId);
+
     const existing = await FoodItem.findOne({ _id: foodId, restaurantId }).lean();
     if (!existing) return null;
 
-    const providedKeys = Object.keys(body || {});
-    const operationalOnlyKeys = ['isActive', 'isAvailable', 'isRecommended'];
-    const isOperationalOnlyUpdate =
-        providedKeys.length > 0 &&
-        providedKeys.every((key) => operationalOnlyKeys.includes(key));
 
     const update = {};
 
@@ -258,18 +284,14 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         update.name = name;
     }
     if (body.description !== undefined) update.description = toStr(body.description);
-    if (body.image !== undefined) update.image = toStr(body.image);
+    if (body.image !== undefined) {
+        const image = toStr(body.image);
+        await deleteReplacedAssets(existing.image, image);
+        update.image = image;
+    }
     Object.assign(update, getUpdatedFoodPricing(existing, body));
-    if (body.isActive !== undefined || body.isAvailable !== undefined) {
-        const nextIsActive = body.isActive !== undefined
-            ? body.isActive !== false
-            : body.isAvailable !== false;
-        update.isActive = nextIsActive;
-        update.isAvailable = nextIsActive;
-    }
-    if (body.isRecommended !== undefined) {
-        update.isRecommended = normalizeRecommendedFlag(body.isRecommended);
-    }
+    if (body.isAvailable !== undefined) update.isAvailable = body.isAvailable !== false;
+    if (body.isRecommended !== undefined) update.isRecommended = body.isRecommended === true;
     if (body.preparationTime !== undefined) update.preparationTime = toStr(body.preparationTime);
 
     const targetFoodType = body.foodType !== undefined ? normalizeFoodType(body.foodType) : normalizeFoodType(existing.foodType);
@@ -289,7 +311,12 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         update.categoryName = categoryName || '';
     }
 
-    const shouldResubmitForApproval = Object.keys(update).length > 0 && !isOperationalOnlyUpdate;
+    // Content-only fields that require admin re-approval
+    const contentUpdate = { ...update };
+    delete contentUpdate.isAvailable;
+    delete contentUpdate.isRecommended;
+
+    const shouldResubmitForApproval = Object.keys(contentUpdate).length > 0;
 
     if (shouldResubmitForApproval) {
         update.approvalStatus = 'pending';
@@ -297,7 +324,23 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
         update.rejectionReason = '';
         update.approvedAt = null;
         update.rejectedAt = null;
+        update.actionType = 'UPDATED';
+        // Only store safe serializable fields (avoid Buffer/binary spread errors)
+        const safeExisting = {
+            name: existing.name,
+            description: existing.description,
+            image: existing.image,
+            price: existing.price,
+            variants: existing.variants,
+            foodType: existing.foodType,
+            categoryName: existing.categoryName,
+            isRecommended: existing.isRecommended,
+            preparationTime: existing.preparationTime,
+        };
+        update.oldData = safeExisting;
+        update.newData = { ...safeExisting, ...contentUpdate };
     }
+
 
     const updated = await FoodItem.findOneAndUpdate(
         { _id: foodId, restaurantId },
@@ -323,4 +366,16 @@ export async function updateRestaurantFood(restaurantId, foodId, body = {}) {
     }
 
     return updated;
+}
+
+export async function deleteRestaurantFood(restaurantId, foodId) {
+    if (!foodId || !mongoose.Types.ObjectId.isValid(String(foodId))) {
+        throw new ValidationError('Invalid food item id');
+    }
+    const food = await FoodItem.findOneAndDelete({
+        _id: foodId,
+        restaurantId: new mongoose.Types.ObjectId(String(restaurantId))
+    }).lean();
+    if (food) await deleteStoredAssets(food.image);
+    return food;
 }

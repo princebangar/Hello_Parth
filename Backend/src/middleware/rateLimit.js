@@ -32,3 +32,5 @@ export const authRateLimiter = rateLimit({
     }
 });
 
+export const privateRateLimiter = apiRateLimiter;
+

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Business Settings Utility
  * Handles loading and updating business settings (favicon, title, logo)
  */
@@ -7,18 +7,7 @@ import apiClient from "@food/api/axios";
 import { API_ENDPOINTS } from "@food/api/config";
 import { publicGetOnce } from "@food/api";
 
-const SETTINGS_KEY = 'food_business_settings';
-
-export const normalizeCompanyName = (value) => {
-  const raw = typeof value === "string" ? value.trim() : "";
-  if (!raw) return "Hello Parth";
-  const lower = raw.toLowerCase();
-  // Legacy brand leftovers from older builds / DB seeds
-  if (lower === "appzeto" || lower.includes("appzeto") || lower === "app") {
-    return "Hello Parth";
-  }
-  return raw;
-};
+const SETTINGS_KEY = 'helloparth_business_settings';
 
 // Initialize from localStorage immediately so it's available for components on mount
 let cachedSettings = (() => {
@@ -34,7 +23,7 @@ let cachedSettings = (() => {
 if (cachedSettings) {
   setTimeout(() => {
     updateFavicon(cachedSettings.favicon?.url);
-    updateTitle(normalizeCompanyName(cachedSettings.companyName));
+    updateTitle(cachedSettings.companyName);
   }, 0);
 }
 
@@ -63,18 +52,14 @@ export const loadBusinessSettings = async () => {
       const settings = response?.data?.data || response?.data;
 
       if (settings) {
-        const normalizedSettings = {
-          ...settings,
-          companyName: normalizeCompanyName(settings.companyName),
-        };
-        cachedSettings = normalizedSettings;
+        cachedSettings = settings;
         try {
-          localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizedSettings));
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
         } catch (e) {}
         
-        updateFavicon(normalizedSettings.favicon?.url);
-        updateTitle(normalizedSettings.companyName);
-        return normalizedSettings;
+        updateFavicon(settings.favicon?.url);
+        updateTitle(settings.companyName);
+        return settings;
       }
       return cachedSettings;
     })();
@@ -92,7 +77,10 @@ export const loadBusinessSettings = async () => {
  * Update favicon in document
  */
 export const updateFavicon = (url) => {
-  if (!url || typeof document === 'undefined') return;
+  if (typeof document === 'undefined') return;
+
+  // Admin favicon when present; otherwise default Hello Parth favicon
+  const href = (url && String(url).trim()) || '/assets/images/Hello Parth Logo.png';
 
   // Remove existing favicons
   const existingFavicons = document.querySelectorAll("link[rel*='icon']");
@@ -101,9 +89,8 @@ export const updateFavicon = (url) => {
   // Add new favicon
   const link = document.createElement("link");
   link.rel = "icon";
-  link.type = "image/png";
-  link.href = url;
-  // Prevent third-party cookie warning (Cloudinary)
+  link.type = /\.png(\?|$)/i.test(href) ? "image/png" : (/\.webp(\?|$)/i.test(href) ? "image/webp" : "image/png");
+  link.href = href;
   link.crossOrigin = "anonymous";
   document.head.appendChild(link);
 };
@@ -113,7 +100,7 @@ export const updateFavicon = (url) => {
  */
 export const updateTitle = (companyName) => {
   if (typeof document !== 'undefined') {
-    document.title = normalizeCompanyName(companyName);
+    document.title = (companyName && companyName !== "Foodelo") ? companyName : "Hello Parth Food";
   }
 };
 
@@ -122,17 +109,13 @@ export const updateTitle = (companyName) => {
  */
 export const setCachedSettings = (settings) => {
   if (settings) {
-    const normalizedSettings = {
-      ...settings,
-      companyName: normalizeCompanyName(settings.companyName),
-    };
-    cachedSettings = normalizedSettings;
+    cachedSettings = settings;
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizedSettings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (e) {}
     
-    updateFavicon(normalizedSettings.favicon?.url);
-    updateTitle(normalizedSettings.companyName);
+    updateFavicon(settings.favicon?.url);
+    updateTitle(settings.companyName);
   }
 };
 
@@ -159,7 +142,8 @@ export const getCachedSettings = () => {
  */
 export const getCompanyName = () => {
   const settings = getCachedSettings();
-  return normalizeCompanyName(settings?.companyName);
+  const name = settings?.companyName || "Hello Parth Food";
+  return name === "Foodelo" ? "Hello Parth Food" : name;
 };
 
 /**
@@ -169,9 +153,8 @@ export const getCompanyName = () => {
 export const getCompanyNameAsync = async () => {
   try {
     const settings = await loadBusinessSettings();
-    return normalizeCompanyName(settings?.companyName);
+    return settings?.companyName || "Hello Parth Food";
   } catch (error) {
-    return "Hello Parth";
+    return "Hello Parth Food";
   }
 };
-

@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
+import dishFallbackImage from '@food/assets/dish_fallback.webp'
 
 /**
  * OptimizedImage Component
  * 
  * Features:
- * - Lazy loading with Intersection Observer
+ * - High-speed native lazy loading (loading="lazy")
  * - Responsive srcset for different screen sizes
  * - WebP/AVIF format support with fallback
  * - Blur placeholder (LQIP) for smooth loading
- * - Preloading for critical images
+ * - Preloading for critical images (priority=true)
  * - Proper decoding and fetchpriority
+ * - Instant cached image rendering (zero delay/flash for cached assets)
  * - Error handling with fallback
  */
 const OptimizedImage = React.memo(({
@@ -22,18 +24,19 @@ const OptimizedImage = React.memo(({
   objectFit = 'cover',
   placeholder = 'blur',
   blurDataURL,
+  responsive = true, // false = single src only (carousels / avoid per-slide request storms)
+  fallbackImage,
   onLoad,
   onError,
   ...props
 }) => {
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(priority)
   const [hasError, setHasError] = useState(false)
-  const [isInView, setIsInView] = useState(priority) // Start visible if priority
   const imgRef = useRef(null)
-  const observerRef = useRef(null)
 
   // Check if image URL supports optimization (external URLs)
   const supportsOptimization = (imageSrc) => {
+    if (!responsive) return false
     if (!imageSrc || typeof imageSrc !== 'string' || imageSrc === '') return false
     if (imageSrc.startsWith('data:') || imageSrc.startsWith('/')) return false
     // Check if it's an external URL (http/https)
@@ -52,55 +55,41 @@ const OptimizedImage = React.memo(({
     }
   }
 
-  // Generate responsive srcset
+  // Prefer thumbnail widths when sizes looks icon/chip-sized (avoids 1600w downloads for logos)
+  const responsiveWidths = useMemo(() => {
+    const s = String(sizes || '')
+    const looksLikeIcon =
+      /^\s*\d{1,3}px\s*$/i.test(s) ||
+      /\b(7[0-9]|8[0-9]|9[0-9]|1[01][0-9]|12[0-8])px\b/i.test(s) ||
+      /\b2[0-5]vw\b/i.test(s)
+    return looksLikeIcon ? [120, 200, 320] : [400, 600, 800, 1200, 1600]
+  }, [sizes])
+
+  // Generate responsive srcset (disabled when responsive=false — e.g. dish carousels)
   const srcSet = useMemo(() => {
-    if (!supportsOptimization(src)) return undefined
-    const sizesArr = [400, 600, 800, 1200, 1600]
-    return sizesArr
+    if (!responsive || !supportsOptimization(src)) return undefined
+    return responsiveWidths
       .map(size => `${appendImageParams(src, { w: size, q: 80 })} ${size}w`)
       .join(', ')
-  }, [src])
+  }, [src, responsive, responsiveWidths])
 
   // Generate WebP srcset
   const webPSrcSet = useMemo(() => {
-    if (!supportsOptimization(src)) return undefined
-    const sizesArr = [400, 600, 800, 1200, 1600]
-    return sizesArr
+    if (!responsive || !supportsOptimization(src)) return undefined
+    return responsiveWidths
       .map(size => `${appendImageParams(src, { w: size, q: 80, format: 'webp' })} ${size}w`)
       .join(', ')
-  }, [src])
+  }, [src, responsive, responsiveWidths])
 
-  // Intersection Observer for lazy loading
+  // Instant Cache Detection: Check if image is already cached/complete in browser cache on mount and source change
   useEffect(() => {
-    if (priority || isInView) return
-
-    if (!imgRef.current) return
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsInView(true)
-            if (observerRef.current && imgRef.current) {
-              observerRef.current.unobserve(imgRef.current)
-            }
-          }
-        })
-      },
-      {
-        rootMargin: '50px', // Start loading 50px before entering viewport
-        threshold: 0.01
-      }
-    )
-
-    observerRef.current.observe(imgRef.current)
-
-    return () => {
-      if (observerRef.current && imgRef.current) {
-        observerRef.current.unobserve(imgRef.current)
+    if (imgRef.current) {
+      const img = imgRef.current.querySelector('img')
+      if (img && img.complete) {
+        setIsLoaded(true)
       }
     }
-  }, [priority, isInView])
+  }, [src])
 
   const handleLoad = (e) => {
     setIsLoaded(true)
@@ -114,24 +103,15 @@ const OptimizedImage = React.memo(({
 
   // Default blur placeholder (tiny gray square)
   const defaultBlurDataURL = blurDataURL || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2U1ZTdlYiIvPjwvc3ZnPg=='
+  const DEFAULT_FALLBACK = dishFallbackImage
 
-  // Don't render if src is empty or null
-  if (!src || src === '') {
-    return (
-      <div className={`relative overflow-hidden ${className}`}>
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-          <span className="text-xs text-gray-400 dark:text-gray-600">Image unavailable</span>
-        </div>
-      </div>
-    )
-  }
-
-  const imageSrc = hasError ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23e5e7eb" width="400" height="300"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E' : src
+  const isFallback = !src || typeof src !== 'string' || !src.trim() || hasError
+  const effectiveSrc = isFallback ? (fallbackImage || DEFAULT_FALLBACK) : src.trim()
 
   return (
     <div className={`relative overflow-hidden ${className}`} ref={imgRef}>
       {/* Blur Placeholder */}
-      {placeholder === 'blur' && !isLoaded && (
+      {placeholder === 'blur' && !isLoaded && !isFallback && (
         <motion.div
           className="absolute inset-0"
           initial={{ opacity: 1 }}
@@ -148,45 +128,36 @@ const OptimizedImage = React.memo(({
       )}
 
       {/* Loading Skeleton */}
-      {!isLoaded && !hasError && (
+      {!isLoaded && !isFallback && placeholder !== 'empty' && (
         <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-700 dark:via-gray-600 dark:to-gray-700 animate-pulse" />
       )}
 
-      {/* Actual Image */}
-      {isInView && (
-        <picture className="absolute inset-0 w-full h-full">
-          {/* WebP source for modern browsers */}
-          {webPSrcSet && (
-            <source
-              srcSet={webPSrcSet}
-              sizes={sizes}
-              type="image/webp"
-            />
-          )}
-
-          {/* Fallback to original format */}
-          <motion.img
-            src={imageSrc}
-            srcSet={srcSet}
-            sizes={supportsOptimization(imageSrc) ? sizes : undefined}
-            alt={alt}
-            className={`w-full h-full ${objectFit === 'cover' ? 'object-cover' : objectFit === 'contain' ? 'object-contain' : ''} ${priority || isLoaded ? 'opacity-100' : 'opacity-0'} ${!priority && 'transition-opacity duration-300'}`}
-            loading={priority ? 'eager' : 'lazy'}
-            decoding="async"
-            fetchPriority={priority ? 'high' : 'auto'}
-            onLoad={handleLoad}
-            onError={handleError}
-            {...props}
+      {/* Actual Image - Rendered immediately */}
+      <picture className="absolute inset-0 w-full h-full">
+        {/* WebP source for modern browsers */}
+        {webPSrcSet && !isFallback && (
+          <source
+            srcSet={webPSrcSet}
+            sizes={sizes}
+            type="image/webp"
           />
-        </picture>
-      )}
+        )}
 
-      {/* Error State */}
-      {hasError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-          <span className="text-xs text-gray-400 dark:text-gray-600">Image unavailable</span>
-        </div>
-      )}
+        {/* Fallback to original format / fallback image */}
+        <motion.img
+          src={effectiveSrc}
+          srcSet={!isFallback ? srcSet : undefined}
+          sizes={!isFallback && supportsOptimization(effectiveSrc) ? sizes : undefined}
+          alt={alt || 'Food item'}
+          className={`w-full h-full ${objectFit === 'cover' ? 'object-cover' : objectFit === 'contain' ? 'object-contain' : ''} ${priority || isLoaded || isFallback ? 'opacity-100' : 'opacity-0'} ${!priority && 'transition-opacity duration-300'}`}
+          loading={priority ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={priority ? 'high' : 'auto'}
+          onLoad={handleLoad}
+          onError={handleError}
+          {...props}
+        />
+      </picture>
     </div>
   )
 })

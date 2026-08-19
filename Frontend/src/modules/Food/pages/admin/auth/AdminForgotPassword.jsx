@@ -12,7 +12,7 @@ import {
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Mail, ArrowLeft, Shield } from "lucide-react"
-import quickSpicyLogo from "@food/assets/hello-parth-logo.png"
+import quickSpicyLogo from "@food/assets/quicky-spicy-logo.png"
 import { adminAPI } from "@food/api"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { loadBusinessSettings } from "@food/utils/businessSettings"
@@ -96,46 +96,20 @@ export default function AdminForgotPassword() {
   }
 
   const handleOtpChange = (index, value) => {
-    const digits = String(value || "").replace(/\D/g, "")
+    if (!/^\d*$/.test(value)) return
+
     const newOtp = [...otp]
-
-    if (!digits) {
-      newOtp[index] = ""
-      setOtp(newOtp)
-      setError("")
-      if (index > 0) inputRefs.current[index - 1]?.focus()
-      return
-    }
-
-    if (digits.length >= 6) {
-      const pasted = digits.slice(0, 6).split("")
-      const fullPastedOtp = ["", "", "", "", "", ""]
-      pasted.forEach((char, i) => { fullPastedOtp[i] = char })
-      setOtp(fullPastedOtp)
-      setError("")
-      inputRefs.current[5]?.focus()
-      return
-    }
-
-    const newDigit = digits.slice(-1)
-    newOtp[index] = newDigit
+    newOtp[index] = value.slice(-1)
     setOtp(newOtp)
-    setError("")
 
-    if (newDigit && index < 5) {
+    if (value && index < 5) {
       inputRefs.current[index + 1]?.focus()
     }
   }
 
   const handleOtpKeyDown = (index, e) => {
-    if (e.key === "Backspace") {
-      if (!otp[index] && index > 0) {
-        e.preventDefault()
-        const newOtp = [...otp]
-        newOtp[index - 1] = ""
-        setOtp(newOtp)
-        inputRefs.current[index - 1]?.focus()
-      }
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus()
     }
   }
 
@@ -247,11 +221,11 @@ export default function AdminForgotPassword() {
         <Card className="w-full max-w-lg bg-white/90 backdrop-blur border-neutral-200 shadow-2xl">
           <CardHeader className="pb-4">
             <div className="flex w-full items-center gap-4 sm:gap-5">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-neutral-200 overflow-hidden">
+              <div className="flex h-14 w-28 shrink-0 items-center justify-center rounded-xl bg-gray-900/5 ring-1 ring-neutral-200">
                 <img
                   src={logoUrl || quickSpicyLogo}
                   alt={companyName}
-                  className="h-full w-full object-cover scale-110"
+                  className="h-10 w-24 object-contain"
                   loading="lazy"
                   onError={(e) => {
                     if (e.target.src !== quickSpicyLogo) {
@@ -465,5 +439,4 @@ export default function AdminForgotPassword() {
     </div>
   )
 }
-
 

@@ -95,6 +95,17 @@ app.use(xssClean());
 // Global rate limiting for API routes
 app.use('/api', apiRateLimiter);
 
+if (config.serveUploadsFromNode || config.nodeEnv !== 'production') {
+    app.use(
+        '/uploads',
+        express.static(config.uploadsRoot, {
+            maxAge: '30d',
+            index: false,
+            dotfiles: 'ignore'
+        })
+    );
+}
+
 // Optional: log API response time (method, path, status, duration) - no sensitive data
 app.use('/api', responseTimeLogger);
 

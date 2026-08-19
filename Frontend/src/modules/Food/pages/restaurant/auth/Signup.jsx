@@ -1,13 +1,24 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2, AlertCircle, User, Phone } from "lucide-react"
-import { Button } from "@food/components/ui/button"
+import { Phone, User, AlertCircle, Loader2, UtensilsCrossed } from "lucide-react"
 import { restaurantAPI } from "@food/api"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@food/components/ui/card"
+import { Button } from "@food/components/ui/button"
+import { Input } from "@food/components/ui/input"
+import { Label } from "@food/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@food/components/ui/select"
+import loginBg from "@food/assets/loginbanner.png"
 import { useCompanyName } from "@food/hooks/useCompanyName"
-import { motion, AnimatePresence } from "framer-motion"
-import logoImg from "@food/assets/hello-parth-logo.png"
 
-const DEFAULT_COUNTRY_CODE = "+91"
+const countryCodes = [
+  { code: "+91", country: "IN", flag: "🇮🇳" },
+]
 
 export default function RestaurantSignup() {
   const navigate = useNavigate()
@@ -23,52 +34,52 @@ export default function RestaurantSignup() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [apiError, setApiError] = useState("")
-  const [keyboardInset, setKeyboardInset] = useState(0)
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return undefined
-
-    const updateKeyboardInset = () => {
-      const viewport = window.visualViewport
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-      setKeyboardInset(inset > 0 ? inset : 0)
-    }
-
-    updateKeyboardInset()
-    window.visualViewport.addEventListener("resize", updateKeyboardInset)
-    window.visualViewport.addEventListener("scroll", updateKeyboardInset)
-
-    return () => {
-      window.visualViewport.removeEventListener("resize", updateKeyboardInset)
-      window.visualViewport.removeEventListener("scroll", updateKeyboardInset)
-    }
-  }, [])
 
   const validatePhone = (phone) => {
-    if (!phone || phone.trim() === "") return "Phone number required"
-    const digitsOnly = phone.replace(/\D/g, "")
-    if (digitsOnly.length !== 10) return "Must be 10 digits"
-    if (!["6", "7", "8", "9"].includes(digitsOnly[0])) return "Invalid number"
+    if (!phone.trim()) {
+      return "Phone number is required"
+    }
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, "")
+    const phoneRegex = /^\d{7,15}$/
+    if (!phoneRegex.test(cleanPhone)) {
+      return "Phone number must be 7-15 digits"
+    }
     return ""
   }
 
   const validateName = (name) => {
-    if (!name.trim()) return "Restaurant name is required"
-    if (name.trim().length < 2) return "Must be at least 2 characters"
-    if (name.trim().length > 50) return "Must be less than 50 characters"
+    if (!name.trim()) {
+      return "Restaurant name is required"
+    }
+    if (name.trim().length < 2) {
+      return "Restaurant name must be at least 2 characters"
+    }
+    if (name.trim().length > 50) {
+      return "Restaurant name must be less than 50 characters"
+    }
     return ""
   }
 
-  const handlePhoneChange = (e) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 10)
-    setFormData((prev) => ({ ...prev, phone: value }))
-    if (errors.phone) setErrors((prev) => ({ ...prev, phone: validatePhone(value) }))
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData({
+      ...formData,
+      [name]: value,
+    })
+
+    // Real-time validation
+    if (name === "phone") {
+      setErrors({ ...errors, phone: validatePhone(value) })
+    } else if (name === "name") {
+      setErrors({ ...errors, name: validateName(value) })
+    }
   }
 
-  const handleNameChange = (e) => {
-    const value = e.target.value
-    setFormData((prev) => ({ ...prev, name: value }))
-    if (errors.name) setErrors((prev) => ({ ...prev, name: validateName(value) }))
+  const handleCountryCodeChange = (value) => {
+    setFormData({
+      ...formData,
+      countryCode: value,
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -95,10 +106,14 @@ export default function RestaurantSignup() {
       return
     }
 
+    // Build full phone number
     const fullPhone = `${formData.countryCode} ${formData.phone}`.trim()
 
     try {
+      // Send OTP with purpose 'register'
       await restaurantAPI.sendOTP(fullPhone, "register")
+
+      // Store auth data in sessionStorage for OTP page
       const authData = {
         method: "phone",
         phone: fullPhone,
@@ -107,162 +122,263 @@ export default function RestaurantSignup() {
         module: "restaurant",
       }
       sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
+
       navigate("/food/restaurant/otp")
     } catch (error) {
-      setApiError(error?.response?.data?.message || error?.response?.data?.error || "Failed to send OTP.")
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setApiError(message)
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-[100dvh] bg-white dark:bg-[#0A0A0B] flex flex-col font-sans overflow-hidden">
-      {/* Top Branding Section - 35% height */}
-      <div className="relative h-[35dvh] w-full bg-[#1A1A1A] overflow-hidden flex flex-col items-center justify-center">
-        {/* Subtle Decorative Elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#F38F24]/5 rounded-full blur-[80px] translate-x-1/3 -translate-y-1/3"></div>
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-white/5 rounded-full blur-[60px] -translate-x-1/3 translate-y-1/3"></div>
-        </div>
-
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="relative z-10 flex flex-col items-center gap-4"
-        >
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-xl border-2 border-white/25 overflow-hidden">
-            <img src={logoImg} alt={`${companyName} logo`} className="w-full h-full object-cover scale-110" />
-          </div>
-          <div className="text-center text-white">
-            <h1 className="font-black text-2xl tracking-tight leading-none mb-1">
-              {companyName.toUpperCase()}<span className="opacity-60 italic">PARTNER</span>
+    <div className="h-screen w-full flex bg-white overflow-hidden">
+      {/* Left image section */}
+      <div className="hidden lg:flex lg:w-1/2 relative">
+        <img
+          src={loginBg}
+          alt="Restaurant background"
+          className="w-full h-full object-cover"
+        />
+        {/* Orange half-circle text block attached to the left with animation */}
+        <div className="absolute inset-0 flex items-center text-white pointer-events-none">
+          <div
+            className="bg-gradient-to-br from-[#B80B3D] to-[#66001D]/80 rounded-r-full py-10 xl:py-20 pl-10 xl:pl-14 pr-10 xl:pr-20 max-w-[70%] shadow-xl backdrop-blur-[1px]"
+            style={{ animation: "slideInLeft 0.8s ease-out both" }}
+          >
+            <h1 className="text-[#B80B3D]xl xl:text-4xl font-extrabold mb-4 tracking-wide leading-tight">
+              JOIN AS
+              <br />
+              RESTAURANT PARTNER
             </h1>
-            <div className="h-0.5 w-8 bg-white/40 mx-auto rounded-full" />
+            <p className="text-base xl:text-lg opacity-95 max-w-xl">
+              Register your restaurant and start serving customers.
+            </p>
           </div>
-        </motion.div>
+        </div>
       </div>
 
-      {/* Bottom Form Section - 65% height */}
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="flex-1 bg-white dark:bg-[#0A0A0B] rounded-t-[2.5rem] -mt-8 relative z-20 shadow-[0_-20px_40px_rgba(0,0,0,0.05)] px-6 pt-8 pb-6 flex flex-col"
-        style={{ marginBottom: keyboardInset ? `${keyboardInset}px` : 0 }}
-      >
-        <div className="max-w-md mx-auto w-full flex flex-col h-full">
-          <div className="space-y-2 mb-6">
-            <h2 className="text-2xl font-black text-[#1A1A1A] dark:text-white tracking-tight">
+      {/* Right form section */}
+      <div className="w-full lg:w-1/2 h-full flex flex-col">
+        {/* Top logo and version */}
+        <div className="relative flex items-center justify-center px-6 sm:px-10 lg:px-16 pt-6 pb-4">
+          <div
+            className="flex items-center gap-3"
+            style={{ animation: "fadeInDown 0.7s ease-out both" }}
+          >
+            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[#B80B3D] to-[#66001D] flex items-center justify-center text-white shadow-lg">
+              <UtensilsCrossed className="h-6 w-6" />
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-2xl font-bold tracking-wide text-primary-orange">
+                {companyName}
+              </span>
+              <span className="text-xs font-medium text-gray-500">
+                Restaurant Panel
+              </span>
+            </div>
+          </div>
+          <div className="absolute right-6 sm:right-10 lg:right-16 top-6 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-700 shadow-sm">
+            Software Version : 1.0.0
+          </div>
+        </div>
+
+        {/* Centered content (title + form + info) */}
+        <div
+          className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 lg:px-16 pb-8"
+          style={{ animation: "fadeInUp 0.8s ease-out 0.15s both" }}
+        >
+          {/* Title */}
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl sm:text-[#B80B3D]xl font-semibold text-gray-900 mb-2">
               Register Your Restaurant
             </h2>
-            <p className="text-sm font-medium text-gray-500">
+            <p className="text-sm text-gray-500">
               Enter your details to get started.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider ml-1">
+          {/* Form */}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5 w-full max-w-lg rounded-xl bg-white/80 backdrop-blur-sm p-1 sm:p-2"
+          >
+            {/* Restaurant name input */}
+            <div className="space-y-1.5">
+              <Label htmlFor="name" className="text-sm font-medium text-gray-700">
                 Restaurant Name
-              </label>
-              <div className="flex items-center gap-0 bg-[#F8F9FA] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl focus-within:border-[#F38F24] focus-within:ring-1 focus-within:ring-[#F38F24] transition-all overflow-hidden group">
-                <div className="flex items-center px-4 h-14 bg-transparent text-gray-400">
-                  <User size={20} className="group-focus-within:text-[#F38F24] transition-colors" />
-                </div>
-                <input
-                  type="text"
+              </Label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                  <User className="h-4 w-4" />
+                </span>
+                <Input
+                  id="name"
                   name="name"
+                  type="text"
                   placeholder="Enter restaurant name"
                   value={formData.name}
-                  onChange={handleNameChange}
-                  className="flex-1 h-14 bg-transparent border-0 outline-none ring-0 placeholder:text-gray-400 text-base font-semibold px-2 text-[#1A1A1A] dark:text-white"
+                  onChange={handleChange}
+                  className={`h-11 pl-9 border-gray-300 rounded-md shadow-sm focus-visible:ring-primary-orange focus-visible:ring-2 transition-colors placeholder:text-gray-400 ${errors.name ? "border-red-500" : ""}`}
+                  required
                 />
               </div>
-              <AnimatePresence>
-                {errors.name && (
-                  <motion.div
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-red-500 pl-2"
-                  >
-                    <AlertCircle className="h-4 w-4" />
-                    <span>{errors.name}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider ml-1">
-                Owner Contact Number
-              </label>
-              <div className="flex items-center gap-0 bg-[#F8F9FA] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl focus-within:border-[#F38F24] focus-within:ring-1 focus-within:ring-[#F38F24] transition-all overflow-hidden group">
-                <div className="flex items-center px-4 h-14 bg-transparent text-gray-500 font-semibold text-lg border-r border-gray-200 dark:border-zinc-800">
-                  <span>+91</span>
+              {errors.name && (
+                <div className="flex items-center gap-1 text-xs sm:text-sm text-[#B80B3D]">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>{errors.name}</span>
                 </div>
-                <input
-                  type="tel"
-                  maxLength={10}
-                  inputMode="numeric"
-                  placeholder="00000 00000"
-                  value={formData.phone}
-                  onChange={handlePhoneChange}
-                  className="flex-1 h-14 bg-transparent border-0 outline-none ring-0 placeholder:text-gray-400 text-lg font-semibold tracking-widest px-4 text-[#1A1A1A] dark:text-white"
-                />
-              </div>
-
-              <AnimatePresence>
-                {(errors.phone || apiError) && (
-                  <motion.div
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-red-500 pl-2"
-                  >
-                    <AlertCircle className="h-4 w-4" />
-                    <span>{errors.phone || apiError}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              )}
             </div>
 
+            {/* Phone input */}
+            <div className="space-y-1.5">
+              <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
+                Phone Number
+              </Label>
+              <div className="flex gap-2">
+                <Select
+                  value={formData.countryCode}
+                  onValueChange={handleCountryCodeChange}
+                >
+                  <SelectTrigger className="w-20 sm:w-24 md:w-[100px] text-xs sm:text-sm">
+                    <SelectValue placeholder="Code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {countryCodes.map((country) => (
+                      <SelectItem key={country.code} value={country.code}>
+                        <span className="flex items-center gap-2 text-xs sm:text-sm">
+                          <span>{country.flag}</span>
+                          <span>{country.code}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex-1 min-w-0">
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                      <Phone className="h-4 w-4" />
+                    </span>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      placeholder="Enter phone number"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className={`h-11 pl-9 border-gray-300 rounded-md shadow-sm focus-visible:ring-primary-orange focus-visible:ring-2 transition-colors placeholder:text-gray-400 ${errors.phone ? "border-red-500" : ""}`}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              {errors.phone && (
+                <div className="flex items-center gap-1 text-xs sm:text-sm text-[#B80B3D]">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>{errors.phone}</span>
+                </div>
+              )}
+              {apiError && !errors.phone && (
+                <div className="flex items-center gap-1 text-xs sm:text-sm text-[#B80B3D] mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>{apiError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Sign up button */}
             <Button
               type="submit"
-              disabled={isLoading || formData.phone.length !== 10 || formData.name.length < 2}
-              className="w-full h-14 rounded-xl font-bold text-base transition-all bg-[#1A1A1A] hover:bg-black text-white hover:shadow-lg disabled:opacity-50 disabled:bg-gray-200 disabled:text-gray-400 mt-4"
+              className="mt-2 h-11 w-full bg-gradient-to-br from-[#B80B3D] to-[#66001D] hover:bg-gradient-to-br from-[#B80B3D] to-[#66001D]/90 text-white text-base font-semibold rounded-md shadow-md transition-colors"
+              disabled={isLoading}
             >
               {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                  <span>Sending OTP...</span>
-                </div>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending OTP...
+                </>
               ) : (
                 "Send OTP"
               )}
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <span className="text-sm font-medium text-gray-500">Already have an account? </span>
+          {/* Login link */}
+          <div className="mt-6 text-center text-sm">
+            <span className="text-gray-600">Already have an account? </span>
             <button
               type="button"
               onClick={() => navigate("/food/restaurant/login")}
-              className="text-sm font-bold text-[#1A1A1A] hover:text-[#F38F24] transition-colors"
+              className="text-primary-orange hover:underline font-medium"
             >
               Login
             </button>
           </div>
 
-          <footer className="mt-auto pt-8 text-center">
-            <p className="text-xs text-gray-400 font-medium leading-relaxed">
-              Secure partner signup powered by<br />
-              <span className="text-[#1A1A1A] font-bold">{companyName} Network</span>
-            </p>
-          </footer>
+          {/* Demo credentials / info bar */}
+          <div className="mt-8 w-full max-w-lg rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-xs sm:text-sm text-gray-800 flex items-start gap-3">
+            <div className="mt-0.5 text-primary-orange">
+              <AlertCircle className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="font-semibold mb-1">Demo Credentials</div>
+              <div>
+                <span className="font-semibold">Phone :</span> +91 9876543210
+              </div>
+              <div>
+                <span className="font-semibold">OTP :</span> 1234
+              </div>
+            </div>
+          </div>
         </div>
-      </motion.div>
+
+        {/* Simple keyframe animations */}
+        <style>{`
+          @keyframes slideInLeft {
+            from {
+              opacity: 0;
+              transform: translateX(-40px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          @keyframes fadeInDown {
+            from {
+              opacity: 0;
+              transform: translateY(-16px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}</style>
+      </div>
     </div>
   )
 }
+
+
+
+
+
+
+
+

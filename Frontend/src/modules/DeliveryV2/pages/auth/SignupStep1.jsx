@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
-import { toast } from "sonner"
-import useDeliveryBackNavigation from "../../hooks/useDeliveryBackNavigation"
+import useDeliveryOnboardingExitGuard from "../../hooks/useDeliveryOnboardingExitGuard"
+import OnboardingExitModal from "@/shared/components/OnboardingExitModal"
+import { hasDeliveryStep1Progress, getAllSignupDocumentsFromDB } from "../../utils/deliveryOnboardingStorage"
+import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
+import { prefetchModuleFcmToken } from "@food/utils/firebaseMessaging"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -10,9 +13,6 @@ const debugError = (...args) => {}
 
 export default function SignupStep1() {
   const navigate = useNavigate()
-  const goBack = useDeliveryBackNavigation()
-  const [zones, setZones] = useState([])
-  const [zonesLoading, setZonesLoading] = useState(false)
   const [formData, setFormData] = useState(() => {
     const saved = sessionStorage.getItem("deliverySignupDetails")
     const base = {
@@ -24,8 +24,6 @@ export default function SignupStep1() {
       address: "",
       city: "",
       state: "",
-      zoneId: "",
-      zoneName: "",
       vehicleType: "bike",
       vehicleName: "",
       vehicleNumber: "",
@@ -45,21 +43,20 @@ export default function SignupStep1() {
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const hasUnsavedProgress = useCallback(
+    () => hasDeliveryStep1Progress(formData),
+    [formData],
+  )
+
+  const { showExitModal, handleBack, handleStay, handleExit } = useDeliveryOnboardingExitGuard(
+    "details",
+    hasUnsavedProgress,
+  )
+
   useEffect(() => {
-    const fetchZones = async () => {
-      setZonesLoading(true)
-      try {
-        const res = await fetch("/api/v1/taxi/user/service-locations")
-        const data = await res.json()
-        const list = data?.data?.results || data?.results || []
-        setZones(list)
-      } catch (e) {
-        debugError("Error loading service locations:", e)
-      } finally {
-        setZonesLoading(false)
-      }
-    }
-    fetchZones()
+    prefetchModuleFcmToken("delivery")
+    void import("./SignupStep2")
+    void getAllSignupDocumentsFromDB().catch(() => {})
   }, [])
 
   const sanitizeLocationValue = (value) =>
@@ -73,22 +70,10 @@ export default function SignupStep1() {
 
   const isValidNameValue = (value) =>
     /^[A-Za-z][A-Za-z\s]*[A-Za-z]$/.test(value.trim())
-  const drivingLicenseRegex = /^[A-Z]{2}[0-9]{1,2}(?:[0-9]{2}|[0-9]{4})[0-9]{4,7}$/
 
   const isValidEmailValue = (value) => {
     const normalizedValue = value.trim()
-    if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(normalizedValue)) {
-      return false
-    }
-
-    const [, domain = ""] = normalizedValue.split("@")
-    const normalizedDomain = domain.toLowerCase()
-
-    if (normalizedDomain.startsWith("gmail.") && normalizedDomain !== "gmail.com") {
-      return false
-    }
-
-    return true
+    return EMAIL_REGEX.test(normalizedValue)
   }
 
   const sanitizeEmailValue = (value) =>
@@ -117,7 +102,7 @@ export default function SignupStep1() {
     }
 
     if (name === "drivingLicenseNumber") {
-      updatedValue = updatedValue.replace(/[^A-Z0-9]/g, "").slice(0, 16)
+      updatedValue = updatedValue.replace(/[^A-Z0-9]/g, "").slice(0, 15)
     }
 
     // Restrict Aadhaar to numeric only
@@ -131,35 +116,25 @@ export default function SignupStep1() {
 
     if (name === "email") {
       updatedValue = sanitizeEmailValue(value)
-    }
-
-    if (name === "zoneId") {
-      const selected = zones.find(z => String(z._id || z.id) === String(value))
-      setFormData(prev => ({
-        ...prev,
-        zoneId: value,
-        zoneName: selected?.name || selected?.service_location_name || ""
-      }))
-      if (errors.zoneId) setErrors(prev => ({ ...prev, zoneId: "" }))
-      return
+      // Real-time validation for email
+      if (updatedValue && !isValidEmailValue(updatedValue)) {
+        setErrors(prev => ({ ...prev, email: "Please enter a valid email address (e.g., aaa@gmail.com)" }))
+      } else if (!updatedValue) {
+        setErrors(prev => ({ ...prev, email: "Email is required" }))
+      } else {
+        setErrors(prev => ({ ...prev, email: "" }))
+      }
     }
 
     setFormData(prev => ({
       ...prev,
       [name]: updatedValue
     }))
-    // Clear error for this field
-    if (errors[name]) {
+    // Clear error for this field (except email which we handled above)
+    if (name !== "email" && errors[name]) {
       setErrors(prev => ({
         ...prev,
         [name]: ""
-      }))
-    }
-    if (name === "vehicleType" && updatedValue === "bicycle") {
-      setErrors(prev => ({
-        ...prev,
-        vehicleNumber: "",
-        drivingLicenseNumber: ""
       }))
     }
   }
@@ -173,8 +148,10 @@ export default function SignupStep1() {
       newErrors.name = "Name can contain letters only"
     }
 
-    if (formData.email && !isValidEmailValue(formData.email)) {
-      newErrors.email = "Enter a valid email address. Gmail must be gmail.com"
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required"
+    } else if (!isValidEmailValue(formData.email)) {
+      newErrors.email = "Please enter a valid email address (e.g., aaa@gmail.com)"
     }
 
     if (!formData.address.trim()) {
@@ -193,18 +170,16 @@ export default function SignupStep1() {
       newErrors.state = "State can contain letters only"
     }
 
-    if (formData.vehicleType !== "bicycle") {
-      if (!formData.vehicleNumber.trim()) {
-        newErrors.vehicleNumber = "Vehicle number is required"
-      } else if (!/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4}$/.test(formData.vehicleNumber)) {
-        newErrors.vehicleNumber = "Invalid Indian vehicle number format (e.g., MH12AB1234)"
-      }
+    if (!formData.vehicleNumber.trim()) {
+      newErrors.vehicleNumber = "Vehicle number is required"
+    } else if (!/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4}$/.test(formData.vehicleNumber)) {
+      newErrors.vehicleNumber = "Invalid Indian vehicle number format (e.g., MH12AB1234)"
+    }
 
-      if (!formData.drivingLicenseNumber.trim()) {
-        newErrors.drivingLicenseNumber = "Driving license number is required"
-      } else if (!drivingLicenseRegex.test(formData.drivingLicenseNumber)) {
-        newErrors.drivingLicenseNumber = "Invalid DL format (e.g., DL0120110012345)"
-      }
+    if (!formData.drivingLicenseNumber.trim()) {
+      newErrors.drivingLicenseNumber = "Driving license number is required"
+    } else if (!/^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/.test(formData.drivingLicenseNumber)) {
+      newErrors.drivingLicenseNumber = "Invalid DL format (e.g., MH1220110012345)"
     }
 
     if (!formData.panNumber.trim()) {
@@ -227,7 +202,6 @@ export default function SignupStep1() {
     e.preventDefault()
 
     if (!validate()) {
-      toast.error("Please fill all required fields correctly")
       return
     }
 
@@ -243,21 +217,17 @@ export default function SignupStep1() {
         address: formData.address.trim(),
         city: formData.city.trim(),
         state: formData.state.trim(),
-        zoneId: formData.zoneId || "",
-        zoneName: formData.zoneName || "",
         vehicleType: formData.vehicleType || "bike",
         vehicleName: formData.vehicleName?.trim() || "",
-        vehicleNumber: formData.vehicleType === "bicycle" ? "" : formData.vehicleNumber.trim(),
-        drivingLicenseNumber: formData.vehicleType === "bicycle" ? "" : formData.drivingLicenseNumber.trim().toUpperCase(),
+        vehicleNumber: formData.vehicleNumber.trim(),
+        drivingLicenseNumber: formData.drivingLicenseNumber.trim().toUpperCase(),
         panNumber: formData.panNumber.trim().toUpperCase(),
         aadharNumber: formData.aadharNumber.replace(/\s/g, "")
       }
       sessionStorage.setItem("deliverySignupDetails", JSON.stringify(details))
-      toast.success("Details saved")
       navigate("/food/delivery/signup/documents")
     } catch (error) {
       debugError("Error saving details:", error)
-      toast.error("Failed to save. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
@@ -268,7 +238,7 @@ export default function SignupStep1() {
       {/* Header */}
       <div className="bg-white px-4 py-3 flex items-center gap-4 border-b border-gray-200">
         <button
-          onClick={goBack}
+          onClick={handleBack}
           className="p-2 hover:bg-gray-100 rounded-full transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -295,7 +265,7 @@ export default function SignupStep1() {
               value={formData.name}
               onChange={handleChange}
               inputMode="text"
-              className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] ${errors.name ? "border-red-500" : ""
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.name ? "border-red-500" : "border-gray-300"
                 }`}
               placeholder="Enter your full name"
             />
@@ -305,7 +275,7 @@ export default function SignupStep1() {
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email (Optional)
+              Email <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
@@ -316,7 +286,7 @@ export default function SignupStep1() {
               autoCorrect="off"
               autoComplete="email"
               inputMode="email"
-              className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] ${errors.email ? "border-red-500" : ""
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.email ? "border-red-500" : "border-gray-300"
                 }`}
               placeholder="Enter your email"
             />
@@ -333,7 +303,7 @@ export default function SignupStep1() {
               value={formData.address}
               onChange={handleChange}
               rows={3}
-              className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] ${errors.address ? "border-red-500" : ""
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.address ? "border-red-500" : "border-gray-300"
                 }`}
               placeholder="Enter your address"
             />
@@ -351,7 +321,7 @@ export default function SignupStep1() {
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] ${errors.city ? "border-red-500" : ""
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.city ? "border-red-500" : "border-gray-300"
                   }`}
                 placeholder="City"
               />
@@ -366,32 +336,12 @@ export default function SignupStep1() {
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] ${errors.state ? "border-red-500" : ""
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.state ? "border-red-500" : "border-gray-300"
                   }`}
                 placeholder="State"
               />
               {errors.state && <p className="text-red-500 text-sm mt-1">{errors.state}</p>}
             </div>
-          </div>
-
-          {/* Operating Zone Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Operating Zone / Service Area
-            </label>
-            <select
-              name="zoneId"
-              value={formData.zoneId || ""}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A]"
-            >
-              <option value="">-- Select Existing Zone (Optional) --</option>
-              {zones.map((zone) => (
-                <option key={zone._id || zone.id} value={zone._id || zone.id}>
-                  {zone.name || zone.service_location_name}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Vehicle Type */}
@@ -403,7 +353,7 @@ export default function SignupStep1() {
               name="vehicleType"
               value={formData.vehicleType}
               onChange={handleChange}
-              className="w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A]"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="bike">Bike</option>
               <option value="scooter">Scooter</option>
@@ -422,50 +372,46 @@ export default function SignupStep1() {
               name="vehicleName"
               value={formData.vehicleName}
               onChange={handleChange}
-              className="w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A]"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               placeholder="e.g., Honda Activa"
             />
           </div>
 
           {/* Vehicle Number */}
-          {formData.vehicleType !== "bicycle" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Vehicle Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="vehicleNumber"
-                value={formData.vehicleNumber}
-                onChange={handleChange}
-                maxLength={10}
-                className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] uppercase ${errors.vehicleNumber ? "border-red-500" : ""
-                  }`}
-                placeholder="e.g., MH12AB1234"
-              />
-              {errors.vehicleNumber && <p className="text-red-500 text-sm mt-1">{errors.vehicleNumber}</p>}
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Vehicle Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="vehicleNumber"
+              value={formData.vehicleNumber}
+              onChange={handleChange}
+              maxLength={10}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.vehicleNumber ? "border-red-500" : "border-gray-300"
+                }`}
+              placeholder="e.g., MH12AB1234"
+            />
+            {errors.vehicleNumber && <p className="text-red-500 text-sm mt-1">{errors.vehicleNumber}</p>}
+          </div>
 
           {/* Driving License Number */}
-          {formData.vehicleType !== "bicycle" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Driving License Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="drivingLicenseNumber"
-                value={formData.drivingLicenseNumber}
-                onChange={handleChange}
-                maxLength={16}
-                className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] uppercase ${errors.drivingLicenseNumber ? "border-red-500" : ""
-                  }`}
-                placeholder="e.g., MH1220110012345"
-              />
-              {errors.drivingLicenseNumber && <p className="text-red-500 text-sm mt-1">{errors.drivingLicenseNumber}</p>}
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Driving License Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="drivingLicenseNumber"
+              value={formData.drivingLicenseNumber}
+              onChange={handleChange}
+              maxLength={15}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 uppercase ${errors.drivingLicenseNumber ? "border-red-500" : "border-gray-300"
+                }`}
+              placeholder="e.g., MH1220110012345"
+            />
+            {errors.drivingLicenseNumber && <p className="text-red-500 text-sm mt-1">{errors.drivingLicenseNumber}</p>}
+          </div>
 
           {/* PAN Number */}
           <div>
@@ -478,7 +424,7 @@ export default function SignupStep1() {
               value={formData.panNumber}
               onChange={handleChange}
               maxLength={10}
-              className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] uppercase ${errors.panNumber ? "border-red-500" : ""
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 uppercase ${errors.panNumber ? "border-red-500" : "border-gray-300"
                 }`}
               placeholder="ABCDE1234F"
             />
@@ -497,7 +443,7 @@ export default function SignupStep1() {
               onChange={handleChange}
               maxLength={12}
               inputMode="numeric"
-              className={`w-full px-4 py-3 border rounded-xl bg-[#F8F9FA] border-gray-200 focus:outline-none focus:border-[#F38F24] focus:ring-1 focus:ring-[#F38F24] transition-all font-semibold text-[#1A1A1A] uppercase ${errors.aadharNumber ? "border-red-500" : ""
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.aadharNumber ? "border-red-500" : "border-gray-300"
                 }`}
               placeholder="123456789012"
             />
@@ -507,16 +453,23 @@ export default function SignupStep1() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSubmitting}
-            className={`w-full py-4 rounded-xl font-bold text-white text-base transition-all mt-6 shadow-md ${isSubmitting
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-[#1A1A1A] hover:bg-black hover:shadow-lg"
+            disabled={isSubmitting || !formData.email || !isValidEmailValue(formData.email) || Object.values(errors).some(error => error !== "")}
+            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-all mt-6 active:scale-[0.98] ${isSubmitting || !formData.email || !isValidEmailValue(formData.email) || Object.values(errors).some(error => error !== "")
+              ? "bg-gray-400 cursor-not-allowed shadow-none"
+              : "bg-gradient-to-r from-[#0E4B9C] to-[#021024] hover:from-[#1157b5] hover:to-[#041630] shadow-[0_8px_20px_rgba(14,75,156,0.3)]"
               }`}
           >
             {isSubmitting ? "Saving..." : "Continue"}
           </button>
         </form>
       </div>
+
+      <OnboardingExitModal
+        open={showExitModal}
+        onStay={handleStay}
+        onExit={handleExit}
+        theme="delivery"
+      />
     </div>
   )
 }

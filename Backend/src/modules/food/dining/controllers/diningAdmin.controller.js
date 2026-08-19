@@ -75,3 +75,32 @@ export async function updateDiningRestaurant(req, res, next) {
         next(error);
     }
 }
+export async function listAllDiningRequests(req, res, next) {
+    try {
+        const data = await diningService.listAllPendingDiningRequests();
+        res.status(200).json({ success: true, message: 'Dining requests fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function approveDiningRequest(req, res, next) {
+    try {
+        const { id } = req.params;
+        const request = await diningService.approveDiningRequest(id);
+        res.status(200).json({ success: true, message: 'Dining request approved successfully', data: request });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function rejectDiningRequest(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body || {};
+        const request = await diningService.rejectDiningRequest(id, reason);
+        res.status(200).json({ success: true, message: 'Dining request rejected successfully', data: request });
+    } catch (error) {
+        next(error);
+    }
+}

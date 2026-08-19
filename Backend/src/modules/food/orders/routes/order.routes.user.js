@@ -1,6 +1,7 @@
 import express from 'express';
 import {
     calculateOrderController,
+    initiateOnlinePaymentController,
     createOrderController,
     verifyPaymentController,
     listOrdersUserController,
@@ -11,21 +12,11 @@ import {
     getOrderDropOtpUserController,
     updateOrderInstructionsController
 } from '../controllers/order.controller.js';
-import { getOrderPublic } from '../services/order.service.js';
-import { sendResponse } from '../../../../utils/response.js';
 
 const router = express.Router();
 
-router.get('/public/:orderId', async (req, res, next) => {
-    try {
-        const data = await getOrderPublic(req.params.orderId);
-        return sendResponse(res, 200, 'Order info', data);
-    } catch (err) {
-        next(err);
-    }
-});
-
 router.post('/calculate', calculateOrderController);
+router.post('/initiate-online-payment', initiateOnlinePaymentController);
 router.post('/', createOrderController);
 router.post('/verify-payment', verifyPaymentController);
 router.get('/', listOrdersUserController);

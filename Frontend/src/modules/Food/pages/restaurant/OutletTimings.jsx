@@ -1,5 +1,6 @@
-﻿import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
+import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
 import { ArrowLeft, ChevronUp, ChevronDown, Clock, Edit2 } from "lucide-react"
@@ -9,7 +10,6 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { restaurantAPI } from "@food/api"
-import { toast } from "sonner"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -20,9 +20,9 @@ const stringToTime = (timeString) => {
     return new Date(2000, 0, 1, 9, 0) // Default to 9:00 AM
   }
   const [hours, minutes] = timeString.split(":").map(Number)
-  // Ensure we handle 0 correctly for time (12 AM is hour 0)
-  const validHours = Math.max(0, Math.min(23, isNaN(hours) ? 9 : hours))
-  const validMinutes = Math.max(0, Math.min(59, isNaN(minutes) ? 0 : minutes))
+  // Ensure valid hours (0-23) and minutes (0-59)
+  const validHours = Math.max(0, Math.min(23, hours || 9))
+  const validMinutes = Math.max(0, Math.min(59, minutes || 0))
   return new Date(2000, 0, 1, validHours, validMinutes)
 }
 
@@ -59,12 +59,14 @@ const getDefaultDays = () => ({
 export default function OutletTimings() {
   const companyName = useCompanyName()
   const navigate = useNavigate()
+  const goBack = useRestaurantBackNavigation()
   const [expandedDay, setExpandedDay] = useState("Monday")
   const isInternalUpdate = useRef(false)
   const [days, setDays] = useState(getDefaultDays)
   const [loading, setLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const saveTimerRef = useRef(null)
+  // Skip the first post-load render so we don't overwrite DB with synthetic defaults.
+  const allowAutosaveRef = useRef(false)
 
   // Load from backend on mount.
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function OutletTimings() {
     ;(async () => {
       try {
         setLoading(true)
+        allowAutosaveRef.current = false
         const res = await restaurantAPI.getOutletTimings()
         const outletTimings = res?.data?.data?.outletTimings || res?.data?.outletTimings
         if (mounted && outletTimings && typeof outletTimings === "object") {
@@ -80,7 +83,13 @@ export default function OutletTimings() {
       } catch (error) {
         debugError("Error loading outlet timings from backend:", error)
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) {
+          setLoading(false)
+          // Enable autosave on the next tick after state settles.
+          setTimeout(() => {
+            allowAutosaveRef.current = true
+          }, 0)
+        }
       }
     })()
     return () => {
@@ -88,10 +97,21 @@ export default function OutletTimings() {
     }
   }, [])
 
-  // Mark unsaved changes whenever days change (after initial load)
+  // Save to backend whenever days change (debounced) — only after user edits.
   useEffect(() => {
-    if (loading) return
-    setHasUnsavedChanges(true)
+    if (loading || !allowAutosaveRef.current) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await restaurantAPI.saveOutletTimings(days)
+        window.dispatchEvent(new Event("outletTimingsUpdated"))
+      } catch (error) {
+        debugError("Error saving outlet timings to backend:", error)
+      }
+    }, 500)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
   }, [days, loading])
 
   // Lenis smooth scrolling
@@ -119,6 +139,7 @@ export default function OutletTimings() {
   }
 
   const toggleDayOpen = (day) => {
+    allowAutosaveRef.current = true
     isInternalUpdate.current = true
     setDays(prev => {
       const newOpen = !prev[day].isOpen
@@ -134,26 +155,13 @@ export default function OutletTimings() {
     })
   }
 
-  const handleSave = async () => {
-    setIsSaving(true)
-    try {
-      await restaurantAPI.saveOutletTimings(days)
-      window.dispatchEvent(new Event("outletTimingsUpdated"))
-      setHasUnsavedChanges(false)
-      toast.success("Outlet timings saved successfully!")
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to save timings. Please try again.")
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   const handleTimeChange = (day, timeType, newTime) => {
     if (!newTime) {
       debugWarn('?? No time value received in handleTimeChange')
       return
     }
     
+    allowAutosaveRef.current = true
     isInternalUpdate.current = true
     const timeString = timeToString(newTime)
     
@@ -188,10 +196,10 @@ export default function OutletTimings() {
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <div className="min-h-screen bg-white overflow-x-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50 flex items-center justify-between">
+        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate("/food/restaurant/explore")}
+              onClick={goBack}
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               aria-label="Go back"
             >
@@ -199,28 +207,16 @@ export default function OutletTimings() {
             </button>
             <h1 className="text-lg font-bold text-gray-900">Outlet timings</h1>
           </div>
-          {/* Save Button in Header */}
-          {hasUnsavedChanges && (
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2"
-            >
-              {isSaving ? (
-                <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
-              ) : "Save"}
-            </button>
-          )}
         </div>
 
         {/* Main Content */}
         <div className="px-4 py-6">
-          {/* Hello Parth delivery Section Header */}
+          {/* Delivery Section Header */}
           <div className="mb-6">
             <div className="text-center mb-2">
-              <h2 className="text-base font-semibold text-blue-600">{companyName} delivery</h2>
+              <h2 className="text-base font-semibold text-[#B80B3D]">{companyName} delivery</h2>
             </div>
-            <div className="h-0.5 bg-blue-600"></div>
+            <div className="h-0.5 bg-gradient-to-br from-[#B80B3D] to-[#66001D]"></div>
           </div>
 
           {/* Day-wise Accordion */}
@@ -400,25 +396,16 @@ export default function OutletTimings() {
               )
             })}
           </div>
-
-          {/* Bottom Save Button */}
-          {hasUnsavedChanges && (
-            <div className="mt-6 pb-6 px-4">
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-lg transition-colors text-sm shadow-lg shadow-gray-200"
-              >
-                {isSaving ? (
-                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
-                ) : "Save All Changes"}
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </LocalizationProvider>
   )
 }
+
+
+
+
+
+
 
 

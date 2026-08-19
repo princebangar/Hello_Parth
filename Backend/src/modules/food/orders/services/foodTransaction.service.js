@@ -3,6 +3,8 @@ import { FoodRestaurantCommission } from '../../admin/models/restaurantCommissio
 import mongoose from 'mongoose';
 
 const RESTAURANT_COMMISSION_CACHE_MS = 60 * 1000;
+/** Platform fallback when a restaurant has no commission rule configured */
+export const DEFAULT_RESTAURANT_COMMISSION_PERCENT = 18.1;
 let restaurantCommissionRulesCache = null;
 let restaurantCommissionRulesLoadedAt = 0;
 
@@ -48,7 +50,8 @@ export function computeRestaurantCommissionAmount(baseAmount, rule) {
 }
 
 export async function getRestaurantCommissionSnapshot(orderDoc) {
-  const baseAmount = Number(orderDoc?.pricing?.subtotal ?? 0) || 0;
+  const baseAmount =
+    Number(orderDoc?.pricing?.baseSubtotal ?? orderDoc?.pricing?.subtotal ?? 0) || 0;
   const restaurantIdRaw =
     orderDoc?.restaurantId?._id ?? orderDoc?.restaurantId ?? null;
 
@@ -56,7 +59,7 @@ export async function getRestaurantCommissionSnapshot(orderDoc) {
     return {
       commissionAmount: 0,
       commissionType: 'percentage',
-      commissionValue: 0,
+      commissionValue: DEFAULT_RESTAURANT_COMMISSION_PERCENT,
       baseAmount,
     };
   }
@@ -69,12 +72,12 @@ export async function getRestaurantCommissionSnapshot(orderDoc) {
     null;
 
   if (!rule) {
-    return {
-      commissionAmount: 0,
-      commissionType: 'percentage',
-      commissionValue: 0,
-      baseAmount,
-    };
+    return computeRestaurantCommissionAmount(baseAmount, {
+      defaultCommission: {
+        type: 'percentage',
+        value: DEFAULT_RESTAURANT_COMMISSION_PERCENT,
+      },
+    });
   }
 
   return computeRestaurantCommissionAmount(baseAmount, rule);
@@ -84,75 +87,34 @@ export async function getRestaurantCommissionSnapshot(orderDoc) {
  * Creates an initial 'pending' transaction when an order is created.
  */
 export async function createInitialTransaction(order) {
-    if (!order) return null;
-
-    const { commissionAmount = 0 } = await getRestaurantCommissionSnapshot(order).catch(() => ({ commissionAmount: 0 }));
+    const { commissionAmount } = await getRestaurantCommissionSnapshot(order);
     
-    // Split logic - Ensure all values are finite numbers
-    const totalCustomerPaid = Number(order.pricing?.total) || 0;
-    const riderShare = Number(order.riderTotalPayout) || Number(order.riderEarning) || 0;
-    
+    // Split logic
+    const totalCustomerPaid = order.pricing?.total || 0;
+    const riderShare = order.riderEarning || 0;
     // Prefer commission already computed & stored on the order (source of truth for this order),
     // fallback to rule snapshot for older orders.
     const restaurantCommissionFromOrder = Number(order.pricing?.restaurantCommission);
     const restaurantCommission =
         Number.isFinite(restaurantCommissionFromOrder) && restaurantCommissionFromOrder > 0
             ? restaurantCommissionFromOrder
-            : (Number(commissionAmount) || 0);
-
-    const discount = Number(order.pricing?.discount) || 0;
-    const subtotal = Number(order.pricing?.subtotal) || 0;
-    const packagingFee = Number(order.pricing?.packagingFee) || 0;
-    const platformFee = Number(order.pricing?.platformFee) || 0;
-    const deliveryFee = Number(order.pricing?.deliveryFee) || 0;
-    const adminDeliveryCommissionEnabled = order.pricing?.adminDeliveryCommissionEnabled === true;
-    const adminDeliveryCommissionPercent = Number(order.pricing?.adminDeliveryCommissionPercent) || 0;
-    const adminDeliveryCommissionAmount = Number(order.pricing?.adminDeliveryCommissionAmount) || 0;
-    const riderDeliveryEarningAfterAdminCommission = Number(order.pricing?.riderDeliveryEarningAfterAdminCommission) || deliveryFee;
-    const deliveryPartnerIncentiveEnabled = order.pricing?.deliveryPartnerIncentiveEnabled === true;
-    const deliveryPartnerIncentivePercent = Number(order.pricing?.deliveryPartnerIncentivePercent) || 0;
-    const deliveryPartnerIncentiveAmount = Number(order.pricing?.deliveryPartnerIncentiveAmount) || 0;
-    const deliveryPartnerIncentiveEligible = order.pricing?.deliveryPartnerIncentiveEligible === true;
-    const surgeAmount = Number(order.pricing?.surgeAmount) || 0;
-    const tax = Number(order.pricing?.tax) || 0;
-    const riderBasePay = Number(order.riderBasePay) || Number(order.pricing?.deliveryFeeBreakdown?.basePayout) || 0;
-    const riderDeliveryFeeShare = Number(order.riderDeliveryFeeShare) || riderDeliveryEarningAfterAdminCommission;
-    const riderSurgePay = Number(order.riderSurgePay) || surgeAmount;
-    const riderIncentivePay = Number(order.riderIncentivePay) || deliveryPartnerIncentiveAmount;
-    const riderTotalPayout =
-        Number(order.riderTotalPayout) ||
-        Number(order.riderEarning) ||
-        Math.round((riderDeliveryFeeShare + riderSurgePay + riderIncentivePay) * 100) / 100;
-
-    let restaurantNet = subtotal + packagingFee - restaurantCommission;
-    // Admin ONLY gets platform fee + restaurant commission (delivery fee, surge & tip go 100% directly to delivery partner)
-    let platformNetProfit = platformFee + restaurantCommission;
-
-    // Handle discount attribution
-    const couponCode = order.pricing?.couponCode;
-    if (discount > 0 && couponCode) {
-        try {
-            // Dynamic import to avoid circular dependency if any
-            const { FoodOffer } = await import('../../admin/models/offer.model.js');
-            const offer = await FoodOffer.findOne({ couponCode: String(couponCode).toUpperCase() }).lean();
-            if (offer?.createdByRole === 'RESTAURANT') {
-                restaurantNet -= discount;
-            } else {
-                // Admin created (default) or not found
-                platformNetProfit -= discount;
-            }
-        } catch (err) {
-            // Log but don't fail, default to admin attribution
-            platformNetProfit -= discount;
-        }
-    }
-
-    // Ensure nets are finite and rounded
-    restaurantNet = Math.round((Number(restaurantNet) || 0) * 100) / 100;
-    platformNetProfit = Math.max(0, Math.round((Number(platformNetProfit) || 0) * 100) / 100);
+            : (commissionAmount || 0);
+    const baseSubtotal =
+        Number(order.pricing?.baseSubtotal ?? order.pricing?.subtotal ?? 0) || 0;
+    const markupTotal = Math.max(0, Number(order.pricing?.markupTotal ?? 0) || 0);
+    const restaurantNet = baseSubtotal + (order.pricing?.packagingFee || 0) - restaurantCommission;
+    const platformNetProfit = Math.max(
+        0,
+        (order.pricing?.platformFee || 0) +
+            (order.pricing?.deliveryFee || 0) +
+            restaurantCommission +
+            markupTotal -
+            riderShare,
+    );
 
     const transaction = new FoodTransaction({
         orderId: order._id,
+
         userId: order.userId,
         restaurantId: order.restaurantId,
         deliveryPartnerId: order.dispatch?.deliveryPartnerId,
@@ -161,7 +123,7 @@ export async function createInitialTransaction(order) {
         payment: {
             method: String(order.payment?.method || 'cash'),
             status: String(order.payment?.status || 'cod_pending'),
-            amountDue: Number(order.payment?.amountDue ?? totalCustomerPaid) || 0,
+            amountDue: Number(order.payment?.amountDue ?? order.pricing?.total ?? 0) || 0,
             razorpay: {
                 orderId: String(order.payment?.razorpay?.orderId || ''),
                 paymentId: String(order.payment?.razorpay?.paymentId || ''),
@@ -177,39 +139,25 @@ export async function createInitialTransaction(order) {
             }
         },
         pricing: {
-            subtotal: subtotal,
-            tax: tax,
-            packagingFee: packagingFee,
-            deliveryFee: deliveryFee,
-            deliveryFeeBreakdown: order.pricing?.deliveryFeeBreakdown || null,
-            adminDeliveryCommissionEnabled,
-            adminDeliveryCommissionPercent,
-            adminDeliveryCommissionAmount,
-            riderDeliveryEarningAfterAdminCommission,
-            deliveryPartnerIncentiveEnabled,
-            deliveryPartnerIncentivePercent,
-            deliveryPartnerIncentiveAmount,
-            deliveryPartnerIncentiveEligible,
-            platformFee: platformFee,
-            surgeAmount: surgeAmount,
-            restaurantCommission: restaurantCommission,
-            discount: discount,
-            total: totalCustomerPaid,
+            subtotal: Number(order.pricing?.subtotal || 0) || 0,
+            baseSubtotal,
+            markupTotal,
+            tax: Number(order.pricing?.tax || 0) || 0,
+            packagingFee: Number(order.pricing?.packagingFee || 0) || 0,
+            deliveryFee: Number(order.pricing?.deliveryFee || 0) || 0,
+            platformFee: Number(order.pricing?.platformFee || 0) || 0,
+            restaurantCommission,
+            discount: Number(order.pricing?.discount || 0) || 0,
+            total: Number(order.pricing?.total || 0) || 0,
             currency: String(order.pricing?.currency || order.currency || 'INR'),
         },
         amounts: {
-            totalCustomerPaid: totalCustomerPaid,
+            totalCustomerPaid,
             restaurantShare: Math.max(0, restaurantNet),
-            restaurantCommission: restaurantCommission,
-            riderShare: riderTotalPayout,
-            riderDeliveryFeeShare: riderDeliveryFeeShare,
-            adminDeliveryCommissionAmount: adminDeliveryCommissionAmount,
-            riderBasePay: riderBasePay,
-            riderSurgePay: riderSurgePay,
-            riderIncentivePay: riderIncentivePay,
-            riderTotalPayout: riderTotalPayout,
-            platformNetProfit: platformNetProfit,
-            taxAmount: tax
+            restaurantCommission,
+            riderShare,
+            platformNetProfit,
+            taxAmount: order.pricing?.tax || 0
         },
         gateway: {
             razorpayOrderId: order.payment?.razorpay?.orderId,
@@ -249,6 +197,12 @@ export async function updateTransactionStatus(orderId, kind, details = {}) {
     if (details.razorpayPaymentId) transaction.gateway.razorpayPaymentId = details.razorpayPaymentId;
     if (details.razorpaySignature) transaction.gateway.razorpaySignature = details.razorpaySignature;
     
+    // Sync payment method if provided (e.g. switching from cash to QR)
+    if (details.paymentMethod) {
+        transaction.paymentMethod = details.paymentMethod;
+        transaction.payment.method = details.paymentMethod;
+    }
+
     transaction.history.push({
         kind,
         amount: transaction.amounts.totalCustomerPaid,
@@ -258,6 +212,23 @@ export async function updateTransactionStatus(orderId, kind, details = {}) {
     });
 
     await transaction.save();
+
+    // Sync back to order as well
+    if (details.paymentMethod || details.status) {
+        try {
+            const updateFields = {};
+            if (details.paymentMethod) updateFields['payment.method'] = details.paymentMethod;
+            if (details.status === 'captured') updateFields['payment.status'] = 'paid';
+            
+            await mongoose.model('FoodOrder').updateOne(
+                { _id: orderId },
+                { $set: updateFields }
+            );
+        } catch (err) {
+            console.error('Failed to sync transaction status to order:', err.message);
+        }
+    }
+
     return transaction;
 }
 

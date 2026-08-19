@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import api, { adminAPI } from "@food/api"
 import { API_ENDPOINTS } from "@food/api/config"
@@ -234,7 +234,7 @@ export default function AboutUs() {
                 id="logo"
                 value={aboutData.logo}
                 onChange={(e) => setAboutData(prev => ({ ...prev, logo: e.target.value }))}
-                placeholder="https://example.com/hello-parth-logo.png"
+                placeholder="https://example.com/logo.png"
                 className="mt-1"
               />
             </div>
@@ -347,5 +347,4 @@ export default function AboutUs() {
     </div>
   )
 }
-
 

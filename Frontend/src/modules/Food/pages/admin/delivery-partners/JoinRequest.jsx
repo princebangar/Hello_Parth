@@ -4,6 +4,9 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { exportJoinRequestsToExcel, exportJoinRequestsToPDF } from "@food/components/admin/deliveryman/joinRequestExportUtils"
+import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
+import AdminListPagination from "@food/components/admin/AdminListPagination"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -21,31 +24,45 @@ export default function JoinRequest() {
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [viewDetails, setViewDetails] = useState(null)
   const [processing, setProcessing] = useState(false)
+  const [processingRequestId, setProcessingRequestId] = useState(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
   const [filters, setFilters] = useState({
     zone: "",
-    jobType: "",
     vehicleType: "",
   })
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    try {
+      return Number(localStorage.getItem("admin_delivery_join_requests_pageSize")) || 20
+    } catch {
+      return 20
+    }
+  })
+  const [totalItems, setTotalItems] = useState(0)
 
   // Debounce search so we don't fetch on every keystroke
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500)
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, activeTab, filters])
+
   // Fetch join requests from API (single source of truth for when to fetch)
-  const fetchJoinRequests = async () => {
+  const fetchJoinRequests = async ({ silent = false } = {}) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setError(null)
 
       const params = {
         status: activeTab === "pending" ? "pending" : "denied",
-        page: 1,
-        limit: 1000,
+        page: currentPage,
+        limit: pageSize,
       }
 
       if (debouncedSearch.trim()) {
@@ -62,9 +79,11 @@ export default function JoinRequest() {
       
       if (response.data && response.data.success) {
         setRequests(response.data.data.requests || [])
+        setTotalItems(response.data.data.pagination?.total ?? (response.data.data.requests || []).length)
       } else {
         setError("Failed to fetch join requests")
         setRequests([])
+        setTotalItems(0)
       }
     } catch (err) {
       debugError("Error fetching join requests:", err)
@@ -84,10 +103,13 @@ export default function JoinRequest() {
         errorMessage = err.message
       }
       
-      setError(errorMessage)
-      setRequests([])
+      if (!silent) {
+        setError(errorMessage)
+        setRequests([])
+        setTotalItems(0)
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -97,18 +119,35 @@ export default function JoinRequest() {
       fetchJoinRequests()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, debouncedSearch, filters, isFilterOpen])
+  }, [activeTab, debouncedSearch, filters, isFilterOpen, currentPage, pageSize])
+
+  useAdminBadgeListRefresh("deliveryPartners", fetchJoinRequests, [
+    activeTab,
+    debouncedSearch,
+    filters,
+    isFilterOpen,
+    currentPage,
+    pageSize,
+  ])
+
+  useEffect(() => {
+    const onFocus = () => fetchJoinRequests({ silent: true })
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchJoinRequests({ silent: true })
+      }
+    }
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [activeTab, debouncedSearch, filters, isFilterOpen, currentPage, pageSize])
 
   const filteredRequests = useMemo(() => {
-    let result = [...requests]
-    
-    // Client-side filtering for additional filters not supported by backend
-    if (filters.jobType) {
-      result = result.filter(request => request.jobType === filters.jobType)
-    }
-
-    return result
-  }, [requests, filters])
+    return [...requests]
+  }, [requests])
 
   const handleApprove = (request) => {
     setSelectedRequest(request)
@@ -118,23 +157,27 @@ export default function JoinRequest() {
   const confirmApprove = async () => {
     if (!selectedRequest) return
 
+    const id = selectedRequest._id
+    const partnerName = selectedRequest.name
+
     try {
       setProcessing(true)
-      await adminAPI.approveDeliveryPartner(selectedRequest._id)
-      
-      // Refresh the list
-      await fetchJoinRequests()
-      
+      setProcessingRequestId(id)
+      await adminAPI.approveDeliveryPartner(id)
+      setRequests((prev) => prev.filter((r) => r._id !== id))
       setIsApproveOpen(false)
       setSelectedRequest(null)
-      
-      toast.success(`Successfully approved ${selectedRequest.name}'s join request!`)
+      refreshSidebarBadges("deliveryPartners")
+      toast.success(`Successfully approved ${partnerName}'s join request!`)
+      await fetchJoinRequests({ silent: true })
     } catch (err) {
       debugError("Error approving request:", err)
       const msg = err.response?.data?.message ?? err.response?.data?.error ?? err?.message
       toast.error(msg || "Failed to approve request. Please try again.")
+      await fetchJoinRequests({ silent: true })
     } finally {
       setProcessing(false)
+      setProcessingRequestId(null)
     }
   }
 
@@ -155,30 +198,33 @@ export default function JoinRequest() {
 
     try {
       setProcessing(true)
-      await adminAPI.rejectDeliveryPartner(selectedRequest._id, rejectionReason.trim())
-      
-      // Refresh the list
-      await fetchJoinRequests()
-      
+      setProcessingRequestId(selectedRequest._id)
+      const id = selectedRequest._id
+      const partnerName = selectedRequest.name
+      const reason = rejectionReason.trim()
+      await adminAPI.rejectDeliveryPartner(id, reason)
+      setRequests((prev) => prev.filter((r) => r._id !== id))
       setIsDenyOpen(false)
       setSelectedRequest(null)
       setRejectionReason("")
-      
-      toast.success(`Successfully rejected ${selectedRequest.name}'s join request.`)
+      refreshSidebarBadges("deliveryPartners")
+      toast.success(`Successfully rejected ${partnerName}'s join request.`)
+      await fetchJoinRequests({ silent: true })
     } catch (err) {
       debugError("Error rejecting request:", err)
       const msg = err.response?.data?.message ?? err.response?.data?.error ?? err?.message
       toast.error(msg || "Failed to reject request. Please try again.")
+      await fetchJoinRequests({ silent: true })
     } finally {
       setProcessing(false)
+      setProcessingRequestId(null)
     }
   }
 
   const handleView = async (request) => {
     try {
-      setLoading(true)
+      setLoadingDetails(true)
       const response = await adminAPI.getDeliveryPartnerById(request._id)
-      
       if (response.data && response.data.success) {
         setViewDetails(response.data.data.delivery)
         setIsViewOpen(true)
@@ -189,7 +235,7 @@ export default function JoinRequest() {
       debugError("Error fetching details:", err)
       toast.error(err.response?.data?.message || "Failed to load details")
     } finally {
-      setLoading(false)
+      setLoadingDetails(false)
     }
   }
 
@@ -210,18 +256,18 @@ export default function JoinRequest() {
   }
 
   const handleResetFilters = () => {
-    setFilters({ zone: "", jobType: "", vehicleType: "" })
+    setFilters({ zone: "", vehicleType: "" })
   }
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
-    setSearchQuery("") // Reset search when changing tabs
-    setFilters({ zone: "", jobType: "", vehicleType: "" }) // Reset filters
+    setSearchQuery("")
+    setFilters({ zone: "", vehicleType: "" })
+    setCurrentPage(1)
   }
 
   const activeFiltersCount = Object.values(filters).filter(v => v).length
   const zones = [...new Set(requests.map(r => r.zone))].filter(Boolean)
-  const jobTypes = [...new Set(requests.map(r => r.jobType))].filter(Boolean)
   const vehicleTypes = [...new Set(requests.map(r => r.vehicleType))].filter(Boolean)
 
   return (
@@ -355,12 +401,7 @@ export default function JoinRequest() {
                         <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
                       </div>
                     </th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                      <div className="flex items-center gap-2">
-                        <span>Job Type</span>
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                      </div>
-                    </th>
+
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                       <div className="flex items-center gap-2">
                         <span>Vehicle Type</span>
@@ -379,17 +420,19 @@ export default function JoinRequest() {
                 <tbody className="bg-white divide-y divide-slate-100">
                   {filteredRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-20 text-center">
+                      <td colSpan={7} className="px-6 py-20 text-center">
                         <p className="text-sm text-slate-500">
                           {error ? "Error loading requests" : "No requests found"}
                         </p>
                       </td>
                     </tr>
                   ) : (
-                    filteredRequests.map((request) => (
-                      <tr key={request._id} className="hover:bg-slate-50 transition-colors">
+                    filteredRequests.map((request, index) => {
+                      const isRowProcessing = processingRequestId === request._id
+                      return (
+                      <tr key={request._id} className={`hover:bg-slate-50 transition-colors ${isRowProcessing ? "bg-blue-50/50" : ""}`}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-slate-700">{request.sl}</span>
+                          <span className="text-sm font-medium text-slate-700">{(currentPage - 1) * pageSize + index + 1}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -426,14 +469,18 @@ export default function JoinRequest() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-slate-700">{request.zone}</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-slate-700">{request.jobType}</span>
-                        </td>
+
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-slate-700">{request.vehicleType}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
+                            {isRowProcessing ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 w-fit">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Processing...
+                              </span>
+                            ) : (
                             <span className={`px-3 py-1 rounded-full text-xs font-medium inline-block w-fit ${
                               request.status === "Pending" || request.status === "pending"
                                 ? "bg-blue-100 text-blue-700"
@@ -443,6 +490,7 @@ export default function JoinRequest() {
                             }`}>
                               {request.status === "blocked" || request.status === "Blocked" || request.status === "Denied" || request.status === "denied" ? "Rejected" : request.status}
                             </span>
+                            )}
                             {request.rejectionReason && (
                               <span className="text-xs text-red-600 italic max-w-[200px] truncate" title={request.rejectionReason}>
                                 {request.rejectionReason}
@@ -467,7 +515,7 @@ export default function JoinRequest() {
                                   className="p-1.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Approve"
                                 >
-                                  <Check className="w-4 h-4" />
+                                  {isRowProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                 </button>
                                 <button
                                   onClick={() => handleDeny(request)}
@@ -482,17 +530,34 @@ export default function JoinRequest() {
                           </div>
                         </td>
                       </tr>
-                    ))
+                      )
+                    })
                   )}
                 </tbody>
               </table>
             )}
           </div>
+
+          <AdminListPagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              try {
+                localStorage.setItem("admin_delivery_join_requests_pageSize", String(size))
+              } catch {
+                /* ignore */
+              }
+            }}
+            itemLabel="requests"
+          />
         </div>
       </div>
 
       {/* Approve Confirmation Dialog */}
-      <Dialog open={isApproveOpen} onOpenChange={setIsApproveOpen}>
+      <Dialog open={isApproveOpen} onOpenChange={(open) => { if (!processing) setIsApproveOpen(open) }}>
         <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
           <DialogHeader className="px-6 pt-6 pb-4">
             <DialogTitle>Approve Request</DialogTitle>
@@ -523,7 +588,7 @@ export default function JoinRequest() {
       </Dialog>
 
       {/* Deny Confirmation Dialog */}
-      <Dialog open={isDenyOpen} onOpenChange={setIsDenyOpen}>
+      <Dialog open={isDenyOpen} onOpenChange={(open) => { if (!processing) setIsDenyOpen(open) }}>
         <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
           <DialogHeader className="px-6 pt-6 pb-4">
             <DialogTitle>Deny Request</DialogTitle>
@@ -961,19 +1026,7 @@ export default function JoinRequest() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Job Type</label>
-              <select
-                value={filters.jobType}
-                onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">All Job Types</option>
-                {jobTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
+
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Vehicle Type</label>
               <select

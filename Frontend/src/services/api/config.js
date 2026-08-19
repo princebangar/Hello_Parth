@@ -4,60 +4,10 @@
  * - `API_BASE_URL` is used by UI (e.g. banners/debug) and should reflect the same value.
  */
 
-const resolveConfigApiBaseUrl = () => {
-  const envValue =
-    typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-      ? String(import.meta.env.VITE_API_BASE_URL).trim().replace(/\/$/, "")
-      : "";
-
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-
-  if (!envValue) {
-    return origin ? `${origin}/api/v1` : "/api/v1";
-  }
-
-  if (/^https?:\/\//i.test(envValue)) {
-    try {
-      const parsed = new URL(envValue);
-      if (typeof window !== "undefined") {
-        const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-        const isEnvLocal = LOCAL_HOSTS.has(parsed.hostname);
-        const isBrowserLocal = LOCAL_HOSTS.has(window.location.hostname);
-        if (isEnvLocal && !isBrowserLocal) {
-          return `${origin}/api/v1`;
-        }
-      }
-      return envValue;
-    } catch (_) { }
-  }
-
-  if (origin) {
-    const cleanPath = envValue.replace(/^https?:?\/*/, "/").replace(/^\/+/, "/");
-    const path = cleanPath.startsWith("/api") ? cleanPath : "/api/v1";
-    return `${origin}${path}`;
-  }
-
-  return "/api/v1";
-};
-
-export const API_BASE_URL = resolveConfigApiBaseUrl();
-
-export const resolveSocketOrigin = (apiBaseUrl = API_BASE_URL) => {
-  const isBrowser = typeof window !== 'undefined';
-  const str = String(apiBaseUrl || '').trim();
-  if (!str) {
-    return isBrowser ? window.location.origin : 'http://localhost:5000';
-  }
-  try {
-    const base = str.startsWith('http') ? undefined : (isBrowser ? window.location.origin : undefined);
-    const parsed = new URL(str, base);
-    return parsed.origin;
-  } catch {
-    return isBrowser ? window.location.origin : 'http://localhost:5000';
-  }
-};
-
-export const SOCKET_ORIGIN = resolveSocketOrigin(API_BASE_URL);
+export const API_BASE_URL =
+  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
+    ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, "")
+    : "";
 
 // Minimal shape so existing API_ENDPOINTS.* references do not break
 export const API_ENDPOINTS = {
@@ -98,6 +48,9 @@ export const API_ENDPOINTS = {
     SHIPPING_PUBLIC: "/food/pages/shipping",
     CANCELLATION: "/food/admin/pages-social-media/cancellation",
     CANCELLATION_PUBLIC: "/food/pages/cancellation",
+    SUPPORT_USER_PUBLIC: "/food/pages/support_user",
+    SUPPORT_RESTAURANT_PUBLIC: "/food/pages/support_restaurant",
+    SUPPORT_DELIVERY_PUBLIC: "/food/pages/support_delivery",
     FEEDBACK_CREATE: "", FEEDBACK_EXPERIENCE: "/food/admin/feedback-experiences", FEEDBACK_EXPERIENCE_CREATE: "/food/restaurant/feedback-experience", FEEDBACK_EXPERIENCE_BY_ID: "",
     SAFETY_EMERGENCY: "/food/admin/safety-emergency-reports",
     // User creates reports via USER context; kept for legacy imports.
@@ -108,8 +61,8 @@ export const API_ENDPOINTS = {
     FOOD_APPROVALS: "", FOOD_APPROVAL_APPROVE: "", FOOD_APPROVAL_REJECT: "",
     DELIVERY_PARTNER_REVIEWS: "", DELIVERY_EMERGENCY_HELP: "", DELIVERY_SUPPORT_TICKETS: "", DELIVERY_SUPPORT_TICKET_BY_ID: "",
     EARNING_ADDON: "", EARNING_ADDON_BY_ID: "", EARNING_ADDON_HISTORY: "", EARNING_ADDON_HISTORY_BY_ID: "",
-    WITHDRAWAL_REQUESTS: "", WITHDRAWAL_APPROVE: "", WITHDRAWAL_REJECT: "",
-    BUSINESS_SETTINGS: "/food/admin/business-settings",
+    WITHDRAWAL_REQUESTS: "", WITHDRAWAL_APPROVE: "", WITHDRAWAL_REJECT: "", 
+    BUSINESS_SETTINGS: "/food/admin/business-settings", 
     BUSINESS_SETTINGS_PUBLIC: "/food/admin/business-settings/public",
   },
   ORDER: { CREATE: "", LIST: "", DETAILS: "", CANCEL: "", VERIFY_PAYMENT: "", CALCULATE: "" },

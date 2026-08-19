@@ -1,9 +1,30 @@
+import { API_BASE_URL } from "@food/api/config";
+
+const defaultBackendOrigin = (API_BASE_URL || "").replace(/\/api\/v1\/?$/i, "").replace(/\/api\/?$/i, "");
+const ASSET_BASE_URL = String(
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_ASSET_BASE_URL) ||
+    "https://helloparth.com"
+).replace(/\/$/, "");
+
+const rewriteUploadsUrl = (absoluteUrl) => {
+  try {
+    const parsed = new URL(absoluteUrl);
+    const match = parsed.pathname.match(/\/uploads\/(.+)$/i);
+    if (!match) return absoluteUrl;
+    const filename = match[1];
+    if (!filename || filename.includes("..")) return absoluteUrl;
+    return `${ASSET_BASE_URL}/uploads/${filename}${parsed.search || ""}`;
+  } catch {
+    return absoluteUrl;
+  }
+};
+
 /**
  * Common utility functions for the Food module
  */
 
 /**
- * Normalizes an image URL to handle relative paths and backend origins
+ * Normalizes an image URL to handle relative paths and always load /uploads from the live server.
  */
 export const normalizeImageUrl = (imageUrl, backendOrigin = "") => {
   if (typeof imageUrl !== "string") return "";
@@ -11,7 +32,7 @@ export const normalizeImageUrl = (imageUrl, backendOrigin = "") => {
   if (!trimmed || /^data:/i.test(trimmed) || /^blob:/i.test(trimmed)) return trimmed;
 
   const appProtocol = typeof window !== "undefined" ? window.location?.protocol : "";
-  const appHost = typeof window !== "undefined" ? window.location?.hostname : "";
+  const originToUse = backendOrigin || defaultBackendOrigin || ASSET_BASE_URL;
 
   let normalized = trimmed
     .replace(/\\/g, "/")
@@ -21,30 +42,20 @@ export const normalizeImageUrl = (imageUrl, backendOrigin = "") => {
   if (/^\/\//.test(normalized)) normalized = `${appProtocol || "https:"}${normalized}`;
 
   if (/^(https?:)?\/\//i.test(normalized)) {
-    try {
-      const parsed = new URL(normalized, window.location.origin);
-      if (appHost && !/^(localhost|127\.0\.0\.1)$/i.test(appHost) && /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)) {
-        const originToUse = (backendOrigin && String(backendOrigin).startsWith('http'))
-          ? backendOrigin
-          : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
-        const backendUrl = new URL(originToUse);
-        parsed.protocol = backendUrl.protocol;
-        parsed.hostname = backendUrl.hostname;
-        parsed.port = backendUrl.port;
-      }
-      if (appProtocol === "https:" && parsed.protocol === "http:") parsed.protocol = "https:";
-      const finalUrl = parsed.toString();
-      const hasSigned = /[?&](X-Amz-|Signature=|Expires=|AWSAccessKeyId=|GoogleAccessId=|token=|sig=|se=|sp=|sv=)/i.test(finalUrl);
-      return hasSigned ? finalUrl : encodeURI(finalUrl);
-    } catch {
-      return normalized;
+    return rewriteUploadsUrl(normalized);
+  }
+
+  if (/uploads\//i.test(normalized) || normalized.startsWith("/uploads")) {
+    const filename = normalized.replace(/^.*\/uploads\//i, "").replace(/^\/+/, "");
+    if (filename && !filename.includes("..")) {
+      return `${ASSET_BASE_URL}/uploads/${filename}`;
     }
   }
 
   const absolutePath = normalized.startsWith("/")
-    ? `${backendOrigin}${normalized}`
-    : `${backendOrigin}/${normalized.replace(/^\.?\/*/, "")}`;
-  return absolutePath;
+    ? `${originToUse}${normalized}`
+    : `${originToUse}/${normalized.replace(/^\.?\/*/, "")}`;
+  return rewriteUploadsUrl(absolutePath);
 };
 
 /**
@@ -104,3 +115,20 @@ export const slugify = (value) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+
+/**
+ * Removes Google Plus Codes (e.g. RW52+FGM, W2XM+VCP) from address strings
+ */
+export const removePlusCode = (addressStr) => {
+  if (!addressStr || typeof addressStr !== 'string') return addressStr;
+  return addressStr
+    // Remove the plus code and optional trailing commas/spaces
+    .replace(/\b[A-Z0-9]{2,8}\+[A-Z0-9]{2,5}[,\s]*/ig, '')
+    // Also remove if it's at the very beginning without a word boundary
+    .replace(/^[A-Z0-9]{2,8}\+[A-Z0-9]{2,5}[,\s]*/ig, '')
+    .trim()
+    // Clean up any leading or trailing commas that might be left over
+    .replace(/^,\s*/, '')
+    .replace(/,\s*,/g, ', ')
+    .replace(/,\s*$/, '');
+};

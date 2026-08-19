@@ -8,6 +8,12 @@ import { Label } from "@food/components/ui/label"
 import { Button } from "@food/components/ui/button"
 import { adminAPI, uploadAPI, zoneAPI } from "@food/api"
 import { toast } from "sonner"
+import { Switch } from "@food/components/ui/switch"
+import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
+import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
+
 const debugLog = (...args) => {}
 const debugWarn = (...args) => { console.warn(...args) }
 const debugError = (...args) => { console.error(...args) }
@@ -24,7 +30,6 @@ const cuisinesOptions = [
 ]
 
 const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_REGEX = /^\d{10}$/
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/
 const FSSAI_REGEX = /^\d{14}$/
@@ -48,6 +53,68 @@ const timeStringToMinutes = (value = "") => {
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
   return hours * 60 + minutes
 }
+
+const normalizeTimeValue = (value) => {
+  if (!value) return ""
+  const raw = String(value).trim()
+  if (!raw) return ""
+
+  const to24Hour = (h, m, period) => {
+    let hours = Number(h)
+    const minutes = Number(m)
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return ""
+    if (minutes < 0 || minutes > 59) return ""
+    const p = String(period || "").toUpperCase()
+    if (p === "AM") {
+      if (hours === 12) hours = 0
+    } else if (p === "PM") {
+      if (hours !== 12) hours += 12
+    }
+    if (hours < 0 || hours > 23) return ""
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+  }
+
+  if (/^\d{2}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(":").map(Number)
+    if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+      return ""
+    }
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+  }
+
+  if (/^\d{1}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(":")
+    return to24Hour(h, m, "")
+  }
+
+  const ampm = raw.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/)
+  if (ampm) {
+    return to24Hour(ampm[1], ampm[2], ampm[3])
+  }
+
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) {
+    return timeToString(parsed)
+  }
+  return ""
+}
+
+const stringToTime = (timeString) => {
+  const normalized = normalizeTimeValue(timeString)
+  if (!normalized || !normalized.includes(":")) {
+    return null
+  }
+  const [hours, minutes] = normalized.split(":").map(Number)
+  return new Date(2000, 0, 1, hours || 0, minutes || 0)
+}
+
+const timeToString = (date) => {
+  if (!date) return ""
+  const hours = date.getHours().toString().padStart(2, "0")
+  const minutes = date.getMinutes().toString().padStart(2, "0")
+  return `${hours}:${minutes}`
+}
+
 const getStoredFileLabel = (value) => {
   if (!value) return ""
   if (value instanceof File) return value.name
@@ -168,7 +235,6 @@ export default function AddRestaurant() {
   const [step1, setStep1] = useState({
     restaurantName: "",
     pureVegRestaurant: null,
-    pricingAttributes: [],
     ownerName: "",
     ownerEmail: "",
     ownerPhone: "",
@@ -197,6 +263,7 @@ export default function AddRestaurant() {
     openingTime: "",
     closingTime: "",
     openDays: [],
+    takeawayEnabled: true,
   })
 
   // Step 3: Documents
@@ -224,7 +291,7 @@ export default function AddRestaurant() {
     { key: "en", label: "English(EN)" },
     { key: "bn", label: "Bengali - ?????(BN)" },
     { key: "ar", label: "Arabic - ??????? (AR)" },
-    { key: "es", label: "Spanish - espaï¿½ol(ES)" },
+    { key: "es", label: "Spanish - espa�ol(ES)" },
   ]
 
   const mainContentRef = useRef(null)
@@ -530,14 +597,14 @@ export default function AddRestaurant() {
       // Upload all images first
       let profileImageData = null
       if (step2.profileImage instanceof File) {
-        profileImageData = await handleUpload(step2.profileImage, "hello-parth/restaurant/profile")
+        profileImageData = await handleUpload(step2.profileImage, "helloparth/restaurant/profile")
       } else if (step2.profileImage?.url) {
         profileImageData = step2.profileImage
       }
 
       let menuImagesData = []
       for (const file of step2.menuImages.filter(f => f instanceof File)) {
-        const uploaded = await handleUpload(file, "hello-parth/restaurant/menu")
+        const uploaded = await handleUpload(file, "helloparth/restaurant/menu")
         menuImagesData.push(uploaded)
       }
       const existingMenuUrls = step2.menuImages.filter(img => !(img instanceof File) && (img?.url || (typeof img === 'string' && img.startsWith('http'))))
@@ -545,7 +612,7 @@ export default function AddRestaurant() {
 
       let panImageData = null
       if (step3.panImage instanceof File) {
-        panImageData = await handleUpload(step3.panImage, "hello-parth/restaurant/pan")
+        panImageData = await handleUpload(step3.panImage, "helloparth/restaurant/pan")
       } else if (step3.panImage?.url) {
         panImageData = step3.panImage
       }
@@ -553,7 +620,7 @@ export default function AddRestaurant() {
       let gstImageData = null
       if (step3.gstRegistered && step3.gstImage) {
         if (step3.gstImage instanceof File) {
-          gstImageData = await handleUpload(step3.gstImage, "hello-parth/restaurant/gst")
+          gstImageData = await handleUpload(step3.gstImage, "helloparth/restaurant/gst")
         } else if (step3.gstImage?.url) {
           gstImageData = step3.gstImage
         }
@@ -561,7 +628,7 @@ export default function AddRestaurant() {
 
       let fssaiImageData = null
       if (step3.fssaiImage instanceof File) {
-        fssaiImageData = await handleUpload(step3.fssaiImage, "hello-parth/restaurant/fssai")
+        fssaiImageData = await handleUpload(step3.fssaiImage, "helloparth/restaurant/fssai")
       } else if (step3.fssaiImage?.url) {
         fssaiImageData = step3.fssaiImage
       }
@@ -571,7 +638,6 @@ export default function AddRestaurant() {
         // Step 1
         restaurantName: step1.restaurantName,
         pureVegRestaurant: step1.pureVegRestaurant,
-        pricingAttributes: step1.pricingAttributes || [],
         ownerName: step1.ownerName,
         ownerEmail: step1.ownerEmail,
         ownerPhone: step1.ownerPhone,
@@ -602,6 +668,9 @@ export default function AddRestaurant() {
         ifscCode: step3.ifscCode,
         accountHolderName: step3.accountHolderName,
         accountType: step3.accountType,
+        takeawaySettings: {
+          isEnabled: step2.takeawayEnabled === true,
+        },
       }
 
       // Call backend API
@@ -914,52 +983,6 @@ export default function AddRestaurant() {
               This helps users filter restaurants by dietary preference.
             </p>
           </div>
-          <div>
-            <Label className="text-xs text-gray-700">Pricing perks (Optional)</Label>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const attrs = step1.pricingAttributes || []
-                  setStep1({
-                    ...step1,
-                    pricingAttributes: attrs.includes("same_price")
-                      ? attrs.filter(a => a !== "same_price")
-                      : [...attrs, "same_price"]
-                  })
-                }}
-                className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                  (step1.pricingAttributes || []).includes("same_price")
-                    ? "bg-emerald-600 text-white border-emerald-600 font-medium shadow-sm"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                Same price as restaurant
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const attrs = step1.pricingAttributes || []
-                  setStep1({
-                    ...step1,
-                    pricingAttributes: attrs.includes("no_packaging")
-                      ? attrs.filter(a => a !== "no_packaging")
-                      : [...attrs, "no_packaging"]
-                  })
-                }}
-                className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                  (step1.pricingAttributes || []).includes("no_packaging")
-                    ? "bg-emerald-600 text-white border-emerald-600 font-medium shadow-sm"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                No packaging charges
-              </button>
-            </div>
-            <p className="text-[11px] text-gray-500 mt-1">
-              Select pricing benefits to display to customers.
-            </p>
-          </div>
         </div>
       </section>
 
@@ -1250,58 +1273,109 @@ export default function AddRestaurant() {
 
         <div className="space-y-3">
           <Label className="text-xs text-gray-700">Outlet timings*</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label className="text-xs text-gray-700 mb-1 block">Opening time</Label>
-              <Input
-                type="time"
-                value={step2.openingTime || ""}
-                onChange={(e) => {
-                  const nextOpening = e.target.value
-                  const closingMinutes = timeStringToMinutes(step2.closingTime)
-                  const openingMinutes = timeStringToMinutes(nextOpening)
-                  if (openingMinutes !== null && closingMinutes !== null) {
-                    if (openingMinutes === closingMinutes) {
-                      toast.error("Opening time and closing time cannot be same")
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50/60">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4 text-gray-800" />
+                  <span className="text-xs font-medium text-gray-900">Opening time</span>
+                </div>
+                <MobileTimePicker
+                  ampm={true}
+                  value={stringToTime(step2.openingTime)}
+                  onChange={(newValue) => {
+                    if (!newValue) {
+                      setStep2({ ...step2, openingTime: "" })
                       return
                     }
-                    if (closingMinutes < openingMinutes) {
-                      toast.error("Closing time cannot be less than opening time")
+                    const nextOpening = timeToString(newValue)
+                    const closingMinutes = timeStringToMinutes(step2.closingTime)
+                    const openingMinutes = timeStringToMinutes(nextOpening)
+                    if (openingMinutes !== null && closingMinutes !== null) {
+                      if (openingMinutes === closingMinutes) {
+                        toast.error("Opening time and closing time cannot be same")
+                        return
+                      }
+                      if (closingMinutes < openingMinutes) {
+                        toast.error("Closing time cannot be less than opening time")
+                        return
+                      }
+                    }
+                    setStep2({ ...step2, openingTime: nextOpening })
+                  }}
+                  slotProps={{
+                    textField: {
+                      variant: "outlined",
+                      size: "small",
+                      placeholder: "Select time",
+                      sx: {
+                        "& .MuiOutlinedInput-root": {
+                          height: "36px",
+                          fontSize: "12px",
+                          backgroundColor: "white",
+                          "& fieldset": { borderColor: "#e5e7eb" },
+                          "&:hover fieldset": { borderColor: "#d1d5db" },
+                          "&.Mui-focused fieldset": { borderColor: "#000" },
+                        },
+                        "& .MuiInputBase-input": { padding: "8px 12px", fontSize: "12px" },
+                      },
+                    },
+                  }}
+                  format="hh:mm a"
+                />
+              </div>
+
+              <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50/60">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4 text-gray-800" />
+                  <span className="text-xs font-medium text-gray-900">Closing time</span>
+                </div>
+                <MobileTimePicker
+                  ampm={true}
+                  value={stringToTime(step2.closingTime)}
+                  onChange={(newValue) => {
+                    if (!newValue) {
+                      setStep2({ ...step2, closingTime: "" })
                       return
                     }
-                  }
-                  setStep2({ ...step2, openingTime: nextOpening })
-                }}
-                autoComplete="off"
-                className="bg-white text-sm"
-              />
+                    const nextClosing = timeToString(newValue)
+                    const openingMinutes = timeStringToMinutes(step2.openingTime)
+                    const closingMinutes = timeStringToMinutes(nextClosing)
+                    if (openingMinutes !== null && closingMinutes !== null) {
+                      if (openingMinutes === closingMinutes) {
+                        toast.error("Opening time and closing time cannot be same")
+                        return
+                      }
+                      if (closingMinutes < openingMinutes) {
+                        toast.error("Closing time cannot be less than opening time")
+                        return
+                      }
+                    }
+                    setStep2({ ...step2, closingTime: nextClosing })
+                  }}
+                  slotProps={{
+                    textField: {
+                      variant: "outlined",
+                      size: "small",
+                      placeholder: "Select time",
+                      sx: {
+                        "& .MuiOutlinedInput-root": {
+                          height: "36px",
+                          fontSize: "12px",
+                          backgroundColor: "white",
+                          "& fieldset": { borderColor: "#e5e7eb" },
+                          "&:hover fieldset": { borderColor: "#d1d5db" },
+                          "&.Mui-focused fieldset": { borderColor: "#000" },
+                        },
+                        "& .MuiInputBase-input": { padding: "8px 12px", fontSize: "12px" },
+                      },
+                    },
+                  }}
+                  format="hh:mm a"
+                />
+              </div>
             </div>
-            <div>
-              <Label className="text-xs text-gray-700 mb-1 block">Closing time</Label>
-              <Input
-                type="time"
-                value={step2.closingTime || ""}
-                onChange={(e) => {
-                  const nextClosing = e.target.value
-                  const openingMinutes = timeStringToMinutes(step2.openingTime)
-                  const closingMinutes = timeStringToMinutes(nextClosing)
-                  if (openingMinutes !== null && closingMinutes !== null) {
-                    if (openingMinutes === closingMinutes) {
-                      toast.error("Opening time and closing time cannot be same")
-                      return
-                    }
-                    if (closingMinutes < openingMinutes) {
-                      toast.error("Closing time cannot be less than opening time")
-                      return
-                    }
-                  }
-                  setStep2({ ...step2, closingTime: nextClosing })
-                }}
-                autoComplete="off"
-                className="bg-white text-sm"
-              />
-            </div>
-          </div>
+          </LocalizationProvider>
         </div>
 
         <div>
@@ -1341,6 +1415,23 @@ export default function AddRestaurant() {
               )
             })}
           </div>
+        </div>
+
+        <div className="flex items-center justify-between p-4 rounded-md border border-gray-100 bg-gray-50/50">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+              <span>🛍️</span>
+              <span>Takeaway (Pickup)</span>
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Allow customers to place orders online and pick them up from the restaurant.
+            </p>
+          </div>
+          <Switch
+            checked={step2.takeawayEnabled}
+            onCheckedChange={(checked) => setStep2({ ...step2, takeawayEnabled: checked })}
+            className="data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
+          />
         </div>
       </section>
     </div>
@@ -1520,27 +1611,34 @@ export default function AddRestaurant() {
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <DialogContent className="max-w-md bg-white p-0">
           <div className="p-8 text-center">
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-6">
               <div className="relative">
                 <div className="absolute inset-0 bg-emerald-100 rounded-full animate-ping opacity-75"></div>
                 <div className="relative bg-emerald-500 rounded-full p-4">
-                  <CheckCircle2 className="w-12 h-12 text-white" />
+                  <CheckCircle2 className="w-8 h-8 text-white" />
                 </div>
               </div>
             </div>
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">Restaurant Created Successfully!</DialogTitle>
               <DialogDescription className="text-sm text-slate-600">
-                The restaurant has been created successfully.
+                The restaurant has been created and is now pending approval.
               </DialogDescription>
             </DialogHeader>
+            <div className="mt-8">
+              <Button 
+                onClick={() => {
+                  setShowSuccessDialog(false)
+                  navigate("/admin/restaurants")
+                }}
+                className="w-full bg-black text-white"
+              >
+                Go to Restaurant List
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   )
 }
-
-
-
-

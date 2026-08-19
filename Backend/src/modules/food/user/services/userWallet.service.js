@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodUserWallet } from '../models/userWallet.model.js';
-import { createRazorpayCheckoutOrder, isRazorpayConfigured, verifyPaymentSignature } from '../../orders/helpers/razorpay.helper.js';
+import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature, fetchRazorpayPayment, assertRazorpayPaymentMatches } from '../../orders/helpers/razorpay.helper.js';
+import { config } from '../../../../config/env.js';
 
 const ensureWallet = async (userId) => {
     const id = String(userId || '');
@@ -74,16 +75,32 @@ export const createWalletTopupOrder = async (userId, amountInr) => {
     const amountPaise = Math.round(amount * 100);
 
     if (!isRazorpayConfigured()) {
-        throw new ValidationError('Razorpay payment gateway is not configured');
+        if (config.nodeEnv === 'production') {
+            throw new ValidationError('Payment gateway is not configured');
+        }
+        // Dev fallback: return a compatible shape without writing to DB.
+        const orderId = `order_dev_${Date.now()}`;
+        return {
+            razorpay: {
+                key: getRazorpayKeyId() || 'rzp_test_dummy',
+                orderId,
+                amount: amountPaise,
+                currency: 'INR'
+            }
+        };
     }
 
     const receipt = `wallet_topup_${String(userId).slice(-8)}_${Date.now()}`;
-    try {
-        const razorpay = await createRazorpayCheckoutOrder(amountPaise, 'INR', receipt);
-        return { razorpay };
-    } catch (error) {
-        throw new ValidationError(error?.message || 'Payment gateway error');
-    }
+    const order = await createRazorpayOrder(amountPaise, 'INR', receipt);
+
+    return {
+        razorpay: {
+            key: getRazorpayKeyId(),
+            orderId: String(order.id),
+            amount: Number(order.amount) || amountPaise,
+            currency: order.currency || 'INR'
+        }
+    };
 };
 
 export const verifyWalletTopupPayment = async (userId, payload) => {
@@ -104,12 +121,24 @@ export const verifyWalletTopupPayment = async (userId, payload) => {
     }
 
     if (!isRazorpayConfigured()) {
-        throw new ValidationError('Razorpay payment gateway is not configured');
-    }
-
-    const ok = verifyPaymentSignature(orderId, paymentId, signature);
-    if (!ok) {
-        throw new ValidationError('Payment verification failed');
+        if (config.nodeEnv === 'production') {
+            throw new ValidationError('Payment gateway is not configured');
+        }
+        // Dev-only: accept without gateway
+    } else {
+        const ok = verifyPaymentSignature(orderId, paymentId, signature);
+        if (!ok) {
+            throw new ValidationError('Payment verification failed');
+        }
+        try {
+            const rzPayment = await fetchRazorpayPayment(paymentId);
+            assertRazorpayPaymentMatches(rzPayment, {
+                orderId,
+                amountPaise: Math.round(amount * 100),
+            });
+        } catch (err) {
+            throw new ValidationError(err?.message || 'Payment verification failed');
+        }
     }
 
     // Store ONLY after payment is verified.
@@ -117,8 +146,8 @@ export const verifyWalletTopupPayment = async (userId, payload) => {
         type: 'addition',
         amount,
         status: 'Completed',
-        description: 'Wallet top-up',
-        metadata: { source: 'wallet_topup', mode: 'razorpay' },
+        description: isRazorpayConfigured() ? 'Wallet top-up' : 'Wallet top-up (dev)',
+        metadata: { source: 'wallet_topup', mode: isRazorpayConfigured() ? 'razorpay' : 'dev' },
         razorpayOrderId: orderId,
         razorpayPaymentId: paymentId,
         razorpaySignature: signature
@@ -175,3 +204,4 @@ export const refundWalletBalance = async (userId, amountInr, description = 'Orde
 
     return { wallet: await getUserWallet(userId) };
 };
+

@@ -12,6 +12,9 @@ const debugError = (...args) => {}
 export default function DeliveryBoyCommission() {
   const [searchQuery, setSearchQuery] = useState("")
   const [commissions, setCommissions] = useState([])
+  const [zones, setZones] = useState([])
+  const [selectedZoneId, setSelectedZoneId] = useState("")
+  const [zonesLoading, setZonesLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -24,7 +27,7 @@ export default function DeliveryBoyCommission() {
     minDistance: "",
     maxDistance: "",
     maxDistanceUnlimited: false,
-    commissionPerKm: "0",
+    commissionPerKm: "",
     basePayout: "",
   })
   const [formErrors, setFormErrors] = useState({})
@@ -32,16 +35,11 @@ export default function DeliveryBoyCommission() {
     si: true,
     name: true,
     distanceSlab: true,
-    commissionPerKm: false,
+    commissionPerKm: true,
     basePayout: true,
     status: true,
     actions: true,
   })
-  const [zoneSurges, setZoneSurges] = useState([])
-  const [savingZoneId, setSavingZoneId] = useState("")
-  const [zoneSearchQuery, setZoneSearchQuery] = useState("")
-  const [zonePage, setZonePage] = useState(1)
-  const zonePageSize = 5
 
   const filteredCommissions = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -56,19 +54,6 @@ export default function DeliveryBoyCommission() {
     )
   }, [commissions, searchQuery])
 
-  const filteredZoneSurges = useMemo(() => {
-    const query = String(zoneSearchQuery || "").trim().toLowerCase()
-    if (!query) return zoneSurges
-    return zoneSurges.filter((z) => String(z.zoneName || "").toLowerCase().includes(query))
-  }, [zoneSurges, zoneSearchQuery])
-
-  const zoneTotalPages = Math.max(1, Math.ceil(filteredZoneSurges.length / zonePageSize))
-  const paginatedZoneSurges = useMemo(() => {
-    const safePage = Math.min(zonePage, zoneTotalPages)
-    const start = (safePage - 1) * zonePageSize
-    return filteredZoneSurges.slice(start, start + zonePageSize)
-  }, [filteredZoneSurges, zonePage, zoneTotalPages])
-
   const getDistanceSlabLabel = (commission) => {
     const min = Number(commission.minDistance) || 0
     const max = commission.maxDistance === null || commission.maxDistance === undefined ? null : Number(commission.maxDistance)
@@ -76,48 +61,70 @@ export default function DeliveryBoyCommission() {
     return `${min}-${max} km`
   }
 
-  // Per-km pricing has been moved to Delivery & Platform Fee page.
+  // Calculate total commission for a given distance
+  const calculateTotalCommission = (commission, distance) => {
+    // Check if distance falls within this commission tier
+    if (distance < commission.minDistance) return 0
+    if (commission.maxDistance !== null && distance > commission.maxDistance) return 0
+    
+    // For 0-x slab we usually want per-km on full distance; for other slabs apply per-km after minDistance
+    const min = Number(commission.minDistance) || 0
+    const extraDistance = Math.max(0, distance - min)
+    const kmForRate = min === 0 ? distance : extraDistance
+    return commission.basePayout + (kmForRate * commission.commissionPerKm)
+  }
 
-  // Fetch commission rules on component mount
+  // Calculate example commission for display (using mid-point of range)
+  const getExampleCommission = (commission) => {
+    if (commission.maxDistance === null) {
+      const exampleDistance = commission.minDistance + 5 // Example: 10km for 10+ km tier
+      return calculateTotalCommission(commission, exampleDistance)
+    }
+    const midDistance = (commission.minDistance + commission.maxDistance) / 2
+    return calculateTotalCommission(commission, midDistance)
+  }
+
   useEffect(() => {
-    fetchCommissionRules()
-    fetchZoneSurges()
+    const fetchZones = async () => {
+      try {
+        setZonesLoading(true)
+        const res = await adminAPI.getZones({ limit: 1000 })
+        const zoneData = res?.data?.data
+        const list = Array.isArray(zoneData?.zones)
+          ? zoneData.zones
+          : Array.isArray(zoneData)
+            ? zoneData
+            : []
+        setZones(list)
+        if (list.length > 0) {
+          setSelectedZoneId(String(list[0]._id || list[0].id))
+        }
+      } catch (error) {
+        debugError("Error fetching zones:", error)
+        toast.error("Failed to load zones")
+        setZones([])
+      } finally {
+        setZonesLoading(false)
+      }
+    }
+    fetchZones()
   }, [])
 
-  const fetchZoneSurges = async () => {
-    try {
-      const response = await adminAPI.getZoneSurgeConfigs()
-      const rows = response?.data?.data?.surgeConfigs
-      setZoneSurges(Array.isArray(rows) ? rows : [])
-      setZonePage(1)
-    } catch (error) {
-      debugError("Error fetching zone surges:", error)
-      setZoneSurges([])
-      setZonePage(1)
+  // Fetch commission rules when zone changes
+  useEffect(() => {
+    if (!selectedZoneId) {
+      setCommissions([])
+      setLoading(false)
+      return
     }
-  }
-
-  const updateZoneSurge = async (zoneId, next) => {
-    try {
-      setSavingZoneId(String(zoneId))
-      await adminAPI.upsertZoneSurgeConfig({
-        zoneId,
-        surgeAmount: Number(next.surgeAmount || 0),
-        isEnabled: Boolean(next.isEnabled),
-      })
-      await fetchZoneSurges()
-      toast.success("Zone surge updated")
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to update zone surge")
-    } finally {
-      setSavingZoneId("")
-    }
-  }
+    fetchCommissionRules()
+  }, [selectedZoneId])
 
   const fetchCommissionRules = async () => {
+    if (!selectedZoneId) return
     try {
       setLoading(true)
-      const response = await adminAPI.getCommissionRules()
+      const response = await adminAPI.getCommissionRules({ zoneId: selectedZoneId })
       
       // Handle different response structures
       let commissionsData = null
@@ -164,7 +171,7 @@ export default function DeliveryBoyCommission() {
         return
       }
       
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch commission rules'
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch payout rules'
       toast.error(errorMessage)
       setCommissions([])
     } finally {
@@ -179,7 +186,7 @@ export default function DeliveryBoyCommission() {
       setCommissions(commissions.map(c =>
         c._id === commission._id ? { ...c, status: newStatus } : c
       ))
-      toast.success('Commission rule status updated successfully')
+      toast.success('Payout rule status updated successfully')
     } catch (error) {
       debugError('Error toggling status:', error)
       toast.error(error.response?.data?.message || 'Failed to update status')
@@ -187,8 +194,12 @@ export default function DeliveryBoyCommission() {
   }
 
   const handleAdd = () => {
+    if (!selectedZoneId) {
+      toast.error('Please select a zone first')
+      return
+    }
     setSelectedCommission(null)
-    setFormData({ name: "", minDistance: "0", maxDistance: "", maxDistanceUnlimited: false, commissionPerKm: "0", basePayout: "" })
+    setFormData({ name: "", minDistance: "0", maxDistance: "", maxDistanceUnlimited: false, commissionPerKm: "", basePayout: "" })
     setFormErrors({})
     setIsAddEditOpen(true)
   }
@@ -201,7 +212,7 @@ export default function DeliveryBoyCommission() {
       minDistance: commission.minDistance?.toString?.() || "",
       maxDistance: isUnlimited ? "" : String(commission.maxDistance),
       maxDistanceUnlimited: isUnlimited,
-      commissionPerKm: "0",
+      commissionPerKm: commission.commissionPerKm.toString(),
       basePayout: commission.basePayout.toString(),
     })
     setFormErrors({})
@@ -222,10 +233,10 @@ export default function DeliveryBoyCommission() {
       setCommissions(commissions.filter(commission => commission._id !== selectedCommission._id))
       setIsDeleteOpen(false)
       setSelectedCommission(null)
-      toast.success('Commission rule deleted successfully')
+      toast.success('Payout rule deleted successfully')
     } catch (error) {
       debugError('Error deleting commission rule:', error)
-      toast.error(error.response?.data?.message || 'Failed to delete commission rule')
+      toast.error(error.response?.data?.message || 'Failed to delete payout rule')
     } finally {
       setDeleting(false)
     }
@@ -238,6 +249,9 @@ export default function DeliveryBoyCommission() {
     }
     if (!formData.maxDistanceUnlimited && formData.maxDistance !== "" && parseFloat(formData.maxDistance) < parseFloat(formData.minDistance || "0")) {
       errors.maxDistance = "Max distance must be greater than or equal to min distance"
+    }
+    if (!formData.commissionPerKm.trim() || parseFloat(formData.commissionPerKm) < 0) {
+      errors.commissionPerKm = "Amount per km must be 0 or greater"
     }
     if (!formData.basePayout.trim() || parseFloat(formData.basePayout) < 0) {
       errors.basePayout = "Base payout must be 0 or greater"
@@ -255,10 +269,11 @@ export default function DeliveryBoyCommission() {
       const minDistance = parseFloat(formData.minDistance)
       const maxDistance = formData.maxDistanceUnlimited || formData.maxDistance === "" ? null : parseFloat(formData.maxDistance)
       const commissionData = {
+        zoneId: selectedZoneId,
         name: formData.name.trim() || `Base (0-${minDistance} km)`,
         minDistance,
         maxDistance,
-        commissionPerKm: 0,
+        commissionPerKm: parseFloat(formData.commissionPerKm),
         basePayout: parseFloat(formData.basePayout),
         status: selectedCommission ? selectedCommission.status : true,
       }
@@ -283,7 +298,7 @@ export default function DeliveryBoyCommission() {
           setCommissions(commissions.map(c =>
             c._id === selectedCommission._id ? updatedCommission : c
           ))
-          toast.success('Commission rule updated successfully')
+          toast.success('Payout rule updated successfully')
         }
       } else {
         const response = await adminAPI.createCommissionRule(commissionData)
@@ -302,12 +317,12 @@ export default function DeliveryBoyCommission() {
             sl: commissions.length + 1
           }
           setCommissions([...commissions, newCommission])
-          toast.success('Commission rule created successfully')
+          toast.success('Payout rule created successfully')
         }
       }
       
       setIsAddEditOpen(false)
-      setFormData({ name: "", minDistance: "0", maxDistance: "", commissionPerKm: "0", basePayout: "" })
+      setFormData({ name: "", minDistance: "0", maxDistance: "", commissionPerKm: "", basePayout: "" })
       setSelectedCommission(null)
     } catch (error) {
       debugError('Error saving commission rule:', error)
@@ -339,7 +354,7 @@ export default function DeliveryBoyCommission() {
       }
       
       // Handle other errors - extract message from different possible response structures
-      let errorMessage = 'Failed to save commission rule'
+      let errorMessage = 'Failed to save payout rule'
       if (error.response?.data) {
         if (error.response.data.message) {
           errorMessage = error.response.data.message
@@ -390,7 +405,7 @@ export default function DeliveryBoyCommission() {
       si: true,
       name: true,
       distanceSlab: true,
-      commissionPerKm: false,
+      commissionPerKm: true,
       basePayout: true,
       totalCommission: true,
       status: true,
@@ -402,25 +417,27 @@ export default function DeliveryBoyCommission() {
     si: "Serial Number",
     name: "Name",
     distanceSlab: "Distance Slab (km)",
-        basePayout: "Base Payout",
+    commissionPerKm: "Amount Per/Km",
+    basePayout: "Base Payout",
     status: "Status",
     actions: "Actions",
   }
 
-  const configuredMinDistance = Number(
+  // Dialog labels follow the rule currently being edited.
+  const formMinDistance = Number(
     formData.minDistance !== "" ? formData.minDistance : selectedCommission?.minDistance
   )
-  const formulaMinDistance = Number.isFinite(configuredMinDistance) ? configuredMinDistance : 0
-
-  useEffect(() => {
-    setZonePage(1)
-  }, [zoneSearchQuery])
-
-  useEffect(() => {
-    if (zonePage > zoneTotalPages) {
-      setZonePage(zoneTotalPages)
-    }
-  }, [zonePage, zoneTotalPages])
+  const dialogMinDistance = Number.isFinite(formMinDistance) ? formMinDistance : 0
+  const formMaxRaw =
+    formData.maxDistanceUnlimited || formData.maxDistance === ""
+      ? null
+      : Number(formData.maxDistance)
+  const dialogBaseCoverage =
+    dialogMinDistance === 0 && formMaxRaw != null && Number.isFinite(formMaxRaw)
+      ? `0-${formMaxRaw}`
+      : dialogMinDistance === 0
+        ? "0"
+        : String(dialogMinDistance)
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
@@ -430,16 +447,43 @@ export default function DeliveryBoyCommission() {
             <div className="flex items-center gap-3">
               <IndianRupee className="w-5 h-5 text-slate-600" />
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900">Delivery Boy Commission</h1>
-                <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-                  {filteredCommissions.length}
+                <h1 className="text-2xl font-bold text-slate-900">Delivery Boy Payout</h1>
+                <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700 flex items-center justify-center min-w-[2.5rem] h-7">
+                  {loading ? (
+                    <span className="w-5 h-3 rounded bg-slate-300/80 animate-pulse" />
+                  ) : (
+                    filteredCommissions.length
+                  )}
                 </span>
               </div>
             </div>
 
           <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <label htmlFor="payout-zone-select" className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                  Zone:
+                </label>
+                <select
+                  id="payout-zone-select"
+                  value={selectedZoneId}
+                  onChange={(e) => setSelectedZoneId(e.target.value)}
+                  className="px-3 py-2.5 bg-white border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm min-w-[10rem]"
+                  disabled={zonesLoading || zones.length === 0}
+                >
+                  {zones.length === 0 ? (
+                    <option value="">No zones</option>
+                  ) : (
+                    zones.map((zone) => (
+                      <option key={zone._id || zone.id} value={zone._id || zone.id}>
+                        {zone.name || zone.zoneName || "Unnamed Zone"}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
               <button
                 onClick={handleAdd}
+                disabled={!selectedZoneId}
                 className="px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add Rule
@@ -458,12 +502,18 @@ export default function DeliveryBoyCommission() {
             <div className="flex items-start gap-3">
               <MapPin className="w-5 h-5 text-blue-600 mt-0.5" />
               <div className="text-sm text-slate-700">
-                <p className="font-semibold text-blue-900 mb-1">Distance Slab Payout</p>
+                <p className="font-semibold text-blue-900 mb-1">Fixed + Extra Distance Payout</p>
                 <p className="text-slate-600">
-                  This page now controls only rider base payout per distance slab.
+                  Payout is calculated as:{" "}
+                  <strong>
+                    Base payout (0-2 km slab) + (km in each slab × that slab&apos;s amount per km)
+                  </strong>
+                  .
+                  Example: base ₹25 for 0-2 km, then ₹5/km after 2 km → 6 km
+                  earns ₹25 + (4 × ₹5) = ₹45.
                 </p>
                 <p className="text-slate-600 mt-1">
-                  Customer delivery charges are configured from <strong>Delivery & Platform Fee</strong> page using distance + order value slabs.
+                  Only the slab with <strong>min distance = 0</strong> can have a base payout. All other slabs should keep base payout set to 0 and use only amount per km.
                 </p>
               </div>
             </div>
@@ -516,14 +566,14 @@ export default function DeliveryBoyCommission() {
                     <td colSpan={Object.values(visibleColumns).filter(v => v).length} className="px-6 py-8 text-center">
                       <div className="flex items-center justify-center gap-2 text-slate-500">
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Loading commission rules...</span>
+                        <span>Loading payout rules...</span>
                       </div>
                     </td>
                   </tr>
                 ) : filteredCommissions.length === 0 ? (
                   <tr>
                     <td colSpan={Object.values(visibleColumns).filter(v => v).length} className="px-6 py-8 text-center text-slate-500">
-                      No commission rules found
+                      No payout rules found
                     </td>
                   </tr>
                 ) : (
@@ -562,7 +612,7 @@ export default function DeliveryBoyCommission() {
                           <button
                             onClick={() => handleToggleStatus(commission)}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                              commission.status ? "bg-blue-600" : "bg-slate-300"
+                              commission.status ? "bg-green-600" : "bg-slate-300"
                             }`}
                           >
                             <span
@@ -599,85 +649,6 @@ export default function DeliveryBoyCommission() {
               </tbody>
             </table>
           </div>
-
-          <div className="mt-8 border-t border-slate-200 pt-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-3">Zone-wise Surge Amount</h2>
-            <div className="mb-4">
-              <div className="relative w-full sm:max-w-sm">
-                <input
-                  type="text"
-                  placeholder="Search zone..."
-                  value={zoneSearchQuery}
-                  onChange={(e) => setZoneSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
-                />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              </div>
-            </div>
-            <div className="space-y-3">
-              {paginatedZoneSurges.map((z) => (
-                <div key={z.zoneId} className="grid grid-cols-12 gap-3 items-center p-3 border border-slate-200 rounded-lg">
-                  <div className="col-span-12 sm:col-span-5 text-sm font-medium text-slate-800">{z.zoneName || "Unnamed Zone"}</div>
-                  <div className="col-span-6 sm:col-span-3">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={z.surgeAmount ?? 0}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        setZoneSurges((prev) => prev.map((r) => r.zoneId === z.zoneId ? { ...r, surgeAmount: value } : r))
-                      }}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
-                    />
-                  </div>
-                  <div className="col-span-3 sm:col-span-2">
-                    <button
-                      onClick={() => updateZoneSurge(z.zoneId, { ...z, isEnabled: !z.isEnabled })}
-                      className={`px-3 py-2 rounded-md text-xs font-semibold ${z.isEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
-                    >
-                      {z.isEnabled ? "Enabled" : "Disabled"}
-                    </button>
-                  </div>
-                  <div className="col-span-3 sm:col-span-2 text-right">
-                    <button
-                      onClick={() => updateZoneSurge(z.zoneId, z)}
-                      disabled={savingZoneId === String(z.zoneId)}
-                      className="px-3 py-2 rounded-md bg-blue-600 text-white text-xs font-semibold disabled:opacity-60"
-                    >
-                      {savingZoneId === String(z.zoneId) ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {filteredZoneSurges.length === 0 && <p className="text-sm text-slate-500">No zones found.</p>}
-            </div>
-            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <p className="text-xs text-slate-500">
-                Showing {(filteredZoneSurges.length === 0) ? 0 : ((zonePage - 1) * zonePageSize + 1)}-
-                {Math.min(zonePage * zonePageSize, filteredZoneSurges.length)} of {filteredZoneSurges.length}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setZonePage((prev) => Math.max(1, prev - 1))}
-                  disabled={zonePage <= 1}
-                  className="px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-slate-700">
-                  Page {zonePage} / {zoneTotalPages}
-                </span>
-                <button
-                  onClick={() => setZonePage((prev) => Math.min(zoneTotalPages, prev + 1))}
-                  disabled={zonePage >= zoneTotalPages}
-                  className="px-3 py-1.5 rounded-md border border-slate-300 text-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
           
         </div>
       </div>
@@ -686,7 +657,7 @@ export default function DeliveryBoyCommission() {
       <Dialog open={isAddEditOpen} onOpenChange={setIsAddEditOpen}>
         <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
           <DialogHeader className="px-6 pt-6 pb-4">
-            <DialogTitle>{selectedCommission ? "Edit Commission Rule" : "Add Commission Rule"}</DialogTitle>
+            <DialogTitle>{selectedCommission ? "Edit Payout Rule" : "Add Payout Rule"}</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6 space-y-4">
             <div>
@@ -700,7 +671,7 @@ export default function DeliveryBoyCommission() {
                 className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
                   formErrors.name ? "border-red-500" : "border-slate-300"
                 }`}
-                placeholder={`e.g., Base (0-${formulaMinDistance} km)`}
+                placeholder={`e.g., Base (${dialogBaseCoverage} km)`}
               />
               {formErrors.name && <p className="text-xs text-red-500 mt-1">{formErrors.name}</p>}
             </div>
@@ -774,7 +745,25 @@ export default function DeliveryBoyCommission() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Fixed Payout <span className="text-red-500">*</span>
+                Extra Per Kilometer (₹) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.commissionPerKm}
+                onChange={(e) => setFormData({ ...formData, commissionPerKm: e.target.value })}
+                className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
+                  formErrors.commissionPerKm ? "border-red-500" : "border-slate-300"
+                }`}
+                placeholder="e.g., 5"
+              />
+              {formErrors.commissionPerKm && <p className="text-xs text-red-500 mt-1">{formErrors.commissionPerKm}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Fixed Base Payout{dialogMinDistance === 0 ? ` for ${dialogBaseCoverage} km` : ""} (₹){" "}
+                <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
@@ -789,7 +778,9 @@ export default function DeliveryBoyCommission() {
               />
               {formErrors.basePayout && <p className="text-xs text-red-500 mt-1">{formErrors.basePayout}</p>}
               <p className="text-xs text-slate-500 mt-1">
-                This value is used as rider fixed payout for this distance slab.
+                {dialogMinDistance === 0
+                  ? "Base payout is flat for the 0-km slab. Amount per km applies only to km that fall inside each slab."
+                  : "Non-base slabs must keep base payout at 0. Only amount per km is used for km inside this slab."}
               </p>
             </div>
           </div>
@@ -816,7 +807,7 @@ export default function DeliveryBoyCommission() {
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
           <DialogHeader className="px-6 pt-6 pb-4">
-            <DialogTitle>Delete Commission Rule</DialogTitle>
+            <DialogTitle>Delete Payout Rule</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6">
             <p className="text-sm text-slate-700">
@@ -897,7 +888,5 @@ export default function DeliveryBoyCommission() {
     </div>
   )
 }
-
-
 
 

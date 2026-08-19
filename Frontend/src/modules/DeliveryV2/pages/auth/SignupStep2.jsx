@@ -3,132 +3,54 @@ import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Upload, X, Check, Camera, Image as ImageIcon } from "lucide-react"
 import { deliveryAPI } from "@food/api"
 import { toast } from "sonner"
-import { isFlutterBridgeAvailable, openCamera } from "@food/utils/imageUploadUtils"
-import useDeliveryBackNavigation from "../../hooks/useDeliveryBackNavigation"
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+import {
+  getUserFacingApiError,
+  isAlreadyExistsError,
+  showUserFacingApiError,
+} from "@/shared/utils/apiError"
+import { openCamera, openGallery } from "@food/utils/imageUploadUtils"
+import { prepareUploadFile } from "@/shared/utils/imageCompressor"
+import useDeliveryOnboardingExitGuard from "../../hooks/useDeliveryOnboardingExitGuard"
+import {
+  DELIVERY_SIGNUP_DOC_TYPES,
+  clearSignupDocumentsFromDB,
+  deleteSignupDocumentFromDB,
+  getAllSignupDocumentsFromDB,
+  loadSignupDocumentPreviews,
+  prepareSignupDocumentFile,
+  saveSignupDocumentToDB,
+} from "../../utils/deliveryOnboardingStorage"
+import {
+  collectFcmTokenForSignup,
+  finalizeDeliveryPendingSubmission,
+  prefetchModuleFcmToken,
+} from "@food/utils/firebaseMessaging"
 
-const createEmptyUploadedDocs = () => ({
-  profilePhoto: null,
-  aadharPhoto: null,
-  aadharPhotoBack: null,
-  panPhoto: null,
-  panPhotoBack: null,
-  drivingLicensePhoto: null,
-  drivingLicensePhotoBack: null
-})
+const debugError = (...args) => { }
 
-const sanitizeUploadedDocValue = (value) => {
-  if (!value) return null
-
-  if (typeof value === "string") {
-    return value.startsWith("blob:") ? null : value
-  }
-
-  if (typeof value === "object") {
-    const url = typeof value.url === "string" ? value.url : ""
-    if (url.startsWith("blob:")) {
-      return null
-    }
-    return value
-  }
-
-  return null
-}
-
-const sanitizeUploadedDocs = (docs) => ({
-  profilePhoto: sanitizeUploadedDocValue(docs?.profilePhoto),
-  aadharPhoto: sanitizeUploadedDocValue(docs?.aadharPhoto),
-  aadharPhotoBack: sanitizeUploadedDocValue(docs?.aadharPhotoBack),
-  panPhoto: sanitizeUploadedDocValue(docs?.panPhoto),
-  panPhotoBack: sanitizeUploadedDocValue(docs?.panPhotoBack),
-  drivingLicensePhoto: sanitizeUploadedDocValue(docs?.drivingLicensePhoto),
-  drivingLicensePhotoBack: sanitizeUploadedDocValue(docs?.drivingLicensePhotoBack)
-})
-
-const getFriendlyRegistrationError = (error) => {
-  const rawMessage =
-    error?.response?.data?.message ||
-    error?.response?.data?.error ||
-    error?.message ||
-    ""
-
-  if (/E11000 duplicate key error/i.test(rawMessage)) {
-    if (/vehicleNumber_1/i.test(rawMessage) || /vehicleNumber/i.test(rawMessage)) {
-      return "This vehicle number is already registered. Please use a different vehicle number."
-    }
-
-    if (/panNumber_1/i.test(rawMessage) || /panNumber/i.test(rawMessage)) {
-      return "This PAN number is already registered."
-    }
-
-    if (/aadharNumber_1/i.test(rawMessage) || /aadharNumber/i.test(rawMessage)) {
-      return "This Aadhar number is already registered."
-    }
-
-    if (/drivingLicense/i.test(rawMessage)) {
-      return "This driving license number is already registered."
-    }
-
-    return "This account detail is already registered. Please check your information."
-  }
-
-  return rawMessage || "Failed to register. Please try again."
-}
-
+const createEmptyPreviewState = () =>
+  DELIVERY_SIGNUP_DOC_TYPES.reduce((acc, docType) => {
+    acc[docType] = null
+    return acc
+  }, {})
 
 export default function SignupStep2() {
   const navigate = useNavigate()
-  const goBack = useDeliveryBackNavigation()
-  const isMobileDevice =
-    typeof navigator !== "undefined" &&
-    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "")
+  const { handleBack } = useDeliveryOnboardingExitGuard("documents")
   const fileInputRefs = useRef({
     profilePhoto: null,
     aadharPhoto: null,
-    aadharPhotoBack: null,
     panPhoto: null,
-    panPhotoBack: null,
     drivingLicensePhoto: null,
-    drivingLicensePhotoBack: null
   })
-  const [documents, setDocuments] = useState({
-    profilePhoto: null,
-    aadharPhoto: null,
-    aadharPhotoBack: null,
-    panPhoto: null,
-    panPhotoBack: null,
-    drivingLicensePhoto: null,
-    drivingLicensePhotoBack: null
-  })
-  const [uploadedDocs, setUploadedDocs] = useState(() => {
-    const saved = sessionStorage.getItem("deliverySignupDocs")
-    if (saved) {
-      try {
-        return sanitizeUploadedDocs(JSON.parse(saved))
-      } catch (e) {
-        debugError("Error parsing saved docs:", e)
-      }
-    }
-    return createEmptyUploadedDocs()
-  })
-  const [activePicker, setActivePicker] = useState(null) // { docType: string, title: string, ref: any }
+  const previewUrlsRef = useRef(createEmptyPreviewState())
+  const [previewUrls, setPreviewUrls] = useState(createEmptyPreviewState)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploading, setUploading] = useState({})
-  const [vehicleType] = useState(() => {
-    try {
-      const raw = sessionStorage.getItem("deliverySignupDetails")
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        return parsed.vehicleType || "bike"
-      }
-    } catch (e) {
-      debugError("Error parsing signup details in step 2:", e)
-    }
-    return "bike"
-  })
-  const isBicycle = vehicleType === "bicycle";
+
+  useEffect(() => {
+    prefetchModuleFcmToken("delivery")
+  }, [])
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" })
@@ -136,107 +58,140 @@ export default function SignupStep2() {
     document.body.scrollTop = 0
   }, [])
 
-  // Save uploaded docs to session storage whenever they change
   useEffect(() => {
-    sessionStorage.setItem("deliverySignupDocs", JSON.stringify(uploadedDocs))
-  }, [uploadedDocs])
+    let cancelled = false
 
-  const documentsRef = useRef(documents)
-  useEffect(() => {
-    documentsRef.current = documents
-  }, [documents])
+    const hydrateDocuments = async () => {
+      try {
+        const previews = await loadSignupDocumentPreviews()
+        if (cancelled) {
+          Object.values(previews).forEach((url) => {
+            if (url) URL.revokeObjectURL(url)
+          })
+          return
+        }
 
-  useEffect(() => {
+        previewUrlsRef.current = previews
+        setPreviewUrls(previews)
+      } catch (error) {
+        debugError("Failed to hydrate signup documents:", error)
+      }
+    }
+
+    void hydrateDocuments()
+
     return () => {
-      // Cleanup object URLs only on unmount to prevent broken previews during flow
-      Object.values(documentsRef.current).forEach((file) => {
-        if (file instanceof File && file._previewUrl) {
-          URL.revokeObjectURL(file._previewUrl)
+      cancelled = true
+      Object.values(previewUrlsRef.current).forEach((url) => {
+        if (url) {
+          try {
+            URL.revokeObjectURL(url)
+          } catch {
+            // Ignore revoke errors.
+          }
         }
       })
+      previewUrlsRef.current = createEmptyPreviewState()
     }
   }, [])
 
-  const getPreviewSrc = (docType) => {
-    const uploaded = uploadedDocs[docType]
-    if (typeof uploaded === "string") return uploaded
-    if (uploaded?.url) return uploaded.url
+  const getPreviewSrc = (docType) => previewUrls[docType] || null
 
-    const localFile = documents[docType]
-    if (localFile instanceof File) {
-      return localFile._previewUrl || null
-    }
-    return null
-  }
-
-  const handleOpenUploadOptions = (docType) => {
-    fileInputRefs.current[docType]?.click()
-  }
+  const hasUploadedDoc = (docType) => Boolean(getPreviewSrc(docType))
 
   const handleFileSelect = async (docType, file) => {
     if (!file) return
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file")
+    if (!String(file.type || "").startsWith("image/")) {
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image size should be less than 5MB")
       return
     }
 
-    // Revoke old URL if replacing a file
-    const oldFile = documents[docType]
-    if (oldFile instanceof File && oldFile._previewUrl) {
-      URL.revokeObjectURL(oldFile._previewUrl)
+    setUploading((prev) => ({ ...prev, [docType]: true }))
+
+    // Failsafe: never leave the UI stuck on "Uploading..." if compression/IDB hangs.
+    let finished = false
+    const failSafeId = setTimeout(() => {
+      if (!finished) {
+        setUploading((prev) => ({ ...prev, [docType]: false }))
+      }
+    }, 12000)
+
+    try {
+      const preparedFile = await prepareSignupDocumentFile(file)
+      await saveSignupDocumentToDB(docType, preparedFile)
+
+      const nextPreviewUrl = URL.createObjectURL(preparedFile)
+      const previousPreviewUrl = previewUrlsRef.current[docType]
+      if (previousPreviewUrl) {
+        URL.revokeObjectURL(previousPreviewUrl)
+      }
+
+      previewUrlsRef.current = {
+        ...previewUrlsRef.current,
+        [docType]: nextPreviewUrl,
+      }
+      setPreviewUrls((prev) => ({
+        ...prev,
+        [docType]: nextPreviewUrl,
+      }))
+    } catch (error) {
+      debugError("Failed to store document preview:", error)
+      toast.error("Could not process image. Please try another photo.")
+    } finally {
+      finished = true
+      clearTimeout(failSafeId)
+      setUploading((prev) => ({ ...prev, [docType]: false }))
     }
-
-    // Create new preview URL
-    file._previewUrl = URL.createObjectURL(file)
-
-    setDocuments((prev) => ({ ...prev, [docType]: file }))
-    setUploadedDocs((prev) => ({ ...prev, [docType]: { file: true } }))
-    toast.success(`${docType.replace(/([A-Z])/g, " $1").trim()} selected`)
   }
 
-  const handleTakeCameraPhoto = (docType, label) => {
+  const handleTakeCameraPhoto = (docType) => {
     openCamera({
       onSelectFile: (file) => handleFileSelect(docType, file),
-      fileNamePrefix: `signup-${docType}`
+      fileNamePrefix: `signup-${docType}`,
     })
   }
 
   const handlePickFromGallery = (docType) => {
-    fileInputRefs.current[docType]?.click()
+    openGallery({
+      onSelectFile: (file) => handleFileSelect(docType, file),
+      fileNamePrefix: `signup-${docType}`,
+      fallbackInputRef: { current: fileInputRefs.current[docType] },
+    })
   }
 
-  const handleRemove = (docType) => {
-    const file = documents[docType]
-    if (file instanceof File && file._previewUrl) {
-      URL.revokeObjectURL(file._previewUrl)
+  const handleRemove = async (docType) => {
+    await deleteSignupDocumentFromDB(docType)
+
+    const previousPreviewUrl = previewUrlsRef.current[docType]
+    if (previousPreviewUrl) {
+      URL.revokeObjectURL(previousPreviewUrl)
     }
-    setDocuments(prev => ({
+
+    previewUrlsRef.current = {
+      ...previewUrlsRef.current,
+      [docType]: null,
+    }
+    setPreviewUrls((prev) => ({
       ...prev,
-      [docType]: null
-    }))
-    setUploadedDocs(prev => ({
-      ...prev,
-      [docType]: null
+      [docType]: null,
     }))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    const hasDrivingLicense = isBicycle || documents.drivingLicensePhoto;
-    if (!documents.profilePhoto || !documents.aadharPhoto || !documents.panPhoto || !hasDrivingLicense) {
-      toast.error("Please upload all required front documents")
+    const resolvedDocuments = await getAllSignupDocumentsFromDB()
+
+    const missingDocument = DELIVERY_SIGNUP_DOC_TYPES.find((docType) => !resolvedDocuments[docType])
+    if (missingDocument) {
       return
     }
 
     const raw = sessionStorage.getItem("deliverySignupDetails")
     if (!raw) {
-      toast.error("Session expired. Please start from Create Account.")
       navigate("/food/delivery/signup", { replace: true })
       return
     }
@@ -245,22 +200,28 @@ export default function SignupStep2() {
     try {
       details = JSON.parse(raw)
     } catch {
-      toast.error("Invalid session. Please start from Create Account.")
       navigate("/food/delivery/signup", { replace: true })
       return
     }
 
+    const { fcmToken, platform } = await collectFcmTokenForSignup("delivery")
+
+    const [profilePhoto, aadharPhoto, panPhoto, drivingLicensePhoto] = await Promise.all([
+      prepareUploadFile(resolvedDocuments.profilePhoto, { preset: "profile" }),
+      prepareUploadFile(resolvedDocuments.aadharPhoto),
+      prepareUploadFile(resolvedDocuments.panPhoto),
+      prepareUploadFile(resolvedDocuments.drivingLicensePhoto),
+    ])
+
     const formData = new FormData()
     formData.append("name", details.name || "")
     formData.append("phone", String(details.phone || "").replace(/\D/g, "").slice(0, 15))
-    if (details.email) formData.append("email", String(details.email).trim())
+    formData.append("email", String(details.email || "").trim().toLowerCase())
     if (details.ref) formData.append("ref", String(details.ref).trim())
     if (details.countryCode) formData.append("countryCode", details.countryCode)
     if (details.address) formData.append("address", details.address)
     if (details.city) formData.append("city", details.city)
     if (details.state) formData.append("state", details.state)
-    if (details.zoneId) formData.append("zoneId", details.zoneId)
-    if (details.zoneName) formData.append("zoneName", details.zoneName)
     if (details.vehicleType) formData.append("vehicleType", details.vehicleType)
     if (details.vehicleName) formData.append("vehicleName", details.vehicleName)
     if (details.vehicleNumber) formData.append("vehicleNumber", details.vehicleNumber)
@@ -270,66 +231,40 @@ export default function SignupStep2() {
     }
     if (details.panNumber) formData.append("panNumber", details.panNumber)
     if (details.aadharNumber) formData.append("aadharNumber", details.aadharNumber)
-    formData.append("profilePhoto", documents.profilePhoto)
-    formData.append("aadharPhoto", documents.aadharPhoto)
-    if (documents.aadharPhotoBack) formData.append("aadharPhotoBack", documents.aadharPhotoBack)
-    formData.append("panPhoto", documents.panPhoto)
-    if (documents.panPhotoBack) formData.append("panPhotoBack", documents.panPhotoBack)
-    if (!isBicycle && documents.drivingLicensePhoto) {
-      formData.append("drivingLicensePhoto", documents.drivingLicensePhoto)
-    }
-    if (!isBicycle && documents.drivingLicensePhotoBack) {
-      formData.append("drivingLicensePhotoBack", documents.drivingLicensePhotoBack)
-    }
-
-    // Try to get FCM token before registering
-    let fcmToken = null;
-    let platform = "web";
-    try {
-      if (typeof window !== "undefined") {
-        if (window.flutter_inappwebview) {
-          platform = "mobile";
-          const handlerNames = ["getFcmToken", "getFCMToken", "getPushToken", "getFirebaseToken"];
-          for (const handlerName of handlerNames) {
-            try {
-              const t = await window.flutter_inappwebview.callHandler(handlerName, { module: "delivery" });
-              if (t && typeof t === "string" && t.length > 20) {
-                fcmToken = t.trim();
-                break;
-              }
-            } catch (e) {}
-          }
-        } else {
-          fcmToken = localStorage.getItem("fcm_web_registered_token_delivery") || null;
-        }
-      }
-    } catch (e) {
-      debugWarn("Failed to get FCM token during signup", e);
-    }
+    formData.append("profilePhoto", profilePhoto)
+    formData.append("aadharPhoto", aadharPhoto)
+    formData.append("panPhoto", panPhoto)
+    formData.append("drivingLicensePhoto", drivingLicensePhoto)
 
     if (fcmToken) {
-      formData.append("fcmToken", fcmToken);
-      formData.append("platform", platform);
+      formData.append("fcmToken", fcmToken)
+      formData.append("platform", platform)
     }
 
-    const isCompleteProfile = sessionStorage.getItem("deliveryNeedsRegistration") === "true"
+    const hasDeliveryAuth =
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem("delivery_authenticated") === "true" &&
+      Boolean(localStorage.getItem("delivery_accessToken"))
+
+    const shouldRegister =
+      sessionStorage.getItem("deliveryNeedsRegistration") === "true" ||
+      !hasDeliveryAuth
 
     setIsSubmitting(true)
 
     try {
-      // New number (OTP ke baad pehli baar): DB me abhi partner nahi hai,
-      // is case me register hi call karna hai (no auth token needed).
-      const response = isCompleteProfile
+      const response = shouldRegister
         ? await deliveryAPI.register(formData)
         : await deliveryAPI.completeProfile(formData)
 
       if (response?.data?.success) {
         sessionStorage.removeItem("deliverySignupDetails")
         sessionStorage.removeItem("deliverySignupDocs")
-        if (isCompleteProfile) {
+        await clearSignupDocumentsFromDB()
+        if (shouldRegister) {
           sessionStorage.removeItem("deliveryNeedsRegistration")
-          toast.success("Registration successful. Please login with OTP.")
-          setTimeout(() => navigate("/food/delivery/login", { replace: true }), 1500)
+          const phone = String(details.phone || "").replace(/\D/g, "").slice(-10)
+          finalizeDeliveryPendingSubmission(navigate, phone, { fcmToken, platform })
         } else {
           toast.success("Profile submitted. Waiting for admin approval.")
           setTimeout(() => navigate("/food/delivery", { replace: true }), 1500)
@@ -337,16 +272,26 @@ export default function SignupStep2() {
       }
     } catch (error) {
       debugError("Error submitting registration:", error)
-      const message = getFriendlyRegistrationError(error)
-      toast.error(message)
+      const errorMsg = getUserFacingApiError(
+        error,
+        "Registration failed. Please try again.",
+      )
+      // Already registered / pending — send user to verification screen instead of raw API error.
+      if (isAlreadyExistsError(errorMsg) || isAlreadyExistsError(error)) {
+        const phone = String(details.phone || "").replace(/\D/g, "").slice(-10)
+        sessionStorage.removeItem("deliveryNeedsRegistration")
+        finalizeDeliveryPendingSubmission(navigate, phone, { fcmToken, platform })
+        return
+      }
+      showUserFacingApiError(error, "Registration failed. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const DocumentUpload = ({ docType, label, required = true }) => {
-    const uploaded = uploadedDocs[docType]
     const isUploading = uploading[docType]
+    const uploaded = hasUploadedDoc(docType)
 
     return (
       <div className="bg-white rounded-lg p-4 border border-gray-200">
@@ -368,18 +313,21 @@ export default function SignupStep2() {
             >
               <X className="w-4 h-4" />
             </button>
-            <div className="absolute bottom-2 left-2 bg-[#1A1A1A] text-white px-3 py-1 rounded-full flex items-center gap-1 text-sm shadow-md">
-              <Check className="w-4 h-4 text-[#F38F24]" />
-              <span className="font-medium">Uploaded</span>
+            <div
+              className="absolute bottom-2 left-2 text-white px-2.5 py-1 rounded-full flex items-center gap-1 text-xs font-semibold shadow-md"
+              style={{ backgroundColor: "#00B761" }}
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Uploaded</span>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-xl hover:border-[#F38F24] bg-[#F8F9FA] transition-colors px-4">
+          <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 transition-colors px-4">
             <div className="flex flex-col items-center justify-center pt-5 pb-3">
               {isUploading ? (
                 <>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F38F24] mb-2"></div>
-                  <p className="text-sm font-medium text-gray-500">Uploading...</p>
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-transparent mb-2" style={{ borderBottomColor: "#00B761" }}></div>
+                  <p className="text-sm text-gray-500">Uploading...</p>
                 </>
               ) : (
                 <>
@@ -394,18 +342,18 @@ export default function SignupStep2() {
               <div className="w-full grid grid-cols-2 gap-2 pb-4">
                 <button
                   type="button"
-                  onClick={() => handleTakeCameraPhoto(docType, label)}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-white border border-gray-200 text-[#1A1A1A] text-xs font-bold cursor-pointer hover:bg-gray-50 transition-all active:scale-95 shadow-sm"
+                  onClick={() => handleTakeCameraPhoto(docType)}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold cursor-pointer hover:bg-black transition-all active:scale-95"
                 >
-                  <Camera className="w-4 h-4 text-gray-500" />
+                  <Camera className="w-4 h-4" />
                   <span>Take Photo</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handlePickFromGallery(docType)}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#1A1A1A] text-white text-xs font-bold cursor-pointer hover:bg-black transition-all active:scale-95 shadow-sm"
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#00B761] text-white text-xs font-bold cursor-pointer hover:bg-[#00A055] transition-all active:scale-95"
                 >
-                  <ImageIcon className="w-4 h-4 text-[#F38F24]" />
+                  <ImageIcon className="w-4 h-4" />
                   <span>Gallery</span>
                 </button>
               </div>
@@ -436,12 +384,13 @@ export default function SignupStep2() {
     )
   }
 
+  const allDocumentsUploaded = DELIVERY_SIGNUP_DOC_TYPES.every((docType) => hasUploadedDoc(docType))
+
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
       <div className="bg-white px-4 py-3 flex items-center gap-4 border-b border-gray-200">
         <button
-          onClick={goBack}
+          onClick={handleBack}
           className="p-2 hover:bg-gray-100 rounded-full transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -449,7 +398,6 @@ export default function SignupStep2() {
         <h1 className="text-lg font-medium">Upload Documents</h1>
       </div>
 
-      {/* Content */}
       <div className="px-4 py-6">
         <div className="mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Document Verification</h2>
@@ -458,41 +406,22 @@ export default function SignupStep2() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <DocumentUpload docType="profilePhoto" label="Profile Photo" required={true} />
-          
-          <div className="space-y-2 pt-2">
-            <h3 className="text-sm font-bold text-gray-800">Aadhar Card Photos</h3>
-            <DocumentUpload docType="aadharPhoto" label="Aadhar Card (Front Side)" required={true} />
-            <DocumentUpload docType="aadharPhotoBack" label="Aadhar Card (Back Side)" required={false} />
-          </div>
+          <DocumentUpload docType="aadharPhoto" label="Aadhar Card Photo" required={true} />
+          <DocumentUpload docType="panPhoto" label="PAN Card Photo" required={true} />
+          <DocumentUpload docType="drivingLicensePhoto" label="Driving License Photo" required={true} />
 
-          <div className="space-y-2 pt-2">
-            <h3 className="text-sm font-bold text-gray-800">PAN Card Photos</h3>
-            <DocumentUpload docType="panPhoto" label="PAN Card (Front Side)" required={true} />
-            <DocumentUpload docType="panPhotoBack" label="PAN Card (Back Side)" required={false} />
-          </div>
-
-          {!isBicycle && (
-            <div className="space-y-2 pt-2">
-              <h3 className="text-sm font-bold text-gray-800">Driving License Photos</h3>
-              <DocumentUpload docType="drivingLicensePhoto" label="Driving License (Front Side)" required={true} />
-              <DocumentUpload docType="drivingLicensePhotoBack" label="Driving License (Back Side)" required={false} />
-            </div>
-          )}
-
-          {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSubmitting || !uploadedDocs.profilePhoto || !uploadedDocs.aadharPhoto || !uploadedDocs.panPhoto || (!isBicycle && !uploadedDocs.drivingLicensePhoto)}
-            className={`w-full py-4 rounded-xl font-bold text-white text-base transition-all mt-6 shadow-md ${isSubmitting || !uploadedDocs.profilePhoto || !uploadedDocs.aadharPhoto || !uploadedDocs.panPhoto || (!isBicycle && !uploadedDocs.drivingLicensePhoto)
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-[#1A1A1A] hover:bg-black hover:shadow-lg"
+            disabled={isSubmitting || !allDocumentsUploaded}
+            className={`w-full py-4 rounded-lg font-bold text-white text-base transition-all mt-6 active:scale-[0.98] ${isSubmitting || !allDocumentsUploaded
+              ? "bg-gray-400 cursor-not-allowed shadow-none"
+              : "bg-gradient-to-r from-[#0E4B9C] to-[#021024] hover:from-[#1157b5] hover:to-[#041630] shadow-[0_8px_20px_rgba(14,75,156,0.3)]"
               }`}
           >
             {isSubmitting ? "Submitting..." : "Complete Signup"}
           </button>
         </form>
       </div>
-
     </div>
   )
 }

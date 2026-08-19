@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from "react"
-import { Search, Download, ChevronDown, Eye, Settings, Building, ArrowUpDown, FileText, FileSpreadsheet, Code, CheckCircle, XCircle, Loader2, Wallet } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Search, Download, ChevronDown, Eye, Settings, Building, ArrowUpDown, FileText, FileSpreadsheet, Code, Check, Columns, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { exportTransactionsToExcel, exportTransactionsToPDF } from "@food/components/admin/transactions/transactionsExportUtils"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import AdminListPagination from "@food/components/admin/AdminListPagination"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -13,6 +14,16 @@ const debugError = (...args) => {}
 export default function RestaurantWithdraws() {
   const [activeTab, setActiveTab] = useState("All")
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    try {
+      return Number(localStorage.getItem("admin_restaurant_withdraws_pageSize")) || 20
+    } catch {
+      return 20
+    }
+  })
+  const [totalItems, setTotalItems] = useState(0)
   const [withdraws, setWithdraws] = useState([])
   const [loading, setLoading] = useState(true)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -21,9 +32,6 @@ export default function RestaurantWithdraws() {
   const [processingAction, setProcessingAction] = useState(null)
   const [rejectionReason, setRejectionReason] = useState("")
   const [showRejectModal, setShowRejectModal] = useState(false)
-  const [minimumWithdrawalAmount, setMinimumWithdrawalAmount] = useState("")
-  const [loadingWithdrawalSetting, setLoadingWithdrawalSetting] = useState(true)
-  const [savingWithdrawalSetting, setSavingWithdrawalSetting] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState({
     si: true,
     amount: true,
@@ -35,111 +43,53 @@ export default function RestaurantWithdraws() {
     actions: true,
   })
 
-  // Fetch withdrawal requests
   useEffect(() => {
-    fetchWithdrawals()
-  }, [activeTab])
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
 
   useEffect(() => {
-    fetchRestaurantWithdrawalSetting()
-  }, [])
+    setCurrentPage(1)
+  }, [debouncedSearch, activeTab])
+
+  useEffect(() => {
+    fetchWithdrawals()
+  }, [activeTab, debouncedSearch, currentPage, pageSize])
 
   const fetchWithdrawals = async () => {
     try {
       setLoading(true)
       const status = activeTab === "All" ? undefined : activeTab
-      const response = await adminAPI.getWithdrawalRequests({ status, search: searchQuery || undefined })
+      const response = await adminAPI.getWithdrawalRequests({
+        status,
+        search: debouncedSearch || undefined,
+        page: currentPage,
+        limit: pageSize,
+      })
       if (response.data?.success) {
         setWithdraws(response.data.data?.requests || [])
+        setTotalItems(
+          response.data.data?.total ??
+          response.data?.total ??
+          (response.data.data?.requests || []).length,
+        )
       } else {
         debugError('Failed to fetch withdrawals:', response.data?.message)
         toast.error('Failed to fetch withdrawal requests')
+        setWithdraws([])
+        setTotalItems(0)
       }
     } catch (error) {
       debugError('Error fetching withdrawals:', error)
       toast.error('Failed to fetch withdrawal requests')
+      setWithdraws([])
+      setTotalItems(0)
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchRestaurantWithdrawalSetting = async () => {
-    try {
-      setLoadingWithdrawalSetting(true)
-      const response = await adminAPI.getRestaurantWithdrawalSetting()
-      const data = response?.data?.data || response?.data || {}
-      const nextAmount = data.minimumWithdrawalAmount
-      setMinimumWithdrawalAmount(
-        nextAmount !== undefined && nextAmount !== null ? String(nextAmount) : "0"
-      )
-    } catch (error) {
-      debugError("Error fetching restaurant withdrawal setting:", error)
-      toast.error(error.response?.data?.message || "Failed to load restaurant withdrawal setting")
-    } finally {
-      setLoadingWithdrawalSetting(false)
-    }
-  }
-
-  const handleWithdrawalSettingChange = (event) => {
-    const nextValue = event.target.value.replace(/[^\d]/g, "")
-    setMinimumWithdrawalAmount(nextValue)
-  }
-
-  const saveRestaurantWithdrawalSetting = async () => {
-    if (minimumWithdrawalAmount === "") {
-      toast.error("Minimum withdrawal amount is required")
-      return
-    }
-
-    const parsedAmount = Number(minimumWithdrawalAmount)
-    if (!Number.isInteger(parsedAmount) || parsedAmount < 0) {
-      toast.error("Minimum withdrawal amount must be a whole number greater than or equal to 0")
-      return
-    }
-
-    try {
-      setSavingWithdrawalSetting(true)
-      const response = await adminAPI.updateRestaurantWithdrawalSetting({
-        minimumWithdrawalAmount: parsedAmount,
-      })
-      const savedAmount =
-        response?.data?.data?.minimumWithdrawalAmount ??
-        response?.data?.minimumWithdrawalAmount ??
-        parsedAmount
-      setMinimumWithdrawalAmount(String(savedAmount))
-      toast.success("Restaurant withdrawal limit updated successfully")
-    } catch (error) {
-      debugError("Error saving restaurant withdrawal setting:", error)
-      toast.error(error.response?.data?.message || "Failed to update restaurant withdrawal limit")
-    } finally {
-      setSavingWithdrawalSetting(false)
-    }
-  }
-
-  // Refetch when search changes (with debounce)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery !== undefined) {
-        fetchWithdrawals()
-      }
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [searchQuery])
-
-  const filteredWithdraws = useMemo(() => {
-    let result = [...withdraws]
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(w =>
-        w.restaurantName?.toLowerCase().includes(query) ||
-        w.restaurantIdString?.toLowerCase().includes(query) ||
-        w.amount?.toString().includes(query)
-      )
-    }
-
-    return result
-  }, [withdraws, searchQuery])
+  const filteredWithdraws = withdraws
 
   const getStatusBadge = (status) => {
     if (status === "Approved") {
@@ -298,44 +248,9 @@ export default function RestaurantWithdraws() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <Building className="w-5 h-5 text-blue-600" />
-              <h1 className="text-2xl font-bold text-slate-900">Restaurant Withdraw Transaction</h1>
-            </div>
-
-            <div className="flex items-center justify-start lg:justify-end">
-              <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm">
-                <div className="rounded-lg bg-white p-2 shadow-sm">
-                  <Wallet className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="min-w-[165px]">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-900">
-                    Restaurant Withdraw Min
-                  </p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={minimumWithdrawalAmount}
-                      onChange={handleWithdrawalSettingChange}
-                      placeholder={loadingWithdrawalSetting ? "Loading..." : "0"}
-                      disabled={loadingWithdrawalSetting || savingWithdrawalSetting}
-                      className="h-9 w-full rounded-lg border border-blue-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      onClick={saveRestaurantWithdrawalSetting}
-                      disabled={loadingWithdrawalSetting || savingWithdrawalSetting}
-                      className="h-9 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {savingWithdrawalSetting && <Loader2 className="w-4 h-4 animate-spin" />}
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="flex items-center gap-3">
+            <Building className="w-5 h-5 text-blue-600" />
+            <h1 className="text-2xl font-bold text-slate-900">Restaurant Withdraw Transaction</h1>
           </div>
         </div>
 
@@ -362,8 +277,12 @@ export default function RestaurantWithdraws() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold text-slate-900">Withdraw Request Table</h2>
-              <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-                {filteredWithdraws.length}
+              <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700 flex items-center justify-center min-w-[2.5rem] h-7">
+                {loading ? (
+                  <span className="w-5 h-3 rounded bg-slate-300/80 animate-pulse" />
+                ) : (
+                  totalItems
+                )}
               </span>
             </div>
 
@@ -513,6 +432,21 @@ export default function RestaurantWithdraws() {
               </table>
             </div>
           )}
+
+          <AdminListPagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              try {
+                localStorage.setItem("admin_restaurant_withdraws_pageSize", String(size))
+              } catch {}
+              setCurrentPage(1)
+            }}
+            itemLabel="withdrawals"
+          />
         </div>
 
         {/* View Withdraw Dialog */}

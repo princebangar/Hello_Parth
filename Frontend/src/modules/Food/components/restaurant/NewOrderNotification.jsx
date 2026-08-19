@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, ShoppingBag, MapPin, Clock, IndianRupee } from 'lucide-react';
+import { Bell, X, ShoppingBag, MapPin, Clock, IndianRupee, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 /**
@@ -8,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
  */
 export default function NewOrderNotification({ order, onClose, onViewOrder }) {
   const navigate = useNavigate();
+  const [showAllItems, setShowAllItems] = useState(false);
+  const VISIBLE_LIMIT = 4;
 
   if (!order) return null;
 
@@ -37,7 +40,22 @@ export default function NewOrderNotification({ order, onClose, onViewOrder }) {
                 <Bell className="w-6 h-6 text-white animate-pulse" />
               </div>
               <div>
-                <h3 className="text-white font-bold text-lg">New Order!</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-white font-bold text-lg">New Order!</h3>
+                  {order.orderType === "takeaway" ? (
+                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                      Takeaway
+                    </span>
+                  ) : order.orderType === "dining" ? (
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                      Dining
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                      Delivery
+                    </span>
+                  )}
+                </div>
                 <p className="text-white/90 text-sm">Order #{order.orderId}</p>
               </div>
             </div>
@@ -65,38 +83,128 @@ export default function NewOrderNotification({ order, onClose, onViewOrder }) {
 
               {/* Items */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Items:</h4>
-                <div className="space-y-2">
-                  {order.items?.slice(0, 3).map((item, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">
-                        {item.name} × {item.quantity}
-                      </span>
-                      <span className="text-gray-800 font-medium">
-                        ₹{(item.price * item.quantity).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                  {order.items?.length > 3 && (
-                    <p className="text-xs text-gray-500 mt-2">
-                      +{order.items.length - 3} more items
-                    </p>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Order Items ({order.items?.length || 0})</h4>
+                <div className="space-y-2.5">
+                  {(showAllItems ? order.items : order.items?.slice(0, VISIBLE_LIMIT))?.map((item, index) => {
+                    const isVeg = item.isVeg !== false && item.veg !== false && !String(item.type || '').toLowerCase().includes('non');
+                    const variantText = 
+                      (typeof item.variantName === 'string' && item.variantName.trim()) ||
+                      (typeof item.variant === 'string' && item.variant.trim()) ||
+                      (typeof item.variant === 'object' && item.variant?.name) ||
+                      (typeof item.selectedVariant === 'string' && item.selectedVariant.trim()) ||
+                      (typeof item.selectedVariant === 'object' && item.selectedVariant?.name) ||
+                      (typeof item.variant_name === 'string' && item.variant_name.trim()) ||
+                      (typeof item.variation === 'string' && item.variation.trim()) ||
+                      (typeof item.variation === 'object' && item.variation?.name) ||
+                      (typeof item.size === 'string' && item.size.trim()) ||
+                      (typeof item.portion === 'string' && item.portion.trim()) ||
+                      (typeof item.option === 'string' && item.option.trim()) ||
+                      (typeof item.choice === 'string' && item.choice.trim()) ||
+                      '';
+                    const itemAddons = Array.isArray(item.addons) ? item.addons : Array.isArray(item.selectedAddons) ? item.selectedAddons : [];
+
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-start justify-between gap-3 bg-gradient-to-r from-slate-50/90 via-white to-slate-50/70 p-3 sm:p-3.5 rounded-xl border border-slate-200/90 shadow-xs"
+                      >
+                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <div className={`w-4 sm:w-5 h-4 sm:h-5 border-2 shrink-0 rounded-[4px] flex items-center justify-center p-[2px] mt-0.5 ${isVeg ? "border-emerald-600 bg-emerald-50/80" : "border-rose-600 bg-rose-50/80"}`}>
+                            <div className={`w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full ${isVeg ? "bg-emerald-600" : "bg-rose-600"}`} />
+                          </div>
+                          <span className="shrink-0 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-gray-900 text-amber-400 font-black text-xs sm:text-sm tracking-wider shadow-xs border border-gray-800">
+                            {item.quantity}×
+                          </span>
+                          {item.image && (
+                            <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0 mt-0.5">
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                            </div>
+                          )}
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-sm sm:text-base font-extrabold text-gray-950 leading-snug">
+                              {item.name}
+                            </span>
+                            {variantText && (
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-black text-rose-900 bg-rose-100 border-2 border-rose-300 px-2.5 py-0.5 rounded-lg shadow-xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+                                  {variantText}
+                                </span>
+                              </div>
+                            )}
+                            {itemAddons.length > 0 && (
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                {itemAddons.map((addon, aIdx) => (
+                                  <span key={aIdx} className="inline-flex items-center text-xs font-bold text-slate-800 bg-slate-100 border border-slate-300 px-2.5 py-0.5 rounded-md">
+                                    + {typeof addon === 'string' ? addon : addon.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-sm sm:text-base font-black text-gray-900 shrink-0 ml-2 bg-gray-100/90 border border-gray-200 px-2.5 py-1 rounded-lg">
+                          ₹{(item.price * item.quantity).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {/* Expand / Collapse button */}
+                  {order.items?.length > VISIBLE_LIMIT && (
+                    <button
+                      onClick={() => setShowAllItems(prev => !prev)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors text-xs font-semibold"
+                    >
+                      {showAllItems ? (
+                        <><ChevronUp className="w-4 h-4" /> Show less</>
+                      ) : (
+                        <><ChevronDown className="w-4 h-4" /> +{order.items.length - VISIBLE_LIMIT} more items</>
+                      )}
+                    </button>
                   )}
                 </div>
               </div>
 
-              {/* Delivery Address */}
-              {order.customerAddress && (
-                <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
-                  <MapPin className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
+              {/* Takeaway / Delivery Address */}
+              {order.orderType === "takeaway" ? (
+                <div className="flex items-start gap-2.5 p-3 bg-orange-50 rounded-lg border border-orange-100">
+                  <ShoppingBag className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <p className="text-xs text-gray-500 mb-1">Delivery Address</p>
-                    <p className="text-sm text-gray-800">
-                      {order.customerAddress.street || order.customerAddress.label || 'Address'}
-                      {order.customerAddress.city && `, ${order.customerAddress.city}`}
+                    <p className="text-xs text-orange-700 font-semibold mb-0.5">Order Type</p>
+                    <p className="text-sm text-orange-950 font-bold">
+                      Takeaway — Customer will pick up from restaurant.
                     </p>
                   </div>
                 </div>
+              ) : order.orderType === "dining" ? (
+                <div className="flex items-start gap-2.5 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <ShoppingBag className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-xs text-blue-700 font-semibold mb-0.5">Order Type</p>
+                    <p className="text-sm text-blue-950 font-bold">
+                      Dining — In-restaurant table service.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                order.customerAddress && (
+                  <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
+                    <MapPin className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-500 mb-1">Delivery Address</p>
+                      <p className="text-sm text-gray-800">
+                        {order.customerAddress.street || order.customerAddress.label || 'Address'}
+                        {order.customerAddress.city && `, ${order.customerAddress.city}`}
+                      </p>
+                    </div>
+                  </div>
+                )
               )}
 
               {/* Estimated Time */}
@@ -138,4 +246,11 @@ export default function NewOrderNotification({ order, onClose, onViewOrder }) {
     </AnimatePresence>
   );
 }
+
+
+
+
+
+
+
 

@@ -1,7 +1,15 @@
-﻿import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, X, Pencil, Loader2, Camera, Upload } from "lucide-react"
+import { ArrowLeft, X, Pencil, Loader2, Camera, Upload, Trash2 } from "lucide-react"
 import { Button } from "@food/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@food/components/ui/dropdown-menu"
+import { getAvatarColor } from "@food/utils/avatarUtils"
+import { ImageCropper } from "@food/components/ImageCropper"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Card, CardContent } from "@food/components/ui/card"
@@ -21,20 +29,19 @@ import {
   DialogTitle,
 } from "@food/components/ui/dialog"
 import { useProfile } from "@food/context/ProfileContext"
+import { normalizeImageUrl } from "@food/utils/common"
 import { userAPI } from "@food/api"
 import { toast } from "sonner"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils"
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import { compressImageForUpload, PROFILE_PRESET } from "@/shared/utils/imageCompressor"
+import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
 import dayjs from 'dayjs'
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+const debugLog = (...args) => { }
+const debugWarn = (...args) => { }
+const debugError = (...args) => { }
 const EDIT_PROFILE_DRAFT_KEY = "user_edit_profile_draft"
-
 
 // Gender options
 const genderOptions = [
@@ -47,7 +54,7 @@ const genderOptions = [
 // Load profile data from localStorage (legacy + current keys)
 const loadProfileFromStorage = () => {
   try {
-    const candidates = ["user_user", "userProfile", "eqosy_user_profile"]
+    const candidates = ["user_user", "userProfile", "helloparth_user_profile"]
     for (const key of candidates) {
       const stored = localStorage.getItem(key)
       if (stored) return JSON.parse(stored)
@@ -88,24 +95,6 @@ const buildFormDataFromProfile = (profile = {}) => ({
   gender: profile.gender || "",
 })
 
-const loadEditProfileDraft = () => {
-  try {
-    const saved = localStorage.getItem(EDIT_PROFILE_DRAFT_KEY)
-    return saved ? JSON.parse(saved) : null
-  } catch (error) {
-    debugError('Error loading edit profile draft from localStorage:', error)
-    return null
-  }
-}
-
-const saveEditProfileDraft = (data) => {
-  try {
-    localStorage.setItem(EDIT_PROFILE_DRAFT_KEY, JSON.stringify(data))
-  } catch (error) {
-    debugError('Error saving edit profile draft to localStorage:', error)
-  }
-}
-
 const clearEditProfileDraft = () => {
   try {
     localStorage.removeItem(EDIT_PROFILE_DRAFT_KEY)
@@ -119,10 +108,13 @@ export default function EditProfile() {
   const goBack = useAppBackNavigation()
   const { userProfile, updateUserProfile } = useProfile()
 
-  // Load from localStorage or use context
+  // Always start from saved profile — never hydrate unsaved drafts into the form
+  useEffect(() => {
+    clearEditProfileDraft()
+  }, [])
+
   const storedProfile = loadProfileFromStorage()
-  const draftProfile = loadEditProfileDraft()
-  const initialProfile = draftProfile || storedProfile || userProfile || {}
+  const initialProfile = storedProfile || userProfile || {}
 
   const initialFormData = buildFormDataFromProfile(initialProfile)
 
@@ -131,59 +123,51 @@ export default function EditProfile() {
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
-  const [profileImage, setProfileImage] = useState(initialProfile?.profileImage || "")
-  const [imagePreview, setImagePreview] = useState(initialProfile?.profileImage || "")
+  const [profileImage, setProfileImage] = useState(initialProfile?.profileImage || userProfile?.profileImage || "")
+  const [imagePreview, setImagePreview] = useState(initialProfile?.profileImage || userProfile?.profileImage || "")
+  const [pendingImageFile, setPendingImageFile] = useState(null)
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
+  const [cropImageFile, setCropImageFile] = useState(null)
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({
     mobile: "",
     email: "",
     dateOfBirth: "",
   })
   const fileInputRef = useRef(null)
-  const hydratedFromDraftRef = useRef(Boolean(draftProfile))
+  const mobileInputRef = useRef(null)
+  const savedProfileImageRef = useRef(initialProfile?.profileImage || userProfile?.profileImage || "")
 
-  // Update form data when profile changes
+  // Sync form when real saved profile loads from context (not while user is editing)
   useEffect(() => {
-    if (hydratedFromDraftRef.current) return
-
-    const storedProfile = loadProfileFromStorage()
-    const profile = storedProfile || userProfile || {}
-    const newFormData = buildFormDataFromProfile(profile)
-    setFormData(newFormData)
-
-    // Update profile image
+    if (hasChanges) return
+    const stored = loadProfileFromStorage()
+    const profile = stored || userProfile || {}
+    const nextForm = buildFormDataFromProfile(profile)
+    setFormData(nextForm)
     if (profile.profileImage) {
       setProfileImage(profile.profileImage)
       setImagePreview(profile.profileImage)
+      savedProfileImageRef.current = profile.profileImage
     }
-  }, [userProfile])
+  }, [userProfile, hasChanges])
 
-  useEffect(() => {
-    saveEditProfileDraft({
-      name: formData.name,
-      phone: formData.mobile,
-      mobile: formData.mobile,
-      email: formData.email,
-      profileImage,
-      dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : null,
-      anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : null,
-      gender: formData.gender || "",
-    })
-  }, [formData, profileImage])
-
-  // Get avatar initial
-  const avatarInitial = formData.name?.charAt(0).toUpperCase() || 'A'
-
-  // Check if form has changes
+  // Check if form has changes (including profile photo changes)
   useEffect(() => {
     const currentData = JSON.stringify(formData)
     const savedData = JSON.stringify(initialData)
-    setHasChanges(currentData !== savedData)
-  }, [formData, initialData])
+    const originalImage = savedProfileImageRef.current || ""
+    const isImageChanged = pendingImageFile !== null || profileImage !== originalImage
+    setHasChanges(currentData !== savedData || isImageChanged)
+  }, [formData, initialData, pendingImageFile, profileImage])
 
+  const discardAndGoBack = () => {
+    clearEditProfileDraft()
+    goBack()
+  }
   const validateEmail = (value) => {
     if (!value) return ""
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? "" : "Please enter a valid email"
+    return EMAIL_REGEX.test(value) ? "" : "Please enter a valid email"
   }
 
   const validateMobile = (value) => {
@@ -202,7 +186,9 @@ export default function EditProfile() {
     let normalizedValue = value
     let errorMessage = ""
 
-    if (field === "mobile") {
+    if (field === "name") {
+      normalizedValue = String(value || "").replace(/[^a-zA-Z\s]/g, "")
+    } else if (field === "mobile") {
       normalizedValue = String(value || "").replace(/\D/g, "").slice(0, 10)
       errorMessage = validateMobile(normalizedValue)
     } else if (field === "email") {
@@ -235,63 +221,42 @@ export default function EditProfile() {
   const processProfileImageFile = async (file) => {
     if (!file) return
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('Please select a valid image file')
       return
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size should be less than 5MB')
-      return
-    }
-
-    // Show preview
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result)
-    }
-    reader.readAsDataURL(file)
-
-    // Upload to server
     try {
-      setIsUploadingImage(true)
-      const response = await userAPI.uploadProfileImage(file)
-      const imageUrl = response?.data?.data?.profileImage || response?.data?.profileImage
+      const prepared = await compressImageForUpload(file, {
+        ...PROFILE_PRESET,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      })
+      setCropImageFile(prepared)
+      setIsCropModalOpen(true)
+    } catch (err) {
+      console.error("Could not prepare selected image:", err)
+      toast.error("Could not read this image. Please try another photo.")
+    }
+  }
 
-      if (imageUrl) {
-        setProfileImage(imageUrl)
-        setImagePreview(imageUrl)
-        toast.success('Profile image uploaded successfully')
+  const handleCropComplete = async (croppedFile) => {
+    setIsCropModalOpen(false)
+    setCropImageFile(null)
 
-        const mergedProfile = {
-          ...(userProfile || {}),
-          name: formData.name,
-          phone: formData.mobile,
-          mobile: formData.mobile,
-          email: formData.email,
-          dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : null,
-          anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : null,
-          gender: formData.gender || "",
-          profileImage: imageUrl,
-        }
+    if (!croppedFile) return
 
-        // Update context + local persistence with current form values so refresh keeps all fields
-        updateUserProfile(mergedProfile)
-        saveProfileToStorage(mergedProfile)
-        saveEditProfileDraft(mergedProfile)
-
-        // Dispatch event to refresh profile
-        window.dispatchEvent(new Event("userAuthChanged"))
+    try {
+      const preparedFile = await compressImageForUpload(croppedFile, PROFILE_PRESET)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result)
+        setPendingImageFile(preparedFile)
       }
-    } catch (error) {
-      debugError('Error uploading image:', error)
-      toast.error(error?.response?.data?.message || 'Failed to upload image')
-      // Revert preview
-      setImagePreview(profileImage)
-    } finally {
-      setIsUploadingImage(false)
+      reader.readAsDataURL(preparedFile)
+    } catch (err) {
+      console.error("Profile image preparation failed:", err)
+      toast.error("Could not prepare image. Please try another photo.")
     }
   }
 
@@ -314,7 +279,9 @@ export default function EditProfile() {
 
   const validateForm = () => {
     const nextErrors = {
-      mobile: validateMobile(formData.mobile),
+      mobile: !formData.mobile
+        ? "Mobile number is required"
+        : validateMobile(formData.mobile),
       email: validateEmail(formData.email),
       dateOfBirth: validateDateOfBirth(formData.dateOfBirth),
     }
@@ -332,15 +299,44 @@ export default function EditProfile() {
     try {
       setIsSaving(true)
 
-      // Prepare data for API
+      let finalImageUrl = profileImage
+      if (pendingImageFile) {
+        setIsUploadingImage(true)
+        try {
+          const uploadRes = await userAPI.uploadProfileImage(pendingImageFile)
+          finalImageUrl =
+            uploadRes?.data?.data?.profileImage ||
+            uploadRes?.data?.profileImage ||
+            uploadRes?.data?.data?.user?.profileImage ||
+            profileImage
+
+          if (!finalImageUrl) {
+            throw new Error("Upload succeeded but profile image URL was missing")
+          }
+        } catch (uploadErr) {
+          debugError('Error uploading image:', uploadErr)
+          const uploadMessage =
+            uploadErr?.response?.data?.error ||
+            uploadErr?.response?.data?.message ||
+            uploadErr?.message ||
+            'Failed to upload image'
+          toast.error(uploadMessage)
+          setIsUploadingImage(false)
+          setIsSaving(false)
+          return
+        }
+        setIsUploadingImage(false)
+      }
+
+      // Prepare data for API — phone only persists when Update profile is clicked
       const updateData = {
         name: formData.name,
-        email: formData.email || undefined,
         phone: formData.mobile || undefined,
+        email: formData.email || undefined,
         dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : undefined,
         anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : undefined,
         gender: formData.gender || undefined,
-        profileImage: profileImage || undefined, // Include profileImage in update
+        profileImage: finalImageUrl,
       }
 
       // Call API to update profile
@@ -352,7 +348,8 @@ export default function EditProfile() {
         updateUserProfile({
           ...updatedUser,
           phone: updatedUser.phone || formData.mobile,
-          profileImage: updatedUser.profileImage || profileImage,
+          profileImage: finalImageUrl,
+          localImagePreview: imagePreview !== finalImageUrl ? imagePreview : undefined
         })
 
         // Save to localStorage with complete data
@@ -361,7 +358,8 @@ export default function EditProfile() {
           phone: updatedUser.phone || formData.mobile,
           mobile: updatedUser.phone || formData.mobile,
           email: updatedUser.email || formData.email,
-          profileImage: updatedUser.profileImage || profileImage,
+          profileImage: updatedUser.profileImage || finalImageUrl,
+          localImagePreview: imagePreview !== finalImageUrl ? imagePreview : undefined,
           dateOfBirth: updatedUser.dateOfBirth || formData.dateOfBirth?.format('YYYY-MM-DD'),
           anniversary: updatedUser.anniversary || formData.anniversary?.format('YYYY-MM-DD'),
           gender: updatedUser.gender || formData.gender,
@@ -371,36 +369,136 @@ export default function EditProfile() {
         // Dispatch event to refresh profile from API
         window.dispatchEvent(new Event("userAuthChanged"))
 
-        toast.success('Profile updated successfully')
-
         // Navigate back
         navigate("/user/profile")
       }
     } catch (error) {
       debugError('Error updating profile:', error)
       toast.error(error?.response?.data?.message || 'Failed to update profile')
-    } finally {
       setIsSaving(false)
     }
   }
 
   const handleMobileChange = () => {
-    // Navigate to mobile change page or show modal
-    debugLog('Change mobile clicked')
+    setFormData((prev) => ({ ...prev, mobile: "" }))
+    setFieldErrors((prev) => ({ ...prev, mobile: "" }))
+    requestAnimationFrame(() => {
+      mobileInputRef.current?.focus()
+      mobileInputRef.current?.select?.()
+    })
   }
 
   const handleEmailChange = () => {
-    // Navigate to email change page or show modal
-    debugLog('Change email clicked')
+    setFormData((prev) => ({ ...prev, email: "" }))
+    setFieldErrors((prev) => ({ ...prev, email: "" }))
+    requestAnimationFrame(() => {
+      document.getElementById("email")?.focus()
+    })
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
+    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] pb-12">
+      <style>{`
+        /* MUI DatePicker overrides */
+        .dark .MuiOutlinedInput-root fieldset {
+          border-color: #4b5563 !important;
+        }
+        .dark .MuiOutlinedInput-root:hover fieldset {
+          border-color: #9ca3af !important;
+        }
+        .dark .MuiOutlinedInput-root.Mui-focused fieldset {
+          border-color: #DC2626 !important;
+        }
+        .dark input,
+        .dark .MuiInputBase-root,
+        .dark .MuiInputBase-root *,
+        .dark .MuiOutlinedInput-root,
+        .dark .MuiOutlinedInput-root * {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          opacity: 1 !important;
+        }
+        .dark input::placeholder,
+        .dark input::-webkit-input-placeholder,
+        .dark input::-moz-placeholder,
+        .dark input:-ms-input-placeholder {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          opacity: 0.9 !important;
+        }
+        .dark .MuiInputLabel-root {
+          color: #9ca3af !important;
+        }
+        .dark .MuiIconButton-root {
+          color: #9ca3af !important;
+        }
+
+        /* Date Selector Calendar Popper Overrides in Dark Mode */
+        .dark .MuiPickersPopper-paper,
+        .dark .MuiPaper-root,
+        .dark .MuiPickersLayout-root {
+          background-color: #1e1e1e !important;
+          color: #ffffff !important;
+          border: 1px solid #374151 !important;
+        }
+        .dark .MuiPickersCalendarHeader-label {
+          color: #ffffff !important;
+        }
+        .dark .MuiPickersCalendarHeader-iconButton {
+          color: #ffffff !important;
+        }
+        .dark .MuiDayCalendar-weekDayLabel {
+          color: #9ca3af !important;
+        }
+        .dark .MuiPickersDay-root {
+          color: #ffffff !important;
+        }
+        .dark .MuiPickersDay-root:hover {
+          background-color: rgba(255, 255, 255, 0.08) !important;
+        }
+        .dark .MuiPickersDay-root.Mui-selected {
+          background-color: #DC2626 !important;
+          color: #ffffff !important;
+        }
+        .dark .MuiPickersDay-root.MuiPickersDay-today {
+          border-color: #DC2626 !important;
+        }
+        .dark .MuiPickersYear-yearButton {
+          color: #ffffff !important;
+        }
+        .dark .MuiPickersYear-yearButton.Mui-selected {
+          background-color: #DC2626 !important;
+        }
+        .dark .MuiPickersMonth-monthButton {
+          color: #ffffff !important;
+        }
+        .dark .MuiPickersMonth-monthButton.Mui-selected {
+          background-color: #DC2626 !important;
+        }
+
+        /* Radix Select Trigger / Gender overrides */
+        .dark [data-slot="select-trigger"] span,
+        .dark [data-slot="select-value"] {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+        .dark [data-slot="select-trigger"][data-placeholder] span,
+        .dark [data-slot="select-trigger"][data-placeholder] [data-slot="select-value"] {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          opacity: 0.9 !important;
+        }
+        .dark [data-slot="select-trigger"] svg {
+          color: #9ca3af !important;
+          opacity: 1 !important;
+        }
+      `}</style>
       {/* Header */}
-      <div className="bg-white dark:bg-[#1a1a1a] sticky top-0 z-10 border-b border-gray-100 dark:border-gray-800">
+      <div className="bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800">
         <div className="max-w-7xl mx-auto flex items-center gap-3 px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 md:py-5 lg:py-6">
           <button
-            onClick={goBack}
+            type="button"
+            onClick={discardAndGoBack}
             className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors flex-shrink-0"
           >
             <ArrowLeft className="h-5 w-5 text-gray-700 dark:text-white" />
@@ -410,234 +508,240 @@ export default function EditProfile() {
       </div>
 
       {/* Content */}
-      <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 pb-28 md:pb-12 space-y-6 md:space-y-8 lg:space-y-10">
-        {/* Avatar Section */}
-        <div className="flex justify-center">
-          <div className="relative">
-            <Avatar className="h-24 w-24 bg-[#EB590E] border-0">
-              {imagePreview && (
-                <AvatarImage
-                  src={imagePreview}
-                  alt={formData.name || 'User'}
-                />
-              )}
-              <AvatarFallback className="bg-[#EB590E] text-white text-3xl font-semibold">
-                {avatarInitial}
-              </AvatarFallback>
-            </Avatar>
-            {/* Edit Icon */}
-            <button
-              onClick={handleProfileImageAction}
-              disabled={isUploadingImage}
-              className="absolute bottom-0 right-0 w-8 h-8 bg-[#EB590E] rounded-full flex items-center justify-center shadow-lg border-2 border-white hover:bg-[#D94F0C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isUploadingImage ? (
-                <Loader2 className="h-4 w-4 text-white animate-spin" />
-              ) : (
-                <Pencil className="h-4 w-4 text-white" />
-              )}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageSelect}
-              className="hidden"
-            />
-          </div>
-        </div>
+      <div className="max-w-xl mx-auto px-4 sm:px-6 py-8 pb-28 md:pb-12 mt-20">
+        <div className="relative bg-white dark:bg-[#1a1a1a] rounded-[32px] pt-16 pb-8 px-4 sm:px-6 shadow-[0_2px_20px_rgb(0,0,0,0.04)] border border-gray-100/50 dark:border-gray-800">
 
-        {/* Form Card */}
-        <Card className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-0 dark:border-gray-800">
-          <CardContent className="p-4 sm:p-5 md:p-6 lg:p-8 space-y-4 md:space-y-5 lg:space-y-6">
-            {/* Name Field */}
-            <div className="space-y-1.5">
-              <Label htmlFor="name" className="text-sm font-medium text-gray-700 dark:text-white">
-                Name
-              </Label>
-              <div className="relative">
-                <Input
-                  id="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => handleChange('name', e.target.value)}
-                  className="pr-10 h-12 text-base border border-gray-300 dark:border-gray-700 focus:border-[#EB590E] focus:ring-1 focus:ring-[#EB590E] rounded-lg bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white"
-                  placeholder="Name"
-                />
-                {formData.name && (
-                  <button
-                    type="button"
-                    onClick={() => handleClear('name')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
+          {/* SVG Hump overlapping top */}
+          <div className="absolute -top-[49px] left-1/2 -translate-x-1/2 w-[320px] h-[50px] overflow-hidden pointer-events-none">
+            <svg width="320" height="50" viewBox="0 0 320 50" fill="none" className="dark:hidden">
+              <path d="M0 50 C 50 50, 70 0, 92 0 L 228 0 C 250 0, 270 50, 320 50 Z" fill="white" />
+            </svg>
+            <svg width="320" height="50" viewBox="0 0 320 50" fill="none" className="hidden dark:block">
+              <path d="M0 50 C 50 50, 70 0, 92 0 L 228 0 C 250 0, 270 50, 320 50 Z" fill="#1a1a1a" />
+            </svg>
+          </div>
+
+          {/* Avatar Section */}
+          <div className="absolute -top-[105px] left-1/2 -translate-x-1/2 z-20 flex justify-center">
+            <div className="relative">
+              <Avatar className="h-28 w-28 border-4 border-white shadow-sm bg-transparent">
+                {(imagePreview && typeof imagePreview === "string" && imagePreview.trim() !== "" && imagePreview !== "null" && imagePreview !== "undefined") ? (
+                  <img
+                    src={normalizeImageUrl(imagePreview)}
+                    alt={formData.name || 'User'}
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                ) : (
+                  <img
+                    src="/assets/images/profile_avatar.webp"
+                    alt={formData.name || 'User'}
+                    className="w-full h-full object-cover rounded-full"
+                  />
                 )}
-              </div>
+              </Avatar>
+              {(imagePreview && typeof imagePreview === "string" && imagePreview.trim() !== "" && imagePreview !== "null" && imagePreview !== "undefined") ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      disabled={isUploadingImage}
+                      className="absolute bottom-1 right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-[1.5px] border-gray-100 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isUploadingImage ? (
+                        <Loader2 className="h-4 w-4 text-[#DC2626] animate-spin" />
+                      ) : (
+                        <Pencil className="h-[18px] w-[18px] text-[#DC2626]" strokeWidth={2.5} />
+                      )}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" sideOffset={12} className="w-[220px] bg-white/70 backdrop-blur-2xl dark:bg-[#1a1a1a]/70 rounded-[28px] border border-gray-100/50 dark:border-gray-800 shadow-[0_8px_30px_rgb(0,0,0,0.12)] p-2 z-50 flex flex-col gap-2 relative">
+                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white/70 dark:bg-[#1a1a1a]/70 backdrop-blur-md rotate-45 rounded-sm z-[-1]" />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setProfileImage("")
+                        setImagePreview("")
+                        setPendingImageFile(null)
+                      }}
+                      className="cursor-pointer text-[15.5px] font-medium py-3.5 px-4 rounded-[20px] bg-[#E5E7EB] dark:bg-[#333] text-[#DC2626] focus:text-[#DC2626] focus:bg-[#D1D5DB] dark:focus:bg-[#444] hover:bg-[#D1D5DB] dark:hover:bg-[#444] outline-none flex justify-center tracking-wide shadow-sm"
+                    >
+                      <span>Delete Photo</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleProfileImageAction}
+                      className="cursor-pointer text-[15.5px] font-medium py-3.5 px-4 rounded-[20px] bg-[#E5E7EB] dark:bg-[#333] text-gray-900 dark:text-gray-100 focus:bg-[#D1D5DB] dark:focus:bg-[#444] hover:bg-[#D1D5DB] dark:hover:bg-[#444] outline-none flex justify-center tracking-wide shadow-sm"
+                    >
+                      <span>Change photo</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <button
+                  onClick={handleProfileImageAction}
+                  disabled={isUploadingImage}
+                  className="absolute bottom-1 right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-[1.5px] border-gray-100 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUploadingImage ? (
+                    <Loader2 className="h-4 w-4 text-[#DC2626] animate-spin" />
+                  ) : (
+                    <Pencil className="h-[18px] w-[18px] text-[#DC2626]" strokeWidth={2.5} />
+                  )}
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {/* Form Fields */}
+          <div className="space-y-4 md:space-y-5 lg:space-y-6 pt-6">
+            {/* Name Field */}
+            <div className="relative">
+              <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Name</legend>
+                <div className="flex items-center justify-between">
+                  <input
+                    id="name"
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => handleChange('name', e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1"
+                  />
+                  {formData.name && (
+                    <button type="button" onClick={() => handleClear('name')} className="text-gray-400 hover:text-gray-600">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </fieldset>
             </div>
 
             {/* Mobile Field */}
-            <div className="space-y-1.5">
-              <Label htmlFor="mobile" className="text-sm font-medium text-gray-700 dark:text-white">
-                Mobile
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="mobile"
-                  type="tel"
-                  value={formData.mobile}
-                  onChange={(e) => handleChange('mobile', e.target.value)}
-                  className="flex-1 h-12 text-base  border border-gray-300 dark:border-gray-700 focus:border-[#EB590E] focus:ring-1 focus:ring-[#EB590E] rounded-lg bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white"
-                  placeholder="Mobile"
-                />
-              </div>
-              {fieldErrors.mobile && (
-                <p className="text-xs text-red-600">{fieldErrors.mobile}</p>
-              )}
+            <div>
+              <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Mobile</legend>
+                <div className="flex items-center justify-between">
+                  <input
+                    ref={mobileInputRef}
+                    id="mobile"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={10}
+                    value={formData.mobile}
+                    onChange={(e) => handleChange('mobile', e.target.value)}
+                    placeholder="Enter 10-digit mobile number"
+                    className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 placeholder:text-gray-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleMobileChange}
+                    className="text-[#DC2626] text-[13px] font-semibold tracking-wider shrink-0 px-1"
+                  >
+                    CHANGE
+                  </button>
+                </div>
+              </fieldset>
+              {fieldErrors.mobile && <p className="text-xs text-red-600 mt-1">{fieldErrors.mobile}</p>}
             </div>
 
             {/* Email Field */}
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-white">
-                Email
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange('email', e.target.value)}
-                  className="flex-1 h-12 text-base border border-gray-300 dark:border-gray-700 focus:border-[#EB590E] focus:ring-1 focus:ring-[#EB590E] rounded-lg bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white"
-                  placeholder="Email"
-                />
-              </div>
-              {fieldErrors.email && (
-                <p className="text-xs text-red-600">{fieldErrors.email}</p>
-              )}
+            <div>
+              <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Email</legend>
+                <div className="flex items-center justify-between">
+                  <input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleChange('email', e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1"
+                  />
+                  <button type="button" onClick={handleEmailChange} className="text-[#DC2626] text-[13px] font-semibold tracking-wider shrink-0 px-1">
+                    CHANGE
+                  </button>
+                </div>
+              </fieldset>
+              {fieldErrors.email && <p className="text-xs text-red-600 mt-1">{fieldErrors.email}</p>}
             </div>
 
             {/* Date of Birth Field */}
-            <div className="space-y-1.5">
-              <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700 dark:text-white">
-                Date of birth
-              </Label>
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DatePicker
-                  value={formData.dateOfBirth}
-                  onChange={(newValue) => handleChange('dateOfBirth', newValue)}
-                  maxDate={dayjs()}
-                  slotProps={{
-                    textField: {
-                      className: "w-full",
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          height: '48px',
-                          borderRadius: '8px',
-                          '& fieldset': {
-                            borderColor: '#d1d5db',
-                          },
-                          '&:hover fieldset': {
-                            borderColor: '#9ca3af',
-                          },
-                          '&.Mui-focused fieldset': {
-                            borderColor: '#EB590E',
-                            borderWidth: '1px',
-                          },
-                        },
-                        '& .MuiInputBase-input': {
-                          padding: '12px 14px',
-                          fontSize: '16px',
-                        },
-                      },
-                    },
-                  }}
+            <div>
+              <fieldset className="border border-gray-300 dark:border-gray-600 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-400 px-1 font-normal tracking-wide">Date of birth</legend>
+                <input
+                  id="dateOfBirth"
+                  type="date"
+                  value={formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : ''}
+                  onChange={(e) => handleChange('dateOfBirth', e.target.value ? dayjs(e.target.value) : null)}
+                  max={dayjs().format('YYYY-MM-DD')}
+                  className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 [color-scheme:light] dark:[color-scheme:dark]"
                 />
-              </LocalizationProvider>
-              {fieldErrors.dateOfBirth && (
-                <p className="text-xs text-red-600">{fieldErrors.dateOfBirth}</p>
-              )}
+              </fieldset>
+              {fieldErrors.dateOfBirth && <p className="text-xs text-red-600 mt-1">{fieldErrors.dateOfBirth}</p>}
             </div>
 
             {/* Anniversary Field */}
-            <div className="space-y-1.5">
-              <Label htmlFor="anniversary" className="text-sm font-medium text-gray-700 dark:text-white">
-                Anniversary <span className="text-gray-400 dark:text-gray-500 font-normal">(Optional)</span>
-              </Label>
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DatePicker
-                  value={formData.anniversary}
-                  onChange={(newValue) => handleChange('anniversary', newValue)}
-                  slotProps={{
-                    textField: {
-                      className: "w-full",
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          height: '48px',
-                          borderRadius: '8px',
-                          '& fieldset': {
-                            borderColor: '#d1d5db',
-                          },
-                          '&:hover fieldset': {
-                            borderColor: '#9ca3af',
-                          },
-                          '&.Mui-focused fieldset': {
-                            borderColor: '#EB590E',
-                            borderWidth: '1px',
-                          },
-                        },
-                        '& .MuiInputBase-input': {
-                          padding: '12px 14px',
-                          fontSize: '16px',
-                        },
-                      },
-                    },
-                  }}
+            <div>
+              <fieldset className="border border-gray-300 dark:border-gray-600 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-400 px-1 font-normal tracking-wide">Anniversary</legend>
+                <input
+                  id="anniversary"
+                  type="date"
+                  value={formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : ''}
+                  onChange={(e) => handleChange('anniversary', e.target.value ? dayjs(e.target.value) : null)}
+                  className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 [color-scheme:light] dark:[color-scheme:dark]"
                 />
-              </LocalizationProvider>
+              </fieldset>
             </div>
 
             {/* Gender Field */}
-            <div className="space-y-1.5">
-              <Label htmlFor="gender" className="text-sm font-medium text-gray-700 dark:text-white">
-                Gender
-              </Label>
-              <Select
-                value={formData.gender || ""}
-                onValueChange={(value) => handleChange('gender', value)}
-              >
-                <SelectTrigger className="h-12 text-base border border-gray-300 dark:border-gray-700 focus:border-[#EB590E] focus:ring-1 focus:ring-[#EB590E] rounded-lg bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white">
-                  <SelectValue placeholder="Gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  {genderOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div>
+              <fieldset className="border border-gray-300 dark:border-gray-600 rounded-[14px] px-3 pb-1 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Gender</legend>
+                <Select
+                  value={formData.gender || ""}
+                  onValueChange={(value) => handleChange('gender', value)}
+                >
+                  <SelectTrigger className="w-full border-none shadow-none focus:ring-0 px-0 h-8 text-[16px] font-medium text-gray-800 dark:text-white bg-transparent mb-1 -mt-1">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {genderOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="text-[15px] font-medium">
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </fieldset>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Update Profile Button */}
-        <Button
-          onClick={handleUpdate}
-          disabled={!hasChanges || isSaving || isUploadingImage}
-          className={`w-full h-14 rounded-xl font-semibold text-base transition-all mb-2 ${hasChanges && !isSaving && !isUploadingImage
-              ? 'bg-[#EB590E] hover:bg-[#D94F0C] text-white'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            'Update profile'
-          )}
-        </Button>
+          {/* Update Profile Button */}
+          <div className="mt-8 mb-2">
+            <Button
+              onClick={handleUpdate}
+              disabled={!hasChanges || isSaving || isUploadingImage}
+              className={`w-full h-[52px] rounded-xl font-semibold text-[15px] transition-all ${isSaving || isUploadingImage || !hasChanges
+                  ? 'bg-[#DC2626]/70 text-white cursor-not-allowed'
+                  : 'bg-[#DC2626] hover:bg-[#991B1B] text-white shadow-md shadow-red-500/20'
+                }`}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Update profile'
+              )}
+            </Button>
+          </div>
+        </div>
 
         <ImageSourcePicker
           isOpen={photoPickerOpen}
@@ -648,8 +752,17 @@ export default function EditProfile() {
           fileNamePrefix="profile-photo"
           galleryInputRef={fileInputRef}
         />
+
+        <ImageCropper
+          isOpen={isCropModalOpen}
+          onClose={() => {
+            setIsCropModalOpen(false)
+            setCropImageFile(null)
+          }}
+          imageFile={cropImageFile}
+          onCropComplete={handleCropComplete}
+        />
       </div>
     </div>
   )
 }
-

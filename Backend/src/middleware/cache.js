@@ -67,3 +67,18 @@ export const invalidateCache = async (pattern) => {
         logger.error(`Cache invalidation error: ${err.message}`);
     }
 };
+
+export const invalidateFoodBrowseCaches = async (
+    prefixes = [
+        'restaurants',
+        'restaurant_detail',
+        'restaurant_menu',
+        'categories',
+        'search',
+        'under_250',
+        'offers',
+    ],
+) => {
+    const list = Array.isArray(prefixes) ? prefixes.filter(Boolean) : [];
+    await Promise.all(list.map((prefix) => invalidateCache(`${prefix}:*`)));
+};

@@ -8,46 +8,54 @@ import * as feedbackExperienceController from '../controllers/feedbackExperience
 import * as notificationBroadcastController from '../controllers/notificationBroadcast.controller.js';
 import * as diningAdminController from '../../dining/controllers/diningAdmin.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
+import * as subAdminController from '../controllers/subAdmin.controller.js';
 import { getAdminPageController, upsertAdminPageController } from '../controllers/pageContent.controller.js';
+import * as systemConfigController from '../controllers/systemConfig.controller.js';
 import { upload } from '../../../../middleware/upload.js';
-import { invalidateCache } from '../../../../middleware/cache.js';
-import { attachFoodAdminContext, requireFoodResourceAccess } from '../middlewares/foodAdmin.middleware.js';
-import * as foodAdminManagementController from '../controllers/foodAdminManagement.controller.js';
+import { enforceSubAdminPermissions } from '../middleware/subAdminPermission.middleware.js';
+import * as otherPriceController from '../controllers/otherPrice.controller.js';
 
 const router = express.Router();
 
 // ----- Public Business Settings (No Admin Required) -----
 router.get('/business-settings/public', businessSettingsController.getBusinessSettings);
 
+const ADMIN_PORTAL_ROLES = new Set(['ADMIN', 'SUB_ADMIN']);
+
 const requireAdmin = (req, _res, next) => {
     const user = req.user;
-    if (!user || user.role !== 'ADMIN') {
+    const role = String(user?.role || '').toUpperCase();
+    if (!user || !ADMIN_PORTAL_ROLES.has(role)) {
         return next(new AuthError('Admin access required'));
     }
     return next();
 };
 
 router.use(requireAdmin);
-router.use(attachFoodAdminContext);
+router.use(enforceSubAdminPermissions);
 
-// ----- Admin Management (Subadmins) -----
-router.get('/admin-management/permissions', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.getFoodAdminPermissions);
-router.get('/admin-management/assignable-zones', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.getAssignableFoodZones);
-router.get('/admin-management/admins', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.getFoodAdmins);
-router.get('/admin-management/admins/:id', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.getFoodAdminById);
-router.post('/admin-management/admins', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.createFoodAdminAccount);
-router.patch('/admin-management/admins/:id', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.updateFoodAdminAccount);
-router.delete('/admin-management/admins/:id', requireFoodResourceAccess('subadmins', 'subadmins'), foodAdminManagementController.deleteFoodAdminAccount);
+// ----- Sub Admins (full ADMIN only — enforced in controller) -----
+router.get('/sub-admins/permission-modules', subAdminController.getPermissionModules);
+router.get('/sub-admins', subAdminController.listSubAdmins);
+router.post('/sub-admins', subAdminController.createSubAdmin);
+router.get('/sub-admins/:id', subAdminController.getSubAdminById);
+router.patch('/sub-admins/:id', subAdminController.updateSubAdmin);
+router.patch('/sub-admins/:id/status', subAdminController.updateSubAdminStatus);
+router.patch('/sub-admins/:id/password', subAdminController.resetSubAdminPassword);
+router.patch('/sub-admins/:id/permissions', subAdminController.updateSubAdminPermissions);
+router.delete('/sub-admins/:id', subAdminController.deleteSubAdmin);
 
 // ----- Broadcast Notifications -----
 router.post('/notifications/broadcast', notificationBroadcastController.createBroadcastNotificationController);
 router.get('/notifications/broadcast', notificationBroadcastController.getBroadcastNotificationsController);
+router.get('/notifications/recipients-search', notificationBroadcastController.searchBroadcastRecipientsController);
 router.delete('/notifications/broadcast/:id', notificationBroadcastController.deleteBroadcastNotificationController);
 
 // ----- Customers -----
-router.get('/customers', requireFoodResourceAccess('customers', 'customers'), adminController.getCustomers);
-router.get('/customers/:id', requireFoodResourceAccess('customers', 'customers'), adminController.getCustomerById);
-router.patch('/customers/:id/status', requireFoodResourceAccess('customers', 'customers'), adminController.updateCustomerStatus);
+router.get('/customers', adminController.getCustomers);
+router.get('/customers/:id', adminController.getCustomerById);
+router.patch('/customers/:id/status', adminController.updateCustomerStatus);
+router.patch('/customers/:id/cod-status', adminController.updateCustomerCodStatus);
 
 // ----- Safety / Emergency Reports -----
 router.get('/safety-emergency-reports', adminController.getSafetyEmergencyReports);
@@ -78,10 +86,10 @@ router.post('/restaurants', adminController.createRestaurant);
 router.patch('/restaurants/:id', adminController.updateRestaurantById);
 router.patch('/restaurants/:id/status', adminController.updateRestaurantStatus);
 router.patch('/restaurants/:id/location', adminController.updateRestaurantLocation);
-router.patch('/restaurants/:id/zone-featured-rank', adminController.updateRestaurantZoneFeaturedRank);
 router.patch('/restaurants/:id/menu', adminController.updateRestaurantMenuById);
 router.patch('/restaurants/:id/approve', adminController.approveRestaurant);
 router.patch('/restaurants/:id/reject', adminController.rejectRestaurant);
+router.delete('/restaurants/:id', adminController.deleteRestaurant);
 
 // ----- Restaurant Commission -----
 router.get('/restaurant-commissions/bootstrap', adminController.getRestaurantCommissionBootstrap);
@@ -110,67 +118,29 @@ router.patch('/addons/:id/reject', addonsApprovalController.rejectRestaurantAddo
 
 // ----- Foods -----
 router.get('/foods', adminController.getFoods);
-router.post('/foods', async (req, res, next) => {
-    try {
-        const { invalidateCache } = await import('../../../../middleware/cache.js');
-        await invalidateCache('restaurant_menu:*');
-        await invalidateCache('restaurants:*');
-        await invalidateCache('restaurant_detail:*');
-    } catch (err) { console.error('Cache invalidation error', err); }
-    next();
-}, adminController.createFood);
-router.patch('/foods/:id', async (req, res, next) => {
-    try {
-        const { invalidateCache } = await import('../../../../middleware/cache.js');
-        await invalidateCache('restaurant_menu:*');
-        await invalidateCache('restaurants:*');
-        await invalidateCache('restaurant_detail:*');
-    } catch (err) { console.error('Cache invalidation error', err); }
-    next();
-}, adminController.updateFood);
-router.delete('/foods/:id', async (req, res, next) => {
-    try {
-        const { invalidateCache } = await import('../../../../middleware/cache.js');
-        await invalidateCache('restaurant_menu:*');
-        await invalidateCache('restaurants:*');
-        await invalidateCache('restaurant_detail:*');
-    } catch (err) { console.error('Cache invalidation error', err); }
-    next();
-}, adminController.deleteFood);
+router.post('/foods', adminController.createFood);
+router.patch('/foods/:id', adminController.updateFood);
+router.delete('/foods/:id', adminController.deleteFood);
+
+// ----- Pricing Management (Other Price markup rules) -----
+router.get('/pricing/summary', otherPriceController.getPricingSummary);
+router.get('/pricing/rules', otherPriceController.listPricingRules);
+router.post('/pricing/rules/bulk-restaurant', otherPriceController.bulkUpsertRestaurantPricingRules);
+router.post('/pricing/rules/bulk-menu-item', otherPriceController.bulkUpsertMenuItemPricingRules);
+router.post('/pricing/rules', otherPriceController.upsertPricingRule);
+router.delete('/pricing/rules/:id', otherPriceController.deletePricingRule);
+router.post('/pricing/preview', otherPriceController.previewPricing);
+router.get('/pricing/audits', otherPriceController.listPricingAudits);
+
 // Food approval queue (pending items created by restaurants)
 router.get('/foods/pending-approvals', foodApprovalController.getPendingFoodApprovals);
-router.patch('/foods/:id/approve', async (req, res, next) => {
-    try {
-        const { invalidateCache } = await import('../../../../middleware/cache.js');
-        await invalidateCache('restaurant_menu:*');
-        await invalidateCache('restaurants:*');
-        await invalidateCache('restaurant_detail:*');
-    } catch (err) { console.error('Cache invalidation error', err); }
-    next();
-}, foodApprovalController.approveFoodItemController);
-router.patch('/foods/:id/reject', async (req, res, next) => {
-    try {
-        const { invalidateCache } = await import('../../../../middleware/cache.js');
-        await invalidateCache('restaurant_menu:*');
-        await invalidateCache('restaurants:*');
-        await invalidateCache('restaurant_detail:*');
-    } catch (err) { console.error('Cache invalidation error', err); }
-    next();
-}, foodApprovalController.rejectFoodItemController);
-router.post('/foods/bulk-approve', async (req, res, next) => {
-    try {
-        const { invalidateCache } = await import('../../../../middleware/cache.js');
-        await invalidateCache('restaurant_menu:*');
-        await invalidateCache('restaurants:*');
-        await invalidateCache('restaurant_detail:*');
-    } catch (err) { console.error('Cache invalidation error', err); }
-    next();
-}, adminController.bulkApproveFoodItems);
-
+router.patch('/foods/:id/approve', foodApprovalController.approveFoodItemController);
+router.patch('/foods/:id/reject', foodApprovalController.rejectFoodItemController);
 
 // ----- Offers & Coupons -----
 router.get('/offers', adminController.getAllOffers);
 router.post('/offers', adminController.createAdminOffer);
+router.put('/offers/:id', adminController.updateAdminOffer);
 router.patch('/offers/:id/cart-visibility', adminController.updateAdminOfferCartVisibility);
 router.delete('/offers/:id', adminController.deleteAdminOffer);
 
@@ -197,8 +167,13 @@ router.patch('/business-settings', upload.fields([
 // ----- Delivery Cash Limit -----
 router.get('/delivery-cash-limit', adminController.getDeliveryCashLimit);
 router.patch('/delivery-cash-limit', adminController.updateDeliveryCashLimit);
-router.get('/restaurant-withdrawal-setting', adminController.getRestaurantWithdrawalSetting);
-router.patch('/restaurant-withdrawal-setting', adminController.updateRestaurantWithdrawalSetting);
+
+// ----- Top Restaurants (per zone + type) -----
+router.get('/top-restaurants', adminController.getTopRestaurants);
+router.put('/top-restaurants', adminController.saveTopRestaurants);
+
+// ----- Archived / Deleted Accounts -----
+router.get('/archived-accounts', adminController.getArchivedAccounts);
 
 // ----- Delivery Emergency Help -----
 router.get('/delivery-emergency-help', adminController.getEmergencyHelp);
@@ -210,6 +185,8 @@ router.patch('/withdrawals/:id', adminController.updateWithdrawalStatus);
 router.get('/delivery/withdrawals', adminController.getDeliveryWithdrawals);
 router.patch('/delivery/withdrawals/:id', adminController.updateDeliveryWithdrawalStatus);
 router.get('/delivery/cash-limit-settlements', adminController.getCashLimitSettlements);
+router.get('/delivery/cash-confirmations', adminController.getCashConfirmations);
+router.patch('/delivery/cash-limit-settlements/:id', adminController.updateCashLimitSettlement);
 
 // ----- Delivery partners & general -----
 router.get('/delivery/join-requests', adminController.getDeliveryJoinRequests);
@@ -222,9 +199,6 @@ router.post('/delivery/commission-rules', adminController.createDeliveryCommissi
 router.patch('/delivery/commission-rules/:id', adminController.updateDeliveryCommissionRule);
 router.delete('/delivery/commission-rules/:id', adminController.deleteDeliveryCommissionRule);
 router.patch('/delivery/commission-rules/:id/status', adminController.toggleDeliveryCommissionRuleStatus);
-router.get('/delivery/zone-surge', adminController.getDeliveryZoneSurgeConfigs);
-router.put('/delivery/zone-surge', adminController.upsertDeliveryZoneSurgeConfig);
-router.patch('/delivery/zone-surge/:zoneId/status', adminController.toggleDeliveryZoneSurgeStatus);
 router.get('/delivery/reviews', adminController.getDeliverymanReviews);
 router.get('/contact-messages', adminController.getContactMessages);
 router.get('/delivery/earning-addons', adminController.getEarningAddons);
@@ -245,11 +219,11 @@ router.patch('/delivery/:id/approve', adminController.approveDeliveryPartner);
 router.patch('/delivery/:id/reject', adminController.rejectDeliveryPartner);
 
 // ----- Zones -----
-router.get('/zones', requireFoodResourceAccess('zones', 'zones'), adminController.getZones);
-router.get('/zones/:id', requireFoodResourceAccess('zones', 'zones'), adminController.getZoneById);
-router.post('/zones', requireFoodResourceAccess('zones', 'zones'), adminController.createZone);
-router.patch('/zones/:id', requireFoodResourceAccess('zones', 'zones'), adminController.updateZone);
-router.delete('/zones/:id', requireFoodResourceAccess('zones', 'zones'), adminController.deleteZone);
+router.get('/zones', adminController.getZones);
+router.get('/zones/:id', adminController.getZoneById);
+router.post('/zones', adminController.createZone);
+router.patch('/zones/:id', adminController.updateZone);
+router.delete('/zones/:id', adminController.deleteZone);
 
 // ----- Dining -----
 router.get('/dining/categories', diningAdminController.getDiningCategories);
@@ -258,11 +232,17 @@ router.patch('/dining/categories/:id', diningAdminController.updateDiningCategor
 router.delete('/dining/categories/:id', diningAdminController.deleteDiningCategory);
 router.get('/dining/restaurants', diningAdminController.getDiningRestaurants);
 router.patch('/dining/restaurants/:restaurantId', diningAdminController.updateDiningRestaurant);
+router.get('/dining/requests', diningAdminController.listAllDiningRequests);
+router.patch('/dining/requests/:id/approve', diningAdminController.approveDiningRequest);
+router.patch('/dining/requests/:id/reject', diningAdminController.rejectDiningRequest);
 
 // ----- Orders -----
-router.get('/orders', requireFoodResourceAccess('orders', 'orders'), orderController.listOrdersAdminController);
-router.get('/orders/:orderId', requireFoodResourceAccess('orders', 'orders'), orderController.getOrderByIdAdminController);
-router.delete('/orders/:orderId', requireFoodResourceAccess('orders', 'orders'), orderController.deleteOrderAdminController);
+router.get('/orders', orderController.listOrdersAdminController);
+router.get('/orders/:orderId', orderController.getOrderByIdAdminController);
+router.delete('/orders/:orderId', orderController.deleteOrderAdminController);
+router.patch('/orders/:orderId/accept', orderController.acceptOrderAdminController);
+router.patch('/orders/:orderId/reject', orderController.rejectOrderAdminController);
+router.patch('/orders/:orderId/statuses', orderController.updateOrderStatusesAdminController);
 
 // ----- CMS Pages (About + legal) -----
 router.get('/pages-social-media/:key', getAdminPageController);
@@ -270,5 +250,14 @@ router.put('/pages-social-media/:key', upsertAdminPageController);
 
 router.get('/sidebar-badges', adminController.getSidebarBadges);
 router.get('/notifications/fssai-expired', adminController.getExpiredFssaiNotifications);
+
+// ----- Customization Settings -----
+router.get('/customization-settings', systemConfigController.getCustomizationSettings);
+router.patch('/customization-settings', systemConfigController.updateCustomizationSettings);
+router.get('/customization-settings/takeaway-cod', systemConfigController.getTakeawayCodStatus);
+
+// ----- Restaurant Settings -----
+router.get('/restaurant-settings', systemConfigController.getRestaurantSettings);
+router.patch('/restaurant-settings', systemConfigController.updateRestaurantSettings);
 
 export default router;

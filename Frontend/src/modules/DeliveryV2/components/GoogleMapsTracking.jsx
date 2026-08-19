@@ -1,11 +1,9 @@
 import { useCallback, useRef, useEffect, useState } from 'react'
-import { GoogleMap, Marker, Polyline } from '@react-google-maps/api'
-import { useAppGoogleMapsLoader } from '@/modules/Taxi/modules/admin/utils/googleMaps'
+import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api'
 import { motion } from 'framer-motion'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
-import bikeLogo from '../../Food/assets/bikelogo.png'
 
 
 /**
@@ -37,7 +35,18 @@ import bikeLogo from '../../Food/assets/bikelogo.png'
  * - The component will automatically calculate and display the driving route polyline
  */
 
-const getDeliveryIconUrl = () => bikeLogo
+// Use direct public path which is more reliable in this setup
+const getDeliveryIconUrl = () => {
+  try {
+    // Try to use delivery icon from public assets
+    return '/assets/deliveryboy/deliveryIcon.png'
+  } catch {
+    // Fallback to bikelogo if delivery icon not found
+    return '/src/assets/bikelogo.png'
+  }
+}
+
+const MAP_LIBRARIES = ['geometry']
 
 const mapContainerStyle = {
   width: '100%',
@@ -58,6 +67,7 @@ export default function GoogleMapsTracking({
   onRouteInfoUpdate,
   lastUpdate
 }) {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   const mapRef = useRef(null)
   const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)
@@ -89,7 +99,12 @@ export default function GoogleMapsTracking({
     }
   }, [routeInfo, onRouteInfoUpdate]);
 
-  const { isLoaded, loadError } = useAppGoogleMapsLoader()
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: apiKey || '',
+    // Do not load `places` — it pulls Geocoding-related code paths; Directions is in core Maps JS.
+    libraries: MAP_LIBRARIES,
+  })
 
   // Combine storeLocation with sellerLocations
   const allSellers = storeLocation ? [storeLocation, ...sellerLocations] : sellerLocations;
@@ -294,7 +309,7 @@ export default function GoogleMapsTracking({
         suppressMarkers: true, // We'll use custom markers
         preserveViewport: true, // Preserve viewport - we'll center manually
                       polylineOptions: {
-                        strokeColor: '#3b82f6', // Bright blue like Hello Parth Partner
+                        strokeColor: '#3b82f6', // Bright blue like Zomato/Swiggy
                         strokeWeight: 6,
                         strokeOpacity: 1.0, // Fully visible - plain solid line
                         icons: [], // No icons/dots - plain solid line only
@@ -652,4 +667,5 @@ export default function GoogleMapsTracking({
     </div>
   )
 }
+
 

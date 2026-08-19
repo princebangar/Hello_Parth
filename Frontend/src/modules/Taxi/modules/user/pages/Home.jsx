@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarClock, ChevronRight, Clock3, MapPin, ShieldCheck, User } from 'lucide-react';
-import HomeHeader from '@food/components/user/home/HomeHeader';
+import SuperAppHomeHeader from '@/shared/components/SuperAppHomeHeader';
 import SuperAppHero from '../components/SuperAppHero';
 import ServiceGrid from '../components/ServiceGrid';
 import LocationMapSection from '../components/LocationMapSection';
@@ -582,7 +582,7 @@ const Home = ({ embedded = false }) => {
       <div className="relative z-10 space-y-3 pb-6">
         {!embedded && (
           <div className="flex flex-col bg-[#0B172A] rounded-b-[28px] shadow-[0_14px_36px_rgba(11,23,42,0.18)] overflow-hidden">
-            <HomeHeader activeVertical="taxi" hideSearchRow={true} />
+            <SuperAppHomeHeader activeVertical="taxi" />
             <SuperAppHero onSearchFocus={() => navigate(`${routePrefix}/ride/select-location`)} />
           </div>
         )}

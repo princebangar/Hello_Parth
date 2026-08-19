@@ -1,8 +1,9 @@
-import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import React, { Suspense, lazy } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
-import FoodAdminPermissionRoute from "./FoodAdminPermissionRoute";
+import PermissionRoute from "./PermissionRoute";
 import AdminLayout from "./AdminLayout";
+import AuthRedirect from "@food/components/AuthRedirect";
 import Loader from "@food/components/Loader";
 
 const AdminHome = lazy(() => import("@food/pages/admin/AdminHome"));
@@ -15,12 +16,10 @@ const OrdersPage = lazy(() => import("@food/pages/admin/orders/OrdersPage"));
 const OrderDetectDelivery = lazy(() => import("@food/pages/admin/OrderDetectDelivery"));
 const Category = lazy(() => import("@food/pages/admin/categories/Category"));
 const FeeSettings = lazy(() => import("@food/pages/admin/fee-settings/FeeSettings"));
-const ReferralSettings = lazy(() => import("@food/pages/admin/referral-settings/ReferralSettings"));
+// TODO: Referral feature temporarily disabled. Uncomment to re-enable in future.
+// const ReferralSettings = lazy(() => import("@food/pages/admin/referral-settings/ReferralSettings"));
 // Restaurant Management
 const ZoneSetup = lazy(() => import("@food/pages/admin/restaurant/ZoneSetup"));
-const ZoneRestaurantsList = lazy(() =>
-  import("@food/pages/admin/restaurant/ZoneRestaurantsList")
-);
 const AddZone = lazy(() => import("@food/pages/admin/restaurant/AddZone"));
 const ViewZone = lazy(() => import("@food/pages/admin/restaurant/ViewZone"));
 const AllZonesMap = lazy(() => import("@food/pages/admin/restaurant/AllZonesMap"));
@@ -28,6 +27,7 @@ const DeliveryBoyViewMap = lazy(() => import("@food/pages/admin/restaurant/Deliv
 const RestaurantsList = lazy(() => import("@food/pages/admin/restaurant/RestaurantsList"));
 const AddRestaurant = lazy(() => import("@food/pages/admin/restaurant/AddRestaurant"));
 const JoiningRequest = lazy(() => import("@food/pages/admin/restaurant/JoiningRequest"));
+const TopRestaurants = lazy(() => import("@food/pages/admin/restaurant/TopRestaurants"));
 const RestaurantCommission = lazy(() => import("@food/pages/admin/restaurant/RestaurantCommission"));
 const RestaurantComplaints = lazy(() => import("@food/pages/admin/restaurant/RestaurantComplaints"));
 const RestaurantReviews = lazy(() => import("@food/pages/admin/restaurant/RestaurantReviews"));
@@ -35,6 +35,7 @@ const RestaurantsBulkImport = lazy(() => import("@food/pages/admin/restaurant/Re
 const RestaurantsBulkExport = lazy(() => import("@food/pages/admin/restaurant/RestaurantsBulkExport"));
 // Food Management
 const FoodsList = lazy(() => import("@food/pages/admin/foods/FoodsList"));
+const PricingManagement = lazy(() => import("@food/pages/admin/pricing/PricingManagement"));
 const AddonsList = lazy(() => import("@food/pages/admin/addons/AddonsList"));
 // Promotions Management
 const BasicCampaign = lazy(() => import("@food/pages/admin/campaigns/BasicCampaign"));
@@ -59,8 +60,11 @@ const Bonus = lazy(() => import("@food/pages/admin/wallet/Bonus"));
 const LoyaltyPointReport = lazy(() => import("@food/pages/admin/loyalty-point/Report"));
 const SubscribedMailList = lazy(() => import("@food/pages/admin/SubscribedMailList"));
 // Deliveryman Management
+const DeliveryBoyCommission = lazy(() => import("@food/pages/admin/DeliveryBoyCommission"));
 const DeliveryCashLimit = lazy(() => import("@food/pages/admin/DeliveryCashLimit"));
+const MultiorderSetting = lazy(() => import("@food/pages/admin/MultiorderSetting"));
 const CashLimitSettlement = lazy(() => import("@food/pages/admin/CashLimitSettlement"));
+const CashConfirmations = lazy(() => import("@food/pages/admin/CashConfirmations"));
 const DeliveryWithdrawal = lazy(() => import("@food/pages/admin/DeliveryWithdrawal"));
 const DeliveryBoyWallet = lazy(() => import("@food/pages/admin/DeliveryBoyWallet"));
 const DeliveryEmergencyHelp = lazy(() => import("@food/pages/admin/DeliveryEmergencyHelp"));
@@ -73,8 +77,6 @@ const DeliverymanBonus = lazy(() => import("@food/pages/admin/delivery-partners/
 const EarningAddon = lazy(() => import("@food/pages/admin/delivery-partners/EarningAddon"));
 const EarningAddonHistory = lazy(() => import("@food/pages/admin/delivery-partners/EarningAddonHistory"));
 const DeliveryEarnings = lazy(() => import("@food/pages/admin/delivery-partners/DeliveryEarnings"));
-const GigsManagement = lazy(() => import("@food/pages/admin/management/GigsManagement"));
-const SelfieLogs = lazy(() => import("@food/pages/admin/management/SelfieLogs"));
 // Disbursement Management
 // Report Management
 const TransactionReport = lazy(() => import("@food/pages/admin/reports/TransactionReport"));
@@ -94,18 +96,21 @@ const WithdrawMethod = lazy(() => import("@food/pages/admin/transactions/Withdra
 const EmployeeRole = lazy(() => import("@food/pages/admin/employees/EmployeeRole"));
 const AddEmployee = lazy(() => import("@food/pages/admin/employees/AddEmployee"));
 const EmployeeList = lazy(() => import("@food/pages/admin/employees/EmployeeList"));
+const SubAdminList = lazy(() => import("@food/pages/admin/sub-admins/SubAdminList"));
+const SubAdminPermissions = lazy(() => import("@food/pages/admin/sub-admins/SubAdminPermissions"));
 // Business Settings
 const BusinessSetup = lazy(() => import("@food/pages/admin/settings/BusinessSetup"));
 const EmailTemplate = lazy(() => import("@food/pages/admin/settings/EmailTemplate"));
 const ThemeSettings = lazy(() => import("@food/pages/admin/settings/ThemeSettings"));
 const Gallery = lazy(() => import("@food/pages/admin/settings/Gallery"));
 const LoginSetup = lazy(() => import("@food/pages/admin/settings/LoginSetup"));
-const TermsAndCondition = lazy(() => import("@food/pages/admin/settings/TermsAndCondition"));
-const PrivacyPolicy = lazy(() => import("@food/pages/admin/settings/PrivacyPolicy"));
+const TermsAndCondition = lazy(() => import("@food/pages/admin/settings/LegalTerms"));
+const PrivacyPolicy = lazy(() => import("@food/pages/admin/settings/LegalPrivacy"));
 const AboutUs = lazy(() => import("@food/pages/admin/settings/AboutUs"));
 const RefundPolicy = lazy(() => import("@food/pages/admin/settings/RefundPolicy"));
 const ShippingPolicy = lazy(() => import("@food/pages/admin/settings/ShippingPolicy"));
 const CancellationPolicy = lazy(() => import("@food/pages/admin/settings/CancellationPolicy"));
+const SupportCMS = lazy(() => import("@food/pages/admin/settings/SupportCMS"));
 const ReactRegistration = lazy(() => import("@food/pages/admin/settings/ReactRegistration"));
 // System Settings
 const ThirdParty = lazy(() => import("@food/pages/admin/system/ThirdParty"));
@@ -126,30 +131,25 @@ const AddonActivation = lazy(() => import("@food/pages/admin/system/AddonActivat
 const LandingPageManagement = lazy(() => import("@food/pages/admin/system/LandingPageManagement"));
 const DiningManagement = lazy(() => import("@food/pages/admin/system/DiningManagement"));
 const DiningList = lazy(() => import("@food/pages/admin/system/DiningList"));
+const DiningRequests = lazy(() => import("@food/pages/admin/system/DiningRequests"));
+const CustomizationSettings = lazy(() => import("@food/pages/admin/system/CustomizationSettings"));
+const ArchivedAccounts = lazy(() => import("@food/pages/admin/system/ArchivedAccounts"));
+const RestaurantSettings = lazy(() => import("@food/pages/admin/restaurant/RestaurantSettings"));
 const EditRestaurant = lazy(() => import("@food/pages/admin/restaurant/EditRestaurant"));
 const AdminLogin = lazy(() => import("@food/pages/admin/auth/AdminLogin"));
 const AdminSignup = lazy(() => import("@food/pages/admin/auth/AdminSignup"));
 const AdminForgotPassword = lazy(() => import("@food/pages/admin/auth/AdminForgotPassword"));
-const FoodSubadmins = lazy(() => import("@food/pages/admin/management/FoodSubadmins"));
-const FoodSubadminCreate = lazy(() => import("@food/pages/admin/management/FoodSubadminCreate"));
-
-const FoodPermissionOutlet = () => (
-  <FoodAdminPermissionRoute>
-    <Suspense fallback={<Loader />}>
-      <Outlet />
-    </Suspense>
-  </FoodAdminPermissionRoute>
-);
 
 export default function AdminRouter() {
   return (
-    <Suspense fallback={<Loader />}>
+    <Suspense fallback={null}>
       <Routes>
         {/* Protected Routes - With Layout */}
         {/* Admin Login - Same as earlier */}
-        <Route path="login" element={<AdminLogin />} />
-        <Route path="forgot-password" element={<AdminForgotPassword />} />
-        <Route path="signup" element={<AdminSignup />} />
+        {/* Admin Auth Routes */}
+        <Route path="login" element={<AuthRedirect module="admin"><AdminLogin /></AuthRedirect>} />
+        <Route path="forgot-password" element={<AuthRedirect module="admin"><AdminForgotPassword /></AuthRedirect>} />
+        <Route path="signup" element={<AuthRedirect module="admin"><AdminSignup /></AuthRedirect>} />
 
         {/* Protected Routes - With Layout */}
         <Route
@@ -163,7 +163,7 @@ export default function AdminRouter() {
           <Route path="/" element={<Navigate to="food" replace />} />
 
           {/* FOOD ADMIN - All food related routes nested here */}
-          <Route path="food/*" element={<FoodPermissionOutlet />}>
+          <Route path="food/*">
             <Route index element={<AdminHome />} />
             <Route path="point-of-sale" element={<PointOfSale />} />
             <Route path="profile" element={<AdminProfile />} />
@@ -174,7 +174,6 @@ export default function AdminRouter() {
             <Route path="orders/scheduled" element={<OrdersPage statusKey="scheduled" />} />
             <Route path="orders/pending" element={<OrdersPage statusKey="pending" />} />
             {/* ... other order routes ... */}
-            <Route path="orders/accepted" element={<OrdersPage statusKey="accepted" />} />
             <Route path="orders/processing" element={<OrdersPage statusKey="processing" />} />
             <Route path="orders/food-on-the-way" element={<OrdersPage statusKey="food-on-the-way" />} />
             <Route path="orders/delivered" element={<OrdersPage statusKey="delivered" />} />
@@ -193,27 +192,27 @@ export default function AdminRouter() {
             <Route path="zone-setup/add" element={<AddZone />} />
             <Route path="zone-setup/edit/:id" element={<AddZone />} />
             <Route path="zone-setup/view/:id" element={<ViewZone />} />
-            <Route
-              path="zone-setup/restaurants/:zoneId"
-              element={<ZoneRestaurantsList />}
-            />
             <Route path="food-approval" element={<FoodApproval />} />
             <Route path="restaurants" element={<RestaurantsList />} />
             <Route path="restaurants/add" element={<AddRestaurant />} />
             <Route path="restaurants/edit/:id" element={<EditRestaurant />} />
             <Route path="restaurants/joining-request" element={<JoiningRequest />} />
+            <Route path="restaurants/top-restaurants" element={<TopRestaurants />} />
             <Route path="restaurants/commission" element={<RestaurantCommission />} />
             <Route path="restaurants/complaints" element={<RestaurantComplaints />} />
             <Route path="restaurants/reviews" element={<RestaurantReviews />} />
             <Route path="restaurants/bulk-import" element={<RestaurantsBulkImport />} />
             <Route path="restaurants/bulk-export" element={<RestaurantsBulkExport />} />
+            <Route path="restaurants/settings" element={<RestaurantSettings />} />
 
             {/* FOOD & CATEGORY MANAGEMENT */}
             <Route path="categories" element={<Category />} />
             <Route path="fee-settings" element={<FeeSettings />} />
-            <Route path="referral-settings" element={<ReferralSettings />} />
+            {/* TODO: Referral feature temporarily disabled. Uncomment to re-enable in future. */}
+            {/* <Route path="referral-settings" element={<ReferralSettings />} /> */}
             <Route path="foods" element={<FoodsList />} />
             <Route path="food/list" element={<FoodsList />} />
+            <Route path="pricing" element={<PricingManagement />} />
             <Route path="addons" element={<AddonsList />} />
 
             {/* PROMOTIONS, CUSTOMERS, DELIVERYMEN, etc. */}
@@ -238,7 +237,10 @@ export default function AdminRouter() {
             <Route path="loyalty-point/report" element={<LoyaltyPointReport />} />
             <Route path="subscribed-mail-list" element={<SubscribedMailList />} />
 
+            <Route path="delivery-boy-commission" element={<DeliveryBoyCommission />} />
             <Route path="delivery-cash-limit" element={<DeliveryCashLimit />} />
+            <Route path="multiorder-setting" element={<MultiorderSetting />} />
+            <Route path="cash-confirmations" element={<CashConfirmations />} />
             <Route path="cash-limit-settlement" element={<CashLimitSettlement />} />
             <Route path="delivery-withdrawal" element={<DeliveryWithdrawal />} />
             <Route path="delivery-boy-wallet" element={<DeliveryBoyWallet />} />
@@ -252,8 +254,6 @@ export default function AdminRouter() {
             <Route path="delivery-partners/earning-addon" element={<EarningAddon />} />
             <Route path="delivery-partners/earning-addon-history" element={<EarningAddonHistory />} />
             <Route path="delivery-partners/earnings" element={<DeliveryEarnings />} />
-            <Route path="delivery-partners/gigs" element={<GigsManagement />} />
-            <Route path="delivery-partners/selfie-logs" element={<SelfieLogs />} />
 
 
             {/* REPORTS & SETTINGS */}
@@ -275,6 +275,24 @@ export default function AdminRouter() {
             <Route path="employees" element={<EmployeeList />} />
             <Route path="employees/add" element={<AddEmployee />} />
 
+            {/* SUB ADMIN MANAGEMENT (full ADMIN only) */}
+            <Route
+              path="sub-admins"
+              element={
+                <PermissionRoute requireFullAdmin>
+                  <SubAdminList />
+                </PermissionRoute>
+              }
+            />
+            <Route
+              path="sub-admins/:id/permissions"
+              element={
+                <PermissionRoute requireFullAdmin>
+                  <SubAdminPermissions />
+                </PermissionRoute>
+              }
+            />
+
             {/* SYSTEM & BUSINESS SETTINGS */}
             <Route path="business-setup" element={<BusinessSetup />} />
             <Route path="email-template" element={<EmailTemplate />} />
@@ -288,6 +306,7 @@ export default function AdminRouter() {
             <Route path="pages-social-media/refund" element={<RefundPolicy />} />
             <Route path="pages-social-media/shipping" element={<ShippingPolicy />} />
             <Route path="pages-social-media/cancellation" element={<CancellationPolicy />} />
+            <Route path="pages-social-media/support" element={<SupportCMS />} />
             <Route path="pages-social-media/react-registration" element={<ReactRegistration />} />
             
             <Route path="3rd-party-configurations/party" element={<ThirdParty />} />
@@ -309,29 +328,16 @@ export default function AdminRouter() {
             <Route path="hero-banner-management" element={<LandingPageManagement />} />
             <Route path="dining-management" element={<DiningManagement />} />
             <Route path="dining-list" element={<DiningList />} />
-
-            {/* ADMIN MANAGEMENT */}
-            <Route path="management/admins" element={<FoodSubadmins />} />
-            <Route
-              path="management/admins/create"
-              element={
-                <FoodAdminPermissionRoute resource="subadmins" action="write">
-                  <FoodSubadminCreate />
-                </FoodAdminPermissionRoute>
-              }
-            />
-            <Route
-              path="management/admins/edit/:id"
-              element={
-                <FoodAdminPermissionRoute resource="subadmins" action="write">
-                  <FoodSubadminCreate />
-                </FoodAdminPermissionRoute>
-              }
-            />
+            <Route path="dining-requests" element={<DiningRequests />} />
+            <Route path="customization-settings" element={<CustomizationSettings />} />
+            <Route path="archived-accounts" element={<ArchivedAccounts />} />
           </Route>
 
-          {/* TAXI ADMIN - Redirect to integrated taxi admin */}
+          {/* TAXI ADMIN - Hello Parth taxi admin */}
           <Route path="taxi/*" element={<Navigate to="/taxi/admin/dashboard" replace />} />
+
+          {/* QUICK COMMERCE ADMIN - Placeholder for future implementation */}
+          <Route path="quick-commerce/*" element={<div className="p-8 text-center text-gray-500 bg-white min-h-[50vh] flex items-center justify-center border rounded-xl m-4">Quick Commerce Administration - Coming Soon</div>} />
         </Route>
 
         {/* Redirect unknown admin routes to food admin */}

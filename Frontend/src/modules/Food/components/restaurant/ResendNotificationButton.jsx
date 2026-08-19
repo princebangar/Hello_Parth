@@ -22,9 +22,10 @@ export default function ResendNotificationButton({ orderId, mongoId, onSuccess }
       const response = await restaurantAPI.resendDeliveryNotification(id);
 
       if (response.data?.success) {
-        toast.success(
-          `Notification sent to ${response.data.data?.notifiedCount || 0} delivery partners`,
-        );
+        const notifiedCount = Number(response.data.data?.notifiedCount || 0);
+        const shortlistedCount = Number(response.data.data?.shortlistedCount || 0);
+        const connectedSocketCount = Number(response.data.data?.connectedSocketCount || 0);
+        toast.success("Resend successful");
         // Refresh orders if onSuccess callback is provided
         if (onSuccess) {
            onSuccess();
@@ -64,3 +65,10 @@ export default function ResendNotificationButton({ orderId, mongoId, onSuccess }
     </button>
   );
 }
+
+
+
+
+
+
+

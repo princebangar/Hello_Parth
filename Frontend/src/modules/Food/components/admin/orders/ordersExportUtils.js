@@ -2,6 +2,8 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const formatMoney = (value) => `Rs. ${Number(value || 0).toFixed(2)}`
+
 // Export utility functions for orders
 export const exportToCSV = (orders, filename = "orders") => {
   // Detect order structure
@@ -34,8 +36,12 @@ export const exportToCSV = (orders, filename = "orders") => {
       order.customerName,
       order.customerPhone,
       order.restaurant,
-      order.total || `?${(order.totalAmount || 0).toFixed(2)}`,
-      order.paymentStatus || "",
+      order.total || formatMoney(order.totalAmount || 0),
+      (order.payment?.status === "paid" || order.payment?.status === "captured" || order.payment?.status === "settled" ? "Paid" :
+       order.payment?.status === "cod_pending" ? "COD Pending" :
+       order.payment?.status === "refunded" ? "Refunded" :
+       order.payment?.status === "failed" ? "Failed" :
+       order.paymentStatus || ""),
       order.orderStatus || "",
       order.deliveryType || ""
     ])
@@ -90,7 +96,12 @@ export const exportToExcel = (orders, filename = "orders") => {
     rows = orders.map((order, index) => {
       const originalOrder = order.originalOrder || {}
       const totalAmount = originalOrder.pricing?.total || originalOrder.totalAmount || originalOrder.total || 0
-      const paymentStatus = originalOrder.payment?.status || originalOrder.paymentStatus || 'N/A'
+      const s = String(originalOrder.payment?.status || "").toLowerCase()
+      let paymentStatus = originalOrder.paymentStatus || 'N/A'
+      if (s === "paid" || s === "captured" || s === "settled") paymentStatus = "Paid"
+      else if (s === "cod_pending") paymentStatus = "COD Pending"
+      else if (s === "refunded") paymentStatus = "Refunded"
+      else if (s === "failed") paymentStatus = "Failed"
       
       return [
         order.sl || index + 1,
@@ -103,7 +114,7 @@ export const exportToExcel = (orders, filename = "orders") => {
         order.deliveryBoyName || 'N/A',
         order.deliveryBoyNumber || 'N/A',
         order.status || 'N/A',
-        totalAmount > 0 ? `?${totalAmount.toFixed(2)}` : 'N/A',
+        totalAmount > 0 ? formatMoney(totalAmount) : 'N/A',
         paymentStatus
       ]
     })
@@ -116,8 +127,12 @@ export const exportToExcel = (orders, filename = "orders") => {
       order.customerName || 'N/A',
       order.customerPhone || 'N/A',
       order.restaurant || 'N/A',
-      order.total || `?${(order.totalAmount || 0).toFixed(2)}`,
-      order.paymentStatus || 'N/A',
+      order.total || formatMoney(order.totalAmount || 0),
+      (order.payment?.status === "paid" || order.payment?.status === "captured" || order.payment?.status === "settled" ? "Paid" :
+       order.payment?.status === "cod_pending" ? "COD Pending" :
+       order.payment?.status === "refunded" ? "Refunded" :
+       order.payment?.status === "failed" ? "Failed" :
+       order.paymentStatus || 'N/A'),
       order.orderStatus || 'N/A',
       order.deliveryType || 'N/A'
     ])
@@ -257,7 +272,12 @@ export const exportToPDF = async (orders, filename = "orders") => {
       tableData = orders.map((order, index) => {
         const originalOrder = order.originalOrder || {}
         const totalAmount = originalOrder.pricing?.total || originalOrder.totalAmount || originalOrder.total || 0
-        const paymentStatus = originalOrder.payment?.status || originalOrder.paymentStatus || 'N/A'
+        const s = String(originalOrder.payment?.status || "").toLowerCase()
+        let paymentStatus = originalOrder.paymentStatus || 'N/A'
+        if (s === "paid" || s === "captured" || s === "settled") paymentStatus = "Paid"
+        else if (s === "cod_pending") paymentStatus = "COD Pending"
+        else if (s === "refunded") paymentStatus = "Refunded"
+        else if (s === "failed") paymentStatus = "Failed"
         
         return [
           order.sl || index + 1,
@@ -270,7 +290,7 @@ export const exportToPDF = async (orders, filename = "orders") => {
           order.deliveryBoyName || 'N/A',
           order.deliveryBoyNumber || 'N/A',
           order.status || 'N/A',
-          totalAmount > 0 ? `₹${totalAmount.toFixed(2)}` : 'N/A',
+          totalAmount > 0 ? formatMoney(totalAmount) : 'N/A',
           paymentStatus
         ]
       })
@@ -289,8 +309,12 @@ export const exportToPDF = async (orders, filename = "orders") => {
           order.customerName || 'N/A',
           order.customerPhone || 'N/A',
           order.restaurant || 'N/A',
-          amount ? `₹${Number(amount).toFixed(2)}` : 'N/A',
-          order.paymentStatus || 'N/A',
+          amount ? formatMoney(amount) : 'N/A',
+          (order.payment?.status === "paid" || order.payment?.status === "captured" || order.payment?.status === "settled" ? "Paid" :
+           order.payment?.status === "cod_pending" ? "COD Pending" :
+           order.payment?.status === "refunded" ? "Refunded" :
+           order.payment?.status === "failed" ? "Failed" :
+           order.paymentStatus || 'N/A'),
           order.orderStatus || 'N/A',
           order.deliveryType || 'N/A'
         ]
@@ -346,5 +370,4 @@ export const exportToJSON = (orders, filename = "orders") => {
   link.click()
   document.body.removeChild(link)
 }
-
 

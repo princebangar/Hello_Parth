@@ -144,7 +144,7 @@ const normalizeAppDisplayName = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return 'Hello Parth';
   const lower = raw.toLowerCase();
-  if (lower === 'appzeto' || lower.includes('appzeto') || lower === 'app') {
+  if (lower === 'helloparth' || lower.includes('helloparth') || lower === 'app') {
     return 'Hello Parth';
   }
   return raw;
@@ -184,21 +184,19 @@ export const SettingsProvider = ({ children }) => {
   useEffect(() => {
     document.title = normalizeAppDisplayName(settings.general?.app_name);
 
-    const favicon = settings.general?.favicon || settings.customization?.favicon;
-    if (favicon) {
-      const href = buildFaviconHref(favicon);
-      const type = getFaviconType(favicon);
+    const favicon = settings.general?.favicon || settings.customization?.favicon || '/assets/images/Hello Parth Logo.png';
+    const href = buildFaviconHref(favicon);
+    const type = getFaviconType(favicon);
 
-      const iconLink = ensureHeadLink("link[rel='icon']", 'icon');
-      const shortcutIconLink = ensureHeadLink("link[rel='shortcut icon']", 'shortcut icon');
-      const appleTouchIconLink = ensureHeadLink("link[rel='apple-touch-icon']", 'apple-touch-icon');
+    const iconLink = ensureHeadLink("link[rel='icon']", 'icon');
+    const shortcutIconLink = ensureHeadLink("link[rel='shortcut icon']", 'shortcut icon');
+    const appleTouchIconLink = ensureHeadLink("link[rel='apple-touch-icon']", 'apple-touch-icon');
 
-      [iconLink, shortcutIconLink, appleTouchIconLink].forEach((link) => {
-        link.href = href;
-        link.type = type;
-        link.sizes = '64x64';
-      });
-    }
+    [iconLink, shortcutIconLink, appleTouchIconLink].forEach((link) => {
+      link.href = href;
+      link.type = type;
+      link.sizes = '64x64';
+    });
 
     return () => {
       if (activeFaviconObjectUrl) {

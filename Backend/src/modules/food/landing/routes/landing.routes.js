@@ -3,6 +3,7 @@ import { upload } from '../../../../middleware/upload.js';
 import {
     listHeroBannersController,
     uploadHeroBannersController,
+    linkRestaurantsToHeroBannerController,
     deleteHeroBannerController,
     updateHeroBannerOrderController,
     toggleHeroBannerStatusController
@@ -22,14 +23,6 @@ import {
     toggleDiningBannerStatusController
 } from '../controllers/diningBanner.controller.js';
 import {
-    listHomePromotionBannersController,
-    createHomePromotionBannerController,
-    updateHomePromotionBannerController,
-    deleteHomePromotionBannerController,
-    toggleHomePromotionBannerStatusController,
-    updateHomePromotionBannerOrderController
-} from '../controllers/homePromotionBanner.controller.js';
-import {
     getAdminLandingSettingsController,
     updateAdminLandingSettingsController
 } from '../controllers/landingSettings.controller.js';
@@ -46,11 +39,16 @@ import {
     getPublicUnder250BannersController,
     getPublicDiningBannersController,
     getPublicExploreIconsController,
-    getPublicHomePromotionBannersController,
     getPublicGourmetController,
     getPublicLandingSettingsController
 } from '../controllers/publicLanding.controller.js';
 import { detectZonePublicController, listZonesPublicController, listZonesNearbyPublicController } from '../controllers/zonePublic.controller.js';
+import {
+    reverseGeocodePublicController,
+    geocodePlacePublicController,
+    nearbyPlacesPublicController,
+    textSearchPlacesPublicController,
+} from '../controllers/geocodePublic.controller.js';
 import { getPublicEnvController } from '../controllers/publicEnv.controller.js';
 import {
     listGourmetAdmin,
@@ -69,7 +67,7 @@ router.get('/pages/:key', getPublicPageController);
 // Public referral settings (no auth required).
 router.get('/referral-settings', getPublicReferralSettingsController);
 
-// Admin hero banner management
+// Admin hero banner management (DEV: auth temporarily disabled for faster integration)
 router.get('/hero-banners', listHeroBannersController);
 router.post(
     '/hero-banners/multiple',
@@ -79,6 +77,7 @@ router.post(
 router.delete('/hero-banners/:id', deleteHeroBannerController);
 router.patch('/hero-banners/:id/order', updateHeroBannerOrderController);
 router.patch('/hero-banners/:id/status', toggleHeroBannerStatusController);
+router.patch('/hero-banners/:id/link-restaurants', linkRestaurantsToHeroBannerController);
 
 // Admin under 250 banners
 router.get('/hero-banners/under-250', listUnder250BannersController);
@@ -101,18 +100,6 @@ router.post(
 router.delete('/hero-banners/dining/:id', deleteDiningBannerController);
 router.patch('/hero-banners/dining/:id/order', updateDiningBannerOrderController);
 router.patch('/hero-banners/dining/:id/status', toggleDiningBannerStatusController);
-
-// Admin Home Promotion banners
-router.get('/hero-banners/home-promotion', listHomePromotionBannersController);
-router.post(
-    '/hero-banners/home-promotion',
-    upload.single('file'),
-    createHomePromotionBannerController
-);
-router.patch('/hero-banners/home-promotion/:id', updateHomePromotionBannerController);
-router.delete('/hero-banners/home-promotion/:id', deleteHomePromotionBannerController);
-router.patch('/hero-banners/home-promotion/:id/status', toggleHomePromotionBannerStatusController);
-router.patch('/hero-banners/home-promotion/:id/order', updateHomePromotionBannerOrderController);
 
 // Admin Explore More (icons)
 router.get('/hero-banners/landing/explore-more', listExploreMoreController);
@@ -142,15 +129,20 @@ router.get('/hero-banners/public', getPublicHeroBannersController);
 router.get('/hero-banners/under-250/public', getPublicUnder250BannersController);
 router.get('/hero-banners/dining/public', getPublicDiningBannersController);
 router.get('/explore-icons/public', getPublicExploreIconsController);
-router.get('/hero-banners/home-promotion/public', getPublicHomePromotionBannersController);
 router.get('/hero-banners/gourmet/public', getPublicGourmetController);
 router.get('/landing/settings/public', getPublicLandingSettingsController);
 router.get('/zones/detect', detectZonePublicController);
 router.get('/zones/nearby', listZonesNearbyPublicController);
 router.get('/zones/public', listZonesPublicController);
+// Geocode proxies — API key stays on the server
+router.get('/geocode/reverse', reverseGeocodePublicController);
+router.get('/geocode/place', geocodePlacePublicController);
+router.post('/geocode/nearby', nearbyPlacesPublicController);
+router.post('/geocode/text-search', textSearchPlacesPublicController);
 router.get('/public/env', getPublicEnvController);
-// Admin landing settings
+// Admin landing settings (old paths used by admin UI)
 router.get('/hero-banners/landing/settings', getAdminLandingSettingsController);
 router.patch('/hero-banners/landing/settings', updateAdminLandingSettingsController);
 
 export default router;
+

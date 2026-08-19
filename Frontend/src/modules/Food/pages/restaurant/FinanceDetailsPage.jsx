@@ -187,7 +187,7 @@ export default function FinanceDetailsPage() {
                 {isActive && (
                   <motion.div
                     layoutId="financeTopTabActive"
-                    className="absolute inset-0 bg-black rounded-full -z-10"
+                    className="absolute inset-0 bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-full -z-10"
                     initial={false}
                     transition={{
                       type: "spring",
@@ -459,7 +459,7 @@ export default function FinanceDetailsPage() {
                               </div>
                               <div className="flex items-center justify-between py-2 border-t border-dashed border-gray-200">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-sm text-gray-700">GST paid by Hello Parth on behalf of the restaurant u/s 9(5) of GST</span>
+                                  <span className="text-sm text-gray-700">GST paid by Zomato on behalf of the restaurant u/s 9(5) of GST</span>
                                   <Info className="w-3.5 h-3.5 text-gray-400" />
                                 </div>
                                 <span className="text-sm font-medium text-gray-900">
@@ -582,7 +582,7 @@ export default function FinanceDetailsPage() {
               </p>
               <button
                 onClick={() => setShowDownloadPopup(false)}
-                className="w-full py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                className="w-full py-3 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
               >
                 Close
               </button>
@@ -623,7 +623,7 @@ export default function FinanceDetailsPage() {
               </p>
               <button
                 onClick={() => setShowEmailPopup(false)}
-                className="w-full py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                className="w-full py-3 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
               >
                 Close
               </button>
@@ -634,3 +634,10 @@ export default function FinanceDetailsPage() {
     </div>
   )
 }
+
+
+
+
+
+
+

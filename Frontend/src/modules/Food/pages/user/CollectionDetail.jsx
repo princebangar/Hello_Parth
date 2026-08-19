@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Link, useParams, useNavigate } from "react-router-dom"
 import { ArrowLeft, Share2, Trash2, Heart, Star, Clock, MapPin } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
@@ -8,12 +8,13 @@ import { Button } from "@food/components/ui/button"
 import { Badge } from "@food/components/ui/badge"
 import { useProfile } from "@food/context/ProfileContext"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
+import { filterRestaurantsForVegMode } from "@food/utils/vegMode"
 
 export default function CollectionDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
-  const { getFavorites, removeFavorite } = useProfile()
+  const { favorites, removeFavorite, vegMode, vegModeOption } = useProfile()
   
   // Mock collection data - in real app, fetch from API based on id
   const [collection, setCollection] = useState({
@@ -24,9 +25,10 @@ export default function CollectionDetail() {
     items: []
   })
 
-  // For now, use favorites as collection items
-  // In real app, fetch collection items from API
-  const favorites = getFavorites()
+  const visibleFavorites = useMemo(
+    () => filterRestaurantsForVegMode(favorites || [], { vegMode, vegModeOption }),
+    [favorites, vegMode, vegModeOption],
+  )
   
   useEffect(() => {
     // In real app, fetch collection data from API
@@ -34,11 +36,11 @@ export default function CollectionDetail() {
     setCollection(prev => ({
       ...prev,
       name: `Collection ${id}`,
-      items: favorites,
-      restaurants: favorites.length,
+      items: visibleFavorites,
+      restaurants: visibleFavorites.length,
       dishes: 0
     }))
-  }, [id, favorites])
+  }, [id, visibleFavorites])
 
   const handleRemoveItem = (e, slug) => {
     e.preventDefault()
@@ -76,7 +78,7 @@ export default function CollectionDetail() {
               <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground text-lg mb-4">This collection is empty</p>
               <Link to="/user">
-                <Button className="bg-gradient-to-r bg-primary-orange hover:opacity-90 text-white">
+                <Button className="bg-gradient-to-r bg-[#DC2626] hover:opacity-90 text-white">
                   Explore Restaurants
                 </Button>
               </Link>
@@ -143,7 +145,7 @@ export default function CollectionDetail() {
                       <h3 className="text-lg font-bold line-clamp-1 flex-1">{restaurant.name}</h3>
                       <div className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded-lg ml-2">
                         <Star className="h-3 w-3 fill-white" />
-                        <span className="text-sm font-bold">{restaurant.rating ? Number(restaurant.rating).toFixed(1) : "NEW"}</span>
+                        <span className="text-sm font-bold">{restaurant.rating || "4.5"}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">

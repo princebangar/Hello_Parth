@@ -8,7 +8,7 @@ const foodOfferSchema = new mongoose.Schema(
         customerScope: { type: String, enum: ['all', 'first-time'], default: 'all', index: true },
         restaurantScope: { type: String, enum: ['all', 'selected'], default: 'all', index: true },
         restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodRestaurant' },
-        minOrderValue: { type: Number, default: 0, min: 0 },
+        minOrderValue: { type: Number, default: null, min: 0 },
         maxDiscount: { type: Number, default: null, min: 0 },
         usageLimit: { type: Number, default: null, min: 0 },
         perUserLimit: { type: Number, default: null, min: 0 },
@@ -18,7 +18,7 @@ const foodOfferSchema = new mongoose.Schema(
         endDate: { type: Date },
         status: { type: String, enum: ['active', 'paused', 'inactive'], default: 'active', index: true },
         showInCart: { type: Boolean, default: true },
-        createdByRole: { type: String, enum: ['ADMIN', 'RESTAURANT'], default: 'ADMIN', index: true }
+        couponType: { type: String, enum: ['delivery', 'takeaway', 'all'], default: 'all', index: true }
     },
     { collection: 'food_offers', timestamps: true }
 );

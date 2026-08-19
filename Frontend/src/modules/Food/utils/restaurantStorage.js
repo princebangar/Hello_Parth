@@ -1,10 +1,10 @@
-﻿// Utility for managing restaurant data across pages
+// Utility for managing restaurant data across pages
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
-const STORAGE_KEY = "eqosy_restaurants"
+const STORAGE_KEY = "helloparth_restaurants"
 
 // Get restaurants from localStorage
 export const getRestaurants = () => {
@@ -68,6 +68,5 @@ export const deleteRestaurant = (id) => {
   saveRestaurants(updatedRestaurants)
   return true
 }
-
 
 

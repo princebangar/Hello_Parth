@@ -1,5 +1,5 @@
-export const LOCATION_STORAGE_KEY = 'eqosy:lastLocation';
-export const LOCATION_UPDATED_EVENT = 'eqosy:location-updated';
+export const LOCATION_STORAGE_KEY = 'helloparth:lastLocation';
+export const LOCATION_UPDATED_EVENT = 'helloparth:location-updated';
 
 export const DEFAULT_LOCATION_LABEL = 'Choose your location';
 export const DEFAULT_LOCATION_COORDS = [78.4867, 17.385];

@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"
 import { authAPI, userAPI } from "@food/api"
+import { normalizeImageUrl } from "@food/utils/common"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 const ProfileContext = createContext(null)
-const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "food-under-250-filters"]
+const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "userVegModeOption", "userOrderType", "food-under-250-filters"]
 
 export function ProfileProvider({ children }) {
   const getAddressId = (address) => address?.id || address?._id || null
@@ -58,7 +59,10 @@ export function ProfileProvider({ children }) {
   
   const [loading, setLoading] = useState(true)
 
-  const [addresses, setAddresses] = useState([])
+  const [addresses, setAddresses] = useState(() => {
+    const saved = localStorage.getItem("userAddresses")
+    return saved ? JSON.parse(saved) : []
+  })
 
   const [paymentMethods, setPaymentMethods] = useState(() => {
     const saved = localStorage.getItem("userPaymentMethods")
@@ -81,6 +85,32 @@ export function ProfileProvider({ children }) {
     const saved = localStorage.getItem("userVegMode")
     // Default to false (OFF) if not set
     return saved !== null ? saved === "true" : false
+  })
+
+  // Veg filter scope: "all" restaurants (veg dishes only) vs "pure-veg" restaurants only
+  const [vegModeOption, setVegModeOptionState] = useState(() => {
+    try {
+      const saved = localStorage.getItem("userVegModeOption")
+      return saved === "pure-veg" ? "pure-veg" : "all"
+    } catch {
+      return "all"
+    }
+  })
+
+  const setVegModeOption = useCallback((next) => {
+    const normalized = next === "pure-veg" ? "pure-veg" : "all"
+    try {
+      localStorage.setItem("userVegModeOption", normalized)
+    } catch {
+      // ignore
+    }
+    setVegModeOptionState(normalized)
+  }, [])
+
+  // orderType state - stored in localStorage for persistence
+  const [orderType, _setOrderType] = useState(() => {
+    const saved = localStorage.getItem("userOrderType")
+    return (saved && ["delivery", "dining", "takeaway"].includes(saved)) ? saved : "delivery"
   })
 
   // Helper to check if authenticated
@@ -125,6 +155,20 @@ export function ProfileProvider({ children }) {
     }
   }, [vegMode, isAuthenticated])
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      localStorage.setItem("userVegModeOption", vegModeOption)
+    }
+  }, [vegModeOption, isAuthenticated])
+
+  // Wrap setOrderType to SYNCHRONOUSLY save to localStorage before React re-render
+  const setOrderType = (newType) => {
+    if (["delivery", "dining", "takeaway"].includes(newType)) {
+      localStorage.setItem("userOrderType", newType)
+      _setOrderType(newType)
+    }
+  }
+
   // Fetch user profile and addresses from API on mount and when authentication changes
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -139,6 +183,7 @@ export function ProfileProvider({ children }) {
         setFavorites([])
         setDishFavorites([])
         setVegMode(false)
+        setVegModeOptionState("all")
         USER_SESSION_PREFERENCE_KEYS.forEach((key) => {
           localStorage.removeItem(key)
         })
@@ -154,10 +199,36 @@ export function ProfileProvider({ children }) {
         const userData = response?.data?.data?.user || response?.data?.user || response?.data
         
         if (userData) {
-          setUserProfile(userData)
-          // Update localStorage
-          localStorage.setItem("user_user", JSON.stringify(userData))
-          localStorage.setItem("userProfile", JSON.stringify(userData))
+          setUserProfile((prev) => {
+            // Background pre-fetching for smooth avatar transition
+            if (prev?.localImagePreview && userData.profileImage) {
+              const img = new Image();
+              img.src = normalizeImageUrl(userData.profileImage);
+              img.onload = () => {
+                setUserProfile((current) => {
+                  if (current?.profileImage === userData.profileImage && current?.localImagePreview) {
+                    const cleaned = {
+                      ...current,
+                      localImagePreview: undefined
+                    };
+                    localStorage.setItem("user_user", JSON.stringify(cleaned));
+                    localStorage.setItem("userProfile", JSON.stringify(cleaned));
+                    return cleaned;
+                  }
+                  return current;
+                });
+              };
+            }
+
+            const mergedData = {
+              ...userData,
+              localImagePreview: prev?.localImagePreview
+            };
+            // Update localStorage
+            localStorage.setItem("user_user", JSON.stringify(mergedData));
+            localStorage.setItem("userProfile", JSON.stringify(mergedData));
+            return mergedData;
+          });
         }
 
         // Fetch addresses
@@ -272,12 +343,96 @@ export function ProfileProvider({ children }) {
 
   const setDefaultAddress = useCallback(async (id) => {
     // Optimistic UI update first
-    setAddresses((prev) =>
-      prev.map((addr) => ({
+    setAddresses((prev) => {
+      const updatedAddresses = prev.map((addr) => ({
         ...addr,
         isDefault: String(getAddressId(addr)) === String(id),
       }))
-    )
+
+      const selectedAddress =
+        updatedAddresses.find((addr) => addr.isDefault) || updatedAddresses[0]
+
+      let syncedLocation = null;
+      if (selectedAddress) {
+        const coordinates = selectedAddress?.location?.coordinates
+        const lngFromCoords =
+          Array.isArray(coordinates) && coordinates.length >= 2
+            ? Number(coordinates[0])
+            : null
+        const latFromCoords =
+          Array.isArray(coordinates) && coordinates.length >= 2
+            ? Number(coordinates[1])
+            : null
+        const lat = Number(
+          Number.isFinite(latFromCoords)
+            ? latFromCoords
+            : selectedAddress?.latitude ?? selectedAddress?.lat,
+        )
+        const lng = Number(
+          Number.isFinite(lngFromCoords)
+            ? lngFromCoords
+            : selectedAddress?.longitude ?? selectedAddress?.lng,
+        )
+
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          let existingLocation = {}
+          try {
+            const raw = localStorage.getItem("userLocation")
+            existingLocation = raw ? JSON.parse(raw) || {} : {}
+          } catch {
+            existingLocation = {}
+          }
+
+          const parts = [
+            selectedAddress?.additionalDetails,
+            selectedAddress?.street,
+            selectedAddress?.city,
+            selectedAddress?.state,
+            selectedAddress?.zipCode,
+          ].filter(Boolean)
+
+          const resolvedAddress =
+            parts.length > 0
+              ? parts.join(", ")
+              : selectedAddress?.formattedAddress || selectedAddress?.address || ""
+
+          syncedLocation = {
+            ...existingLocation,
+            latitude: lat,
+            longitude: lng,
+            area:
+              selectedAddress?.additionalDetails ||
+              selectedAddress?.street ||
+              selectedAddress?.area ||
+              existingLocation?.area ||
+              "",
+            city: selectedAddress?.city || existingLocation?.city || "",
+            state: selectedAddress?.state || existingLocation?.state || "",
+            address: resolvedAddress || existingLocation?.address || "",
+            formattedAddress:
+              resolvedAddress || existingLocation?.formattedAddress || "",
+          }
+        }
+      }
+
+      // Defer side effects to avoid "updating component while rendering another" error
+      setTimeout(() => {
+        localStorage.setItem("userAddresses", JSON.stringify(updatedAddresses))
+        localStorage.setItem("deliveryAddressMode", "saved")
+        window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
+
+        if (syncedLocation) {
+          localStorage.setItem("userLocation", JSON.stringify(syncedLocation))
+          window.dispatchEvent(
+            new CustomEvent("userLocationUpdated", {
+              detail: { location: syncedLocation },
+            }),
+          )
+        }
+      }, 0)
+
+      return updatedAddresses
+    })
 
     try {
       await userAPI.setDefaultAddress(id)
@@ -406,6 +561,10 @@ export function ProfileProvider({ children }) {
       favorites,
       vegMode,
       setVegMode,
+      vegModeOption,
+      setVegModeOption,
+      orderType,
+      setOrderType,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -427,6 +586,7 @@ export function ProfileProvider({ children }) {
       removeDishFavorite,
       isDishFavorite,
       getDishFavorites,
+      isAuthenticated,
     }),
     [
       userProfile,
@@ -438,6 +598,10 @@ export function ProfileProvider({ children }) {
       dishFavorites,
       vegMode,
       setVegMode,
+      vegModeOption,
+      setVegModeOption,
+      orderType,
+      setOrderType,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -458,6 +622,7 @@ export function ProfileProvider({ children }) {
       removeDishFavorite,
       isDishFavorite,
       getDishFavorites,
+      isAuthenticated,
     ]
   )
 
@@ -499,7 +664,12 @@ export function useProfile() {
       isDishFavorite: () => false,
       getDishFavorites: () => [],
       vegMode: false,
-      setVegMode: () => debugWarn("ProfileProvider not available")
+      setVegMode: () => debugWarn("ProfileProvider not available"),
+      vegModeOption: "all",
+      setVegModeOption: () => debugWarn("ProfileProvider not available"),
+      orderType: "delivery",
+      setOrderType: () => debugWarn("ProfileProvider not available"),
+      isAuthenticated: false
     }
   }
   return context

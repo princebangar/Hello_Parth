@@ -8,7 +8,9 @@ import {
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { uploadAPI } from '@food/api';
 import { toast } from 'sonner';
-import { openCamera } from "@food/utils/imageUploadUtils";
+import { showUserFacingApiError } from '@/shared/utils/apiError';
+import { formatTripDistanceKm } from '@/modules/DeliveryV2/hooks/useProximityCheck';
+import { openCamera, openGallery } from "@food/utils/imageUploadUtils";
 
 /**
  * PickupActionModal - Unified White/Green Theme with Slider Actions.
@@ -42,7 +44,7 @@ export const PickupActionModal = ({
 
     setIsUploadingBill(true);
     try {
-      const res = await uploadAPI.uploadMedia(file, { folder: 'hello-parth/delivery/bills' });
+      const res = await uploadAPI.uploadMedia(file, { folder: 'helloparth/delivery/bills' });
       if (res?.data?.success && res?.data?.data) {
         setBillImageUrl(res.data.data.url || res.data.data.secure_url);
         setBillImageUploaded(true);
@@ -51,7 +53,7 @@ export const PickupActionModal = ({
         throw new Error('Upload failed');
       }
     } catch (err) {
-      toast.error('Failed to upload bill image');
+      showUserFacingApiError(err, 'Failed to upload bill image');
       setBillImageUploaded(false);
       setBillImageUrl(null);
     } finally {
@@ -67,270 +69,292 @@ export const PickupActionModal = ({
   }
 
   const handlePickFromGallery = () => {
-    cameraInputRef.current?.click()
+    openGallery({
+      onSelectFile: handleBillImageSelect,
+      fileNamePrefix: `bill-${order.orderId || order._id}`,
+      fallbackInputRef: cameraInputRef,
+    })
   }
 
   const isAtPickup = status === 'REACHED_PICKUP';
-  const displayOrderId = order.order_id || order.orderId || order.displayOrderId || order.orderMongoId || (order._id ? String(order._id).slice(-6) : null);
-  const restaurantName = order.restaurantName || order.restaurant_name || order.restaurantId?.restaurantName || order.restaurantId?.name || 'Restaurant';
-  const restLoc = order.restaurantLocation || order.restaurantId?.location || {};
-  const restLat = order.restaurant_lat || order.restaurantLat || restLoc.latitude || restLoc.lat || (Array.isArray(restLoc.coordinates) ? restLoc.coordinates[1] : null);
-  const restLng = order.restaurant_lng || order.restaurantLng || restLoc.longitude || restLoc.lng || (Array.isArray(restLoc.coordinates) ? restLoc.coordinates[0] : null);
-  const restaurantAddress = order.restaurantAddress || order.restaurant_address || restLoc.address || restLoc.formattedAddress || [order.restaurantId?.addressLine1, order.restaurantId?.area, order.restaurantId?.city].filter(Boolean).join(', ') || 'Address not available';
+  const restaurant = order.restaurantId || order.restaurant || {};
+  const restaurantName =
+    order.restaurantName ||
+    order.restaurant_name ||
+    restaurant.restaurantName ||
+    restaurant.name ||
+    'Restaurant';
+  const restaurantAddress =
+    order.restaurantAddress ||
+    order.restaurant_address ||
+    order.restaurantLocation?.address ||
+    [restaurant.addressLine1, restaurant.addressLine2, restaurant.area, restaurant.city, restaurant.state, restaurant.pincode]
+      .filter(Boolean)
+      .join(', ') ||
+    restaurant.location?.address ||
+    '';
   const restaurantPhone =
     order.restaurantPhone ||
     order.restaurant_phone ||
-    order.restaurantId?.phone ||
-    order.restaurantId?.ownerPhone ||
+    restaurant.primaryContactNumber ||
+    restaurant.ownerPhone ||
+    restaurant.phone ||
     '';
+  const restaurantCoords = order.restaurantLocation || null;
   const items = order.items || [];
-  const restaurantLogo = order.restaurantImage || order.restaurant?.logo || order.restaurant?.profileImage || 'https://cdn-icons-png.flaticon.com/512/3170/3170733.png';
+  const restaurantLogo =
+    order.restaurantImage ||
+    restaurant.profileImage ||
+    restaurant.logo ||
+    order.restaurant?.logo ||
+    order.restaurant?.profileImage ||
+    'https://cdn-icons-png.flaticon.com/512/3170/3170733.png';
+
+  const customerName =
+    order.customerName ||
+    order.userId?.name ||
+    order.user?.name ||
+    order.deliveryAddress?.fullName ||
+    order.deliveryAddress?.name ||
+    'Customer';
+
+  const customerPhone =
+    order.customerPhone ||
+    order.userPhone ||
+    order.userId?.phone ||
+    order.user?.phone ||
+    order.deliveryAddress?.phone ||
+    '';
+
+  const customerAddress =
+    order.customerAddress ||
+    order.customer_address ||
+    [
+      order.deliveryAddress?.street,
+      order.deliveryAddress?.additionalDetails,
+      order.deliveryAddress?.landmark,
+      order.deliveryAddress?.area,
+      order.deliveryAddress?.city,
+      order.deliveryAddress?.state,
+      order.deliveryAddress?.zipCode || order.deliveryAddress?.pincode,
+    ]
+      .map((v) => String(v || '').trim())
+      .filter(Boolean)
+      .join(', ') ||
+    '';
+
+  const customerLocation = order.customerLocation || order.deliveryLocation || null;
+
+  const handleCallRestaurant = () => {
+    const num = String(restaurantPhone || '').replace(/\D/g, '');
+    if (!num) {
+      toast.error('Restaurant number not available');
+      return;
+    }
+    window.location.href = `tel:${num}`;
+  };
 
   const handleNavigateToRestaurant = () => {
-    let navUrl = '';
-    if (restLat && restLng && !isNaN(Number(restLat)) && !isNaN(Number(restLng))) {
-      navUrl = `https://www.google.com/maps/dir/?api=1&destination=${restLat},${restLng}`;
-    } else if (restaurantAddress && restaurantAddress !== 'Address not available') {
-      navUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurantAddress + ', ' + restaurantName)}`;
+    const lat = parseFloat(restaurantCoords?.lat ?? restaurantCoords?.latitude);
+    const lng = parseFloat(restaurantCoords?.lng ?? restaurantCoords?.longitude);
+    let mapsUrl;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+    } else if (restaurantAddress) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurantAddress)}&travelmode=driving`;
     } else {
-      navUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurantName)}`;
+      toast.error('Restaurant location not available');
+      return;
     }
-    window.open(navUrl, '_blank');
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCallCustomer = () => {
+    const num = String(customerPhone || '').replace(/\D/g, '');
+    if (!num) {
+      toast.error('Customer number not available');
+      return;
+    }
+    window.location.href = `tel:${num}`;
+  };
+
+  const handleNavigateToCustomer = () => {
+    const lat = parseFloat(customerLocation?.lat ?? customerLocation?.latitude);
+    const lng = parseFloat(customerLocation?.lng ?? customerLocation?.longitude);
+    let mapsUrl;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+    } else if (customerAddress) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(customerAddress)}&travelmode=driving`;
+    } else {
+      toast.error('Customer location not available');
+      return;
+    }
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <div className="absolute inset-0 z-[110] flex items-end justify-center">
+    <div className="fixed inset-0 z-110 p-0 sm:p-4 flex items-end justify-center">
       {/* Background Dim */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm -z-10"
+        className="absolute inset-0 bg-black/40 -z-10"
       />
 
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="w-full max-w-lg bg-white rounded-t-[3.5rem] shadow-[0_-25px_80px_rgba(0,0,0,0.5)] flex flex-col max-h-[88vh] overflow-hidden"
+        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 max-h-[84vh] overflow-y-auto"
       >
         {/* Handle / Minimize */}
-        <div className="w-full flex justify-center py-3 bg-white relative z-20">
-          <button 
-            onClick={onMinimize} 
-            className="w-12 h-1.5 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors active:scale-95"
-            aria-label="Minimize"
-          />
+        <div className="w-full flex justify-center pb-2 sm:pb-4 pt-1">
+          <button onClick={onMinimize} className="p-1 hover:bg-gray-100 active:scale-95 transition-all rounded-full flex flex-col items-center">
+             <ChevronDown className="w-6 h-6 text-gray-400 stroke-3" />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          {/* Restaurant Header */}
-          <div className="p-8 pb-6">
-            <div className="flex items-start justify-between mb-6 pb-6 border-b border-gray-50">
-              <div className="flex gap-4">
-                <div className="w-16 h-16 bg-white rounded-[1.5rem] flex items-center justify-center shadow-xl shadow-black/5 overflow-hidden border border-gray-100 ring-4 ring-gray-50">
-                  <img src={restaurantLogo} alt="Logo" className="w-full h-full object-cover" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <h3 className="text-gray-950 text-2xl font-black tracking-tight leading-none">{restaurantName}</h3>
-                    {displayOrderId && (
-                      <span className="bg-gray-100 text-gray-800 text-xs font-black px-2.5 py-1 rounded-lg border border-gray-200 shrink-0">
-                        #{displayOrderId}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isAtPickup ? (
-                      <div className="bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                        <span className="text-emerald-600 text-[10px] font-black uppercase tracking-widest">At Restaurant ✓</span>
-                      </div>
-                    ) : (
-                      <div className="bg-orange-50 px-3 py-1 rounded-full border border-orange-100">
-                        <span className="text-orange-600 text-[10px] font-black uppercase tracking-widest">
-                          {(distanceToTarget / 1000).toFixed(1)} km • {eta || '--'} min
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+        {/* Restaurant Header Card */}
+        <div className="flex items-start justify-between mb-4 pb-4 border-b border-gray-100">
+          <div className="flex gap-3 sm:gap-4 min-w-0 flex-1">
+            <div className="w-13 h-13 sm:w-14 sm:h-14 bg-white rounded-2xl flex items-center justify-center shadow-md overflow-hidden border border-gray-100 shrink-0">
+              <img src={restaurantLogo} alt="Logo" className="w-full h-full object-cover" />
+            </div>
+            <div className="min-w-0 flex-1 pr-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-green-600">
+                <ChefHat className="w-3.5 h-3.5" />
+                <span>Restaurant Pickup</span>
               </div>
-
-              <div className="flex gap-2.5">
-                {restaurantPhone && (
-                  <button
-                    onClick={() => window.location.href = `tel:${restaurantPhone}`}
-                    className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors active:scale-90"
-                  >
-                    <Phone className="w-5 h-5" />
-                  </button>
+              <h3 className="text-gray-950 text-base sm:text-lg font-bold leading-tight truncate mt-0.5">{restaurantName}</h3>
+              {restaurantAddress ? (
+                <p className="text-gray-500 text-xs font-medium mt-0.5 leading-snug line-clamp-2">
+                  {restaurantAddress}
+                </p>
+              ) : null}
+              <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mt-1">
+                {isAtPickup ? (
+                  <span className="text-green-600 font-extrabold">Reached Location √</span>
+                ) : (
+                  <span className="text-orange-500">
+                    {formatTripDistanceKm(distanceToTarget) === '--'
+                      ? 'Locating restaurant…'
+                      : `${formatTripDistanceKm(distanceToTarget)} km • ${eta || '--'} min to Store`}
+                  </span>
                 )}
-                <button 
-                  onClick={handleNavigateToRestaurant}
-                  className="w-11 h-11 rounded-2xl bg-gray-950 flex items-center justify-center text-white shadow-xl hover:bg-gray-800 transition-colors active:scale-90"
-                  title="Navigate to Restaurant on Google Maps"
-                >
-                  <Navigation className="w-5 h-5" />
-                </button>
-              </div>
+              </p>
             </div>
+          </div>
 
-            {/* Content Area */}
-            <div className="space-y-4">
-              {/* Real-time Food Preparation Status Banner */}
-              {(() => {
-                const normalizedStatus = String(order?.orderStatus || order?.status || order?.deliveryState?.currentPhase || '').toLowerCase();
-                const isFoodReady = 
-                  normalizedStatus === 'ready_for_pickup' || 
-                  normalizedStatus === 'ready' || 
-                  normalizedStatus === 'at_pickup' ||
-                  normalizedStatus === 'reached_pickup' ||
-                  Boolean(order?.isFoodReady) || 
-                  Boolean(order?.deliveryState?.isFoodReady);
-
-                return (
-                  <div className={`p-4 rounded-[2rem] border transition-all ${
-                    isFoodReady 
-                      ? 'bg-emerald-50/90 border-emerald-200 shadow-sm' 
-                      : 'bg-amber-50/90 border-amber-200 shadow-sm'
-                  }`}>
-                    <div className="flex items-start gap-3.5">
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md ${
-                        isFoodReady ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white animate-pulse'
-                      }`}>
-                        {isFoodReady ? <CheckCircle2 className="w-5 h-5" /> : <ChefHat className="w-5 h-5" />}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className={`text-xs font-black uppercase tracking-widest ${
-                            isFoodReady ? 'text-emerald-800' : 'text-amber-800'
-                          }`}>
-                            {isFoodReady ? '🟢 Food Ready for Pickup' : '🟠 Food Preparation in Progress'}
-                          </p>
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                            isFoodReady ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-amber-100 border-amber-300 text-amber-800'
-                          }`}>
-                            {isFoodReady ? 'Ready' : 'Preparing'}
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-gray-700 mt-1 leading-relaxed">
-                          {isFoodReady 
-                            ? 'Your order is ready. Please collect the order from the restaurant.'
-                            : 'The restaurant is still preparing your order. You can wait outside until the order is marked ready.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-              {/* Delivery Instructions (User Note) */}
-              {order?.note && (
-                <div className="bg-orange-50/50 border border-orange-100 rounded-[2rem] p-5 flex gap-4 items-start relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <ChefHat className="w-12 h-12 text-orange-500" />
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
-                    <ChefHat className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-1.5">User Note</p>
-                    <p className="text-sm font-bold text-gray-800 leading-relaxed italic">"{order.note}"</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Order Items Summary */}
-              <div className="space-y-4">
-                <button 
-                  onClick={() => setShowItems(!showItems)}
-                  className="w-full flex items-center justify-between p-5 bg-gray-50/80 rounded-[2rem] border border-gray-100 hover:bg-gray-100 transition-all group"
-                >
-                  <div className="flex items-center gap-4 text-gray-900">
-                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-gray-400 group-hover:text-blue-500 transition-colors">
-                      <Package className="w-5 h-5" />
-                    </div>
-                    <div className="text-left">
-                      <span className="block text-[11px] font-black uppercase tracking-widest text-gray-400">Order Contents</span>
-                      <span className="text-sm font-black tracking-tight">{items.length || 0} Items Reserved</span>
-                    </div>
-                  </div>
-                  {showItems ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronUp className="w-5 h-5 text-gray-400" />}
-                </button>
-
-                <AnimatePresence>
-                  {showItems && (
-                    <motion.div 
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden space-y-2 px-2"
-                    >
-                      {items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-4 bg-gray-50/30 rounded-2xl border border-gray-50">
-                          <span className="text-gray-800 text-sm font-bold uppercase tracking-tight">{item.name || 'Item Name'}</span>
-                          <span className="text-emerald-700 font-black bg-emerald-100/50 px-3 py-1 rounded-xl text-xs">x{item.quantity || 1}</span>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
+          <div className="flex gap-2 shrink-0 ml-1">
+            <button
+              type="button"
+              onClick={handleCallRestaurant}
+              className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
+              aria-label="Call restaurant"
+            >
+              <Phone className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNavigateToRestaurant}
+              className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+              aria-label="Navigate to restaurant"
+            >
+              <Navigation className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        {/* Action Sliders (Sticky Bottom) */}
-        <div className="p-8 pt-0 pb-12 space-y-6 bg-white border-t border-gray-50">
+        {/* Customer Drop Card (Requested for SS 2 & SS 3) */}
+        <div className="flex items-start justify-between mb-5 pb-4 border-b border-gray-100">
+          <div className="flex gap-3 sm:gap-4 min-w-0 flex-1">
+            <div className="w-13 h-13 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-sm shrink-0 border border-blue-100">
+              <MapPin className="w-6 h-6" />
+            </div>
+            <div className="min-w-0 flex-1 pr-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-blue-600">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Customer Drop</span>
+              </div>
+              <h3 className="text-gray-950 text-base sm:text-lg font-bold leading-tight truncate mt-0.5">{customerName}</h3>
+              {customerAddress ? (
+                <p className="text-gray-500 text-xs font-medium mt-0.5 leading-snug line-clamp-2">{customerAddress}</p>
+              ) : null}
+              {customerPhone ? (
+                <p className="text-gray-500 text-[11px] font-semibold mt-0.5">{customerPhone}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex gap-2 shrink-0 ml-1">
+            <button
+              type="button"
+              onClick={handleCallCustomer}
+              className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
+              aria-label="Call customer"
+            >
+              <Phone className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNavigateToCustomer}
+              className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+              aria-label="Navigate to customer"
+            >
+              <Navigation className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Action Sliders */}
+          <div className="space-y-4 sm:space-y-6">
           {!isAtPickup ? (
-            <div className="pt-6">
-              <p className={`text-center text-[10px] font-black uppercase tracking-[0.2em] mb-4 transition-colors ${
-                isWithinRange ? 'text-emerald-600' : 'text-orange-500 animate-pulse'
-              }`}>
-                {isWithinRange ? 'Ready - Swipe to confirm arrival' : 'Get closer to restaurant'}
+            <div>
+              <p className="text-center text-[10px] font-bold uppercase tracking-widest mb-3 text-green-600">
+                Ready - Swipe to confirm arrival
               </p>
               <ActionSlider 
                 key="action-reach"
                 label="Slide to Reach" 
                 successLabel="Reached!"
-                disabled={!isWithinRange}
+                disabled={false}
                 onConfirm={onReachedPickup}
-                color="bg-emerald-600"
+                color="bg-green-600"
               />
             </div>
           ) : (
-            <div className="pt-6 space-y-6">
-              <div className="flex justify-center items-center gap-4 w-full">
+            <div className="space-y-4">
+              <div className="flex justify-center items-center gap-3 w-full">
                  {!billImageUploaded && !isUploadingBill && (
                    <>
                       <button
                         onClick={handleTakeCameraPhoto}
-                        className="flex-1 flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-gray-950 text-white font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all group"
+                        className="flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 rounded-2xl bg-gray-900 text-white font-bold text-[11px] sm:text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all"
                       >
-                        <Camera className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <Camera className="w-5 h-5" />
                         <span>Camera</span>
                       </button>
                       <button
                         onClick={handlePickFromGallery}
-                        className="flex-1 flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-orange-50 text-orange-600 border-2 border-dashed border-orange-200 font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all group"
+                        className="flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 rounded-2xl bg-orange-50 text-orange-600 border border-orange-100 font-bold text-[11px] sm:text-xs uppercase tracking-widest active:scale-95 transition-all"
                       >
-                        <ImageIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <ImageIcon className="w-5 h-5" />
                         <span>Gallery</span>
                       </button>
                    </>
                  )}
 
                  {isUploadingBill && (
-                    <div className="w-full flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-gray-50 text-gray-400 border border-gray-100 font-black text-[11px] uppercase tracking-widest">
-                       <Loader2 className="w-5 h-5 animate-spin" />
-                       <span>Uploading Bill...</span>
+                    <div className="w-full flex items-center justify-center gap-2 py-3 sm:py-4 rounded-2xl bg-gray-50 text-gray-400 font-bold text-[11px] sm:text-xs uppercase tracking-widest">
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                       <span>Uploading...</span>
                     </div>
                  )}
 
                  {billImageUploaded && (
-                    <div className="w-full flex items-center justify-center gap-3 py-5 rounded-[1.5rem] bg-emerald-50 text-emerald-700 border border-emerald-100 font-black text-[11px] uppercase tracking-widest shadow-inner">
-                       <CheckCircle2 className="w-5 h-5" />
-                       <span>Bill Verified ✓</span>
+                    <div className="w-full flex items-center justify-center gap-2 py-3 sm:py-4 rounded-2xl bg-green-100 text-green-700 font-bold text-[11px] sm:text-xs uppercase tracking-widest">
+                       <CheckCircle2 className="w-4 h-4" />
+                       <span>Bill Uploaded</span>
                     </div>
                  )}
 
@@ -344,26 +368,63 @@ export const PickupActionModal = ({
               </div>
 
               <div>
-                <p className={`text-center text-[10px] font-black uppercase tracking-[0.2em] mb-4 ${billImageUploaded ? 'text-emerald-600' : 'text-gray-400'}`}>
-                  {billImageUploaded ? "Order Ready - Swipe to pick up" : "Capture bill to unlock pickup"}
+                <p className="text-center text-[10px] font-bold uppercase tracking-widest mb-3 text-green-600">
+                  Swipe to pick up
                 </p>
                 <ActionSlider 
                   key="action-pickup"
                   label="Slide to Pick Up" 
                   successLabel="Picked Up!"
-                  disabled={!billImageUploaded}
+                  disabled={false}
                   onConfirm={() => onPickedUp(billImageUrl)}
                   color="bg-orange-500"
                 />
               </div>
             </div>
           )}
+
+          {/* Delivery Instructions (User Note) */}
+          {order?.note && (
+            <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 sm:p-4 flex gap-3 items-start">
+              <ChefHat className="w-5 h-5 text-orange-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1.5">User Instructions</p>
+                <p className="text-sm font-bold text-gray-800 leading-snug">"{order.note}"</p>
+              </div>
+            </div>
+          )}
+
+          {/* Collapsible Order Summary */}
+          <button 
+            onClick={() => setShowItems(!showItems)}
+            className="w-full flex items-center justify-between p-3.5 sm:p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
+          >
+            <div className="flex items-center gap-3 text-gray-900 font-bold text-xs uppercase tracking-widest">
+              <Package className="w-5 h-5 text-gray-400" />
+              <span>Order Details ({items.length || 0})</span>
+            </div>
+            {showItems ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+
+          {showItems && (
+            <div className="overflow-hidden space-y-2 px-1">
+              {items.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-start p-3 border-b border-gray-50 last:border-0">
+                  <div>
+                    <span className="text-gray-700 text-sm font-bold">{item.name || 'Item Name'}</span>
+                    {item.variantName && (
+                      <p className="text-xs text-gray-500 font-medium mt-0.5">{item.variantName}</p>
+                    )}
+                  </div>
+                  <span className="text-green-600 font-bold bg-green-50 px-2.5 py-1 rounded-lg text-xs shrink-0 ml-2">x{item.quantity || 1}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </motion.div>
     </div>
-
   );
 };
 
 export default PickupActionModal;
-

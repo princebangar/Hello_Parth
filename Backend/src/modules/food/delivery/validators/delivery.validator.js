@@ -8,14 +8,12 @@ const phoneSchema = z
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 const aadharRegex = /^[0-9]{12}$/;
-// India-wide DL support (normalized, no spaces/hyphens):
-// 2 letters (state) + 1-2 digits (RTO) + 2 or 4 digits (year) + 4-7 digits (serial)
-const drivingLicenseRegex = /^[A-Z]{2}[0-9]{1,2}(?:[0-9]{2}|[0-9]{4})[0-9]{4,7}$/;
+const drivingLicenseRegex = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
 
 const deliveryRegisterSchema = z.object({
     name: z.string().min(1, 'Name is required'),
     phone: phoneSchema,
-    email: z.string().email().optional().or(z.literal('')),
+    email: z.string().trim().min(1, 'Email is required').email('Valid email is required'),
     countryCode: z.string().optional(),
     address: z.string().optional(),
     city: z.string().optional(),
@@ -53,6 +51,7 @@ export const validateDeliveryRegisterDto = (body) => {
 
 const deliveryProfileUpdateSchema = z.object({
     name: z.string().min(1).optional(),
+    email: z.string().trim().email('Valid email is required').optional().or(z.literal('')),
     countryCode: z.string().optional(),
     address: z.string().optional(),
     city: z.string().optional(),

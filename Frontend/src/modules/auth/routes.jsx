@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Suspense, lazy } from "react"
-import Loader from "@food/components/Loader"
+import Loader from "@/shared/components/Loader"
 import { peekLoginReturnTo, resolvePostLoginRoute } from "@/shared/utils/activeModule.js"
 
 const Login = lazy(() => import("./pages/Login"))

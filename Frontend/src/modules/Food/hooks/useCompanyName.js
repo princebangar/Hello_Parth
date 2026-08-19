@@ -1,15 +1,15 @@
-﻿import { useState, useEffect } from 'react';
-import { loadBusinessSettings, getCachedSettings, normalizeCompanyName } from '@food/utils/businessSettings';
+import { useState, useEffect } from 'react';
+import { loadBusinessSettings, getCachedSettings, getCompanyName } from '@food/utils/businessSettings';
 
 /**
  * Custom hook to get company name from business settings
- * @returns {string} Company name with fallback to "Hello Parth"
+ * @returns {string} Company name with fallback to "Hello Parth Food"
  */
 export const useCompanyName = () => {
   const [companyName, setCompanyName] = useState(() => {
     // Initialize with cached value if available
     const cached = getCachedSettings();
-    return normalizeCompanyName(cached?.companyName);
+    return cached?.companyName || 'Hello Parth Food';
   });
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export const useCompanyName = () => {
       try {
         const settings = await loadBusinessSettings();
         if (settings?.companyName) {
-          setCompanyName(normalizeCompanyName(settings.companyName));
+          setCompanyName(settings.companyName);
         }
       } catch (error) {
         // Keep default value on error
@@ -30,14 +30,14 @@ export const useCompanyName = () => {
     if (!cached?.companyName) {
       loadCompanyName();
     } else {
-      setCompanyName(normalizeCompanyName(cached.companyName));
+      setCompanyName(cached.companyName);
     }
 
     // Listen for business settings updates
     const handleSettingsUpdate = () => {
       const updated = getCachedSettings();
       if (updated?.companyName) {
-        setCompanyName(normalizeCompanyName(updated.companyName));
+        setCompanyName(updated.companyName);
       }
     };
 
@@ -50,4 +50,3 @@ export const useCompanyName = () => {
 
   return companyName;
 };
-

@@ -10,8 +10,7 @@ import {
 import {
     getCurrentUserProfileController,
     updateCurrentUserProfileController,
-    uploadCurrentUserProfileImageController,
-    deleteCurrentUserAccountController
+    uploadCurrentUserProfileImageController
 } from '../controllers/userProfile.controller.js';
 import {
     getUserWalletController,
@@ -36,7 +35,6 @@ const router = express.Router();
 router.get('/profile', getCurrentUserProfileController);
 router.patch('/profile', updateCurrentUserProfileController);
 router.post('/profile/profile-image', upload.single('file'), uploadCurrentUserProfileImageController);
-router.delete('/profile', deleteCurrentUserAccountController);
 
 // Wallet (Bearer USER)
 router.get('/wallet', getUserWalletController);
@@ -60,5 +58,6 @@ router.post('/addresses', addAddressController);
 router.patch('/addresses/:addressId', updateAddressController);
 router.delete('/addresses/:addressId', deleteAddressController);
 router.patch('/addresses/:addressId/default', setDefaultAddressController);
+
 
 export default router;

@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { Camera, Upload } from "lucide-react"
 import {
   Dialog,
@@ -6,7 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@food/components/ui/dialog"
-import { isFlutterBridgeAvailable, openCamera, openGallery } from "@food/utils/imageUploadUtils"
+import { openCamera, openGallery } from "@food/utils/imageUploadUtils"
+import { compressImageForUpload } from "@/shared/utils/imageCompressor"
 
 /**
  * ImageSourcePicker component to choose between Camera and Gallery
@@ -21,41 +23,32 @@ export const ImageSourcePicker = ({
   fileNamePrefix = "upload",
   galleryInputRef = null
 }) => {
+  const internalInputRef = useRef(null)
   
   const handleOpenCamera = async () => {
-    const openPromise = openCamera({
-      onSelectFile: onFileSelect,
-      fileNamePrefix: fileNamePrefix
-    })
-    onClose()
-    await openPromise
-  }
-
-  const handlePickFromDevice = async () => {
-    onClose()
-    
-    // 1. Try Bridge first
-    if (isFlutterBridgeAvailable()) {
-      await openGallery({
+    try {
+      onClose()
+      await openCamera({
         onSelectFile: onFileSelect,
         fileNamePrefix: fileNamePrefix
       })
-      return
+    } catch (error) {
+      console.error("Camera error caught in ImageSourcePicker:", error)
+      // Silently fail - toast already shown in openCamera function
     }
+  }
 
-    // 2. Try provided ref (Standard browser behavior)
-    if (galleryInputRef && galleryInputRef.current) {
-      galleryInputRef.current.click()
-    } else {
-      // 3. Last resort - generic browser input
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = "image/*"
-      input.onchange = (e) => {
-        const file = e.target.files?.[0]
-        if (file) onFileSelect(file)
-      }
-      input.click()
+  const handlePickFromDevice = async () => {
+    try {
+      onClose()
+      await openGallery({
+        onSelectFile: onFileSelect,
+        fileNamePrefix,
+        fallbackInputRef: galleryInputRef || internalInputRef,
+      })
+    } catch (error) {
+      console.error("Gallery error caught in ImageSourcePicker:", error)
+      // Silently fail - toast already shown if needed
     }
   }
 
@@ -63,7 +56,26 @@ export const ImageSourcePicker = ({
   // But usually users might still want a camera option if their browser supports it.
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+      <input 
+        type="file" 
+        ref={internalInputRef} 
+        style={{ display: 'none' }} 
+        accept="image/*" 
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (file && onFileSelect) {
+            try {
+              const compressed = await compressImageForUpload(file)
+              onFileSelect(compressed)
+            } catch {
+              onFileSelect(file)
+            }
+          }
+          e.target.value = ""
+        }} 
+      />
+      <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-sm w-[calc(100%-2rem)] rounded-2xl p-0 overflow-hidden">
         <DialogHeader className="p-5 pb-3">
           <DialogTitle className="text-lg font-bold text-gray-900">{title}</DialogTitle>
@@ -95,5 +107,6 @@ export const ImageSourcePicker = ({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

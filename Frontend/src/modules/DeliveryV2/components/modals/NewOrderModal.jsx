@@ -1,154 +1,69 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, MapPin, FastForward, Clock, Phone, ChefHat, ChevronDown } from 'lucide-react';
+import { User, MapPin, FastForward, Clock, Phone, ChefHat, ChevronDown, Volume2, VolumeX, Navigation } from 'lucide-react';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
-import { getHaversineDistance, calculateETA } from '@/modules/DeliveryV2/utils/geo';
+import { computePickupMetrics } from '@/modules/DeliveryV2/utils/pickupMetrics';
+import { PickupMetricsValue } from '@/modules/DeliveryV2/components/orders/NewOrderCard';
+import { toast } from 'sonner';
 
 /**
  * NewOrderModal - Ported to Original 1:1 Theme with Slider Accept.
- * Matches the Hello Parth Partner style Green Header + White Card.
+ * Matches the Zomato/Swiggy style Green Header + White Card.
  */
-export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
+export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted = false, onToggleMute }) => {
   const { riderLocation } = useDeliveryStore();
-  const [timeLeft, setTimeLeft] = useState(30);
 
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      onReject();
-      return;
-    }
-    const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    return () => clearInterval(timer);
-  }, [timeLeft, onReject]);
-
-  const { distanceKm, etaMins } = useMemo(() => {
-    if (!order) return { distanceKm: '1.2', etaMins: 15 };
-
-    // 1. Restaurant coordinates
-    const rest = order.restaurantLocation || order.restaurantId?.location || {};
-    const coords = Array.isArray(rest.coordinates) ? rest.coordinates : [];
-    const resLat = parseFloat(order.restaurant_lat || order.restaurantLat || rest.latitude || rest.lat || (coords.length >= 2 ? coords[1] : NaN));
-    const resLng = parseFloat(order.restaurant_lng || order.restaurantLng || rest.longitude || rest.lng || (coords.length >= 2 ? coords[0] : NaN));
-
-    // 2. Rider coordinates
-    const riderLat = parseFloat(riderLocation?.lat || riderLocation?.latitude);
-    const riderLng = parseFloat(riderLocation?.lng || riderLocation?.longitude);
-
-    let pickupKm = null;
-    if (!isNaN(riderLat) && !isNaN(riderLng) && !isNaN(resLat) && !isNaN(resLng)) {
-      const distM = getHaversineDistance(riderLat, riderLng, resLat, resLng);
-      const computedKm = distM / 1000;
-      if (computedKm < 30) {
-        pickupKm = computedKm;
-      }
-    }
-
-    // 3. Fallback pickup distance from order props
-    if (pickupKm == null) {
-      const socketDist = parseFloat(order.pickupDistanceKm || order.distanceKm);
-      if (!isNaN(socketDist) && socketDist < 30) {
-        pickupKm = socketDist;
-      } else {
-        pickupKm = 1.2; // Realistic local pickup distance fallback
-      }
-    }
-
-    // 4. Calculate ETA dynamically
-    let calculatedEta = order.estimatedTime || order.duration || order.eta;
-    if (!calculatedEta || calculatedEta > 120) {
-      calculatedEta = Math.ceil((pickupKm * 1000) / 416) + (order.prepTime || 5);
-      if (calculatedEta > 60) {
-        calculatedEta = 18; // Realistic default delivery ETA in minutes
-      }
-    }
-
-    return {
-      distanceKm: Number(pickupKm).toFixed(1),
-      etaMins: Math.min(60, Math.max(5, Math.ceil(calculatedEta)))
-    };
-  }, [order, riderLocation]);
+  const metrics = useMemo(
+    () => computePickupMetrics(order, riderLocation),
+    [order, riderLocation],
+  );
 
   if (!order) return null;
 
-  const earnings = useMemo(() => {
-    if (order?.riderEarning != null && Number(order.riderEarning) > 0) {
-      return Number(order.riderEarning);
-    }
-    if (order?.earnings != null && Number(order.earnings) > 0) {
-      return Number(order.earnings);
-    }
-    const baseFee = Number(
-      order?.pricing?.riderDeliveryEarningAfterAdminCommission ??
-      order?.pricing?.deliveryFee ??
-      order?.deliveryFee ??
-      order?.deliveryCharge ??
-      order?.amounts?.riderShare ??
-      order?.riderShare ??
-      0
-    );
-    const surge = Number(order?.pricing?.surgeAmount ?? order?.surgeAmount ?? 0);
-    const tip = Number(order?.pricing?.deliveryPartnerTip ?? order?.deliveryPartnerTip ?? 0);
-    return baseFee + surge + tip;
-  }, [order]);
-
-  const restaurantName = order.restaurantName || order.restaurant_name || (order.restaurantId?.restaurantName || order.restaurantId?.name) || 'Restaurant';
-  const restaurantAddress = order.restaurantAddress || order.restaurant_address || (order.restaurantId?.location?.formattedAddress || order.restaurantId?.location?.address || [order.restaurantId?.addressLine1, order.restaurantId?.area, order.restaurantId?.city].filter(Boolean).join(', ')) || 'Address not available';
+  const earnings = order.earnings || order.riderEarning || (order.orderAmount ? order.orderAmount * 0.1 : 0);
+  const restaurantName = order.restaurantName || order.restaurant_name || (order.restaurantId?.name) || 'Restaurant';
+  const restaurantAddress = order.restaurantAddress || order.restaurant_address || (order.restaurantId?.location?.address) || 'Address not available';
   const restaurantPhone =
     order.restaurantPhone ||
     order.restaurant_phone ||
-    order.restaurantId?.phone ||
+    order.restaurantId?.primaryContactNumber ||
     order.restaurantId?.ownerPhone ||
+    order.restaurantId?.phone ||
     '';
-  const orderDeliveryAddress = order?.deliveryAddress || {};
+  const deliveryAddress = order?.deliveryAddress || {};
 
   const geoCoords =
-    Array.isArray(orderDeliveryAddress?.location?.coordinates) &&
-      orderDeliveryAddress.location.coordinates.length >= 2
+    Array.isArray(deliveryAddress?.location?.coordinates) &&
+    deliveryAddress.location.coordinates.length >= 2
       ? {
-        lng: orderDeliveryAddress.location.coordinates[0],
-        lat: orderDeliveryAddress.location.coordinates[1],
-      }
+          lng: deliveryAddress.location.coordinates[0],
+          lat: deliveryAddress.location.coordinates[1],
+        }
       : null;
 
   const customerLocation = order.customerLocation || order.deliveryLocation || geoCoords || null;
-
-  const restToCustomerDistKm = useMemo(() => {
-    const rest = order.restaurantLocation || order.restaurantId?.location || {};
-    const coords = Array.isArray(rest.coordinates) ? rest.coordinates : [];
-    const resLat = parseFloat(order.restaurant_lat || order.restaurantLat || rest.latitude || rest.lat || (coords.length >= 2 ? coords[1] : NaN));
-    const resLng = parseFloat(order.restaurant_lng || order.restaurantLng || rest.longitude || rest.lng || (coords.length >= 2 ? coords[0] : NaN));
-
-    const cusLat = parseFloat(customerLocation?.lat || customerLocation?.latitude || (Array.isArray(customerLocation?.coordinates) ? customerLocation.coordinates[1] : NaN));
-    const cusLng = parseFloat(customerLocation?.lng || customerLocation?.longitude || (Array.isArray(customerLocation?.coordinates) ? customerLocation.coordinates[0] : NaN));
-
-    if (!isNaN(resLat) && !isNaN(resLng) && !isNaN(cusLat) && !isNaN(cusLng)) {
-      const distM = getHaversineDistance(resLat, resLng, cusLat, cusLng);
-      const km = distM / 1000;
-      if (km < 50) {
-        return km.toFixed(1);
-      }
-    }
-    if (order.pricing?.deliveryFeeBreakdown?.distanceKm != null) {
-      const distBreakdown = Number(order.pricing.deliveryFeeBreakdown.distanceKm);
-      if (distBreakdown < 50) return distBreakdown.toFixed(1);
-    }
-    return '0.8';
-  }, [order, customerLocation]);
-
   const customerName =
-    order.userId?.name ||
-    order.userName ||
     order.customerName ||
+    order.userId?.name ||
+    order.user?.name ||
+    order.deliveryAddress?.fullName ||
     order.deliveryAddress?.name ||
-    (order.deliveryAddress?.label ? `Customer (${order.deliveryAddress.label})` : 'Customer Delivery Address');
+    'Customer';
+  const customerPhone =
+    order.customerPhone ||
+    order.userPhone ||
+    order.userId?.phone ||
+    order.user?.phone ||
+    order.deliveryAddress?.phone ||
+    '';
 
   const addressPartsFromSchema = [
-    orderDeliveryAddress.street,
-    orderDeliveryAddress.additionalDetails,
-    orderDeliveryAddress.city,
-    orderDeliveryAddress.state,
-    orderDeliveryAddress.zipCode,
+    deliveryAddress.street,
+    deliveryAddress.additionalDetails,
+    deliveryAddress.city,
+    deliveryAddress.state,
+    deliveryAddress.zipCode,
   ]
     .map((v) => String(v || '').trim())
     .filter(Boolean);
@@ -161,155 +76,203 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize }) => {
       ? `Lat ${Number(customerLocation.lat).toFixed(5)}, Lng ${Number(customerLocation.lng).toFixed(5)}`
       : 'Location not available');
 
-  const mapsLink =
-    customerLocation?.lat != null && customerLocation?.lng != null
-      ? `https://www.google.com/maps/dir/?api=1&destination=${customerLocation.lat},${customerLocation.lng}`
-      : customerAddress && customerAddress !== 'Location not available'
-        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`
-        : null;
+  const handleCallRestaurant = () => {
+    const num = String(restaurantPhone || '').replace(/\D/g, '');
+    if (!num) {
+      toast.error('Restaurant phone number not available');
+      return;
+    }
+    window.location.href = `tel:${num}`;
+  };
 
-  const displayOrderId =
-    order.order_id ||
-    order.orderId ||
-    order.orderMongoId ||
-    (order._id ? String(order._id).slice(-6) : null);
+  const handleNavigateToRestaurant = () => {
+    const restCoords = order.restaurantLocation || order.restaurantId?.location || null;
+    const lat = parseFloat(restCoords?.lat ?? restCoords?.latitude);
+    const lng = parseFloat(restCoords?.lng ?? restCoords?.longitude);
+    let mapsUrl;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+    } else if (restaurantAddress) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurantAddress)}&travelmode=driving`;
+    } else {
+      toast.error('Restaurant location not available');
+      return;
+    }
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCallCustomer = () => {
+    const num = String(customerPhone || '').replace(/\D/g, '');
+    if (!num) {
+      toast.error('Customer phone number not available');
+      return;
+    }
+    window.location.href = `tel:${num}`;
+  };
+
+  const handleNavigateToCustomer = () => {
+    const lat = parseFloat(customerLocation?.lat ?? customerLocation?.latitude);
+    const lng = parseFloat(customerLocation?.lng ?? customerLocation?.longitude);
+    let mapsUrl;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+    } else if (customerAddress) {
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(customerAddress)}&travelmode=driving`;
+    } else {
+      toast.error('Customer location not available');
+      return;
+    }
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-end justify-center"
+      className="fixed inset-0 z-1000 bg-black/60 flex items-end justify-center p-0"
     >
-      <motion.div
+      <motion.div 
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="w-full max-w-lg bg-white rounded-t-[3.5rem] shadow-[0_-25px_80px_rgba(0,0,0,0.5)] flex flex-col max-h-[85vh] relative overflow-hidden"
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[3rem] overflow-hidden shadow-[0_-20px_60px_rgba(0,0,0,0.5)] flex flex-col pt-1 sm:pt-2"
       >
         {/* Handle / Minimize */}
-        <div className="w-full flex justify-center py-3 bg-white relative z-20">
-          <button
-            onClick={onMinimize}
-            className="w-12 h-1.5 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors active:scale-95"
-            aria-label="Minimize"
-          />
-        </div>
-
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          {/* Header Ribbon (Compact Premium) */}
-          <div className="bg-linear-to-br from-emerald-500 via-green-500 to-emerald-600 px-6 py-5 flex justify-between items-center text-white">
-            <div>
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <p className="text-white/80 text-[10px] font-black uppercase tracking-[0.2em]">New Order Request</p>
-                {displayOrderId && (
-                  <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full tracking-wider">
-                    #{displayOrderId}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl font-bold opacity-80">₹</span>
-                <h2 className="text-4xl font-black tracking-tighter">{Number(earnings || 0).toFixed(2)}</h2>
-              </div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-2 text-white flex flex-col items-center min-w-[80px]">
-              <span className="text-[9px] font-black uppercase tracking-widest opacity-60">Expires</span>
-              <span className="font-black text-2xl tabular-nums leading-none">{timeLeft}s</span>
-            </div>
-          </div>
-
-          <div className="px-6 py-4 space-y-5">
-            {/* Direct Summary Metrics (Horizontal Compact Row) */}
-            <div className="flex gap-2">
-              <div className="flex-1 p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center text-emerald-500">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1">EST. Time</span>
-                  <span className="text-sm font-black text-gray-900 tracking-tight leading-none">{etaMins} MINS</span>
-                </div>
-              </div>
-              <div className="flex-1 p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center text-blue-500">
-                  <MapPin className="w-5 h-5" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1">Distance</span>
-                  <span className="text-sm font-black text-gray-900 tracking-tight leading-none">{distanceKm} KM</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Delivery Locations (Tighter Timeline) */}
-            <div className="bg-gray-50/50 rounded-3xl p-5 border border-gray-100/50">
-              <div className="flex gap-4 relative">
-                <div className="flex flex-col items-center py-1">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/20" />
-                  <div className="flex-1 w-0.5 border-l-2 border-dashed border-gray-200 my-1" />
-                  <div className="w-3 h-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/20" />
-                </div>
-
-                <div className="flex-1 space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-600 mb-0.5">
-                        Restaurant Pickup {distanceKm ? `(${distanceKm} km)` : ''}
-                      </h4>
-                      {restaurantPhone && (
-                        <button
-                          onClick={() => (window.location.href = `tel:${restaurantPhone}`)}
-                          className="shrink-0 w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 hover:bg-emerald-100 transition-colors active:scale-90"
-                          aria-label="Call restaurant"
-                        >
-                          <Phone className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                    <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5 line-clamp-1">{restaurantName}</h3>
-                    <p className="text-gray-500 text-[11px] font-bold line-clamp-1">{restaurantAddress}</p>
-                  </div>
-
-                  <div className="pt-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-600 mb-0.5">
-                        Customer Drop {restToCustomerDistKm ? `(${restToCustomerDistKm} km)` : ''}
-                      </h4>
-                      {mapsLink && (
-                        <a href={mapsLink} target="_blank" rel="noreferrer" className="text-[9px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full hover:bg-blue-100 transition-colors">
-                          Open Map
-                        </a>
-                      )}
-                    </div>
-                    <h3 className="text-gray-950 font-black text-lg leading-tight mb-0.5">{customerName}</h3>
-                    <p className="text-gray-500 text-[11px] font-bold line-clamp-1">{customerAddress}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Area (Fixed / Non-Scrolling Footer) */}
-        <div className="px-6 pb-8 pt-2 space-y-4 bg-white">
-          <ActionSlider
-            label="Slide to Accept"
-            onConfirm={() => onAccept(order)}
-            color="bg-emerald-600"
-            successLabel="Order Accepted ✓"
-          />
-
-          <button
-            onClick={onReject}
-            className="w-full text-gray-400 font-black text-[11px] uppercase tracking-[0.2em] hover:text-red-500 transition-colors active:scale-95 py-2"
-          >
-            Pass this task
+        <div className="w-full flex justify-center pb-1.5 pt-1 bg-white relative z-10 rounded-t-3xl sm:rounded-t-[3rem] -mb-1">
+          <button onClick={onMinimize} className="p-1 hover:bg-gray-100 active:scale-95 transition-all rounded-full flex flex-col items-center">
+             <ChevronDown className="w-6 h-6 text-gray-400 stroke-3" />
           </button>
+        </div>
+
+        {/* Header Ribbon (Old Green Style) */}
+        <div 
+          className="p-4 sm:p-8 flex justify-between items-center text-white border-b border-white/10"
+          style={{ background: 'linear-gradient(33deg, #15498b 0%, #000000 100%)' }}
+        >
+          <div>
+            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incoming Request</p>
+            <h2 className="text-2xl sm:text-4xl font-bold tracking-tighter">₹{Number(earnings || 0).toFixed(2)}</h2>
+          </div>
+          {onToggleMute && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMute();
+              }}
+              className={`rounded-full p-2.5 transition-colors border ${
+                isMuted
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                  : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+              }`}
+              aria-label={isMuted ? 'Unmute order alerts' : 'Mute order alerts'}
+            >
+              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+          )}
+        </div>
+
+        {/* Info Body */}
+        <div className="p-4 sm:p-8 pb-6 sm:pb-12 space-y-5 sm:space-y-10 overflow-y-auto max-h-[78vh]">
+          <div className="flex gap-3 sm:gap-6">
+            <div className="flex flex-col items-center gap-1.5 mt-2 py-1">
+              <div className="w-5 h-5 rounded-full bg-green-500 border-4 border-green-50 shadow-lg shadow-green-500/20" />
+              <div className="w-0.5 h-16 bg-dashed border-l-2 border-gray-100" />
+              <div className="w-5 h-5 rounded-full bg-blue-500 border-4 border-blue-50 shadow-lg shadow-blue-500/20" />
+            </div>
+            <div className="flex-1 space-y-5 sm:space-y-10">
+              <div className="flex justify-between items-start">
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-2 mb-2 font-bold text-[10px] uppercase tracking-widest text-green-600">
+                    <ChefHat className="w-4 h-4" />
+                    <span>Restaurant Pickup</span>
+                  </div>
+                  <p className="text-gray-950 font-bold text-base sm:text-xl leading-tight">{restaurantName}</p>
+                  <p className="text-gray-500 text-sm font-medium leading-relaxed">{restaurantAddress}</p>
+                </div>
+                <div className="flex gap-2 shrink-0 mt-1">
+                  <button
+                    type="button"
+                    onClick={handleCallRestaurant}
+                    className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
+                    aria-label="Call restaurant"
+                  >
+                    <Phone className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNavigateToRestaurant}
+                    className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+                    aria-label="Navigate to restaurant"
+                  >
+                    <Navigation className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-start">
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-2 mb-2 font-bold text-[10px] uppercase tracking-widest text-blue-600">
+                    <MapPin className="w-4 h-4" />
+                    <span>Customer Drop</span>
+                  </div>
+                  <p className="text-gray-950 font-bold text-base sm:text-xl leading-tight">{customerName}</p>
+                  {customerPhone ? <p className="text-gray-500 text-sm font-medium">{customerPhone}</p> : null}
+                  <p className="text-gray-500 text-sm font-medium line-clamp-2">{customerAddress}</p>
+                </div>
+                <div className="flex gap-2 shrink-0 mt-1">
+                  <button
+                    type="button"
+                    onClick={handleCallCustomer}
+                    className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
+                    aria-label="Call customer"
+                  >
+                    <Phone className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNavigateToCustomer}
+                    className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+                    aria-label="Navigate to customer"
+                  >
+                    <Navigation className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+           <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+             <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">
+               <Clock className="w-5 h-5 text-orange-500" />
+               <PickupMetricsValue metrics={metrics} label="Time" unit="min" />
+             </div>
+             <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">
+               <MapPin className="w-5 h-5 text-gray-400" />
+               <PickupMetricsValue metrics={metrics} label="Distance" unit="km" />
+             </div>
+          </div>
+
+        {/* Action Area */}
+          <div className="space-y-4 sm:space-y-6 pt-1 sm:pt-2">
+            <ActionSlider 
+              label="Slide to Accept" 
+              onConfirm={() => onAccept(order)} 
+              color="bg-black"
+              successLabel="Order Accepted ✓"
+            />
+
+            <button 
+              onClick={onReject}
+              className="w-full text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-500 transition-colors py-2 active:scale-95"
+            >
+              Pass this task
+            </button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
-
   );
 };

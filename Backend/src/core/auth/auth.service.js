@@ -27,7 +27,7 @@ const ROLES = {
 };
 
 const DEFAULT_CREDENTIALS = {
-  adminEmail: String(process.env.DEFAULT_ADMIN_EMAIL || "helloparthindia@gmail.com")
+  adminEmail: String(process.env.DEFAULT_ADMIN_EMAIL || "admin@helloparth.com")
     .trim()
     .toLowerCase(),
   adminPassword: String(
@@ -305,7 +305,7 @@ export const adminLogin = async (email, password) => {
       adminLevel: ADMIN_LEVELS.PLATFORM_SUPERADMIN,
       admin_type: "superadmin",
       permissions: ["*"],
-      servicesAccess: ["food", "quickCommerce", "taxi"],
+      servicesAccess: ["food", "taxi"],
     });
   }
 
@@ -751,7 +751,7 @@ export const getProfile = async (userId, role) => {
   return { user: profile };
 };
 
-const ADMIN_SERVICES_ALLOWED = ["food", "quickCommerce", "taxi"];
+const ADMIN_SERVICES_ALLOWED = ["food", "taxi"];
 
 /** Update admin profile (name, email, phone, profileImage). Only for ADMIN role. */
 export const updateAdminProfile = async (userId, body) => {

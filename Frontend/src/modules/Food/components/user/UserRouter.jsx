@@ -1,30 +1,30 @@
-import { Routes, Route, Navigate } from "react-router-dom"
+import React, { Suspense, lazy } from "react"
+import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom"
 import UserLayout from "./UserLayout"
-import { Suspense, lazy } from "react"
 import Loader from "@food/components/Loader"
 import ProtectedRoute from "@food/components/ProtectedRoute"
+import AuthRedirect from "@food/components/AuthRedirect"
+
+const SearchResults = lazy(() => import("@food/pages/user/search/ProfessionalSearch"))
 
 // Lazy Loading Pages
 
 // Home & Discovery
-const Home = lazy(() => import("@food/pages/user/Home"))
-const Dining = lazy(() => import("@food/pages/user/Dining"))
-const DiningRestaurants = lazy(() => import("@food/pages/user/DiningRestaurants"))
 const DiningCategory = lazy(() => import("@food/pages/user/DiningCategory"))
 const DiningExplore50 = lazy(() => import("@food/pages/user/DiningExplore50"))
 const DiningExploreNear = lazy(() => import("@food/pages/user/DiningExploreNear"))
 const Coffee = lazy(() => import("@food/pages/user/Coffee"))
-const Under250 = lazy(() => import("@food/pages/user/Under250"))
 const Categories = lazy(() => import("@food/pages/user/Categories"))
-const CategoryPage = lazy(() => import("@food/pages/user/CategoryPage"))
 const Restaurants = lazy(() => import("@food/pages/user/restaurants/Restaurants"))
 const RestaurantDetails = lazy(() => import("@food/pages/user/restaurants/RestaurantDetails"))
 const DiningRestaurantDetails = lazy(() => import("@food/pages/user/dining/DiningRestaurantDetails"))
 const TableBooking = lazy(() => import("@food/pages/user/dining/TableBooking"))
 const TableBookingConfirmation = lazy(() => import("@food/pages/user/dining/TableBookingConfirmation"))
 const TableBookingSuccess = lazy(() => import("@food/pages/user/dining/TableBookingSuccess"))
+const TableModificationPolicy = lazy(() => import("@food/pages/user/dining/TableModificationPolicy"))
+const TableCancellationPolicy = lazy(() => import("@food/pages/user/dining/TableCancellationPolicy"))
+const TableEditUserPage = lazy(() => import("@food/pages/user/dining/TableEditUserPage"))
 const MyBookings = lazy(() => import("@food/pages/user/dining/MyBookings"))
-const SearchResults = lazy(() => import("@food/pages/user/search/ProfessionalSearch"))
 const ProductDetail = lazy(() => import("@food/pages/user/ProductDetail"))
 
 // Cart
@@ -36,7 +36,6 @@ const AddressSelectorPage = lazy(() => import("@food/pages/user/cart/AddressSele
 // Orders
 const Orders = lazy(() => import("@food/pages/user/orders/Orders"))
 const OrderTracking = lazy(() => import("@food/pages/user/orders/OrderTracking"))
-const SharedOrderTrackingPage = lazy(() => import("@food/pages/user/orders/SharedOrderTrackingPage"))
 const OrderInvoice = lazy(() => import("@food/pages/user/orders/OrderInvoice"))
 const UserOrderDetails = lazy(() => import("@food/pages/user/orders/UserOrderDetails"))
 
@@ -54,7 +53,6 @@ const CollectionDetail = lazy(() => import("@food/pages/user/CollectionDetail"))
 
 
 // Profile
-const Profile = lazy(() => import("@food/pages/user/profile/Profile"))
 const EditProfile = lazy(() => import("@food/pages/user/profile/EditProfile"))
 const Payments = lazy(() => import("@food/pages/user/profile/Payments"))
 const AddPayment = lazy(() => import("@food/pages/user/profile/AddPayment"))
@@ -72,9 +70,8 @@ const ReportSafetyEmergency = lazy(() => import("@food/pages/user/profile/Report
 const Accessibility = lazy(() => import("@food/pages/user/profile/Accessibility"))
 const Logout = lazy(() => import("@food/pages/user/profile/Logout"))
 const ReferEarn = lazy(() => import("@food/pages/user/profile/ReferEarn"))
-
-// Onboarding
-const Preferences = lazy(() => import("@food/pages/user/Preferences"))
+const UserCMSHelpSupportPage = lazy(() => import("@food/pages/user/profile/UserCMSHelpSupportPage"))
+const Settings = lazy(() => import("@food/pages/user/profile/Settings"))
 
 // Auth
 const SignIn = lazy(() => import("@food/pages/user/auth/SignIn"))
@@ -94,258 +91,145 @@ const Wallet = lazy(() => import("@food/pages/user/Wallet"))
 // Complaints
 const SubmitComplaint = lazy(() => import("@food/pages/user/complaints/SubmitComplaint"))
 
-import SharedOrderCard from "@food/components/user/SharedOrderCard"
+import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
+import { Loader2 } from "lucide-react"
 
-function UserLayoutWithSharedCard() {
-  return (
-    <>
-      <SharedOrderCard />
-      <UserLayout />
-    </>
-  )
-}
+const PageLoader = () => (
+  <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#0a0a0a]">
+    <Loader2 className="h-10 w-10 animate-spin text-[#CB202D]" />
+    <p className="mt-4 text-gray-500 font-bold uppercase tracking-widest text-[10px]">
+      Loading...
+    </p>
+  </div>
+)
+
+/** Main tabs render via MainTabKeepAlive in UserLayout — route match only. */
+const MainTabRoutePlaceholder = () => null
+
+const RequireInitialAuth = ({ children }) => children;
 
 export default function UserRouter() {
   return (
-    <Suspense fallback={<Loader />}>
+    <Suspense fallback={<AppShellSkeleton />}>
       <Routes>
-        <Route element={<UserLayoutWithSharedCard />}>
-          {/* Home & Discovery */}
-          <Route path="" element={<Home />} />
-          <Route path="dining" element={<Dining />} />
-          <Route path="dining/restaurants" element={<DiningRestaurants />} />
+        <Route element={<RequireInitialAuth><UserLayout /></RequireInitialAuth>}>
+          {/* ========================================== */}
+          {/* PUBLIC ROUTES (No login required)          */}
+          {/* ========================================== */}
+          
+          {/* Public Legal Policies & Support */}
+          <Route path="profile/terms" element={<Suspense fallback={<PageLoader />}><Terms /></Suspense>} />
+          <Route path="profile/privacy" element={<Suspense fallback={<PageLoader />}><Privacy /></Suspense>} />
+          <Route path="profile/refund" element={<Suspense fallback={<PageLoader />}><Refund /></Suspense>} />
+          <Route path="profile/shipping" element={<Suspense fallback={<PageLoader />}><Shipping /></Suspense>} />
+          <Route path="profile/cancellation" element={<Suspense fallback={<PageLoader />}><Cancellation /></Suspense>} />
+          <Route path="profile/support" element={<Suspense fallback={<PageLoader />}><Support /></Suspense>} />
+          <Route path="profile/support-info" element={<Suspense fallback={<PageLoader />}><UserCMSHelpSupportPage /></Suspense>} />
+          
+          {/* Help Center */}
+          <Route path="help" element={<Help />} />
+          <Route path="help/orders/:orderId" element={<OrderHelp />} />
+
+          {/* Auth Redirects & Callbacks */}
+          <Route path="auth/login" element={
+            <AuthRedirect module="user">
+              <Navigate to="/login" replace />
+            </AuthRedirect>
+          } />
+          <Route path="auth/sign-in" element={
+            <AuthRedirect module="user">
+              <Navigate to="/login" replace />
+            </AuthRedirect>
+          } />
+          <Route path="auth/otp" element={
+            <AuthRedirect module="user">
+              <OTP />
+            </AuthRedirect>
+          } />
+          <Route path="auth/callback" element={<AuthCallback />} />
+
+
+          {/* ========================================== */}
+          {/* PUBLIC DISCOVERY ROUTES (Guest mode allowed) */}
+          {/* ========================================== */}
+          {/* Home & Discovery — kept alive in UserLayout MainTabKeepAlive */}
+          <Route path="" element={<MainTabRoutePlaceholder />} />
+          <Route path="home" element={<MainTabRoutePlaceholder />} />
+          <Route path="takeaway" element={<MainTabRoutePlaceholder />} />
+          <Route path="dining" element={<MainTabRoutePlaceholder />} />
           <Route path="dining/:category" element={<DiningCategory />} />
           <Route path="dining/explore/upto50" element={<DiningExplore50 />} />
           <Route path="dining/explore/near-rated" element={<DiningExploreNear />} />
           <Route path="dining/coffee" element={<Coffee />} />
           <Route path="dining/:diningType/:slug" element={<DiningRestaurantDetails />} />
-          <Route path="dining/book/:slug" element={<TableBooking />} />
-          <Route path="dining/book-confirmation" element={<TableBookingConfirmation />} />
-          <Route path="dining/book-success" element={<TableBookingSuccess />} />
-          <Route
-            path="bookings"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <MyBookings />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="under-250" element={<Under250 />} />
-          <Route path="grocery" element={<Navigate to="/food/user" replace />} />
+          <Route path="under-250" element={<MainTabRoutePlaceholder />} />
           <Route path="categories" element={<Categories />} />
-          <Route path="category/:category" element={<CategoryPage />} />
+          <Route path="category/:category" element={<MainTabRoutePlaceholder />} />
           <Route path="restaurants" element={<Restaurants />} />
           <Route path="restaurants/:slug" element={<RestaurantDetails />} />
           <Route path="search" element={<SearchResults />} />
           <Route path="product/:id" element={<ProductDetail />} />
-          <Route path="track-shared/:shareId" element={<SharedOrderTrackingPage />} />
+          <Route path="address-selector" element={<AddressSelectorPage />} />
 
-          {/* Cart - Now Public */}
-          <Route path="cart" element={<Cart />} />
-          <Route path="cart/checkout" element={<Checkout />} />
-          <Route path="cart/select-address" element={<SelectAddress />} />
-          <Route path="cart/address-selector" element={<AddressSelectorPage />} />
+          {/* ========================================== */}
+          {/* PROTECTED ROUTES (Login required)          */}
+          {/* ========================================== */}
+          <Route element={<ProtectedRoute requiredRole="user" loginPath="/login"><Outlet /></ProtectedRoute>}>
+            {/* Dining Table Bookings */}
+            <Route path="dining/book/:slug" element={<TableBooking />} />
+            <Route path="dining/book-confirmation" element={<TableBookingConfirmation />} />
+            <Route path="dining/book-success" element={<TableBookingSuccess />} />
+            <Route path="dining/modification-policy" element={<TableModificationPolicy />} />
+            <Route path="dining/cancellation-policy" element={<TableCancellationPolicy />} />
+            <Route path="dining/edit-user" element={<TableEditUserPage />} />
+            <Route path="bookings" element={<MyBookings />} />
 
-          {/* Orders - Protected (require user auth) */}
-          <Route
-            path="orders"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Orders />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="orders/:orderId"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <OrderTracking />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="orders/:orderId/invoice"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <OrderInvoice />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="orders/:orderId/details"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <UserOrderDetails />
-              </ProtectedRoute>
-            }
-          />
+            {/* Cart */}
+            <Route path="cart" element={<Cart />} />
+            <Route path="cart/checkout" element={<Checkout />} />
+            <Route path="cart/select-address" element={<SelectAddress />} />
 
-          {/* Offers */}
-          <Route path="offers" element={<Offers />} />
+            {/* Orders */}
+            <Route path="orders" element={<Orders />} />
+            <Route path="orders/:orderId" element={<OrderTracking />} />
+            <Route path="orders/:orderId/invoice" element={<OrderInvoice />} />
+            <Route path="orders/:orderId/details" element={<UserOrderDetails />} />
 
-          {/* Gourmet */}
-          <Route path="gourmet" element={<Gourmet />} />
+            {/* Offers */}
+            <Route path="offers" element={<Offers />} />
 
+            {/* Gourmet */}
+            <Route path="gourmet" element={<Gourmet />} />
 
-          {/* Collections */}
-          <Route path="collections" element={<Collections />} />
-          <Route path="collections/:id" element={<CollectionDetail />} />
+            {/* Collections */}
+            <Route path="collections" element={<Collections />} />
+            <Route path="collections/:id" element={<CollectionDetail />} />
 
+            {/* Profile — kept alive in UserLayout MainTabKeepAlive */}
+            <Route path="profile" element={<MainTabRoutePlaceholder />} />
+            <Route path="profile/edit" element={<EditProfile />} />
+            <Route path="profile/payments" element={<Payments />} />
+            <Route path="profile/payments/new" element={<AddPayment />} />
+            <Route path="profile/payments/:id/edit" element={<EditPayment />} />
+            <Route path="profile/favorites" element={<Favorites />} />
+            <Route path="profile/coupons" element={<Coupons />} />
+            <Route path="profile/about" element={<About />} />
+            <Route path="profile/report-safety-emergency" element={<ReportSafetyEmergency />} />
+            <Route path="profile/accessibility" element={<Accessibility />} />
+            <Route path="profile/logout" element={<Logout />} />
+            <Route path="profile/refer-earn" element={<ReferEarn />} />
+            <Route path="profile/dining-bookings" element={<MyBookings />} />
+            <Route path="profile/settings" element={<Suspense fallback={<Loader />}><Settings /></Suspense>} />
 
+            {/* Notifications */}
+            <Route path="notifications" element={<Notifications />} />
 
-          {/* Profile - Protected (require user auth) */}
-          <Route
-            path="profile"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/edit"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <EditProfile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/payments"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Payments />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/payments/new"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <AddPayment />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/payments/:id/edit"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <EditPayment />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/favorites"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Favorites />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/support"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Support />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/coupons"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Coupons />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/about"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <About />
-              </ProtectedRoute>
-            }
-          />
+            {/* Wallet */}
+            <Route path="wallet" element={<Wallet />} />
 
-          <Route
-            path="profile/report-safety-emergency"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <ReportSafetyEmergency />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/accessibility"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Accessibility />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/logout"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Logout />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile/refer-earn"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <ReferEarn />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Public Legal Policies (stay public) */}
-          <Route path="profile/terms" element={<Terms />} />
-          <Route path="profile/privacy" element={<Privacy />} />
-          <Route path="profile/refund" element={<Refund />} />
-          <Route path="profile/shipping" element={<Shipping />} />
-          <Route path="profile/cancellation" element={<Cancellation />} />
-
-          {/* Auth - User login is centralized at /user/auth/login */}
-          <Route path="auth/login" element={<Navigate to="/login" replace state={{ from: '/food/user' }} />} />
-          <Route path="auth/sign-in" element={<Navigate to="/login" replace state={{ from: '/food/user' }} />} />
-          <Route path="auth/otp" element={<Navigate to="/login" replace state={{ from: '/food/user' }} />} />
-          <Route path="auth/callback" element={<AuthCallback />} />
-
-          {/* Help */}
-          <Route path="help" element={<Help />} />
-          <Route path="help/orders/:orderId" element={<OrderHelp />} />
-
-          {/* Notifications - Protected (user auth) */}
-          <Route
-            path="notifications"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Notifications />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Wallet - Protected (user auth) */}
-          <Route
-            path="wallet"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <Wallet />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Complaints - Protected (user auth) */}
-          <Route
-            path="complaints/submit/:orderId"
-            element={
-              <ProtectedRoute requiredRole="user" loginPath="/login">
-                <SubmitComplaint />
-              </ProtectedRoute>
-            }
-          />
+            {/* Complaints */}
+            <Route path="complaints/submit/:orderId" element={<SubmitComplaint />} />
+          </Route>
         </Route>
       </Routes>
     </Suspense>

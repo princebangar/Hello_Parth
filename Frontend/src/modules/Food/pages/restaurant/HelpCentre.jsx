@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { motion } from "framer-motion"
 import { 
@@ -21,40 +21,41 @@ const helpTopics = [
     icon: Power,
     title: "Outlet online / offline status",
     subtitle: "Current status & details",
-    path: "/restaurant/delivery-settings"
+    path: "/food/restaurant/delivery-settings"
   },
   {
     id: 2,
     icon: Utensils,
     title: "Order related issues",
     subtitle: "Cancellations & delivery related concerns",
-    path: "/restaurant/orders/all"
+    path: "/food/restaurant/orders/all"
   },
   {
     id: 3,
     icon: Building2,
     title: "Restaurant",
     subtitle: "Timings, contacts, FSSAI, bank details, location etc.",
-    path: "/restaurant/outlet-info"
+    path: "/food/restaurant/outlet-info"
   },
   {
     id: 6,
     icon: Wallet,
     title: "Payments",
     subtitle: "Statement of account, invoices etc.",
-    path: "/restaurant/hub-finance"
+    path: "/food/restaurant/hub-finance"
   },
   {
     id: 7,
     icon: LifeBuoy,
     title: "Support",
     subtitle: "Raise ticket and get admin response",
-    path: "/restaurant/help-centre/support"
+    path: "/food/restaurant/help-centre/support"
   }
 ]
 
 export default function HelpCentre() {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = useRestaurantBackNavigation()
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -114,7 +115,7 @@ export default function HelpCentre() {
                 className="w-full flex items-center gap-4 px-0 py-4 border-b border-gray-200 hover:bg-gray-50 transition-colors text-left"
                 onClick={() => {
                   if (topic.path) {
-                    navigate(topic.path)
+                    navigate(topic.path, { state: { from: location.pathname } })
                   }
                 }}
               >
@@ -157,3 +158,10 @@ export default function HelpCentre() {
     </div>
   )
 }
+
+
+
+
+
+
+

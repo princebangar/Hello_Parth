@@ -1,6 +1,5 @@
 import { Skeleton } from "@food/components/ui/skeleton"
 import { cn } from "@food/utils/utils"
-import { ArrowLeft } from "lucide-react"
 
 const DEFAULT_CARD_COUNT = 4
 
@@ -11,9 +10,8 @@ function LoadingSkeletonRegion({ label = "Loading content", className, children 
       aria-live="polite"
       aria-label={label}
       className={className}
-      translate="no"
     >
-      <span className="sr-only notranslate">{label}</span>
+      <span className="sr-only">{label}</span>
       {children}
     </div>
   )
@@ -77,31 +75,25 @@ function CategoryChipRowSkeleton({ count = 8, className }) {
   )
 }
 
-function ExploreTileSkeleton({ index }) {
+function ExploreTileSkeleton() {
   return (
-    <div
-      className={cn(
-        "rounded-2xl border border-[#f1e3d6] bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]",
-        index % 4 === 0 ? "bg-[#fffaf4]" : ""
-      )}
-    >
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-14 w-14 rounded-2xl" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-3/4 rounded-full" />
-          <Skeleton className="h-3 w-1/2 rounded-full" />
-        </div>
-      </div>
+    <div className="flex flex-col items-center gap-2 w-20 sm:w-24 flex-shrink-0">
+      <Skeleton className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl" />
+      <Skeleton className="h-3 w-12 rounded-full" />
     </div>
   )
 }
 
-function ExploreGridSkeleton({ count = 4, className }) {
+function ExploreGridSkeleton({ count = 6, className, noWrapper = false }) {
+  const items = Array.from({ length: count }, (_, index) => (
+    <ExploreTileSkeleton key={`explore-${index}`} />
+  ))
+
+  if (noWrapper) return <>{items}</>
+
   return (
-    <div className={cn("grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4", className)}>
-      {Array.from({ length: count }, (_, index) => (
-        <ExploreTileSkeleton key={`explore-${index}`} index={index} />
-      ))}
+    <div className={cn("flex gap-4 overflow-hidden", className)}>
+      {items}
     </div>
   )
 }
@@ -356,94 +348,100 @@ function AppShellSkeleton({ className }) {
   )
 }
 
-function CartPageSkeleton({ onBack, className }) {
+function OnboardingSkeleton({ className }) {
   return (
-    <LoadingSkeletonRegion
-      label="Loading cart"
-      className={cn("min-h-screen bg-slate-50 dark:bg-[#0a0a0a]", className)}
-    >
-      <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto flex items-center gap-3 px-3 md:px-6 py-2 md:py-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="h-8 w-8 flex-shrink-0 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="flex-1 min-w-0 space-y-2">
-            <Skeleton className="h-3 w-32 rounded-full" />
-            <Skeleton className="h-4 w-full max-w-sm rounded-full" />
-          </div>
-          <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
+    <LoadingSkeletonRegion label="Loading onboarding" className={cn("min-h-screen bg-gray-50 dark:bg-[#0a0a0a] flex flex-col", className)}>
+      {/* Header */}
+      <header className="px-4 py-4 sm:px-6 sm:py-5 bg-white dark:bg-[#121212] flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-3">
+          {/* Back Button */}
+          <Skeleton className="w-9 h-9 rounded-full bg-slate-200/80 dark:bg-white/10" />
+          {/* Title */}
+          <Skeleton className="h-5 w-40 rounded-md bg-slate-200/80 dark:bg-white/10" />
         </div>
-      </div>
+        <div className="flex items-center gap-3">
+          {/* Step Text */}
+          <Skeleton className="h-4 w-20 rounded-md bg-slate-200/80 dark:bg-white/10" />
+          {/* Logout Button */}
+          <Skeleton className="w-9 h-9 rounded-full bg-slate-200/80 dark:bg-white/10" />
+        </div>
+      </header>
 
-      <div className="max-w-3xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-3 md:space-y-4 pb-44">
-        <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl md:rounded-3xl border border-slate-100 dark:border-gray-800 p-4 md:p-5 space-y-4">
-          {Array.from({ length: 2 }, (_, index) => (
-            <div key={`cart-item-${index}`} className="flex items-start gap-3">
-              <Skeleton className="h-5 w-5 rounded-sm flex-shrink-0" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-2/3 rounded-full" />
-                <Skeleton className="h-3 w-1/4 rounded-full" />
+      {/* Form sections */}
+      <main className="flex-1 px-4 sm:px-6 py-4 space-y-6 max-w-3xl mx-auto w-full">
+        {/* Restaurant Information Card */}
+        <div className="bg-white dark:bg-[#121212] p-4 sm:p-6 rounded-md space-y-5 border border-gray-100 dark:border-gray-800">
+          <Skeleton className="h-6 w-48 rounded-md bg-slate-200/80 dark:bg-white/10" />
+          <div className="space-y-4">
+            <div>
+              <Skeleton className="h-3 w-28 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-36 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 w-24 rounded-full bg-slate-200/80 dark:bg-white/10" />
+                <Skeleton className="h-8 w-28 rounded-full bg-slate-200/80 dark:bg-white/10" />
               </div>
-              <Skeleton className="h-8 w-20 rounded-lg flex-shrink-0" />
-            </div>
-          ))}
-          <Skeleton className="h-4 w-28 rounded-full" />
-        </div>
-
-        <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-100 dark:border-gray-800 p-4 space-y-3">
-          <Skeleton className="h-10 w-full rounded-xl" />
-          <Skeleton className="h-10 w-full rounded-xl" />
-        </div>
-
-        <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-100 dark:border-gray-800 p-4 flex items-center gap-3">
-          <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-40 rounded-full" />
-            <Skeleton className="h-3 w-24 rounded-full" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-100 dark:border-gray-800 p-4 space-y-3">
-          <Skeleton className="h-4 w-28 rounded-full" />
-          <div className="flex gap-2">
-            {Array.from({ length: 3 }, (_, index) => (
-              <Skeleton key={`addr-tab-${index}`} className="h-8 w-16 rounded-full" />
-            ))}
-          </div>
-          <Skeleton className="h-24 w-full rounded-2xl" />
-        </div>
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 p-4 space-y-3">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="space-y-2 flex-1">
-              <Skeleton className="h-3 w-16 rounded-full" />
-              <Skeleton className="h-4 w-32 rounded-full" />
             </div>
           </div>
-          <Skeleton className="h-8 w-20 rounded-lg" />
         </div>
-        <Skeleton className="h-12 md:h-14 w-full max-w-3xl mx-auto rounded-2xl" />
-      </div>
+
+        {/* Owner Details Card */}
+        <div className="bg-white dark:bg-[#121212] p-4 sm:p-6 rounded-md space-y-5 border border-gray-100 dark:border-gray-800">
+          <Skeleton className="h-6 w-32 rounded-md bg-slate-200/80 dark:bg-white/10" />
+          <div className="space-y-4">
+            <div>
+              <Skeleton className="h-3 w-20 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-24 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-24 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+          </div>
+        </div>
+
+        {/* Location Card */}
+        <div className="bg-white dark:bg-[#121212] p-4 sm:p-6 rounded-md space-y-5 border border-gray-100 dark:border-gray-800">
+          <Skeleton className="h-6 w-56 rounded-md bg-slate-200/80 dark:bg-white/10" />
+          <div className="space-y-4">
+            <div>
+              <Skeleton className="h-3 w-36 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-24 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-28 rounded-md mb-2 bg-slate-200/80 dark:bg-white/10" />
+              <Skeleton className="h-10 w-full rounded-md bg-slate-200/80 dark:bg-white/10" />
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="px-4 sm:px-6 py-3 bg-white dark:bg-[#121212] border-t border-gray-100 dark:border-gray-800 flex justify-end">
+        <Skeleton className="h-10 w-28 rounded-md bg-slate-200/80 dark:bg-white/10" />
+      </footer>
     </LoadingSkeletonRegion>
   )
 }
 
 export {
   AppShellSkeleton,
-  CartPageSkeleton,
   CategoryChipRowSkeleton,
   ContentPageSkeleton,
   ExploreGridSkeleton,
   HeroBannerSkeleton,
   LoadingSkeletonRegion,
+  OnboardingSkeleton,
   OrdersDashboardSkeleton,
   RestaurantCardSkeleton,
   RestaurantDetailSkeleton,
@@ -451,4 +449,4 @@ export {
   SkeletonLines,
   TableSkeleton,
   WalletSkeleton,
-}
+  }

@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Search, Download, ChevronDown, Filter, UtensilsCrossed, Settings, ArrowUpDown, Star, BarChart3, FileText, FileSpreadsheet, Code } from "lucide-react"
 import { emptyFoodReports, emptyYearlySalesData } from "@food/utils/adminFallbackData"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
@@ -96,7 +96,7 @@ export default function FoodReport() {
     }
     const fullStars = Math.floor(rating)
     const hasHalfStar = rating % 1 !== 0
-    return "?".repeat(fullStars) + (hasHalfStar ? "�" : "") + "?".repeat(5 - Math.ceil(rating)) + ` (${reviews})`
+    return "?".repeat(fullStars) + (hasHalfStar ? "?" : "") + "?".repeat(5 - Math.ceil(rating)) + ` (${reviews})`
   }
 
   const maxChartValue = emptyYearlySalesData.chartData.length > 0 ? Math.max(...emptyYearlySalesData.chartData.map((d) => d.amount)) : 0
@@ -143,7 +143,7 @@ export default function FoodReport() {
                 >
                   <option value="All restaurants">All restaurants</option>
                   <option value="Hungry Puppets">Hungry Puppets</option>
-                  <option value="Caf� Monarch">Caf� Monarch</option>
+                  <option value="Caf? Monarch">Caf? Monarch</option>
                   <option value="Redcliff Cafe">Redcliff Cafe</option>
                 </select>
                 <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />

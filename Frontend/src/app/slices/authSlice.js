@@ -1,5 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit'
-import { isModuleAuthenticated, getCurrentUserRole } from '@food/utils/auth'
+import { isModuleAuthenticated, getCurrentUserRole } from '@/shared/utils/moduleAuth'
 
 const initialState = {
   // module: 'user' | 'restaurant' | 'delivery' | 'admin'

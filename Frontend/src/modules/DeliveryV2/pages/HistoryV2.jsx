@@ -7,6 +7,35 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
 import useDeliveryBackNavigation from '../hooks/useDeliveryBackNavigation';
+import { Skeleton } from '@food/components/ui/skeleton';
+
+const HISTORY_PREFS_KEY = 'delivery_trip_history_prefs_v1';
+
+const toLocalDateKey = (date) => {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseLocalDateKey = (key) => {
+  if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(String(key))) return null;
+  const [y, m, d] = String(key).split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const loadHistoryPrefs = () => {
+  try {
+    const raw = localStorage.getItem(HISTORY_PREFS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * HistoryV2 - EXACT 1:1 Match with User Screenshot.
@@ -16,29 +45,50 @@ import useDeliveryBackNavigation from '../hooks/useDeliveryBackNavigation';
  */
 export const HistoryV2 = () => {
   const goBack = useDeliveryBackNavigation();
-  const [activeTab, setActiveTab] = useState("daily");
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedTripType, setSelectedTripType] = useState("ALL TRIPS");
+  const savedPrefs = useMemo(() => loadHistoryPrefs(), []);
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = String(savedPrefs?.activeTab || 'daily').toLowerCase();
+    return ['daily', 'weekly', 'monthly'].includes(tab) ? tab : 'daily';
+  });
+  const [selectedDate, setSelectedDate] = useState(() => {
+    return parseLocalDateKey(savedPrefs?.selectedDate) || new Date();
+  });
+  const [selectedTripType, setSelectedTripType] = useState(() => {
+    const type = savedPrefs?.selectedTripType || 'ALL TRIPS';
+    return ['ALL TRIPS', 'Completed', 'Cancelled', 'Pending'].includes(type) ? type : 'ALL TRIPS';
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTripTypePicker, setShowTripTypePicker] = useState(false);
   const [trips, setTrips] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showBonusModal, setShowBonusModal] = useState(false);
   const [bonusTransactions, setBonusTransactions] = useState([]);
   const [bonusLoading, setBonusLoading] = useState(false);
-  const [expandedTripId, setExpandedTripId] = useState(null);
 
   const tripTypes = ["ALL TRIPS", "Completed", "Cancelled", "Pending"];
+
+  // Persist filters so refresh / remount keeps yesterday (etc.) selected
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        HISTORY_PREFS_KEY,
+        JSON.stringify({
+          activeTab,
+          selectedDate: toLocalDateKey(selectedDate),
+          selectedTripType,
+        }),
+      );
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [activeTab, selectedDate, selectedTripType]);
 
   // Fetch Logic
   useEffect(() => {
     const fetchTrips = async () => {
       setLoading(true);
       try {
-        const year = selectedDate.getFullYear();
-        const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
-        const day = String(selectedDate.getDate()).padStart(2, "0");
-        const dateStr = `${year}-${month}-${day}`;
+        const dateStr = toLocalDateKey(selectedDate);
 
         const params = {
           period: activeTab,
@@ -96,10 +146,25 @@ export const HistoryV2 = () => {
 
   const metrics = useMemo(() => {
      return trips.reduce((acc, trip) => {
-        if (trip.status === 'Completed') {
-           acc.earnings += Number(trip.deliveryEarning || trip.amount || trip.earningAmount || 0);
-           const isCOD = (trip.paymentMethod || '').toLowerCase() === 'cash' || (trip.paymentMethod || '').toLowerCase() === 'cod';
-           if (isCOD) acc.cod += Number(trip.codCollectedAmount || trip.orderTotal || 0);
+        const status = String(trip.status || '').toLowerCase();
+        if (status === 'completed') {
+           acc.earnings += Number(trip.deliveryEarning ?? trip.amount ?? trip.earningAmount ?? 0) || 0;
+           const method = String(trip.paymentMethod || '').toLowerCase();
+           const isCOD =
+             method === 'cash' ||
+             method === 'cod' ||
+             method === 'cash on delivery';
+           if (isCOD) {
+             const collected = Number(trip.codCollectedAmount);
+             const due = Number(trip.codAmount);
+             const fallback = Number(trip.orderTotal);
+             const amount = Number.isFinite(collected) && collected > 0
+               ? collected
+               : Number.isFinite(due) && due > 0
+                 ? due
+                 : (Number.isFinite(fallback) ? fallback : 0);
+             acc.cod += amount;
+           }
         }
         return acc;
      }, { earnings: 0, cod: 0 });
@@ -112,45 +177,7 @@ export const HistoryV2 = () => {
     const qty = first.quantity || first.qty || 1;
     const name = first.name || first.itemName || 'Item';
     return `${qty}x ${name}${items.length > 1 ? ` +${items.length - 1} more` : ''}`;
-  };
-
-  const formatCurrency = (amount) => `₹${Number(amount || 0).toFixed(2)}`;
-
-  const getEarningBreakdown = (trip) => {
-    const basePay = Number(trip.riderBasePay || trip.pricing?.deliveryFeeBreakdown?.basePayout || 0);
-    const deliveryFeeShare = Number(trip.riderDeliveryFeeShare || trip.deliveryFee || trip.pricing?.deliveryFee || 0);
-    const distancePay = Math.max(0, Math.round((deliveryFeeShare - basePay) * 100) / 100);
-    const surgeAmount = Number(trip.riderSurgePay || trip.surgeAmount || trip.pricing?.surgeAmount || 0);
-    const incentiveAmount = Number(trip.riderIncentivePay || trip.pricing?.deliveryPartnerIncentiveAmount || 0);
-    const tipReceived = Number(trip.riderTipPay || trip.deliveryPartnerTip || trip.pricing?.deliveryPartnerTip || 0);
-    const totalPayout = Number(
-      trip.riderTotalPayout ||
-      trip.deliveryEarning ||
-      trip.amount ||
-      trip.earningAmount ||
-      (deliveryFeeShare + surgeAmount + incentiveAmount + tipReceived)
-    );
-
-    const items = [];
-    if (basePay > 0 && distancePay > 0) {
-      items.push({ key: 'basePay', label: 'Base Pay', value: basePay });
-      items.push({ key: 'distancePay', label: 'Distance Pay', value: distancePay });
-    } else if (deliveryFeeShare > 0) {
-      items.push({ key: 'deliveryFee', label: 'Delivery Charge', value: deliveryFeeShare });
-    }
-    if (surgeAmount > 0) {
-      items.push({ key: 'surgeAmount', label: 'Surge Charge', value: surgeAmount });
-    }
-    if (incentiveAmount > 0) {
-      items.push({ key: 'incentiveAmount', label: 'Incentive', value: incentiveAmount });
-    }
-    if (tipReceived > 0) {
-      items.push({ key: 'tipReceived', label: 'Tip Received', value: tipReceived });
-    }
-    items.push({ key: 'totalPayout', label: 'Total Earned', value: totalPayout, isTotal: true });
-
-    return items;
-  };
+  }
 
   return (
     <div className="min-h-screen bg-white font-poppins pb-32">
@@ -243,11 +270,15 @@ export const HistoryV2 = () => {
           <div className="bg-[#E9F9F4] rounded-2xl p-6 border border-[#D1F2E8] flex justify-between items-center">
              <div>
                 <p className="text-[11px] font-bold text-[#10B981] mb-1">COD Collected</p>
-                <h3 className="text-xl font-bold text-gray-950">₹{metrics.cod.toFixed(2)}</h3>
+                <h3 className="text-xl font-bold text-gray-950 min-h-[1.75rem] flex items-center">
+                   {loading ? <Skeleton className="h-7 w-24" /> : `₹${metrics.cod.toFixed(2)}`}
+                </h3>
              </div>
              <div className="text-right">
                 <p className="text-[11px] font-bold text-[#10B981] mb-1">Earnings</p>
-                <h3 className="text-xl font-bold text-gray-950">₹{metrics.earnings.toFixed(2)}</h3>
+                <h3 className="text-xl font-bold text-gray-950 min-h-[1.75rem] flex items-center justify-end">
+                   {loading ? <Skeleton className="h-7 w-24" /> : `₹${metrics.earnings.toFixed(2)}`}
+                </h3>
              </div>
           </div>
 
@@ -263,21 +294,20 @@ export const HistoryV2 = () => {
                    const isCompleted = (trip.status || '').toLowerCase() === 'completed';
                    const isCancelled = (trip.status || '').toLowerCase() === 'cancelled';
                    const isPending = !isCompleted && !isCancelled;
-                   const payout = Number(
-                      trip.riderTotalPayout ||
-                      trip.deliveryEarning ||
-                      trip.amount ||
-                      trip.earningAmount ||
-                      0
-                   );
-                   const collection = Number(trip.codCollectedAmount || trip.orderTotal || 0);
+                   const payout = Number(trip.deliveryEarning ?? trip.amount ?? trip.earningAmount ?? 0) || 0;
+                   const collectedRaw = Number(trip.codCollectedAmount);
+                   const dueRaw = Number(trip.codAmount);
+                   const totalRaw = Number(trip.orderTotal);
+                   const collection = Number.isFinite(collectedRaw) && collectedRaw > 0
+                     ? collectedRaw
+                     : Number.isFinite(dueRaw) && dueRaw > 0
+                       ? dueRaw
+                       : (Number.isFinite(totalRaw) ? totalRaw : 0);
+                   const isQR = (trip.paymentMethod || '').toLowerCase() === 'razorpay_qr';
                    const isCOD = (trip.paymentMethod || '').toLowerCase() === 'cash' || (trip.paymentMethod || '').toLowerCase() === 'cod';
-                   const breakdown = getEarningBreakdown(trip);
-                   const tripKey = trip.orderId || trip._id || idx;
-                   const isBreakdownOpen = expandedTripId === tripKey;
 
                    return (
-                      <div key={tripKey} className="bg-white rounded-[24px] p-5 border border-[#EEF2F6] shadow-[0_10px_30px_rgba(15,23,42,0.06)] active:scale-[0.99] transition-all">
+                      <div key={trip.orderId || idx} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm active:scale-[0.99] transition-all">
                          <div className="flex justify-between items-start mb-2">
                              <div>
                                 <h4 className="text-base font-bold text-gray-950">{trip.orderId || 'ORDER-ID'}</h4>
@@ -290,63 +320,25 @@ export const HistoryV2 = () => {
                          </div>
                          
                          <div className="flex gap-2 mb-4 mt-3">
-                             <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${isCOD ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-[#10B981]'}`}>
-                                {isCOD ? 'COD' : 'Online'}
+                             <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${(isCOD || isQR) ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-[#10B981]'}`}>
+                                {isQR ? 'COD (QR)' : isCOD ? 'COD' : 'Online'}
                              </span>
                          </div>
 
-                         <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#F4F7FA]">
+                         <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-50">
                              <div>
                                 <p className="text-[11px] font-medium text-gray-400 mb-1">Time</p>
                                 <p className="text-sm font-bold text-gray-950">{trip.time || '--:--'}</p>
                              </div>
                              <div className="text-center">
                                 <p className="text-[11px] font-medium text-gray-400 mb-1">COD</p>
-                                <p className="text-sm font-bold text-gray-950">{formatCurrency(collection)}</p>
+                                <p className="text-sm font-bold text-gray-950">₹{collection.toFixed(2)}</p>
                              </div>
                              <div className="text-right">
                                 <p className="text-[11px] font-medium text-gray-400 mb-1">Earning</p>
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedTripId(isBreakdownOpen ? null : tripKey)}
-                                  className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#F7FFFB] px-2.5 py-1 text-right transition-colors hover:bg-[#ECFDF5]"
-                                  aria-label={isBreakdownOpen ? 'Hide earning breakdown' : 'Show earning breakdown'}
-                                >
-                                  <span className="text-sm font-bold text-gray-950">{formatCurrency(payout)}</span>
-                                  <ChevronDown className={`w-4 h-4 text-[#10B981] transition-transform ${isBreakdownOpen ? 'rotate-180' : ''}`} />
-                                </button>
+                                <p className="text-sm font-bold text-gray-950">₹{payout.toFixed(2)}</p>
                              </div>
                          </div>
-                         <AnimatePresence initial={false}>
-                            {isBreakdownOpen && (
-                               <motion.div
-                                 initial={{ opacity: 0, height: 0 }}
-                                 animate={{ opacity: 1, height: 'auto' }}
-                                 exit={{ opacity: 0, height: 0 }}
-                                 className="overflow-hidden"
-                               >
-                                 <div className="mt-4 rounded-[20px] border border-[#D7F5E8] bg-gradient-to-br from-[#F7FFFB] to-[#F0FDF7] p-4">
-                                    <div className="mb-3 flex items-center justify-between">
-                                       <p className="text-xs font-bold uppercase tracking-wider text-[#10B981]">Earning Breakdown</p>
-                                       <p className="text-xs font-medium text-gray-400">Per order payout</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                       {breakdown.map((item) => (
-                                          <div
-                                            key={item.key}
-                                            className={`flex items-center justify-between rounded-xl text-sm ${item.isTotal ? 'mt-3 border-t border-[#D1F2E8] pt-3 font-bold text-gray-950' : 'bg-white/70 px-3 py-2 text-gray-600'}`}
-                                          >
-                                             <span>{item.label}</span>
-                                             <span className={item.isTotal ? 'text-gray-950' : 'text-[#10B981]'}>
-                                                {formatCurrency(item.value)}
-                                             </span>
-                                          </div>
-                                       ))}
-                                    </div>
-                                 </div>
-                               </motion.div>
-                            )}
-                         </AnimatePresence>
                       </div>
                    );
                 })}

@@ -15,7 +15,8 @@ const createOfferSchema = z.object({
     maxDiscount: z.number().min(0).optional(),
     usageLimit: z.number().min(0).optional(),
     perUserLimit: z.number().min(0).optional(),
-    isFirstOrderOnly: z.boolean().optional()
+    isFirstOrderOnly: z.boolean().optional(),
+    couponType: z.enum(['delivery', 'takeaway', 'all']).default('all')
 });
 
 export const validateCreateOfferDto = (body) => {
@@ -29,11 +30,18 @@ export const validateCreateOfferDto = (body) => {
         restaurantId: body?.restaurantId ? String(body.restaurantId) : undefined,
         endDate: body?.endDate ? String(body.endDate) : undefined,
         startDate: body?.startDate ? String(body.startDate) : undefined,
-        minOrderValue: body?.minOrderValue !== undefined ? Number(body.minOrderValue) : undefined,
+        minOrderValue: (() => {
+            if (body?.minOrderValue === undefined || body?.minOrderValue === null || body?.minOrderValue === '') {
+                return undefined;
+            }
+            const parsed = Number(body.minOrderValue);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+        })(),
         maxDiscount: body?.maxDiscount !== undefined ? Number(body.maxDiscount) : undefined,
         usageLimit: body?.usageLimit !== undefined ? Number(body.usageLimit) : undefined,
         perUserLimit: body?.perUserLimit !== undefined ? Number(body.perUserLimit) : undefined,
-        isFirstOrderOnly: body?.isFirstOrderOnly !== undefined ? Boolean(body.isFirstOrderOnly) : undefined
+        isFirstOrderOnly: body?.isFirstOrderOnly !== undefined ? Boolean(body.isFirstOrderOnly) : undefined,
+        couponType: body?.couponType || 'all'
     };
 
     const result = createOfferSchema.safeParse(normalized);
@@ -85,7 +93,8 @@ export const validateCreateOfferDto = (body) => {
         maxDiscount,
         usageLimit: result.data.usageLimit,
         perUserLimit: result.data.perUserLimit,
-        isFirstOrderOnly: result.data.isFirstOrderOnly
+        isFirstOrderOnly: result.data.isFirstOrderOnly === true,
+        couponType: result.data.couponType
     };
 };
 

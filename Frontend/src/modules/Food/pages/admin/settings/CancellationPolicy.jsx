@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import api from "@food/api"
 import { API_ENDPOINTS } from "@food/api/config"
 import { Textarea } from "@food/components/ui/textarea"
-import { legalHtmlToPlainText, plainTextToLegalHtml } from "@food/utils/legalContentFormat"
+import { unwrapLegalPage, plainTextToLegalHtml } from "@food/utils/legalContentFormat"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -27,13 +27,7 @@ export default function CancellationPolicy() {
       setLoading(true)
       const response = await api.get(API_ENDPOINTS.ADMIN.CANCELLATION, { contextModule: "admin" })
       if (response.data.success) {
-        // Convert HTML to plain text for textarea
-        const content = response.data.data.content || ''
-        const textContent = legalHtmlToPlainText(content)
-        setCancellationData({
-          ...response.data.data,
-          content: textContent
-        })
+        setCancellationData(unwrapLegalPage(response.data, { title: 'Cancellation Policy' }))
       }
     } catch (error) {
       debugError('Error fetching cancellation data:', error)
@@ -57,13 +51,7 @@ export default function CancellationPolicy() {
       )
       if (response.data.success) {
         toast.success('Cancellation policy updated successfully')
-        // Convert HTML to plain text for display in textarea
-        const content = response.data.data.content || ''
-        const textContent = legalHtmlToPlainText(content)
-        setCancellationData({
-          ...response.data.data,
-          content: textContent
-        })
+        setCancellationData(unwrapLegalPage(response.data, { title: 'Cancellation Policy' }))
       }
     } catch (error) {
       debugError('Error saving cancellation policy:', error)

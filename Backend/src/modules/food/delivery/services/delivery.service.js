@@ -4,25 +4,140 @@ import { DeliverySupportTicket } from '../models/supportTicket.model.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { FoodEarningAddon } from '../../admin/models/earningAddon.model.js';
 import { FoodOrder } from '../../orders/models/order.model.js';
-import { uploadImageBuffer } from '../../../../services/cloudinary.service.js';
+import { uploadImageBuffer, deleteReplacedAssets } from '../../../../services/storage.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
+import { logger } from '../../../../utils/logger.js';
+import {
+  toStartOfDayInTimeZone,
+  toEndOfDayInTimeZone,
+  getWeekRangeInTimeZone,
+  getMonthRangeInTimeZone,
+  APP_TIMEZONE,
+} from '../../../../utils/timezone.js';
+
+export const normalizeDeliveryPhone = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    return digits.slice(-10) || null;
+};
+
+const escapeDeliveryPhoneRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export const findDeliveryPartnerByPhone = async (phone) => {
+    const normalized = normalizeDeliveryPhone(phone);
+    if (!normalized) return null;
+
+    const candidates = Array.from(
+        new Set([normalized, `91${normalized}`, `+91${normalized}`, `0${normalized}`])
+    );
+    const suffixPattern = new RegExp(`${escapeDeliveryPhoneRegex(normalized)}$`);
+
+    const matchingPartners = await FoodDeliveryPartner.find({
+        $or: [
+            { phone: { $in: candidates } },
+            { phone: { $regex: suffixPattern } },
+        ],
+    });
+
+    const statusPriority = { approved: 1, pending: 2, rejected: 3, deleted: 4 };
+    return (
+        matchingPartners.sort((a, b) => {
+            const pA = statusPriority[a.status] || 99;
+            const pB = statusPriority[b.status] || 99;
+            return pA - pB;
+        })[0] || null
+    );
+};
+
+const formatDeliveryDuplicateKeyError = (err) => {
+    if (!err || err.code !== 11000) return null;
+
+    const keyPattern = err.keyPattern || {};
+    const keyValue = err.keyValue || {};
+
+    if (keyPattern.phone || keyValue.phone !== undefined) {
+        return 'Delivery partner with this phone number already exists';
+    }
+    if (keyPattern.vehicleNumber || keyValue.vehicleNumber !== undefined) {
+        return 'This vehicle number is already registered. Please use a different vehicle number.';
+    }
+    if (keyPattern.panNumber || keyValue.panNumber !== undefined) {
+        return 'This PAN number is already registered.';
+    }
+    if (keyPattern.aadharNumber || keyValue.aadharNumber !== undefined) {
+        return 'This Aadhar number is already registered.';
+    }
+    if (keyPattern.drivingLicenseNumber || keyValue.drivingLicenseNumber !== undefined) {
+        return 'This driving license number is already registered.';
+    }
+
+    return 'This account detail is already registered. Please check your information.';
+};
+
+const clearPartnerForReRegistration = async (existing) => {
+    if (!existing) return;
+
+    if (existing.status === 'rejected') {
+        await FoodDeliveryPartner.deleteOne({ _id: existing._id });
+        return;
+    }
+
+    if (existing.status === 'deleted') {
+        existing.phone = `${existing.phone}_deleted_${Date.now()}`;
+        await existing.save();
+    }
+};
+
+/** Keep FCM arrays on the in-memory doc in sync before partner.save() (avoids wiping tokens). */
+function appendPartnerFcmToken(partner, fcmToken, platform = 'web') {
+    const token = String(fcmToken || '').trim();
+    if (!token || !partner) return;
+    const field = platform === 'mobile' ? 'fcmTokenMobile' : 'fcmTokens';
+    const existing = Array.isArray(partner[field]) ? partner[field] : [];
+    if (existing.includes(token)) return;
+    partner[field] = [...existing, token].slice(-10);
+}
 
 export const registerDeliveryPartner = async (payload, files) => {
     const { 
-        name, phone, email, countryCode, address, city, state, zoneId, zoneName,
+        name, phone, email, countryCode, address, city, state, 
         vehicleType, vehicleName, vehicleNumber, drivingLicenseNumber, panNumber, aadharNumber,
         fcmToken, platform 
     } = payload;
     const refRaw = typeof payload?.ref === 'string' ? String(payload.ref).trim() : '';
+    const normalizedPhone = normalizeDeliveryPhone(phone);
 
-    const existing = await FoodDeliveryPartner.findOne({ phone });
+    if (!normalizedPhone) {
+        throw new ValidationError('Valid phone number is required');
+    }
+
+    const existing = await findDeliveryPartnerByPhone(normalizedPhone);
     if (existing) {
-        if (existing.status !== 'rejected') {
-            throw new ValidationError('Delivery partner with this phone already exists');
+        if (existing.status === 'pending') {
+            throw new ValidationError(
+                'Registration with this phone is already submitted and pending admin approval. Please check Join Requests in admin panel.'
+            );
         }
-        // If rejected, delete the old record so they can start fresh with same phone
-        await FoodDeliveryPartner.deleteMany({ phone });
+        if (existing.status === 'approved') {
+            throw new ValidationError('Delivery partner with this phone number already exists. Please login instead.');
+        }
+        await clearPartnerForReRegistration(existing);
+    }
+
+    const normalizedVehicleNumber = vehicleNumber
+        ? String(vehicleNumber).trim().toUpperCase()
+        : undefined;
+
+    if (normalizedVehicleNumber) {
+        const existingVehicle = await FoodDeliveryPartner.findOne({
+            vehicleNumber: normalizedVehicleNumber,
+        }).select('_id phone status').lean();
+
+        if (existingVehicle) {
+            throw new ValidationError(
+                'This vehicle number is already registered. Please use a different vehicle number.'
+            );
+        }
     }
 
     const images = {};
@@ -33,14 +148,8 @@ export const registerDeliveryPartner = async (payload, files) => {
     if (files?.aadharPhoto?.[0]) {
         images.aadharPhoto = await uploadImageBuffer(files.aadharPhoto[0].buffer, 'food/delivery/aadhar');
     }
-    if (files?.aadharPhotoBack?.[0]) {
-        images.aadharPhotoBack = await uploadImageBuffer(files.aadharPhotoBack[0].buffer, 'food/delivery/aadhar');
-    }
     if (files?.panPhoto?.[0]) {
         images.panPhoto = await uploadImageBuffer(files.panPhoto[0].buffer, 'food/delivery/pan');
-    }
-    if (files?.panPhotoBack?.[0]) {
-        images.panPhotoBack = await uploadImageBuffer(files.panPhotoBack[0].buffer, 'food/delivery/pan');
     }
     if (files?.drivingLicensePhoto?.[0]) {
         images.drivingLicensePhoto = await uploadImageBuffer(
@@ -48,56 +157,81 @@ export const registerDeliveryPartner = async (payload, files) => {
             'food/delivery/license'
         );
     }
-    if (files?.drivingLicensePhotoBack?.[0]) {
-        images.drivingLicensePhotoBack = await uploadImageBuffer(
-            files.drivingLicensePhotoBack[0].buffer,
-            'food/delivery/license'
-        );
-    }
 
-    const partner = await FoodDeliveryPartner.create({
-        name,
-        phone,
-        email: email && String(email).trim() ? String(email).trim() : undefined,
-        countryCode,
-        address,
-        city,
-        state,
-        zoneId: zoneId && mongoose.Types.ObjectId.isValid(zoneId) ? zoneId : null,
-        zoneName: zoneName ? String(zoneName).trim() : '',
-        vehicleType,
-        vehicleName,
-        vehicleNumber,
-        drivingLicenseNumber,
-        panNumber,
-        aadharNumber,
-        status: 'pending',
-        ...images
-    });
+    const normalizedEmail =
+        email && String(email).trim() ? String(email).trim().toLowerCase() : undefined;
 
-    // Update FCM token if provided
-    if (fcmToken) {
-        if (platform === 'mobile') {
-            partner.fcmTokenMobile = [fcmToken];
-        } else {
-            partner.fcmTokens = [fcmToken];
+    let partner;
+
+    try {
+        partner = await FoodDeliveryPartner.create({
+            name,
+            phone: normalizedPhone,
+            email: normalizedEmail,
+            countryCode,
+            address,
+            city,
+            state,
+            vehicleType,
+            vehicleName,
+            vehicleNumber: normalizedVehicleNumber,
+            drivingLicenseNumber,
+            panNumber,
+            aadharNumber,
+            status: 'pending',
+            ...(fcmToken
+                ? (platform === 'mobile'
+                    ? { fcmTokenMobile: [String(fcmToken).trim()] }
+                    : { fcmTokens: [String(fcmToken).trim()] })
+                : {}),
+            ...images
+        });
+    } catch (err) {
+        const duplicateMessage = formatDeliveryDuplicateKeyError(err);
+        if (duplicateMessage) {
+            throw new ValidationError(duplicateMessage);
         }
+        throw err;
     }
 
-    // Ensure referralCode exists for sharing.
+    const postCreateSet = {};
     if (!partner.referralCode) {
-        partner.referralCode = String(partner._id);
+        postCreateSet.referralCode = String(partner._id);
     }
 
     // Store referredBy (no credit here; credit happens on admin approval).
     if (refRaw && mongoose.Types.ObjectId.isValid(refRaw) && String(refRaw) !== String(partner._id)) {
         const referrer = await FoodDeliveryPartner.findById(refRaw).select('_id').lean();
         if (referrer) {
-            partner.referredBy = referrer._id;
+            postCreateSet.referredBy = referrer._id;
         }
     }
 
-    await partner.save();
+    if (Object.keys(postCreateSet).length) {
+        await FoodDeliveryPartner.updateOne({ _id: partner._id }, { $set: postCreateSet });
+        Object.assign(partner, postCreateSet);
+    }
+
+    if (fcmToken) {
+        try {
+            const { upsertFirebaseDeviceToken } = await import('../../../../core/notifications/firebase.service.js');
+            await upsertFirebaseDeviceToken({
+                ownerType: 'DELIVERY_PARTNER',
+                ownerId: String(partner._id),
+                token: String(fcmToken).trim(),
+                platform: platform === 'mobile' ? 'mobile' : 'web',
+            });
+        } catch (err) {
+            logger.warn(`[FCM-Register] Delivery ${partner._id} upsert backup failed: ${err?.message || err}`);
+        }
+    }
+
+    const tokenSnapshot = await FoodDeliveryPartner.findById(partner._id)
+        .select('fcmTokens fcmTokenMobile')
+        .lean();
+    logger.info(
+        `[FCM-Register] Delivery ${partner._id} saved tokens web=${tokenSnapshot?.fcmTokens?.length || 0} mobile=${tokenSnapshot?.fcmTokenMobile?.length || 0}`
+    );
 
     try {
         const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
@@ -125,12 +259,16 @@ export const updateDeliveryPartnerProfile = async (userId, payload, files) => {
     }
 
     const {
-        name, countryCode, address, city, state,
+        name, email, countryCode, address, city, state,
         vehicleType, vehicleName, vehicleNumber, drivingLicenseNumber, panNumber, aadharNumber,
         fcmToken, platform
     } = payload;
 
     if (name) partner.name = name;
+    if (email !== undefined) {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        if (normalizedEmail) partner.email = normalizedEmail;
+    }
     if (countryCode !== undefined) partner.countryCode = countryCode;
     if (address !== undefined) partner.address = address;
     if (city !== undefined) partner.city = city;
@@ -141,23 +279,15 @@ export const updateDeliveryPartnerProfile = async (userId, payload, files) => {
     if (drivingLicenseNumber !== undefined) partner.drivingLicenseNumber = drivingLicenseNumber;
 
     if (fcmToken) {
-        if (platform === 'mobile') {
-            if (!partner.fcmTokenMobile) partner.fcmTokenMobile = [];
-            if (!partner.fcmTokenMobile.includes(fcmToken)) {
-                partner.fcmTokenMobile.push(fcmToken);
-            }
-        } else {
-            if (!partner.fcmTokens) partner.fcmTokens = [];
-            if (!partner.fcmTokens.includes(fcmToken)) {
-                partner.fcmTokens.push(fcmToken);
-            }
-        }
+        appendPartnerFcmToken(partner, fcmToken, platform);
     }
 
     let updatedDocsRequiringReapproval = false;
 
     if (files?.profilePhoto?.[0]) {
-        partner.profilePhoto = await uploadImageBuffer(files.profilePhoto[0].buffer, 'food/delivery/profile');
+        partner.profilePhoto = await uploadImageBuffer(files.profilePhoto[0].buffer, 'food/delivery/profile', {
+            replaceUrl: partner.profilePhoto
+        });
     }
 
     await partner.save();
@@ -182,7 +312,9 @@ export const updateDeliveryPartnerDetails = async (userId, payload) => {
     }
 
     if (payload?.profilePhoto !== undefined) {
-        partner.profilePhoto = payload.profilePhoto ? String(payload.profilePhoto).trim() : '';
+        const nextPhoto = payload.profilePhoto ? String(payload.profilePhoto).trim() : '';
+        await deleteReplacedAssets(partner.profilePhoto, nextPhoto);
+        partner.profilePhoto = nextPhoto;
     }
 
     await partner.save();
@@ -207,7 +339,9 @@ export const updateDeliveryPartnerProfilePhotoBase64 = async (userId, payload) =
         throw new ValidationError('Image too large (max 8MB)');
     }
     // uploadImageBuffer expects raw bytes; mimeType is ignored by current implementation, but buffer is valid.
-    partner.profilePhoto = await uploadImageBuffer(buffer, 'food/delivery/profile');
+    partner.profilePhoto = await uploadImageBuffer(buffer, 'food/delivery/profile', {
+        replaceUrl: partner.profilePhoto
+    });
     await partner.save();
     return partner.toObject();
 };
@@ -251,7 +385,9 @@ export const updateDeliveryPartnerBankDetails = async (userId, payload, files) =
     }
 
     if (files?.upiQrCode?.[0]) {
-        partner.upiQrCode = await uploadImageBuffer(files.upiQrCode[0].buffer, 'food/delivery/upi');
+        partner.upiQrCode = await uploadImageBuffer(files.upiQrCode[0].buffer, 'food/delivery/upi', {
+            replaceUrl: partner.upiQrCode
+        });
     }
 
     await partner.save();
@@ -310,56 +446,11 @@ export const updateDeliveryAvailability = async (userId, payload) => {
     if (!partner) {
         throw new ValidationError('Delivery partner not found');
     }
-    const { status, latitude, longitude, selfieImageUrl, forceBypassForDev } = payload || {};
+    const { status, latitude, longitude } = payload || {};
     let validStatus = 'offline';
     if (status === 'online' || status === true) validStatus = 'online';
     else if (status === 'offline' || status === false) validStatus = 'offline';
-
-    const todayKey = new Date().toISOString().slice(0, 10);
-
-    if (validStatus === 'online' && !forceBypassForDev) {
-        // Step 1: Enforce Active Gig Check
-        const { getActiveGigForPartner } = await import('./gig.service.js');
-        const activeGig = await getActiveGigForPartner(partner._id);
-
-        if (!activeGig) {
-            const err = new ValidationError("You don't have an active gig. Please book a gig before going online.");
-            err.code = 'NO_ACTIVE_GIG';
-            throw err;
-        }
-
-        // Step 2: Enforce Verified Selfie Check for Today
-        const onlineSelfie = partner.onlineSelfie || {};
-        const isVerifiedToday =
-            onlineSelfie.forDate === todayKey &&
-            onlineSelfie.imageUrl &&
-            onlineSelfie.verifiedStatus === 'verified';
-
-        if (!isVerifiedToday && !String(selfieImageUrl || '').trim()) {
-            const err = new ValidationError('Selfie verification is required before going online today.');
-            err.code = 'SELFIE_REQUIRED';
-            throw err;
-        }
-
-        if (String(selfieImageUrl || '').trim()) {
-            partner.onlineSelfie = {
-                ...(onlineSelfie || {}),
-                imageUrl: selfieImageUrl.trim(),
-                capturedAt: new Date(),
-                uploadedAt: new Date(),
-                forDate: todayKey,
-                verifiedStatus: 'verified'
-            };
-        }
-
-        // Step 3: Mark gig booking status to completed
-        const { FoodGigBooking } = await import('../models/foodGigBooking.model.js');
-        await FoodGigBooking.updateOne(
-            { gigId: activeGig._id, deliveryPartnerId: partner._id, status: 'booked' },
-            { $set: { status: 'completed', completedAt: new Date() } }
-        );
-    }
-
+    
     partner.availabilityStatus = validStatus;
     if (typeof latitude === 'number' && typeof longitude === 'number') {
         partner.lastLocation = {
@@ -371,10 +462,7 @@ export const updateDeliveryAvailability = async (userId, payload) => {
         partner.lastLocationAt = new Date();
     }
     await partner.save();
-    return {
-        availabilityStatus: partner.availabilityStatus,
-        onlineSelfie: partner.onlineSelfie || {}
-    };
+    return { availabilityStatus: partner.availabilityStatus };
 };
 
 // ----- Delivery partner wallet (Pocket / requests page) -----
@@ -405,7 +493,7 @@ export const getDeliveryPartnerWallet = async (deliveryPartnerId) => {
             {
                 $group: {
                     _id: null,
-                    totalEarned: { $sum: { $ifNull: ['$riderEarning', '$pricing.deliveryFee'] } }
+                    totalEarned: { $sum: { $ifNull: ['$riderEarning', 0] } }
                 }
             }
         ]),
@@ -459,7 +547,7 @@ export const getDeliveryPartnerWallet = async (deliveryPartnerId) => {
         return {
             _id: o._id,
             type: 'payment',
-            amount: Number(o.riderEarning) || Number(o?.pricing?.deliveryFee) || 0,
+            amount: Number(o.riderEarning) || 0,
             status: 'Completed',
             date,
             createdAt: date,
@@ -536,33 +624,74 @@ export const getDeliveryPartnerEarnings = async (deliveryPartnerId, query = {}) 
         orderStatus: 'delivered',
     };
     if (range) {
-        match['deliveryState.deliveredAt'] = { $gte: range.start, $lte: range.end };
+        // Prefer deliveredAt, but don't drop delivered orders that only have createdAt/updatedAt
+        match.$or = [
+            { 'deliveryState.deliveredAt': { $gte: range.start, $lte: range.end } },
+            {
+                $and: [
+                    {
+                        $or: [
+                            { 'deliveryState.deliveredAt': { $exists: false } },
+                            { 'deliveryState.deliveredAt': null },
+                        ],
+                    },
+                    { updatedAt: { $gte: range.start, $lte: range.end } },
+                ],
+            },
+            {
+                $and: [
+                    {
+                        $or: [
+                            { 'deliveryState.deliveredAt': { $exists: false } },
+                            { 'deliveryState.deliveredAt': null },
+                        ],
+                    },
+                    { createdAt: { $gte: range.start, $lte: range.end } },
+                ],
+            },
+        ];
     }
 
-    const [totalOrders, agg] = await Promise.all([
+    const [totalOrders, agg, bonusAgg] = await Promise.all([
         FoodOrder.countDocuments(match),
         FoodOrder.aggregate([
             { $match: match },
             {
                 $group: {
                     _id: null,
-                    totalEarnings: { $sum: { $ifNull: ['$riderEarning', '$pricing.deliveryFee'] } }
+                    totalEarnings: { $sum: { $ifNull: ['$riderEarning', 0] } }
                 }
             }
-        ])
+        ]),
+        range
+            ? DeliveryBonusTransaction.aggregate([
+                {
+                    $match: {
+                        deliveryPartnerId: partnerId,
+                        createdAt: { $gte: range.start, $lte: range.end },
+                    },
+                },
+                { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+            ])
+            : DeliveryBonusTransaction.aggregate([
+                { $match: { deliveryPartnerId: partnerId } },
+                { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+            ]),
     ]);
 
     const totalEarnings = Number(agg?.[0]?.totalEarnings) || 0;
+    const totalBonus = Number(bonusAgg?.[0]?.total) || 0;
 
-    // Frontend only strongly relies on totalEarnings + totalOrders.
+    // Weekly "Earnings" card = order earnings only.
+    // Admin/referral/addon bonuses stay in pocket balance (not mixed into this card).
     const summary = {
         totalEarnings,
         totalOrders,
         totalHours: 0,
         totalMinutes: 0,
         orderEarning: totalEarnings,
-        incentive: 0,
-        otherEarnings: 0
+        incentive: totalBonus,
+        otherEarnings: totalBonus,
     };
 
     return {
@@ -581,112 +710,93 @@ const normalizeStatusFilter = (status) => {
     return s;
 };
 
-const toStartOfDay = (d) => {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    return x;
-};
+const toStartOfDay = (d) => toStartOfDayInTimeZone(d);
+const toEndOfDay = (d) => toEndOfDayInTimeZone(d);
+const getWeekRange = (anchorDate) => getWeekRangeInTimeZone(anchorDate);
+const getMonthRange = (anchorDate) => getMonthRangeInTimeZone(anchorDate);
 
-const toEndOfDay = (d) => {
-    const x = new Date(d);
-    x.setHours(23, 59, 59, 999);
-    return x;
-};
-
-const getWeekRange = (anchorDate) => {
-    const d = new Date(anchorDate);
-    const start = toStartOfDay(d);
-    start.setDate(start.getDate() - start.getDay()); // Sunday
-    const end = toEndOfDay(start);
-    end.setDate(start.getDate() + 6);
-    return { start, end };
-};
-
-const getMonthRange = (anchorDate) => {
-    const d = new Date(anchorDate);
-    const start = new Date(d.getFullYear(), d.getMonth(), 1);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+const formatTripTimeIST = (value) => {
+  if (!value) return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  // Always Asia/Kolkata — never depend on server OS timezone
+  return d.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: APP_TIMEZONE,
+  });
 };
 
 const computeRange = (period, date) => {
-    const p = String(period || 'daily').toLowerCase();
-    const anchor = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
-    if (p === 'weekly' || p === 'week') return getWeekRange(anchor);
-    if (p === 'monthly' || p === 'month') return getMonthRange(anchor);
-    // daily
-    return { start: toStartOfDay(anchor), end: toEndOfDay(anchor) };
+  const p = String(period || 'daily').toLowerCase();
+  const anchor = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  if (p === 'weekly' || p === 'week') return getWeekRange(anchor);
+  if (p === 'monthly' || p === 'month') return getMonthRange(anchor);
+  // daily
+  return { start: toStartOfDay(anchor), end: toEndOfDay(anchor) };
 };
 
 const toTripDto = (order) => {
-    const createdAt = order?.createdAt || null;
-    const deliveredAt = order?.deliveryState?.deliveredAt || order?.deliveredAt || order?.completedAt || null;
-    const dateForUi = deliveredAt || createdAt || order?.updatedAt || null;
+  const createdAt = order?.createdAt || null;
+  const deliveredAt = order?.deliveryState?.deliveredAt || order?.deliveredAt || order?.completedAt || null;
+  // Match admin "ORDER DATE" semantics for the Time column: order placed time.
+  // (Delivered time is still exposed separately as deliveredAt for clients that need it.)
+  const dateForUi = createdAt || deliveredAt || order?.updatedAt || null;
 
-    const time = dateForUi
-        ? new Date(dateForUi).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-        : '';
+  const time = formatTripTimeIST(dateForUi);
 
-    const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
-    const isDelivered = orderStatus === 'delivered' || String(order?.deliveryState?.currentPhase || '').toLowerCase() === 'delivered';
-    const isCancelled = orderStatus.startsWith('cancelled') || String(order?.deliveryState?.status || '').toLowerCase().includes('cancel');
+  const orderStatus = String(order?.orderStatus || order?.status || '').toLowerCase();
+  const isDelivered = orderStatus === 'delivered' || String(order?.deliveryState?.currentPhase || '').toLowerCase() === 'delivered';
+  const isCancelled = orderStatus.startsWith('cancelled') || String(order?.deliveryState?.status || '').toLowerCase().includes('cancel');
 
-    const status = isDelivered ? 'Completed' : isCancelled ? 'Cancelled' : 'Pending';
+  const status = isDelivered ? 'Completed' : isCancelled ? 'Cancelled' : 'Pending';
 
-    const restaurantName =
-        order?.restaurantId?.restaurantName ||
-        order?.restaurantName ||
-        order?.restaurant?.restaurantName ||
-        '';
+  const restaurantName =
+    order?.restaurantId?.restaurantName ||
+    order?.restaurantName ||
+    order?.restaurant?.restaurantName ||
+    '';
 
-    const paymentMethod = order?.payment?.method || order?.paymentMethod || '';
-    const pricingTotal = Number(order?.pricing?.total) || Number(order?.totalAmount) || 0;
+  const paymentMethod = String(order?.payment?.method || order?.paymentMethod || '').toLowerCase();
+  const pricingTotal = Number(order?.pricing?.total) || Number(order?.totalAmount) || 0;
 
-    const earningAmount = Number(order?.riderEarning ?? order?.deliveryEarning ?? 0) || 0;
-    const riderBasePay = Number(order?.riderBasePay) || Number(order?.pricing?.deliveryFeeBreakdown?.basePayout) || 0;
-    const riderDeliveryFeeShare = Number(order?.riderDeliveryFeeShare) || Number(order?.pricing?.riderDeliveryEarningAfterAdminCommission) || 0;
-    const riderSurgePay = Number(order?.riderSurgePay) || Number(order?.pricing?.surgeAmount) || 0;
-    const riderIncentivePay = Number(order?.riderIncentivePay) || Number(order?.pricing?.deliveryPartnerIncentiveAmount) || 0;
-    const riderTipPay = Number(order?.pricing?.deliveryPartnerTip) || 0;
-    const computedTotalPayout = Math.round((riderDeliveryFeeShare + riderSurgePay + riderIncentivePay + riderTipPay) * 100) / 100;
-    const riderTotalPayout =
-        Number(order?.riderTotalPayout) ||
-        computedTotalPayout ||
-        earningAmount;
-    const codAmount = paymentMethod === 'cash' ? Number(order?.payment?.amountDue) || 0 : 0;
-    const codCollectedAmount = paymentMethod === 'cash' && order?.payment?.status === 'paid' ? codAmount : 0;
-    return {
-        id: order?._id,
-        _id: order?._id,
-        orderId: order?.orderId || order?._id,
-        status,
-        restaurantName,
-        restaurant: restaurantName,
-        items: order?.items || order?.orderItems || [],
-        orderItems: order?.orderItems || order?.items || [],
-        paymentMethod,
-        totalAmount: pricingTotal,
-        orderTotal: pricingTotal,
-        codAmount: codAmount,
-        codCollectedAmount,
-        deliveryEarning: riderTotalPayout,
-        earningAmount: riderTotalPayout,
-        amount: riderTotalPayout, // legacy fallback
-        riderBasePay,
-        riderDeliveryFeeShare,
-        riderSurgePay,
-        riderIncentivePay,
-        riderTipPay,
-        deliveryPartnerTip: riderTipPay,
-        riderTotalPayout,
-        createdAt: order?.createdAt,
-        deliveredAt: deliveredAt,
-        completedAt: deliveredAt,
-        date: dateForUi,
-        time
-    };
+  const earningAmount = Number(order?.riderEarning ?? order?.deliveryEarning ?? 0) || 0;
+  const isCashCod =
+    paymentMethod === 'cash' ||
+    paymentMethod === 'cod' ||
+    paymentMethod === 'cash on delivery';
+  const amountDue = Number(order?.payment?.amountDue);
+  const codAmount = isCashCod
+    ? (Number.isFinite(amountDue) && amountDue > 0 ? amountDue : pricingTotal)
+    : 0;
+  const paymentStatus = String(order?.payment?.status || '').toLowerCase();
+  const codCollectedAmount =
+    isCashCod && (paymentStatus === 'paid' || isDelivered) ? codAmount : 0;
+  return {
+    id: order?._id,
+    _id: order?._id,
+    orderId: order?.orderId || order?._id,
+    status,
+    restaurantName,
+    restaurant: restaurantName,
+    items: order?.items || order?.orderItems || [],
+    orderItems: order?.orderItems || order?.items || [],
+    paymentMethod,
+    totalAmount: pricingTotal,
+    orderTotal: pricingTotal,
+    codAmount: codAmount,
+    codCollectedAmount,
+    deliveryEarning: earningAmount,
+    earningAmount: earningAmount,
+    amount: earningAmount, // legacy fallback
+    createdAt: order?.createdAt,
+    deliveredAt: deliveredAt,
+    completedAt: deliveredAt,
+    date: dateForUi,
+    time,
+    timeZone: APP_TIMEZONE,
+  };
 };
 
 export const getDeliveryPartnerTripHistory = async (deliveryPartnerId, query = {}) => {
@@ -705,8 +815,11 @@ export const getDeliveryPartnerTripHistory = async (deliveryPartnerId, query = {
 
     const sf = String(statusFilter || '').toLowerCase();
     if (sf === 'completed') {
+        // Same day axis as ALL TRIPS (order placed / createdAt) so Completed ⊆ ALL
+        // for that day. Using deliveredAt here dropped orders placed yesterday but
+        // delivered next day (or missing deliveredAt), which made COD/earnings smaller.
         match.orderStatus = 'delivered';
-        match['deliveryState.deliveredAt'] = { $gte: start, $lte: end };
+        match.createdAt = { $gte: start, $lte: end };
     } else if (sf === 'cancelled') {
         match.orderStatus = { $regex: '^cancelled', $options: 'i' };
         match.createdAt = { $gte: start, $lte: end };
@@ -718,22 +831,76 @@ export const getDeliveryPartnerTripHistory = async (deliveryPartnerId, query = {
             { orderStatus: { $not: { $regex: '^cancelled', $options: 'i' } } },
         ];
     } else {
-        // ALL TRIPS: show anything created in range, and compute earnings only for delivered orders.
+        // ALL TRIPS: show anything created in range
         match.createdAt = { $gte: start, $lte: end };
     }
 
     const orders = await FoodOrder.find(match)
         .populate({ path: 'restaurantId', select: 'restaurantName' })
-        .sort({ 'deliveryState.deliveredAt': -1, createdAt: -1 })
+        .sort({ createdAt: -1 })
         .limit(limit)
         .lean();
+
+    // Sort by each trip's effective time (delivered time for completed, else placed
+    // time) descending — latest order on top regardless of status (pending/completed).
+    const trips = (orders || [])
+        .map(toTripDto)
+        .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 
     return {
         period,
         date: (date || new Date()).toISOString(),
         range: { start: start.toISOString(), end: end.toISOString() },
-        trips: (orders || []).map(toTripDto)
+        trips
     };
+};
+
+// Reviews given by customers to the logged-in delivery partner.
+export const getDeliveryPartnerReviews = async (deliveryPartnerId, query = {}) => {
+    if (!deliveryPartnerId || !mongoose.Types.ObjectId.isValid(deliveryPartnerId)) {
+        throw new ValidationError('Delivery partner not found');
+    }
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 500);
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const skip = (page - 1) * limit;
+
+    const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
+    const filter = {
+        'dispatch.deliveryPartnerId': partnerId,
+        'ratings.deliveryPartner.rating': { $exists: true, $ne: null },
+    };
+
+    const [docs, total, agg] = await Promise.all([
+        FoodOrder.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate('userId', 'name')
+            .select('orderId userId ratings.deliveryPartner createdAt deliveryState.deliveredAt')
+            .lean(),
+        FoodOrder.countDocuments(filter),
+        // Compute the average from the actual delivery ratings on orders so the number
+        // always matches the reviews shown here (the partner.rating aggregate field can
+        // drift from real data, e.g. due to old/test ratings).
+        FoodOrder.aggregate([
+            { $match: filter },
+            { $group: { _id: null, avg: { $avg: '$ratings.deliveryPartner.rating' }, count: { $sum: 1 } } },
+        ]),
+    ]);
+
+    const reviews = docs.map((doc) => ({
+        orderId: doc.orderId,
+        customer: doc.userId?.name || 'Customer',
+        review: doc.ratings?.deliveryPartner?.comment || '',
+        rating: doc.ratings?.deliveryPartner?.rating || 0,
+        submittedAt: doc.createdAt,
+        deliveredAt: doc.deliveryState?.deliveredAt || null,
+    }));
+
+    const averageRating = agg?.[0]?.avg ? Math.round(agg[0].avg * 10) / 10 : 0;
+    const totalRatings = agg?.[0]?.count || total;
+
+    return { reviews, total, page, limit, averageRating, totalRatings };
 };
 
 export const getDeliveryPocketDetails = async (deliveryPartnerId, query = {}) => {
@@ -880,90 +1047,6 @@ export const getActiveEarningAddonsForPartner = async (deliveryPartnerId) => {
     return {
         activeOffer: offers[0] || null,
         offers
-    };
-};
-
-
-/**
- * Delete a delivery partner and all associated data (wallet, tickets) permanently.
- */
-export const deleteDeliveryPartnerAccount = async (partnerId) => {
-    // Dynamic imports
-    const { DeliverySupportTicket } = await import('../models/supportTicket.model.js');
-    const { FoodDeliveryWallet } = await import('../models/deliveryWallet.model.js');
-
-    const partner = await FoodDeliveryPartner.findById(partnerId);
-    if (!partner) throw new ValidationError('Delivery partner not found');
-
-    // Remove associated documents
-    await FoodDeliveryWallet.findOneAndDelete({ deliveryPartnerId: partnerId });
-    await DeliverySupportTicket.deleteMany({ deliveryPartnerId: partnerId });
-
-    // Remove Partner
-    await FoodDeliveryPartner.findByIdAndDelete(partnerId);
-
-    return { success: true };
-};
-
-export const getDeliveryPartnerReviews = async (deliveryPartnerId) => {
-    if (!deliveryPartnerId || !mongoose.Types.ObjectId.isValid(deliveryPartnerId)) {
-        throw new ValidationError('Delivery partner not found');
-    }
-
-    const partner = await FoodDeliveryPartner.findById(deliveryPartnerId).select('rating totalRatings name').lean();
-    if (!partner) {
-        throw new ValidationError('Delivery partner not found');
-    }
-
-    const { FoodReview } = await import('../../orders/models/foodReview.model.js');
-    const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
-
-    // Fetch from FoodReview collection
-    const reviewDocs = await FoodReview.find({ deliveryPartnerId: partnerId })
-        .populate('userId', 'name profileImage avatar')
-        .populate('orderId', 'orderId order_id')
-        .sort({ createdAt: -1 })
-        .limit(100)
-        .lean();
-
-    let reviews = reviewDocs.map((doc) => ({
-        _id: doc._id,
-        rating: doc.rating,
-        comment: doc.comment || '',
-        customerName: doc.userId?.name || 'Customer',
-        orderId: doc.orderId?.order_id || doc.orderId?.orderId || doc.orderId?._id || 'N/A',
-        createdAt: doc.createdAt
-    }));
-
-    // If FoodReview table has no docs yet for this partner, fallback to historical FoodOrder.ratings.deliveryPartner
-    if (reviews.length === 0) {
-        const orderDocs = await FoodOrder.find({
-            'dispatch.deliveryPartnerId': partnerId,
-            'ratings.deliveryPartner.rating': { $exists: true, $ne: null }
-        })
-            .populate('userId', 'name profileImage avatar')
-            .select('orderId order_id ratings.deliveryPartner createdAt')
-            .sort({ createdAt: -1 })
-            .limit(100)
-            .lean();
-
-        reviews = orderDocs.map((o) => ({
-            _id: o._id,
-            rating: o.ratings?.deliveryPartner?.rating || 0,
-            comment: o.ratings?.deliveryPartner?.comment || '',
-            customerName: o.userId?.name || 'Customer',
-            orderId: o.order_id || o.orderId || o._id,
-            createdAt: o.ratings?.deliveryPartner?.ratedAt || o.createdAt
-        }));
-    }
-
-    const overallRating = Number(partner.rating || 0);
-    const totalRatings = Number(partner.totalRatings || reviews.length || 0);
-
-    return {
-        rating: overallRating,
-        totalRatings: totalRatings,
-        reviews
     };
 };
 

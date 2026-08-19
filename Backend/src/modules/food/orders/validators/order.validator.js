@@ -3,11 +3,13 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 
 const orderItemSchema = z.object({
     itemId: z.string().min(1, 'Item id required'),
-    name: z.string().min(1, 'Item name required'),
+    name: z.string().optional(),
     variantId: z.string().optional(),
     variantName: z.string().optional(),
     variantPrice: z.number().min(0).optional(),
-    price: z.number().min(0),
+    price: z.number().min(0).optional(),
+    basePrice: z.number().min(0).optional(),
+    otherPrice: z.number().min(0).optional(),
     quantity: z.number().int().min(1),
     isVeg: z.boolean().optional().default(true),
     image: z.string().optional(),
@@ -32,101 +34,92 @@ const addressSchema = z.object({
         .optional()
 });
 
-const calculateAddressSchema = z.object({
-    label: z.enum(['Home', 'Office', 'Other']).optional(),
-    name: z.string().optional(),
-    fullName: z.string().optional(),
-    street: z.string().optional(),
-    additionalDetails: z.string().optional(),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    zipCode: z.string().optional(),
-    phone: z.string().optional(),
-    formattedAddress: z.string().optional(),
-    address: z.string().optional(),
-    location: z
-        .object({
-            type: z.literal('Point').optional(),
-            coordinates: z.tuple([z.number(), z.number()]).optional()
-        })
-        .optional()
-});
-
 const pricingSchema = z.object({
-    subtotal: z.number().min(0),
+    subtotal: z.number().min(0).optional(),
     tax: z.number().min(0).optional(),
     packagingFee: z.number().min(0).optional(),
     deliveryFee: z.number().min(0).optional(),
     platformFee: z.number().min(0).optional(),
-    surgeAmount: z.number().min(0).optional(),
     discount: z.number().min(0).optional(),
-    deliveryPartnerTip: z.number().min(0).optional(),
-    total: z.number().min(0),
-    currency: z.string().optional()
-});
-
-function zodMessage(error) {
-    const first = error?.issues?.[0] || error?.errors?.[0];
-    const path = first?.path?.length ? first.path.join('.') : '';
-    return path ? `${path}: ${first?.message || 'Validation failed'}` : first?.message || 'Validation failed';
-}
-
-function normalizePaymentMethod(value) {
-    const method = String(value || '').trim().toLowerCase();
-    if (['cod', 'cash_on_delivery'].includes(method)) return 'cash';
-    if (['online', 'online_payment', 'digital', 'upi', 'card'].includes(method)) return 'razorpay';
-    return method;
-}
+    total: z.number().min(0).optional(),
+    currency: z.string().optional(),
+    couponCode: z.string().nullable().optional()
+}).optional();
 
 export function validateCalculateOrderDto(body) {
     const schema = z.object({
-        items: z.array(orderItemSchema).min(1, 'At least one item required'),
-        restaurantId: z.string().min(1, 'Restaurant id required'),
-        address: addressSchema.optional(),
-        deliveryAddress: addressSchema.optional(),
+        useCart: z.boolean().optional().default(true),
+        items: z.array(orderItemSchema).optional().default([]),
+        restaurantId: z.string().optional(),
+        deliveryAddress: z
+            .object({
+                location: z
+                    .object({
+                        type: z.literal('Point').optional(),
+                        coordinates: z.tuple([z.number(), z.number()]).optional()
+                    })
+                    .optional()
+            })
+            .optional(),
         deliveryAddressId: z.string().optional(),
-        deliveryAddress: calculateAddressSchema.optional(),
-        address: calculateAddressSchema.optional(),
         zoneId: z.string().optional(),
-        couponCode: z.string().optional(),
-        deliveryFleet: z.string().optional()
+        couponCode: z.string().nullable().optional(),
+        deliveryFleet: z.string().optional(),
+        orderType: z.enum(['delivery', 'dining', 'takeaway']).optional().default('delivery')
+    }).superRefine((data, ctx) => {
+        if (data.useCart === false && (!data.items || data.items.length === 0)) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'At least one item required', path: ['items'] });
+        }
+        if (data.useCart === false && !data.restaurantId) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Restaurant id required', path: ['restaurantId'] });
+        }
     });
     const result = schema.safeParse(body);
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        const first = result.error.issues?.[0];
+        const path = first?.path?.length ? first.path.join('.') : '';
+        const msg = path ? `${path}: ${first?.message || 'Validation failed'}` : first?.message || 'Validation failed';
+        throw new ValidationError(msg);
     }
-    const data = result.data;
-    if (data.deliveryAddress && !data.address) {
-        return {
-            ...data,
-            address: data.deliveryAddress
-        };
-    }
-    return data;
+    return result.data;
 }
 
 export function validateCreateOrderDto(body) {
     const schema = z.object({
-        items: z.array(orderItemSchema).min(1, 'At least one item required'),
-        address: addressSchema,
-        restaurantId: z.string().min(1, 'Restaurant id required'),
+        useCart: z.boolean().optional().default(true),
+        items: z.array(orderItemSchema).optional().default([]),
+        address: addressSchema.optional(),
+        orderType: z.enum(['delivery', 'dining', 'takeaway']).optional().default('delivery'),
+        restaurantId: z.string().optional(),
         restaurantName: z.string().optional(),
         customerName: z.string().optional(),
         customerPhone: z.string().optional(),
         pricing: pricingSchema,
+        couponCode: z.string().nullable().optional(),
         deliveryFleet: z.string().optional(),
         note: z.string().optional(),
+        restaurantNote: z.string().optional(),
         sendCutlery: z.boolean().optional(),
         // 'razorpay_qr' means COD-style flow, but payment is collected via Razorpay QR at delivery.
-        paymentMethod: z.preprocess(
-            normalizePaymentMethod,
-            z.enum(['cash', 'razorpay', 'razorpay_qr', 'wallet'])
-        ),
-        zoneId: z.string().nullable().optional()
+        paymentMethod: z.enum(['cash', 'razorpay', 'razorpay_qr', 'card', 'wallet']),
+        zoneId: z.string().nullable().optional(),
+        scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
+        razorpayOrderId: z.string().optional(),
+        razorpayPaymentId: z.string().optional(),
+        razorpaySignature: z.string().optional()
+    }).superRefine((data, ctx) => {
+        if (data.useCart === false && (!data.items || data.items.length === 0)) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'At least one item required', path: ['items'] });
+        }
+        if (data.useCart === false && !data.restaurantId) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Restaurant id required', path: ['restaurantId'] });
+        }
     });
     const result = schema.safeParse(body);
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        const first = result.error.issues?.[0];
+        const msg = first?.message || result.error.errors?.[0]?.message || 'Validation failed';
+        throw new ValidationError(msg);
     }
     return result.data;
 }
@@ -140,7 +133,8 @@ export function validateVerifyPaymentDto(body) {
     });
     const result = schema.safeParse(body);
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        const msg = result.error.errors?.[0]?.message || 'Validation failed';
+        throw new ValidationError(msg);
     }
     return result.data;
 }
@@ -148,12 +142,11 @@ export function validateVerifyPaymentDto(body) {
 export function validateCancelOrderDto(body) {
     const schema = z.object({
         reason: z.string().optional(),
-        cancellationReason: z.string().optional(),
-        cancellationComment: z.string().optional()
+        refundDestination: z.enum(['source', 'wallet']).optional()
     });
     const result = schema.safeParse(body || {});
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        throw new ValidationError(result.error.errors?.[0]?.message || 'Validation failed');
     }
     return result.data;
 }
@@ -168,11 +161,12 @@ export function validateOrderStatusDto(body) {
             'delivered',
             'cancelled_by_restaurant'
         ]),
-        note: z.string().optional()
+        note: z.string().optional(),
+        preparationTime: z.number().int().min(0).optional()
     });
     const result = schema.safeParse(body);
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        throw new ValidationError(result.error.errors?.[0]?.message || 'Validation failed');
     }
     return result.data;
 }
@@ -183,7 +177,7 @@ export function validateAssignDeliveryDto(body) {
     });
     const result = schema.safeParse(body);
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        throw new ValidationError(result.error.errors?.[0]?.message || 'Validation failed');
     }
     return result.data;
 }
@@ -194,7 +188,7 @@ export function validateDispatchSettingsDto(body) {
     });
     const result = schema.safeParse(body);
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        throw new ValidationError(result.error.errors?.[0]?.message || 'Validation failed');
     }
     return result.data;
 }
@@ -208,7 +202,7 @@ export function validateOrderRatingsDto(body) {
     });
     const result = schema.safeParse(body || {});
     if (!result.success) {
-        throw new ValidationError(zodMessage(result.error));
+        throw new ValidationError(result.error.errors?.[0]?.message || 'Validation failed');
     }
     return result.data;
 }

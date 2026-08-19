@@ -71,7 +71,6 @@ const normalizeDetailsFormFromRestaurant = (restaurant) => {
       typeof restaurant?.pureVegRestaurant === "boolean"
         ? restaurant.pureVegRestaurant
         : false,
-    pricingAttributes: Array.isArray(restaurant?.pricingAttributes) ? restaurant.pricingAttributes : [],
     ownerName: restaurant?.ownerName || "",
     ownerEmail: restaurant?.ownerEmail || "",
     ownerPhone: restaurant?.ownerPhone || "",
@@ -86,6 +85,7 @@ const normalizeDetailsFormFromRestaurant = (restaurant) => {
     openingTime: restaurant?.openingTime || restaurant?.deliveryTimings?.openingTime || "",
     closingTime: restaurant?.closingTime || restaurant?.deliveryTimings?.closingTime || "",
     isActive: restaurant?.isActive !== false,
+    takeawayEnabled: restaurant?.takeawaySettings?.isEnabled ?? false,
   }
 }
 
@@ -304,7 +304,6 @@ export default function EditRestaurant() {
       const payload = {
         name: detailsForm.name,
         pureVegRestaurant: detailsForm.pureVegRestaurant === true,
-        pricingAttributes: detailsForm.pricingAttributes || [],
         ownerName: detailsForm.ownerName,
         ownerEmail: detailsForm.ownerEmail,
         ownerPhone: detailsForm.ownerPhone,
@@ -319,6 +318,9 @@ export default function EditRestaurant() {
         openingTime: detailsForm.openingTime,
         closingTime: detailsForm.closingTime,
         isActive: detailsForm.isActive !== false,
+        takeawaySettings: {
+          isEnabled: detailsForm.takeawayEnabled === true,
+        },
       }
 
       const res = await adminAPI.updateRestaurant(restaurantId, payload)
@@ -462,49 +464,6 @@ export default function EditRestaurant() {
                   </div>
                 </div>
                 <div>
-                  <Label>Pricing Perks (Optional)</Label>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const attrs = detailsForm.pricingAttributes || []
-                        setDetailsForm((p) => ({
-                          ...p,
-                          pricingAttributes: attrs.includes("same_price")
-                            ? attrs.filter(a => a !== "same_price")
-                            : [...attrs, "same_price"]
-                        }))
-                      }}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                        (detailsForm.pricingAttributes || []).includes("same_price")
-                          ? "bg-emerald-600 text-white border-emerald-600 font-medium"
-                          : "bg-white text-slate-700 border-slate-300"
-                      }`}
-                    >
-                      Same price
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const attrs = detailsForm.pricingAttributes || []
-                        setDetailsForm((p) => ({
-                          ...p,
-                          pricingAttributes: attrs.includes("no_packaging")
-                            ? attrs.filter(a => a !== "no_packaging")
-                            : [...attrs, "no_packaging"]
-                        }))
-                      }}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                        (detailsForm.pricingAttributes || []).includes("no_packaging")
-                          ? "bg-emerald-600 text-white border-emerald-600 font-medium"
-                          : "bg-white text-slate-700 border-slate-300"
-                      }`}
-                    >
-                      No packaging
-                    </button>
-                  </div>
-                </div>
-                <div>
                   <Label>Primary Email</Label>
                   <Input value={detailsForm.email} onChange={(e) => setDetailsForm((p) => ({ ...p, email: e.target.value }))} />
                 </div>
@@ -539,6 +498,33 @@ export default function EditRestaurant() {
                 <div>
                   <Label>Offer</Label>
                   <Input value={detailsForm.offer} onChange={(e) => setDetailsForm((p) => ({ ...p, offer: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Takeaway (Pickup) Enabled</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDetailsForm((p) => ({ ...p, takeawayEnabled: true }))}
+                      className={`px-3 py-1.5 text-xs rounded-full border ${
+                        detailsForm.takeawayEnabled === true
+                          ? "bg-green-600 text-white border-green-600"
+                          : "bg-white text-slate-700 border-slate-300"
+                      }`}
+                    >
+                      Enabled
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailsForm((p) => ({ ...p, takeawayEnabled: false }))}
+                      className={`px-3 py-1.5 text-xs rounded-full border ${
+                        detailsForm.takeawayEnabled === false
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-700 border-slate-300"
+                      }`}
+                    >
+                      Disabled
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>

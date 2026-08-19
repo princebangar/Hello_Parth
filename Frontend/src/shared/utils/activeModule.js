@@ -199,6 +199,19 @@ export function resolvePostLoginRoute() {
 }
 
 /**
+ * Mark explicit guest browsing for Food when no login token exists.
+ * Matches "Skip for now" semantics so super-app tab switches open Food home.
+ */
+export function ensureFoodGuestSession() {
+  if (typeof localStorage === 'undefined') return
+  const token = localStorage.getItem('user_accessToken')
+  const authStatus = localStorage.getItem('user_authenticated')
+  if (!token && authStatus === null) {
+    localStorage.setItem('user_authenticated', 'false')
+  }
+}
+
+/**
  * Back from /login while still logged out.
  * Never return auth-gated routes (e.g. /taxi/user/activity) — they redirect
  * straight back to /login and look like a broken back button.

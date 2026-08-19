@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Search, 
@@ -17,11 +17,7 @@ import {
   ArrowLeft,
   Trash2,
   RefreshCw,
-  Loader2,
-  FileUp,
-  Download,
-  AlertTriangle,
-  Check
+  Loader2
 } from "lucide-react"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 // Removed foodManagement - now using backend API directly
@@ -103,13 +99,6 @@ export default function HubMenu() {
   const [uploadingAddonImages, setUploadingAddonImages] = useState(false)
   const [editingAddon, setEditingAddon] = useState(null) // Store addon being edited
   const addonFileInputRef = useRef(null)
-
-  // Bulk Upload State
-  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false)
-  const [bulkUploadFile, setBulkUploadFile] = useState(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [bulkUploadResults, setBulkUploadResults] = useState(null)
-  const bulkFileInputRef = useRef(null)
 
   // Restaurant info - fetch from backend
   const restaurantName = restaurantData?.name || ""
@@ -538,7 +527,7 @@ export default function HubMenu() {
     try {
       setUploadingAddonImages(true)
 
-      // Upload new images to Cloudinary
+      // Upload new images to the server
       const uploadedImageUrls = []
       
       const existingImageUrls = addonImages.filter(img => 
@@ -557,7 +546,7 @@ export default function HubMenu() {
             let uploadResponse
             try {
               uploadResponse = await uploadAPI.uploadMedia(file, {
-                folder: 'hello-parth/restaurant/addons'
+                folder: 'helloparth/restaurant/addons'
               })
             } catch (folderUploadError) {
               // Fallback: retry without folder in case provider/account rejects custom folder.
@@ -649,62 +638,6 @@ export default function HubMenu() {
     } catch (error) {
       debugError('Error deleting add-on:', error)
       toast.error(error?.response?.data?.message || 'Failed to delete add-on')
-    }
-  }
-
-  // Bulk Upload Handlers
-  const handleDownloadTemplate = async () => {
-    try {
-      const response = await restaurantAPI.bulkUploadTemplate()
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', 'Bulk_Menu_Template.xlsx')
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      toast.success('Template downloaded successfully')
-    } catch (error) {
-      debugError('Error downloading template:', error)
-      toast.error('Failed to download template')
-    }
-  }
-
-  const handleBulkUpload = async () => {
-    if (!bulkUploadFile) {
-      toast.error('Please select an Excel file first')
-      return
-    }
-
-    try {
-      setIsUploading(true)
-      const response = await restaurantAPI.bulkUpload(bulkUploadFile)
-      
-      if (response.data && response.data.success) {
-        const results = response.data.data
-        setBulkUploadResults(results)
-        toast.info(`Processed ${results.success + results.failed} items`)
-        
-        if (results.success > 0) {
-          fetchMenu() // Refresh menu to show new items
-        }
-      }
-    } catch (error) {
-      debugError('Error uploading menu:', error)
-      toast.error(error?.response?.data?.message || 'Bulk upload failed')
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  const onBulkFileChange = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('File size exceeds 10MB limit')
-        return
-      }
-      setBulkUploadFile(file)
     }
   }
 
@@ -1029,7 +962,7 @@ export default function HubMenu() {
     if (!subCategoryName.trim() || !selectedGroupForSubCategory) return
     
     // Navigate to new item page with sub-category info
-    navigate('/restaurant/hub-menu/item/new', {
+    navigate('/food/restaurant/hub-menu/item/new', {
       state: {
         groupId: selectedGroupForSubCategory.id,
         category: selectedGroupForSubCategory.name,
@@ -1057,7 +990,7 @@ export default function HubMenu() {
     }
     
     toast.message('Finish category setup on Menu Categories so you can choose veg, non-veg, or both before admin approval.')
-    navigate('/restaurant/menu-categories', {
+    navigate('/food/restaurant/menu-categories', {
       state: {
         draftCategoryName: newCategoryName.trim(),
       }
@@ -1078,7 +1011,7 @@ export default function HubMenu() {
       // Menu editing is disabled on the backend. The menu is generated from food_items.
       // Category deletion must be done via the Menu Categories page and can only happen when it has no items.
       toast.error('Delete categories from Menu Categories (and only when empty).')
-      navigate('/restaurant/menu-categories')
+      navigate('/food/restaurant/menu-categories')
     } catch (error) {
       debugError('Error deleting category:', error)
       toast.error('Failed to delete category')
@@ -1158,7 +1091,7 @@ export default function HubMenu() {
               </button>
               <button
               className="p-2 ml-1 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/explore")}
+              onClick={() => navigate("/food/restaurant/explore")}
             >
               <Menu className="w-5 h-5 text-gray-700" />
             </button>
@@ -1206,7 +1139,7 @@ export default function HubMenu() {
                 onClick={() => handleFilterSelect(filter.id)}
                 className={`flex items-center gap-2 px-2 py-1 text-semibold border-2 rounded-md text-sm font-medium whitespace-nowrap shrink-0 ${
                   activeFilter === filter.id
-                    ? "bg-gray-900 text-white border-gray-900"
+                    ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white border-gray-900"
                     : "bg-white border-gray-200 text-gray-900"
                 }`}
               >
@@ -1219,7 +1152,7 @@ export default function HubMenu() {
             ))}
             <button
               onClick={() => setIsFilterOpen(true)}
-              className="z-10 shrink-0 bg-black text-white border-2 border-black flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap"
+              className="z-10 shrink-0 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white border-2 border-black flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap"
             >
               <SlidersHorizontal className="w-4 h-4" />
               <span>Filter</span>
@@ -1306,9 +1239,9 @@ export default function HubMenu() {
                         {addon.description && (
                           <p className="text-sm text-gray-600 mb-2">{addon.description}</p>
                         )}
-                        <p className="text-base font-bold text-gray-900">â‚¹{addon.price}</p>
+                        <p className="text-base font-bold text-gray-900">₹{addon.price}</p>
                         {isRejectedApproval(addon.approvalStatus) && addon.rejectionReason && (
-                          <p className="text-xs text-red-600 mt-1">Reason: {addon.rejectionReason}</p>
+                          <p className="text-xs text-[#B80B3D] mt-1">Reason: {addon.rejectionReason}</p>
                         )}
                         {isPendingApproval(addon.approvalStatus) && addon.published && (
                           <p className="text-xs text-gray-500 mt-1">
@@ -1330,7 +1263,7 @@ export default function HubMenu() {
                         <div className="flex flex-col gap-2">
                           <button
                             onClick={() => handleEditAddon(addon)}
-                            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                            className="p-2 bg-blue-100 text-[#B80B3D] rounded-lg hover:bg-blue-200 transition-colors"
                             title="Edit add-on"
                           >
                             <Edit className="h-4 w-4" />
@@ -1349,7 +1282,7 @@ export default function HubMenu() {
                             className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
                               addon.isAvailable === false
                                 ? "bg-green-600 text-white hover:bg-green-700"
-                                : "bg-gray-900 text-white hover:bg-gray-800"
+                                : "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                             }`}
                             title="Toggle availability"
                           >
@@ -1357,7 +1290,7 @@ export default function HubMenu() {
                           </button>
                           <button
                             onClick={() => handleDeleteAddon(addon)}
-                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                            className="p-2 bg-red-100 text-[#B80B3D] rounded-lg hover:bg-red-200 transition-colors"
                             title="Delete add-on"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1386,7 +1319,7 @@ export default function HubMenu() {
               {/* Group Header */}
               <div className="py-3 flex items-center justify-between px-4">
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="w-1 h-6 bg-red-500 rounded-r-full" />
+                  <div className="w-1 h-6 bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-r-full" />
                   <h3 className="text-base font-bold text-gray-900">
                     {group.name} ({enabledItems})
                   </h3>
@@ -1443,7 +1376,7 @@ export default function HubMenu() {
                                 <div className={`w-2 h-2 rounded-full ${
                                   item.foodType === "Veg"
                                     ? "bg-green-600"
-                                    : "bg-red-600"
+                                    : "bg-gradient-to-br from-[#B80B3D] to-[#66001D]"
                                 }`} />
                               </div>
                             </div>
@@ -1468,9 +1401,9 @@ export default function HubMenu() {
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm font-medium text-gray-700 mb-3">â‚¹{item.price}</p>
+                            <p className="text-sm font-medium text-gray-700 mb-3">₹{item.price}</p>
                             {isRejectedApproval(item.approvalStatus) && item.rejectionReason && (
-                              <p className="text-xs text-red-600 -mt-2 mb-3">Reason: {item.rejectionReason}</p>
+                              <p className="text-xs text-[#B80B3D] -mt-2 mb-3">Reason: {item.rejectionReason}</p>
                             )}
                           </div>
 
@@ -1494,7 +1427,7 @@ export default function HubMenu() {
                         {isPendingApproval(item.approvalStatus) && (
                           <div className="flex items-center justify-center gap-3 mt-4">
                             <button
-                              onClick={() => navigate(`/restaurant/hub-menu/item/${item.id}`, { state: { item, groupId: group.id } })}
+                              onClick={() => navigate(`/food/restaurant/hub-menu/item/${item.id}`, { state: { item, groupId: group.id } })}
                               className="flex items-center gap-1.5 bg-transparent text-gray-700 text-sm font-medium"
                             >
                               <Edit className="w-3.5 h-3.5" />
@@ -1581,7 +1514,7 @@ export default function HubMenu() {
                 )}
                 <button
                   onClick={() => setIsFilterOpen(false)}
-                  className="w-full py-3 rounded-lg font-semibold text-sm bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+                  className="w-full py-3 rounded-lg font-semibold text-sm bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800 transition-colors"
                 >
                   Confirm
                 </button>
@@ -1621,18 +1554,6 @@ export default function HubMenu() {
                   className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-sm font-medium text-gray-900">Add item</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setIsAddPopupOpen(false)
-                    setIsBulkUploadModalOpen(true)
-                  }}
-                  className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors border-t border-gray-100"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileUp className="w-4 h-4 text-red-500" />
-                    <span className="text-sm font-medium text-gray-900">Bulk Upload Menu</span>
-                  </div>
                 </button>
               </div>
             </motion.div>
@@ -1731,7 +1652,7 @@ export default function HubMenu() {
                       <span className="text-sm font-medium text-gray-900">I will turn it on myself</span>
                     </label>
                     <p className="text-xs text-gray-500 ml-8">
-                      This item will not be visible to customers on the Hello Parth Store app till you switch it on.
+                      This item will not be visible to customers on the Zomato app till you switch it on.
                     </p>
                   </div>
                 </div>
@@ -1744,7 +1665,7 @@ export default function HubMenu() {
                   disabled={!availabilityReason || isScheduling || (availabilityReason === 'custom' && !customDateTime)}
                   className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
                     availabilityReason && !isScheduling && (availabilityReason !== 'custom' || customDateTime)
-                      ? "bg-gray-900 text-white hover:bg-gray-800"
+                      ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
@@ -1764,7 +1685,7 @@ export default function HubMenu() {
           <motion.button
           whileTap={{ scale: 0.96 }}
           onClick={() => setIsAddPopupOpen(true)}
-          className="px-4 py-2 border bg-black text-white border-gray-800 rounded-lg text-sm font-bold"
+          className="px-4 py-2 border bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white border-gray-800 rounded-lg text-sm font-bold"
         >
           + ADD
         </motion.button>)}
@@ -1792,7 +1713,7 @@ export default function HubMenu() {
               {isMenuOpen && (
                 <>
                   <motion.div
-                    className="fixed inset-0 bg-black/40 z-30"
+                    className="fixed inset-0 bg-black/50/40 z-30"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -1888,9 +1809,9 @@ export default function HubMenu() {
                   </button>
                   <button
                     onClick={handleDeleteCategory}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm font-medium text-red-600 bg-gray-50 hover:bg-red-50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm font-medium text-[#B80B3D] bg-gray-50 hover:bg-red-50 transition-colors"
                   >
-                    <Trash2 className="w-5 h-5 text-red-600" />
+                    <Trash2 className="w-5 h-5 text-[#B80B3D]" />
                     <span>Delete category</span>
                   </button>
                 </div>
@@ -1967,7 +1888,7 @@ export default function HubMenu() {
                       disabled={!editCategoryName.trim()}
                       className={`flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
                         editCategoryName.trim()
-                          ? "bg-black text-white hover:bg-gray-800"
+                          ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                           : "bg-gray-300 text-gray-500 cursor-not-allowed"
                       }`}
                     >
@@ -2047,7 +1968,7 @@ export default function HubMenu() {
                     disabled={!subCategoryName.trim()}
                     className={`w-full py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
                       subCategoryName.trim()
-                        ? "bg-black text-white hover:bg-gray-800"
+                        ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
                   >
@@ -2119,7 +2040,7 @@ export default function HubMenu() {
                     disabled={!newCategoryName.trim()}
                     className={`w-full py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
                       newCategoryName.trim()
-                        ? "bg-black text-white hover:bg-gray-800"
+                        ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
                   >
@@ -2233,19 +2154,19 @@ export default function HubMenu() {
                                       <div className={`w-2 h-2 rounded-full ${
                                         item.foodType === "Veg"
                                           ? "bg-green-600"
-                                          : "bg-red-600"
+                                          : "bg-gradient-to-br from-[#B80B3D] to-[#66001D]"
                                       }`} />
                                     </div>
                                     <h4 className="text-sm font-bold text-gray-900 truncate">
                                       {item.name}
                                     </h4>
                                   </div>
-                                  <p className="text-sm font-medium text-gray-700">â‚¹{item.price}</p>
+                                  <p className="text-sm font-medium text-gray-700">₹{item.price}</p>
                                   {isRejectedApproval(item.approvalStatus) && item.rejectionReason && (
-                                    <p className="text-xs text-red-600 mt-1">Reason: {item.rejectionReason}</p>
+                                    <p className="text-xs text-[#B80B3D] mt-1">Reason: {item.rejectionReason}</p>
                                   )}
                                   {!item.isAvailable && (
-                                    <span className="text-xs text-red-600 font-medium">Out of stock</span>
+                                    <span className="text-xs text-[#B80B3D] font-medium">Out of stock</span>
                                   )}
                                 </div>
                               </div>
@@ -2280,7 +2201,7 @@ export default function HubMenu() {
                 <div className="px-4 py-3 border-t border-gray-200">
                   <button
                     onClick={() => setIsSearchOpen(false)}
-                    className="w-full py-3 rounded-lg font-semibold text-sm bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+                    className="w-full py-3 rounded-lg font-semibold text-sm bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800 transition-colors"
                   >
                     View Results ({filteredMenuGroups.reduce((acc, group) => acc + group.items.length, 0)} items)
                   </button>
@@ -2326,7 +2247,7 @@ export default function HubMenu() {
                 {/* Name Field */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add-on Name <span className="text-red-500">*</span>
+                    Add-on Name <span className="text-[#B80B3D]">*</span>
                   </label>
                   <input
                     type="text"
@@ -2354,7 +2275,7 @@ export default function HubMenu() {
                 {/* Price Field */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Price (â‚¹) <span className="text-red-500">*</span>
+                    Price (₹) <span className="text-[#B80B3D]">*</span>
                   </label>
                   <input
                     type="number"
@@ -2390,7 +2311,7 @@ export default function HubMenu() {
                           )}
                           <button
                             onClick={() => handleAddonImageDelete(index)}
-                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-1 right-1 p-1 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -2448,200 +2369,15 @@ export default function HubMenu() {
         )}
       </AnimatePresence>
 
-      {/* Bulk Upload Modal */}
-      <AnimatePresence>
-        {isBulkUploadModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                if (!isUploading) {
-                  setIsBulkUploadModalOpen(false)
-                  setBulkUploadFile(null)
-                  setBulkUploadResults(null)
-                }
-              }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-lg bg-white sm:rounded-2xl shadow-2xl overflow-hidden"
-            >
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-white">
-                <h3 className="text-xl font-bold text-gray-900">Bulk Menu Upload</h3>
-                <button
-                  onClick={() => {
-                    if (!isUploading) {
-                      setIsBulkUploadModalOpen(false)
-                      setBulkUploadFile(null)
-                      setBulkUploadResults(null)
-                    }
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                {!bulkUploadResults ? (
-                  <>
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-4">
-                      <div className="bg-blue-100 p-2 rounded-lg">
-                        <Download className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-blue-900 mb-1">Step 1: Download Template</h4>
-                        <p className="text-xs text-blue-700 mb-3">
-                          Download our Excel template to correctly format your menu data.
-                        </p>
-                        <button
-                          onClick={handleDownloadTemplate}
-                          className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          Download Template
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-4">
-                      <div className="bg-red-100 p-2 rounded-lg">
-                        <FileUp className="w-5 h-5 text-red-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-bold text-red-900 mb-1">Step 2: Upload Excel File</h4>
-                        <p className="text-xs text-red-700 mb-4">
-                          Upload the filled Excel file (max 500 items). Include image URLs if available.
-                        </p>
-                        
-                        <input
-                          type="file"
-                          ref={bulkFileInputRef}
-                          onChange={onBulkFileChange}
-                          accept=".xlsx, .xls"
-                          className="hidden"
-                        />
-                        
-                        <div 
-                          onClick={() => bulkFileInputRef.current?.click()}
-                          className={`
-                            border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all
-                            ${bulkUploadFile ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-red-400 hover:bg-red-50/30'}
-                          `}
-                        >
-                          <FileUp className={`w-8 h-8 mb-2 ${bulkUploadFile ? 'text-green-500' : 'text-gray-400'}`} />
-                          <span className="text-sm font-medium text-gray-600">
-                            {bulkUploadFile ? bulkUploadFile.name : 'Click to select Excel file'}
-                          </span>
-                          {bulkUploadFile && (
-                            <span className="text-xs text-green-600 mt-1">File selected</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4">
-                      <button
-                        onClick={handleBulkUpload}
-                        disabled={!bulkUploadFile || isUploading}
-                        className={`
-                          w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2
-                          ${!bulkUploadFile || isUploading 
-                              ? 'bg-gray-300 cursor-not-allowed shadow-none' 
-                              : 'bg-red-600 hover:bg-red-700 active:scale-[0.98] shadow-red-200'}
-                        `}
-                      >
-                        {isUploading ? (
-                          <>
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                            Processing Batch...
-                          </>
-                        ) : (
-                          <>
-                            <FileUp className="w-5 h-5" />
-                            Start Bulk Upload
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-4">
-                    <div className={`
-                      w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center
-                      ${bulkUploadResults.failed === 0 ? 'bg-green-100' : 'bg-yellow-100'}
-                    `}>
-                      {bulkUploadResults.failed === 0 ? (
-                        <Check className="w-8 h-8 text-green-600" />
-                      ) : (
-                        <AlertTriangle className="w-8 h-8 text-yellow-600" />
-                      )}
-                    </div>
-                    
-                    <h4 className="text-xl font-bold text-gray-900 mb-2">Upload Complete</h4>
-                    <p className="text-sm text-gray-600 mb-6">
-                      We've processed your menu data.
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                      <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-                        <div className="text-2xl font-bold text-green-700">{bulkUploadResults.success}</div>
-                        <div className="text-xs font-semibold text-green-600 uppercase tracking-wider">Success</div>
-                      </div>
-                      <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                        <div className="text-2xl font-bold text-red-700">{bulkUploadResults.failed}</div>
-                        <div className="text-xs font-semibold text-red-600 uppercase tracking-wider">Failed</div>
-                      </div>
-                    </div>
-
-                    {bulkUploadResults.errors && bulkUploadResults.errors.length > 0 && (
-                      <div className="text-left mb-8">
-                        <h5 className="text-sm font-bold text-gray-900 mb-3 ml-1">Issues Found:</h5>
-                        <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 max-h-40 overflow-y-auto space-y-2">
-                          {bulkUploadResults.errors.map((err, idx) => (
-                            <div key={idx} className="flex gap-2 text-xs">
-                              <span className="font-bold text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded whitespace-nowrap h-fit">
-                                Row {err.row}
-                              </span>
-                              <span className="text-red-600 py-0.5">{err.error}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => {
-                        setIsBulkUploadModalOpen(false)
-                        setBulkUploadFile(null)
-                        setBulkUploadResults(null)
-                      }}
-                      className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg active:scale-[0.98]"
-                    >
-                      Done & Close
-                    </button>
-                    
-                    {bulkUploadResults.success > 0 && (
-                      <p className="text-xs text-gray-500 mt-4 italic">
-                        * Successfully uploaded items are set to "Pending" status and will be visible on the app after admin approval.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       <BottomNavOrders />
     </div>
   )
 }
+
+
+
+
+
+
+
 

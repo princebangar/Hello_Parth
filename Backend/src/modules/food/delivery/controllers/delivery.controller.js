@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { registerDeliveryPartner, updateDeliveryPartnerProfile, updateDeliveryPartnerBankDetails, listSupportTicketsByPartner, createSupportTicket, getSupportTicketByIdAndPartner, updateDeliveryPartnerDetails, updateDeliveryPartnerProfilePhotoBase64, updateDeliveryAvailability, getDeliveryPartnerWallet, getDeliveryPartnerEarnings, getDeliveryPartnerTripHistory, getDeliveryPocketDetails, getActiveEarningAddonsForPartner, deleteDeliveryPartnerAccount, getDeliveryPartnerReviews } from '../services/delivery.service.js';
-import { createDeliveryCashDepositOrder, getDeliveryPartnerWalletEnhanced, requestDeliveryWithdrawal, verifyDeliveryCashDepositPayment } from '../services/deliveryFinance.service.js';
+import { registerDeliveryPartner, updateDeliveryPartnerProfile, updateDeliveryPartnerBankDetails, listSupportTicketsByPartner, createSupportTicket, getSupportTicketByIdAndPartner, updateDeliveryPartnerDetails, updateDeliveryPartnerProfilePhotoBase64, updateDeliveryAvailability, getDeliveryPartnerWallet, getDeliveryPartnerEarnings, getDeliveryPartnerTripHistory, getDeliveryPocketDetails, getActiveEarningAddonsForPartner, getDeliveryPartnerReviews } from '../services/delivery.service.js';
+import { createDeliveryCashDepositOrder, getDeliveryPartnerWalletEnhanced, requestDeliveryWithdrawal, verifyDeliveryCashDepositPayment, submitCashDepositByHand } from '../services/deliveryFinance.service.js';
 import { getDeliveryCashLimitSettings, getDeliveryEmergencyHelp } from '../../admin/services/admin.service.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { validateDeliveryRegisterDto, validateDeliveryProfileUpdateDto, validateDeliveryBankDetailsDto } from '../validators/delivery.validator.js';
@@ -129,7 +129,13 @@ export const getWalletController = async (req, res, next) => {
             createdAt: tx?.createdAt || tx?.date
         });
 
-        if (requestedTypeRaw === 'bonus' || requestedTypeRaw === 'deposit' || requestedTypeRaw === 'deduction') {
+        if (
+            requestedTypeRaw === 'bonus' ||
+            requestedTypeRaw === 'deposit' ||
+            requestedTypeRaw === 'deduction' ||
+            requestedTypeRaw === 'withdrawal' ||
+            requestedTypeRaw === 'payment'
+        ) {
             if (!deliveryPartnerId || !mongoose.Types.ObjectId.isValid(deliveryPartnerId)) {
                 return sendResponse(res, 200, 'Wallet fetched successfully', { wallet: { transactions: [] } });
             }
@@ -153,9 +159,12 @@ export const getWalletController = async (req, res, next) => {
                     transactionId: b.transactionId
                 }));
             } else {
-                const allowedTypes = requestedTypeRaw === 'deposit'
-                    ? new Set(['deposit'])
-                    : new Set(['withdrawal', 'deposit']);
+                const allowedTypes =
+                    requestedTypeRaw === 'deposit'
+                        ? new Set(['deposit'])
+                        : requestedTypeRaw === 'deduction'
+                          ? new Set(['withdrawal', 'deposit'])
+                          : new Set([requestedTypeRaw]);
 
                 wallet.transactions = (wallet.transactions || [])
                     .filter((tx) => allowedTypes.has(String(tx?.type || '').trim().toLowerCase()))
@@ -229,6 +238,17 @@ export const verifyCashDepositPaymentController = async (req, res, next) => {
     }
 };
 
+export const submitCashDepositByHandController = async (req, res, next) => {
+    try {
+        const deliveryPartnerId = req.user?.userId;
+        const amount = req.body?.amount;
+        const data = await submitCashDepositByHand(deliveryPartnerId, amount);
+        return sendResponse(res, 201, 'Cash submitted successfully. Waiting for admin confirmation.', data);
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getTripHistoryController = async (req, res, next) => {
     try {
         const deliveryPartnerId = req.user?.userId;
@@ -244,6 +264,16 @@ export const getPocketDetailsController = async (req, res, next) => {
         const deliveryPartnerId = req.user?.userId;
         const data = await getDeliveryPocketDetails(deliveryPartnerId, req.query || {});
         return sendResponse(res, 200, 'Pocket details fetched successfully', data);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getMyReviewsController = async (req, res, next) => {
+    try {
+        const deliveryPartnerId = req.user?.userId;
+        const data = await getDeliveryPartnerReviews(deliveryPartnerId, req.query || {});
+        return sendResponse(res, 200, 'Reviews fetched successfully', data);
     } catch (error) {
         next(error);
     }
@@ -277,23 +307,3 @@ export const getDeliveryReferralStatsController = async (req, res, next) => {
     }
 };
 
-
-export const deleteDeliveryPartnerAccountController = async (req, res, next) => {
-    try {
-        const partnerId = req.user?.userId;
-        const result = await deleteDeliveryPartnerAccount(partnerId);
-        return sendResponse(res, 200, 'Account deleted successfully', result);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const getDeliveryPartnerReviewsController = async (req, res, next) => {
-    try {
-        const deliveryPartnerId = req.user?.userId;
-        const data = await getDeliveryPartnerReviews(deliveryPartnerId);
-        return sendResponse(res, 200, 'Reviews fetched successfully', data);
-    } catch (error) {
-        next(error);
-    }
-};

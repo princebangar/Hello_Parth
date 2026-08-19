@@ -3,7 +3,8 @@ import { ArrowLeft, Eye, Edit2, Loader2, Camera, X, Plus, FileText, Image as Ima
 import { motion, AnimatePresence } from 'framer-motion';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
-import { openCamera } from "@food/utils/imageUploadUtils";
+import { openCamera, openGallery } from "@food/utils/imageUploadUtils";
+import { prepareUploadFile } from "@/shared/utils/imageCompressor";
 import useDeliveryBackNavigation from '../../hooks/useDeliveryBackNavigation';
 
 /**
@@ -33,7 +34,10 @@ export const ProfileDocsV2 = () => {
      if (!file) return;
      setIsUpdating(true);
      const formData = new FormData();
-     formData.append(field, file);
+     formData.append(
+       field,
+       await prepareUploadFile(file, field === "profilePhoto" ? { preset: "profile" } : {}),
+     );
      try {
         const res = await deliveryAPI.updateProfileMultipart(formData);
         if (res?.data?.success) {
@@ -54,7 +58,11 @@ export const ProfileDocsV2 = () => {
 
   const handlePickFromGallery = (field) => {
     setUploadField(field)
-    fileInputRef.current?.click()
+    openGallery({
+      onSelectFile: (file) => handleUpdate(field, file),
+      fileNamePrefix: `profile-doc-${field}`,
+      fallbackInputRef: fileInputRef,
+    })
   }
 
   const getDocStatus = (doc) => {

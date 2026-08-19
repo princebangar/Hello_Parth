@@ -25,23 +25,21 @@ const zoneKeyFromCoords = (lat, lng) => {
   return `${rLat},${rLng}`
 }
 
-const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus, persistToStorage = true }) => {
+const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus }) => {
   if (data?.status === 'IN_SERVICE' && data.zoneId) {
     setZoneId(data.zoneId)
     setZone(data.zone || null)
     setZoneStatus('IN_SERVICE')
-    if (persistToStorage) {
-      localStorage.setItem('userZoneId', data.zoneId)
-      localStorage.setItem('userZone', JSON.stringify(data.zone))
-    }
+    localStorage.setItem('userZoneId', data.zoneId)
+    localStorage.setItem('userZone', JSON.stringify(data.zone))
+    localStorage.setItem('userZoneStatus', 'IN_SERVICE')
   } else {
     setZoneId(null)
     setZone(null)
     setZoneStatus('OUT_OF_SERVICE')
-    if (persistToStorage) {
-      localStorage.removeItem('userZoneId')
-      localStorage.removeItem('userZone')
-    }
+    localStorage.removeItem('userZoneId')
+    localStorage.removeItem('userZone')
+    localStorage.setItem('userZoneStatus', 'OUT_OF_SERVICE')
   }
 }
 
@@ -50,23 +48,27 @@ const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus, persistToSt
  * Hook to detect and manage user's zone based on location
  * Automatically detects zone when location is available
  */
-export function useZone(location, options = {}) {
-  const {
-    persistToStorage = true,
-    usePersistedFallback = true,
-  } = options
-  const [zoneId, setZoneId] = useState(null)
-  const [zoneStatus, setZoneStatus] = useState('loading') // 'loading' | 'IN_SERVICE' | 'OUT_OF_SERVICE'
-  const [zone, setZone] = useState(null)
+export function useZone(location) {
+  const [zoneId, setZoneId] = useState(() => localStorage.getItem("userZoneId"))
+  const [zoneStatus, setZoneStatus] = useState(() => localStorage.getItem("userZoneStatus") || "loading")
+  const [zone, setZone] = useState(() => {
+    try {
+      const cached = localStorage.getItem("userZone")
+      return cached ? JSON.parse(cached) : null
+    } catch { return null }
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  
+  const initialLat = roundCoord(location?.latitude, 5)
+  const initialLng = roundCoord(location?.longitude, 5)
   const prevCoordsRef = useRef({ latitude: null, longitude: null })
   const debounceTimerRef = useRef(null)
 
   // Detect zone when location is available
   const detectZone = useCallback(async (lat, lng) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setZoneStatus("loading");
+      setZoneStatus("OUT_OF_SERVICE");
       setZoneId(null);
       setZone(null);
       return;
@@ -81,7 +83,7 @@ export function useZone(location, options = {}) {
       if (key) {
         const cached = zoneCache.get(key)
         if (cached && now - cached.ts < ZONE_CACHE_TTL_MS) {
-          applyZonePayload(cached.payload, { setZoneId, setZone, setZoneStatus, persistToStorage })
+          applyZonePayload(cached.payload, { setZoneId, setZone, setZoneStatus })
           return
         }
       }
@@ -105,7 +107,7 @@ export function useZone(location, options = {}) {
 
       const data = await promise
       if (key) zoneCache.set(key, { ts: now, payload: data })
-      applyZonePayload(data, { setZoneId, setZone, setZoneStatus, persistToStorage })
+      applyZonePayload(data, { setZoneId, setZone, setZoneStatus })
     } catch (err) {
       debugError("Error detecting zone:", err);
       setError(
@@ -113,7 +115,7 @@ export function useZone(location, options = {}) {
       );
 
       // Try to use cached zone if available
-      const cachedZoneId = usePersistedFallback ? localStorage.getItem("userZoneId") : null;
+      const cachedZoneId = localStorage.getItem("userZoneId");
       if (cachedZoneId) {
         const cachedZone = localStorage.getItem("userZone");
         setZoneId(cachedZoneId);
@@ -130,41 +132,43 @@ export function useZone(location, options = {}) {
     }
   }, []);
 
+  const lat = roundCoord(location?.latitude, 5)
+  const lng = roundCoord(location?.longitude, 5)
+  const coordsChanged =
+    prevCoordsRef.current.latitude !== lat ||
+    prevCoordsRef.current.longitude !== lng;
+
   // Auto-detect zone when location changes
   useEffect(() => {
-    const lat = roundCoord(location?.latitude, 6)
-    const lng = roundCoord(location?.longitude, 6)
-
-    // Check if coordinates have changed significantly (threshold: ~10 meters)
-    const coordThreshold = 0.0001; // approximately 10 meters
-    const coordsChanged =
-      !prevCoordsRef.current.latitude ||
-      !prevCoordsRef.current.longitude ||
-      Math.abs(prevCoordsRef.current.latitude - (lat || 0)) > coordThreshold ||
-      Math.abs(prevCoordsRef.current.longitude - (lng || 0)) > coordThreshold;
 
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      // Only detect zone if coordinates changed significantly
+      // Only detect zone if coordinates changed significantly (~1m via 5 decimals)
       if (coordsChanged) {
+        const hadCachedZone = Boolean(
+          typeof localStorage !== "undefined" && localStorage.getItem("userZoneId"),
+        );
+        // Keep cached zone usable for instant restaurant fetch on refresh;
+        // only block UI when we have no zone at all yet.
+        if (!hadCachedZone) setLoading(true);
         prevCoordsRef.current = { latitude: lat, longitude: lng }
         if (debounceTimerRef.current) {
           clearTimeout(debounceTimerRef.current)
         }
         debounceTimerRef.current = setTimeout(() => {
           detectZone(lat, lng)
-        }, 350)
+        }, 50)
       }
     } else {
       // Try to use cached zone if location not available
-      const cachedZoneId = usePersistedFallback ? localStorage.getItem("userZoneId") : null;
+      const cachedZoneId = localStorage.getItem("userZoneId");
       if (cachedZoneId) {
         const cachedZone = localStorage.getItem("userZone");
+        const cachedStatus = localStorage.getItem("userZoneStatus");
         setZoneId(cachedZoneId);
         setZone(cachedZone ? JSON.parse(cachedZone) : null);
-        setZoneStatus("IN_SERVICE");
+        setZoneStatus(cachedStatus || "IN_SERVICE");
       } else {
-        // Do NOT set OUT_OF_SERVICE when location is not available yet!
-        setZoneStatus("loading");
+        setZoneStatus("loading"); // Default to loading instead of OUT_OF_SERVICE if location not yet fetched
         setZoneId(null);
         setZone(null);
       }
@@ -190,6 +194,8 @@ export function useZone(location, options = {}) {
     zoneId,
     zone,
     zoneStatus,
+    // Don't OR with coordsChanged — that re-flashes loading on every parent re-render
+    // until the effect commits, which makes Home look like it "auto-refreshes".
     loading,
     error,
     isInService: zoneStatus === "IN_SERVICE",

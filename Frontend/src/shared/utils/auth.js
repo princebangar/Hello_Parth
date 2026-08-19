@@ -1,2 +1,1 @@
-export * from '../modules/food/lib/utils/auth.js'
-
+export * from './moduleAuth.js'

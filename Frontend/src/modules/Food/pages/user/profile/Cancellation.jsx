@@ -1,4 +1,4 @@
-﻿import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useLocation } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { ArrowLeft, XCircle, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
@@ -10,6 +10,7 @@ import { API_ENDPOINTS } from "@food/api/config"
 
 export default function Cancellation() {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = useAppBackNavigation()
   const [loading, setLoading] = useState(true)
   const [cancellationData, setCancellationData] = useState({
@@ -36,7 +37,12 @@ export default function Cancellation() {
   }
 
   const handleBack = () => {
-    if (window.history.length > 2) {
+    if (location.state?.returnTo) {
+      navigate(location.state.returnTo, { 
+        state: location.state?.originalState,
+        replace: true 
+      })
+    } else if (window.history.length > 2) {
       goBack()
     } else {
       navigate('/food/user')
@@ -47,7 +53,7 @@ export default function Cancellation() {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex items-center justify-center p-6">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-[#FA0272]" />
+          <Loader2 className="h-10 w-10 animate-spin text-[#CB202D]" />
           <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Loading...</p>
         </div>
       </div>
@@ -71,7 +77,7 @@ export default function Cancellation() {
              <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
                {cancellationData.title || "Cancellation Policy"}
              </h1>
-             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Hello Parth Policy</p>
+             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Hello Parth Food Ecosystem</p>
           </div>
         </div>
       </div>
@@ -88,7 +94,7 @@ export default function Cancellation() {
                 prose-headings:font-black prose-headings:text-gray-900 dark:prose-headings:text-white
                 prose-p:text-gray-600 dark:prose-p:text-gray-400 prose-p:leading-relaxed
                 prose-strong:text-gray-900 dark:prose-strong:text-white
-                prose-a:text-[#FA0272] dark:prose-a:text-[#EB590E]
+                prose-a:text-[#CB202D] dark:prose-a:text-[#DC2626]
                 prose-li:text-gray-600 dark:prose-li:text-gray-400"
               dangerouslySetInnerHTML={{ __html: cancellationData.content }}
             />
@@ -102,12 +108,11 @@ export default function Cancellation() {
 
         <p className="text-center mt-10 text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] leading-relaxed">
           Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} <br />
-          Â© {new Date().getFullYear()} Hello Parth. All Rights Reserved.
+          © {new Date().getFullYear()} Hello Parth Food. All Rights Reserved.
         </p>
       </div>
     </AnimatedPage>
   )
 }
-
 
 

@@ -1,4 +1,4 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 
 const businessSettingsSchema = new mongoose.Schema(
     {
@@ -25,4 +25,3 @@ const businessSettingsSchema = new mongoose.Schema(
 );
 
 export const FoodBusinessSettings = mongoose.model('FoodBusinessSettings', businessSettingsSchema);
-

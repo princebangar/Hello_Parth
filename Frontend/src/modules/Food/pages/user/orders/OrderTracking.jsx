@@ -1,10 +1,11 @@
-import { useParams, Link, useSearchParams } from "react-router-dom"
+import { useParams, Link, useSearchParams, useNavigate, useLocation } from "react-router-dom"
 import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import {
   ArrowLeft,
   Share2,
+  Star,
   RefreshCw,
   Phone,
   User,
@@ -18,10 +19,11 @@ import {
   Receipt,
   CircleSlash,
   Loader2,
-  Star,
-  AlertCircle,
-  Store,
-  FileText
+  Clock,
+  Calendar,
+  ShoppingBag,
+  Users,
+  Navigation
 } from "lucide-react"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Card, CardContent } from "@food/components/ui/card"
@@ -37,16 +39,11 @@ import { useOrders } from "@food/context/OrdersContext"
 import { useProfile } from "@food/context/ProfileContext"
 import { useLocation as useUserLocation } from "@food/hooks/useLocation"
 import DeliveryTrackingMap from "@food/components/user/DeliveryTrackingMap"
-import api, { orderAPI, restaurantAPI } from "@food/api"
-import { API_BASE_URL, API_ENDPOINTS } from "@food/api/config"
-import {
-  resolveSharerDisplayName,
-  saveSharedOrder,
-} from "@food/utils/sharedOrderStorage"
+import { orderAPI, restaurantAPI } from "@food/api"
 import { useCompanyName } from "@food/hooks/useCompanyName"
-import { useUserNotifications } from "@food/hooks/useUserNotifications"
-import circleIcon from "@food/assets/circleicon.png"
 import { RESTAURANT_PIN_SVG, CUSTOMER_PIN_SVG, RIDER_BIKE_SVG } from "@food/constants/mapIcons"
+import burgerImg from "@food/assets/takeaway_burger.png"
+
 
 // Fallback definitions in case imports fail at runtime or are shadowed
 const DEFAULT_CUSTOMER_PIN = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#10B981"><path d="M12 2C8.13 2 5 5.13 5 9c0 4.17 4.42 9.92 6.24 12.11.4.48 1.08.48 1.52 0C14.58 18.92 19 13.17 19 9c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5 14.5 7.62 14.5 9 13.38 11.5 12 11.5z"/><circle cx="12" cy="9" r="3" fill="#FFFFFF"/></svg>`;
@@ -57,17 +54,6 @@ const SAFE_RESTAURANT_PIN = typeof RESTAURANT_PIN_SVG !== 'undefined' ? RESTAURA
 const debugLog = (...args) => console.log('[OrderTracking]', ...args)
 const debugWarn = (...args) => console.warn('[OrderTracking]', ...args)
 const debugError = (...args) => console.error('[OrderTracking]', ...args)
-
-async function fetchPublicOrderDetails(shareId) {
-  const base = (API_BASE_URL || '/api/v1').replace(/\/$/, '')
-  const res = await fetch(`${base}/public/order-track/${encodeURIComponent(shareId)}`)
-  if (!res.ok) throw new Error('Order not found')
-  const json = await res.json()
-  if (!json?.success || !json?.data?.order) {
-    throw new Error(json?.message || 'Failed to load order')
-  }
-  return json.data.order
-}
 
 
 // Animated checkmark component
@@ -105,37 +91,405 @@ const AnimatedCheckmark = ({ delay = 0 }) => (
   </motion.svg>
 )
 
-// Error boundary to protect page from map render failures
-class MapErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = { hasError: false }
-  }
+// Premium Takeaway Animation Component for Self-Pickup
+// Premium Takeaway Animation Component for Self-Pickup
+const TakeawayAnimation = memo(({ order }) => {
+  const [transparentBurger, setTransparentBurger] = useState(null);
+  const uiStatus = mapOrderToTrackingUiStatus(order);
+  const isReady = uiStatus === 'ready';
 
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
+  useEffect(() => {
+    if (!burgerImg) return;
+    const img = new Image();
+    img.src = burgerImg;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        const minVal = Math.min(r, g, b);
+        if (minVal > 238) {
+          data[i+3] = 0;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      setTransparentBurger(canvas.toDataURL());
+    };
+    img.onerror = () => {
+      setTransparentBurger(burgerImg);
+    };
+  }, []);
 
-  componentDidCatch(error, errorInfo) {
-    console.warn('[MapErrorBoundary] Caught map rendering error:', error, errorInfo)
-  }
+  return (
+    <div className="relative w-full h-[240px] bg-gradient-to-br from-[#F59E0B] via-[#FBBF24] to-[#D97706] dark:from-[#78350F] dark:via-[#92400E] dark:to-[#451A03] border-b border-amber-500/20 flex flex-col items-center justify-center overflow-hidden">
+      {/* Grid Overlay */}
+      <div className="absolute inset-0 opacity-15 select-none pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.4) 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
 
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="relative w-full h-[250px] bg-gray-100 dark:bg-zinc-800 rounded-2xl flex flex-col items-center justify-center p-4 text-center border border-gray-200 dark:border-zinc-700">
-          <MapPin className="w-8 h-8 text-gray-400 mb-2" />
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Map preview unavailable</p>
-          <p className="text-xs text-gray-400 mt-1">Live order status is tracked below</p>
+      {/* Radial Glows */}
+      <div className="absolute top-1/4 left-1/4 w-60 h-60 rounded-full bg-white/20 dark:bg-yellow-400/5 blur-3xl animate-pulse select-none pointer-events-none" style={{ animationDuration: '4s' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-72 h-72 rounded-full bg-orange-400/10 dark:bg-orange-500/5 blur-3xl animate-pulse select-none pointer-events-none" style={{ animationDuration: '6s', animationDelay: '1s' }} />
+      
+      {/* Drifting Bokeh Circles */}
+      <div className="absolute w-2 h-2 rounded-full bg-white/30 blur-[1px] animate-float-bokeh-1 select-none pointer-events-none" />
+      <div className="absolute w-3 h-3 rounded-full bg-amber-300/40 blur-[2px] animate-float-bokeh-2 select-none pointer-events-none" />
+      <div className="absolute w-1.5 h-1.5 rounded-full bg-orange-300/30 blur-[1px] animate-float-bokeh-3 select-none pointer-events-none" />
+      <div className="absolute w-2.5 h-2.5 rounded-full bg-yellow-200/40 blur-[1.5px] animate-float-bokeh-4 select-none pointer-events-none" />
+
+      {/* Top Typography section in Takeaway-Self-Pickup theme */}
+      <div className="text-center px-4 mt-1.5 select-none pointer-events-none flex flex-col items-center z-10">
+        <h3 className="text-[#7C2D12] dark:text-[#FEF3C7] font-black text-[13px] sm:text-base tracking-widest mb-0.5 select-none uppercase drop-shadow-[0_1px_2px_rgba(255,255,255,0.3)] dark:drop-shadow-md">
+          ORDER, EAT, ENJOY!
+        </h3>
+        <p className="text-[#9A3412] dark:text-[#FCD34D] font-bold text-[11px] sm:text-[13px] select-none italic tracking-wide opacity-95">
+          With Takeaway Self PickUp
+        </p>
+      </div>
+
+      {/* Spatial Canvas Container */}
+      <div className="relative w-[300px] h-[120px] mt-1 z-10 flex items-center justify-between">
+        
+        {/* SVG Bezier curve trajectory line */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ zIndex: 5 }}>
+          {/* Dotted path */}
+          <path 
+            d="M 47,60 Q 152,-15 257,74" 
+            fill="none" 
+            className="stroke-[#9A3412]/30 dark:stroke-[#FCD34D]/25"
+            strokeWidth="2.5" 
+            strokeLinecap="round"
+            strokeDasharray="6,6" 
+          />
+          {/* Pulsing glow line */}
+          <path 
+            d="M 47,60 Q 152,-15 257,74" 
+            fill="none" 
+            stroke="url(#takeaway-path-grad)" 
+            strokeWidth="3" 
+            strokeLinecap="round"
+            strokeDasharray="30,240"
+            className="animate-route-pulse"
+          />
+          <defs>
+            <linearGradient id="takeaway-path-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#EA580C" stopOpacity="0" className="dark:stop-color-[#F59E0B]" />
+              <stop offset="50%" stopColor="#EA580C" stopOpacity="1" className="dark:stop-color-[#F59E0B]" />
+              <stop offset="100%" stopColor="#EA580C" stopOpacity="0" className="dark:stop-color-[#F59E0B]" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        {/* Android Phone Frame Mockup (Left) */}
+        <div className="absolute left-[15px] bottom-[5px] w-[64px] h-[110px] bg-slate-950 rounded-[15px] border-[2.5px] border-slate-800 shadow-[0_8px_20px_-5px_rgba(0,0,0,0.3),0_0_12px_rgba(217,119,6,0.2)] flex flex-col items-center justify-between p-1 overflow-hidden animate-phone-float z-10">
+          {/* Speaker Notch */}
+          <div className="w-7 h-1.5 bg-slate-800 rounded-b-md absolute top-0 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
+            <div className="w-3.5 h-[0.5px] bg-slate-700 rounded-full" />
+          </div>
+          
+          {/* Internal screen */}
+          <div className="relative w-full h-full rounded-[10px] bg-gradient-to-b from-[#451A03] to-[#090514] flex flex-col items-center justify-center overflow-hidden pt-2.5">
+            {/* Screen grid pattern */}
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, #fff 0.5px, transparent 0.5px)', backgroundSize: '6px 6px' }} />
+            
+            {/* Glow circle */}
+            <div className="absolute w-10 h-10 rounded-full bg-green-500/15 blur-xl animate-pulse" />
+            
+            <div className="relative z-10 flex flex-col items-center justify-center scale-90">
+              {/* Confirmed Animation Details badge */}
+              <div className="relative w-8 h-8 rounded-full bg-emerald-500/25 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-pulse">
+                <Check className="w-4.5 h-4.5 stroke-[2.5]" />
+                
+                {/* Ripple */}
+                <div className="absolute inset-0 rounded-full border border-emerald-400/50 animate-ping opacity-60" style={{ animationDuration: '1.8s' }} />
+              </div>
+              
+              <span className="text-[6.5px] text-emerald-400 font-extrabold uppercase tracking-widest mt-1 select-none animate-pulse">
+                {isReady ? "Ready" : "Booked"}
+              </span>
+              <span className="text-[4.5px] text-slate-400 font-medium tracking-normal mt-0.5 select-none uppercase">
+                {isReady ? "For PickUp" : "Self PickUp"}
+              </span>
+            </div>
+          </div>
         </div>
-      )
-    }
-    return this.props.children
-  }
-}
+
+        {/* Takeaway Cart/Bag Container (Right) */}
+        <div className="absolute right-[15px] bottom-[10px] w-[56px] h-[56px] flex flex-col items-center justify-center z-10">
+          {/* Base shadow */}
+          <div className="absolute bottom-[-2px] w-10 h-1 bg-black/35 blur-[2px] rounded-full scale-x-95 animate-shadow-shrink" />
+          
+          {/* Bag with squash/stretch */}
+          <div className="relative w-12 h-12 flex items-center justify-center animate-bag-receive">
+            <svg className="w-10 h-10 text-[#9A3412] dark:text-[#FCD34D] fill-[#9A3412]/10 dark:fill-[#FCD34D]/10 drop-shadow-lg filter drop-shadow-[0_3px_8px_rgba(217,119,6,0.25)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007z" />
+            </svg>
+            
+            {/* Sparkles particles shooting out on burger arrival */}
+            <div className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-20">
+              <span className="absolute top-1 left-2.5 w-1.5 h-1.5 rounded-full bg-yellow-400 animate-sparkle-1" />
+              <span className="absolute top-1 right-2.5 w-2 h-2 bg-white rotate-45 animate-sparkle-2" />
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-yellow-500 rotate-12 animate-sparkle-3" />
+              <span className="absolute bottom-3 right-1 w-1.5 h-1.5 rounded-full bg-white animate-sparkle-4" />
+            </div>
+          </div>
+        </div>
+
+        {/* Flying Burger Item */}
+        <img 
+          src={transparentBurger || burgerImg} 
+          className="absolute left-[27px] top-[40px] w-10 h-10 object-contain pointer-events-none animate-burger-pack z-20 drop-shadow-[0_6px_12px_rgba(0,0,0,0.3)]" 
+          alt="Burger"
+        />
+
+      </div>
+
+      {/* Ready for pickup banner — only shown when restaurant marks ready */}
+      {isReady && (
+        <div className="w-full flex justify-center mt-4 z-10 select-none pointer-events-none">
+          <p className="text-[#047857] dark:text-[#34D399] font-black text-[12px] sm:text-[13px] tracking-widest animate-bounce drop-shadow-sm">
+            🎉 READY FOR PICK UP!
+          </p>
+        </div>
+      )}
+
+      {/* Embedded CSS Animations */}
+      <style>{`
+        @keyframes float-bokeh-1 {
+          0%, 100% { transform: translate(40px, 90px) translateY(0) scale(1); opacity: 0.3; }
+          50% { transform: translate(60px, 45px) translateY(-10px) scale(1.2); opacity: 0.6; }
+        }
+        @keyframes float-bokeh-2 {
+          0%, 100% { transform: translate(220px, 60px) translateY(0) scale(1.2); opacity: 0.2; }
+          50% { transform: translate(200px, 100px) translateY(-15px) scale(0.8); opacity: 0.5; }
+        }
+        @keyframes float-bokeh-3 {
+          0%, 100% { transform: translate(140px, 120px) translateY(0); opacity: 0.4; }
+          50% { transform: translate(160px, 75px) translateY(-8px); opacity: 0.7; }
+        }
+        @keyframes float-bokeh-4 {
+          0%, 100% { transform: translate(280px, 35px) translateY(0); opacity: 0.3; }
+          50% { transform: translate(260px, 75px) translateY(-20px); opacity: 0.6; }
+        }
+        @keyframes route-pulse {
+          0% { stroke-dashoffset: 270; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes phone-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        @keyframes burger-pack {
+          0% {
+            transform: translate(0, 0) scale(0.1) rotate(0deg);
+            opacity: 0;
+          }
+          10% {
+            transform: translate(0, -25px) scale(1.1) rotate(0deg);
+            opacity: 1;
+          }
+          30% {
+            transform: translate(0, -30px) scale(1.0) rotate(5deg);
+            opacity: 1;
+          }
+          52% {
+            transform: translate(105px, -65px) scale(1.0) rotate(90deg);
+            opacity: 1;
+          }
+          68% {
+            transform: translate(188px, -10px) scale(0.7) rotate(165deg);
+            opacity: 0.95;
+          }
+          74% {
+            transform: translate(210px, 14px) scale(0.2) rotate(180deg);
+            opacity: 0;
+          }
+          100% {
+            transform: translate(0, 0) scale(0.1) rotate(0deg);
+            opacity: 0;
+          }
+        }
+        @keyframes bag-receive {
+          0%, 60%, 100% {
+            transform: scale(1) rotate(0deg);
+          }
+          68% {
+            transform: scale(1.25, 0.75);
+          }
+          75% {
+            transform: scale(0.85, 1.25) translateY(-10px) rotate(-3deg);
+          }
+          85% {
+            transform: scale(1.08, 0.92) rotate(2deg);
+          }
+          92% {
+            transform: scale(1) rotate(0deg);
+          }
+        }
+        @keyframes shadow-shrink {
+          0%, 60%, 100% { transform: scaleX(0.95); opacity: 0.45; }
+          68% { transform: scaleX(1.2); opacity: 0.55; }
+          75% { transform: scaleX(0.7); opacity: 0.2; }
+          85% { transform: scaleX(1.05); opacity: 0.48; }
+          92% { transform: scaleX(0.95); opacity: 0.45; }
+        }
+        @keyframes sparkle-1 {
+          0%, 73%, 86%, 100% { transform: translate(0, 0) scale(0); opacity: 0; }
+          75% { transform: translate(-15px, -15px) scale(1); opacity: 1; }
+          84% { transform: translate(-30px, -25px) scale(0.3); opacity: 0; }
+        }
+        @keyframes sparkle-2 {
+          0%, 73%, 86%, 100% { transform: translate(0, 0) scale(0); opacity: 0; }
+          75% { transform: translate(15px, -18px) scale(1.2); opacity: 1; }
+          84% { transform: translate(30px, -30px) scale(0.3); opacity: 0; }
+        }
+        @keyframes sparkle-3 {
+          0%, 73%, 86%, 100% { transform: translate(0, 0) scale(0); opacity: 0; }
+          76% { transform: translate(-4px, -24px) scale(1); opacity: 1; }
+          85% { transform: translate(-8px, -38px) scale(0.3); opacity: 0; }
+        }
+        @keyframes sparkle-4 {
+          0%, 73%, 86%, 100% { transform: translate(0, 0) scale(0); opacity: 0; }
+          76% { transform: translate(12px, -8px) scale(1); opacity: 1; }
+          85% { transform: translate(22px, -12px) scale(0.3); opacity: 0; }
+        }
+        
+        .animate-float-bokeh-1 { animation: float-bokeh-1 8s infinite ease-in-out; }
+        .animate-float-bokeh-2 { animation: float-bokeh-2 10s infinite ease-in-out; }
+        .animate-float-bokeh-3 { animation: float-bokeh-3 9s infinite ease-in-out; }
+        .animate-float-bokeh-4 { animation: float-bokeh-4 11s infinite ease-in-out; }
+        
+        .animate-route-pulse { animation: route-pulse 3.5s infinite linear; }
+        .animate-phone-float { animation: phone-float 4s infinite ease-in-out; }
+        
+        .animate-burger-pack {
+          animation: burger-pack 3.5s infinite ease-in-out;
+        }
+        .animate-bag-receive {
+          animation: bag-receive 3.5s infinite ease-in-out;
+          transform-origin: bottom center;
+        }
+        .animate-shadow-shrink {
+          animation: shadow-shrink 3.5s infinite ease-in-out;
+          transform-origin: center center;
+        }
+        .animate-sparkle-1 { animation: sparkle-1 3.5s infinite ease-out; }
+        .animate-sparkle-2 { animation: sparkle-2 3.5s infinite ease-out; }
+        .animate-sparkle-3 { animation: sparkle-3 3.5s infinite ease-out; }
+        .animate-sparkle-4 { animation: sparkle-4 3.5s infinite ease-out; }
+      `}</style>
+    </div>
+  );
+});
+
+// Premium Dining Animation Component for Table Service
+const DiningAnimation = memo(({ order }) => {
+  return (
+    <div className="relative w-full h-[300px] bg-gradient-to-br from-[#FFF5F5] to-[#FFE3E3] dark:from-[#170a0c] dark:to-[#261216] border-b border-gray-100 dark:border-gray-900/50 flex flex-col items-center justify-center overflow-hidden">
+      {/* Glow effect */}
+      <div className="absolute w-[200px] h-[200px] rounded-full bg-red-500/10 dark:bg-red-500/5 blur-3xl animate-pulse" />
+      
+      {/* Spatial Canvas */}
+      <div className="relative flex items-center justify-center w-64 h-40">
+        
+        {/* Radar Rings */}
+        <div className="absolute inset-0 rounded-full border-2 border-red-500/5 animate-ping" style={{ animationDuration: '4s' }} />
+        <div className="absolute inset-8 rounded-full border border-red-500/10 animate-pulse" />
+        
+        {/* Rising Steam Lines */}
+        <div className="absolute -top-6 left-[48%] flex gap-1.5 opacity-80 z-10">
+          <span className="w-1 h-5 bg-red-400/30 dark:bg-red-400/20 rounded-full animate-steam" style={{ animationDelay: '0.2s' }} />
+          <span className="w-1 h-7 bg-red-400/40 dark:bg-red-400/30 rounded-full animate-steam" style={{ animationDelay: '0.5s' }} />
+          <span className="w-1 h-4 bg-red-400/30 dark:bg-red-400/20 rounded-full animate-steam" style={{ animationDelay: '0.8s' }} />
+        </div>
+
+        {/* Fork, Plate/Cloche, Knife Table Setting */}
+        <div className="flex items-center gap-6 z-10">
+          {/* Fork */}
+          <div className="animate-fork-bounce">
+            <svg className="w-6 h-12 text-red-500/70 dark:text-red-400/50" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 3v7a6 6 0 006 6v5m0-18v18m4-18v7a6 6 0 01-6 6" />
+            </svg>
+          </div>
+
+          {/* Plate and Cloche Serving Dome */}
+          <div className="relative flex flex-col items-center">
+            {/* Cloche Dome */}
+            <div className="animate-cloche-float mb-0.5">
+              <svg className="w-20 h-16 text-[#DC2626] dark:text-[#E11D48] fill-red-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2M4 19h16M12 5a8 8 0 00-8 8h16a8 8 0 00-8-8zM12 5c-1 0-2 1-2 2h4c0-1-1-2-2-2z" />
+              </svg>
+            </div>
+            
+            {/* Plate Base */}
+            <div className="w-24 h-2 bg-gradient-to-r from-red-400 to-[#B80B3D] dark:from-red-900 dark:to-rose-950 rounded-full shadow-md shadow-red-500/20" />
+          </div>
+
+          {/* Knife */}
+          <div className="animate-knife-bounce">
+            <svg className="w-6 h-12 text-red-500/70 dark:text-red-400/50" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 3v18M18 3c-3 0-6 3-6 7v6h6V3z" />
+            </svg>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Text Indicators */}
+      <div className="text-center px-4 mt-2 select-none pointer-events-none">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100/80 dark:bg-red-950/30 text-red-700 dark:text-red-400 text-[10px] font-black uppercase tracking-wider mb-2">
+          Dining - Table Service
+        </span>
+        <h4 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-tight">
+          Food will be served at your table
+        </h4>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs leading-normal">
+          Sit back and relax. Our server will bring your fresh hot meal directly to you shortly.
+        </p>
+      </div>
+
+      {/* Embedded CSS Animations */}
+      <style>{`
+        @keyframes steam {
+          0% { transform: translateY(0) scaleX(1); opacity: 0; }
+          15% { opacity: 0.6; }
+          50% { transform: translateY(-12px) scaleX(1.2); opacity: 0.3; }
+          100% { transform: translateY(-24px) scaleX(0.8); opacity: 0; }
+        }
+        @keyframes cloche-float {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          50% { transform: translateY(-8px) rotate(2deg); }
+        }
+        @keyframes item-bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .animate-steam {
+          animation: steam 2s infinite ease-out;
+        }
+        .animate-cloche-float {
+          animation: cloche-float 3s infinite ease-in-out;
+        }
+        .animate-fork-bounce {
+          animation: item-bounce 3s infinite ease-in-out;
+          animation-delay: 0.2s;
+        }
+        .animate-knife-bounce {
+          animation: item-bounce 3s infinite ease-in-out;
+          animation-delay: 0.4s;
+        }
+      `}</style>
+    </div>
+  );
+});
 
 // Real Delivery Map Component with User Live Location
-const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoords = null, userLiveCoords = null, userLocationAccuracy = null, onEtaUpdate = null }) => {
+const DeliveryMap = memo(({ orderId, order, isVisible, fallbackCustomerCoords = null, userLiveCoords = null, userLocationAccuracy = null, onEtaUpdate = null }) => {
   const toPointFromGeoJSON = (coords) => {
     if (!Array.isArray(coords) || coords.length < 2) return null;
     const lng = Number(coords[0]);
@@ -145,16 +499,39 @@ const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoo
   };
 
   // Memoize coordinates to prevent re-calculating on every parent render
+  const restaurantCoords = useMemo(() => {
+    // Try multiple sources for restaurant coordinates
+    let coords = null;
+
+    if (order?.restaurantLocation?.coordinates &&
+      Array.isArray(order.restaurantLocation.coordinates) &&
+      order.restaurantLocation.coordinates.length >= 2) {
+      coords = order.restaurantLocation.coordinates;
+    }
+    else if (order?.restaurantId?.location?.coordinates &&
+      Array.isArray(order.restaurantId.location.coordinates) &&
+      order.restaurantId.location.coordinates.length >= 2) {
+      coords = order.restaurantId.location.coordinates;
+    }
+    else if (order?.restaurantId?.location?.latitude && order?.restaurantId?.location?.longitude) {
+      coords = [order.restaurantId.location.longitude, order.restaurantId.location.latitude];
+    }
+
+    const fromCoords = toPointFromGeoJSON(coords);
+    if (fromCoords) return fromCoords;
+
+    const fallbackLat = Number(order?.restaurantId?.location?.latitude || order?.restaurant?.location?.latitude);
+    const fallbackLng = Number(order?.restaurantId?.location?.longitude || order?.restaurant?.location?.longitude);
+    if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng)) {
+      return { lat: fallbackLat, lng: fallbackLng };
+    }
+    return null;
+  }, [order?.restaurantId, order?.restaurantLocation, order?.restaurant]);
+
   const customerCoords = useMemo(() => {
     const coords = order?.address?.coordinates || order?.address?.location?.coordinates;
     const fromCoords = toPointFromGeoJSON(coords);
     if (fromCoords) return fromCoords;
-
-    const lat = Number(order?.address?.latitude ?? order?.address?.location?.latitude);
-    const lng = Number(order?.address?.longitude ?? order?.address?.location?.longitude);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
-      return { lat, lng };
-    }
 
     if (
       fallbackCustomerCoords &&
@@ -163,62 +540,32 @@ const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoo
     ) {
       return fallbackCustomerCoords;
     }
-
-    if (
-      userLiveCoords &&
-      Number.isFinite(userLiveCoords.lat) &&
-      Number.isFinite(userLiveCoords.lng)
-    ) {
-      return userLiveCoords;
-    }
-
     return null;
-  }, [order?.address, fallbackCustomerCoords, userLiveCoords]);
-
-  const restaurantCoords = useMemo(() => {
-    let coords =
-      order?.restaurantLocation?.coordinates ||
-      order?.restaurantId?.location?.coordinates ||
-      order?.restaurant?.location?.coordinates ||
-      order?.restaurant?.coordinates ||
-      (order?.restaurantId?.location?.latitude && order?.restaurantId?.location?.longitude
-        ? [order.restaurantId.location.longitude, order.restaurantId.location.latitude]
-        : null) ||
-      (order?.restaurant?.location?.latitude && order?.restaurant?.location?.longitude
-        ? [order.restaurant.location.longitude, order.restaurant.location.latitude]
-        : null);
-
-    const fromCoords = toPointFromGeoJSON(coords);
-    if (fromCoords) return fromCoords;
-
-    const fallbackLat = Number(
-      order?.restaurantId?.location?.latitude ||
-      order?.restaurant?.location?.latitude ||
-      order?.restaurant?.latitude ||
-      order?.restaurantLocation?.latitude
-    );
-    const fallbackLng = Number(
-      order?.restaurantId?.location?.longitude ||
-      order?.restaurant?.location?.longitude ||
-      order?.restaurant?.longitude ||
-      order?.restaurantLocation?.longitude
-    );
-    if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng) && (fallbackLat !== 0 || fallbackLng !== 0)) {
-      return { lat: fallbackLat, lng: fallbackLng };
-    }
-
-    if (customerCoords) {
-      return { lat: customerCoords.lat + 0.015, lng: customerCoords.lng + 0.015 };
-    }
-
-    return null;
-  }, [order?.restaurantId, order?.restaurantLocation, order?.restaurant, customerCoords]);
+  }, [order?.address, fallbackCustomerCoords]);
 
   // Delivery boy data
   const deliveryBoyData = useMemo(() => order?.deliveryPartner ? {
     name: order.deliveryPartner.name || 'Delivery Partner',
     avatar: order.deliveryPartner.avatar || null
   } : null, [order?.deliveryPartner]);
+
+  const effectiveCustomerCoords = useMemo(() => {
+    if (order?.orderType === 'takeaway' && userLiveCoords && Number.isFinite(userLiveCoords.lat) && Number.isFinite(userLiveCoords.lng)) {
+      return userLiveCoords;
+    }
+    if (customerCoords) return customerCoords;
+    if (userLiveCoords && Number.isFinite(userLiveCoords.lat) && Number.isFinite(userLiveCoords.lng)) {
+      return userLiveCoords;
+    }
+    if (restaurantCoords) return restaurantCoords;
+    return null;
+  }, [order?.orderType, customerCoords, userLiveCoords, restaurantCoords]);
+
+  const effectiveRestaurantCoords = useMemo(() => {
+    if (restaurantCoords) return restaurantCoords;
+    if (effectiveCustomerCoords) return effectiveCustomerCoords;
+    return null;
+  }, [restaurantCoords, effectiveCustomerCoords]);
 
   // Firebase and backend write tracking under order.orderId (string) or mongoId; subscribe to all so we receive updates
   const orderTrackingIdsList = useMemo(() => [
@@ -229,25 +576,23 @@ const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoo
     order?.id
   ].filter(Boolean), [order?.orderId, order?.mongoId, order?._id, orderId, order?.id]);
 
-  if (!isVisible || !orderId || !order || !restaurantCoords || !customerCoords) {
+  if (!isVisible || !orderId || !order || !effectiveRestaurantCoords || !effectiveCustomerCoords) {
     return (
       <div
-        className="relative min-h-[250px] bg-gradient-to-b from-gray-100 to-gray-200"
-        style={{ height: '250px' }}
+        className="relative h-[300px] sm:h-[450px] bg-gradient-to-b from-gray-100 to-gray-200 dark:from-[#0a0a0a] dark:to-[#1a1a1a]"
       />
     );
   }
 
   return (
     <div
-      className="relative w-full min-h-[250px] overflow-visible"
-      style={{ height: '250px' }}
+      className="relative w-full h-[300px] sm:h-[450px] overflow-visible"
     >
       <DeliveryTrackingMap
         orderId={orderId}
         orderTrackingIds={orderTrackingIdsList}
-        restaurantCoords={restaurantCoords}
-        customerCoords={customerCoords}
+        restaurantCoords={effectiveRestaurantCoords}
+        customerCoords={effectiveCustomerCoords}
 
         userLiveCoords={userLiveCoords}
         userLocationAccuracy={userLocationAccuracy}
@@ -263,10 +608,10 @@ const DeliveryMap = React.memo(({ orderId, order, isVisible, fallbackCustomerCoo
 const SectionItem = ({ icon: Icon, iconNode, title, subtitle, onClick, showArrow = true, rightContent }) => (
   <motion.button
     onClick={onClick}
-    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors text-left border-b border-dashed border-gray-200 last:border-0"
+    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0"
     whileTap={{ scale: 0.99 }}
   >
-    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
       {iconNode ? (
         <div
           className="w-6 h-6 flex-shrink-0 flex items-center justify-center [&_svg]:w-full [&_svg]:h-full [&_svg]:block"
@@ -274,16 +619,42 @@ const SectionItem = ({ icon: Icon, iconNode, title, subtitle, onClick, showArrow
           {iconNode}
         </div>
       ) : (
-        <Icon className="w-5 h-5 text-gray-600 flex-shrink-0" />
+        <Icon className="w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0" />
       )}
     </div>
     <div className="flex-1 min-w-0">
-      <p className="font-medium text-gray-900 truncate">{title}</p>
-      {subtitle && <p className="text-sm text-gray-500 truncate">{subtitle}</p>}
+      <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{title}</p>
+      {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{subtitle}</p>}
     </div>
-    {rightContent || (showArrow && <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />)}
+    {rightContent || (showArrow && <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />)}
   </motion.button>
 )
+
+class MapErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error) {
+    debugError('OrderTracking map render failed:', error)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="relative h-[300px] sm:h-[450px] bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 flex items-center justify-center">
+          <p className="text-sm text-gray-600 dark:text-gray-400 px-4 text-center">Live map unavailable right now</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const getRestaurantCoordsFromOrder = (apiOrder, fallback = null) => {
   if (
@@ -338,13 +709,15 @@ const getCustomerCoordsFromApiOrder = (apiOrder, previousOrder = null) => {
   if (Array.isArray(fromLoc) && fromLoc.length >= 2) return fromLoc
   const flat = addr?.coordinates
   if (Array.isArray(flat) && flat.length >= 2) return flat
+
+  // Some payloads provide plain object coordinates instead of GeoJSON arrays.
+  const objectCoord = addr?.location || addr
+  const objLat = Number(objectCoord?.lat ?? objectCoord?.latitude)
+  const objLng = Number(objectCoord?.lng ?? objectCoord?.longitude)
+  if (Number.isFinite(objLat) && Number.isFinite(objLng)) return [objLng, objLat]
+
   const prev = previousOrder?.address?.coordinates || previousOrder?.address?.location?.coordinates
   if (Array.isArray(prev) && prev.length >= 2) return prev
-
-  const lat = Number(addr?.latitude ?? addr?.location?.latitude ?? previousOrder?.address?.latitude)
-  const lng = Number(addr?.longitude ?? addr?.location?.longitude ?? previousOrder?.address?.longitude)
-  if (Number.isFinite(lat) && Number.isFinite(lng)) return [lng, lat]
-
   return null
 }
 
@@ -359,13 +732,19 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     id: apiOrder?.orderId || apiOrder?._id,
     mongoId: apiOrder?._id || null,
     orderId: apiOrder?.orderId || apiOrder?._id,
-    shareTrackingId: apiOrder?.shareTrackingId || previousOrder?.shareTrackingId || null,
-    restaurant: apiOrder?.restaurantName || previousOrder?.restaurant || 'Restaurant',
+    restaurant: 
+      apiOrder?.restaurantId?.restaurantName || 
+      apiOrder?.restaurantId?.name || 
+      apiOrder?.restaurantName || 
+      (typeof apiOrder?.restaurant === 'string' ? apiOrder.restaurant : null) ||
+      apiOrder?.restaurant?.restaurantName || 
+      apiOrder?.restaurant?.name || 
+      previousOrder?.restaurant || 
+      'Restaurant',
     restaurantPhone:
       apiOrder?.restaurantPhone ||
       apiOrder?.restaurantId?.phone ||
       apiOrder?.restaurantId?.ownerPhone ||
-      apiOrder?.restaurantId?.primaryContactNumber ||
       apiOrder?.restaurant?.phone ||
       apiOrder?.restaurant?.ownerPhone ||
       previousOrder?.restaurantPhone ||
@@ -373,7 +752,7 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     restaurantAddress,
     restaurantId: apiOrder?.restaurantId || previousOrder?.restaurantId || null,
     userId: apiOrder?.userId || previousOrder?.userId || null,
-    userName: apiOrder?.userName || apiOrder?.customerName || apiOrder?.userId?.name || apiOrder?.userId?.fullName || previousOrder?.userName || '',
+    userName: apiOrder?.userName || apiOrder?.userId?.name || apiOrder?.userId?.fullName || previousOrder?.userName || '',
     userPhone: apiOrder?.userPhone || apiOrder?.userId?.phone || previousOrder?.userPhone || '',
     address: {
       street: addr?.street || previousOrder?.address?.street || '',
@@ -399,29 +778,30 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
     total: apiOrder?.pricing?.total || previousOrder?.total || 0,
     // Backend canonical field is orderStatus; keep legacy `status` for UI compatibility.
     status: apiOrder?.orderStatus || apiOrder?.status || previousOrder?.status || 'pending',
-    deliveryPartner: apiOrder?.deliveryPartner || (apiOrder?.deliveryPartnerId ? {
+    deliveryPartner: apiOrder?.deliveryPartnerId ? {
       name: apiOrder.deliveryPartnerId.name || apiOrder.deliveryPartnerId.fullName || 'Delivery Partner',
       phone: apiOrder.deliveryPartnerId.phone || apiOrder.deliveryPartnerId.phoneNumber || '',
       avatar: apiOrder.deliveryPartnerId.avatar || apiOrder.deliveryPartnerId.profilePicture || null
-    } : (previousOrder?.deliveryPartner || null)),
+    } : (previousOrder?.deliveryPartner || null),
     deliveryPartnerId: apiOrder?.deliveryPartnerId?._id || apiOrder?.deliveryPartnerId || apiOrder?.dispatch?.deliveryPartnerId?._id || apiOrder?.dispatch?.deliveryPartnerId || apiOrder?.assignmentInfo?.deliveryPartnerId || null,
     dispatch: apiOrder?.dispatch || previousOrder?.dispatch || null,
     assignmentInfo: apiOrder?.assignmentInfo || previousOrder?.assignmentInfo || null,
     tracking: apiOrder?.tracking || previousOrder?.tracking || {},
     deliveryState: apiOrder?.deliveryState || previousOrder?.deliveryState || null,
+    scheduledAt: apiOrder?.scheduledAt || previousOrder?.scheduledAt || null,
     createdAt: apiOrder?.createdAt || previousOrder?.createdAt || null,
+    preparationTime: apiOrder?.preparationTime || previousOrder?.preparationTime || 0,
+    acceptedAt: apiOrder?.acceptedAt || previousOrder?.acceptedAt || null,
     totalAmount: apiOrder?.pricing?.total || apiOrder?.totalAmount || previousOrder?.totalAmount || 0,
     deliveryFee: apiOrder?.pricing?.deliveryFee || apiOrder?.deliveryFee || previousOrder?.deliveryFee || 0,
     gst: apiOrder?.pricing?.tax || apiOrder?.pricing?.gst || apiOrder?.gst || apiOrder?.tax || previousOrder?.gst || 0,
     packagingFee: apiOrder?.pricing?.packagingFee || apiOrder?.packagingFee || 0,
     platformFee: apiOrder?.pricing?.platformFee || apiOrder?.platformFee || 0,
-    surgeAmount: apiOrder?.pricing?.surgeAmount || apiOrder?.surgeAmount || previousOrder?.surgeAmount || 0,
-    surgeTitle: apiOrder?.pricing?.surgeTitle || apiOrder?.surgeTitle || previousOrder?.surgeTitle || "Surge Charge",
-    deliveryPartnerTip: apiOrder?.pricing?.deliveryPartnerTip || apiOrder?.deliveryPartnerTip || apiOrder?.tip || previousOrder?.deliveryPartnerTip || 0,
     discount: apiOrder?.pricing?.discount || apiOrder?.discount || 0,
     subtotal: apiOrder?.pricing?.subtotal || apiOrder?.subtotal || 0,
     paymentMethod: apiOrder?.paymentMethod || apiOrder?.payment?.method || previousOrder?.paymentMethod || null,
     payment: apiOrder?.payment || previousOrder?.payment || null,
+    orderType: apiOrder?.orderType || previousOrder?.orderType || 'delivery',
     // Preserve delivery OTP code received via socket event.
     // API responses intentionally strip the secret code for security,
     // so without preserving it the UI would lose the OTP on each poll refresh.
@@ -429,12 +809,12 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       const prevDV = previousOrder?.deliveryVerification || null
       const apiDV = apiOrder?.deliveryVerification || null
       const handoverOtp = apiOrder?.handoverOtp || null
-
+      
       if (!prevDV && !apiDV && !handoverOtp) return null
 
       const prevDropOtp = prevDV?.dropOtp || null
       const apiDropOtp = apiDV?.dropOtp || null
-
+      
       const merged = {
         ...(prevDV || {}),
         ...(apiDV || {})
@@ -454,19 +834,22 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       }
       return merged
     })(),
-    note: apiOrder?.note || previousOrder?.note || ''
+    cancellationReason: apiOrder?.cancellationReason || previousOrder?.cancellationReason || null,
+    ratings: apiOrder?.ratings || previousOrder?.ratings || {},
+    restaurantRating: apiOrder?.ratings?.restaurant?.rating || apiOrder?.restaurantRating || previousOrder?.restaurantRating || null,
+    deliveryPartnerRating: apiOrder?.ratings?.deliveryPartner?.rating || apiOrder?.deliveryPartnerRating || previousOrder?.deliveryPartnerRating || null,
   }
 }
 
 /**
  * Backend uses `orderStatus` (created, confirmed, preparing, ready_for_pickup, picked_up, delivered, cancelled_*).
- * This page used to read legacy `status` only — so UI never updated. Map canonical + legacy values to tracking steps.
+ * In this flow `confirmed` means the user placed the order and it is waiting for restaurant acceptance.
+ * `preparing` is the first true restaurant-accepted state.
  */
 function mapBackendOrderStatusToUi(raw) {
   const s = String(raw || "").toLowerCase()
-  if (!s || s === "pending" || s === "created") return "placed"
-  if (s === "confirmed" || s === "accepted") return "confirmed"
-  if (s === "preparing" || s === "processed") return "preparing"
+  if (!s || s === "pending" || s === "created" || s === "confirmed") return "placed"
+  if (s === "accepted" || s === "preparing" || s === "processed") return "preparing"
   if (s === "ready" || s === "ready_for_pickup" || s === "reached_pickup" || s === "order_confirmed") return "ready"
   if (s === "picked_up" || s === "out_for_delivery" || s === "en_route_to_delivery") return "on_way"
   if (s === "reached_drop" || s === "at_drop" || s === "at_delivery") return "at_drop"
@@ -486,7 +869,7 @@ function mapOrderToTrackingUiStatus(orderLike) {
 
   // Live Ride / Phase-based mapping (Highest priority for precision)
   const isRiderAccepted = orderLike.dispatch?.status === "accepted" || orderLike.assignmentInfo?.status === "accepted" || orderLike.deliveryPartner?.status === "accepted";
-
+  
   if (phase === "reached_drop" || phase === "at_drop" || statusRaw === "at_drop") return "at_drop"
   if (phase === "en_route_to_delivery" || statusRaw === "picked_up" || statusRaw === "out_for_delivery") return "on_way"
   if (phase === "at_pickup" && orderLike.deliveryPartnerId && isRiderAccepted) return "at_pickup"
@@ -509,229 +892,225 @@ function normalizeLookupId(value) {
   return raw
 }
 
-function formatEtaText(estimatedTime, fallbackText) {
-  if (estimatedTime == null) return fallbackText;
+const getGlobalLastFetchTime = (id) => {
+  if (typeof window === 'undefined') return 0;
+  window.__lastOrderDetailsFetchTime = window.__lastOrderDetailsFetchTime || {};
+  return window.__lastOrderDetailsFetchTime[id] || 0;
+};
 
-  let minutes = null;
+const setGlobalLastFetchTime = (id, time) => {
+  if (typeof window === 'undefined') return;
+  window.__lastOrderDetailsFetchTime = window.__lastOrderDetailsFetchTime || {};
+  window.__lastOrderDetailsFetchTime[id] = time;
+};
 
-  if (typeof estimatedTime === "number") {
-    if (Number.isFinite(estimatedTime) && !isNaN(estimatedTime) && estimatedTime > 0) {
-      minutes = Math.round(estimatedTime);
-    }
-  } else if (typeof estimatedTime === "string") {
-    const cleaned = estimatedTime.trim();
-    if (cleaned.toLowerCase().includes("nan")) {
-      return fallbackText;
-    }
-    const match = cleaned.match(/(\d+)/);
-    if (match) {
-      const parsed = parseInt(match[1], 10);
-      if (Number.isFinite(parsed) && !isNaN(parsed) && parsed > 0) {
-        minutes = parsed;
-      }
-    }
-  }
-
-  if (minutes !== null && minutes > 0) {
-    return `Arriving in ${minutes} min${minutes === 1 ? '' : 's'}`;
-  }
-
-  return fallbackText;
-}
-
-const CANCELLATION_REASONS = [
-  "I ordered by mistake",
-  "I want to change my order",
-  "I want to change the delivery address",
-  "I want to change the payment method",
-  "Restaurant is taking too long to accept my order",
-  "I no longer need the order",
-  "I found another restaurant/food option",
-  "Ordered the wrong item",
-  "I want to place a new order",
-  "Price/total amount is higher than expected",
-  "Delivery time is too long",
-  "Other"
-];
-
-const ORDER_SUPPORT_CATEGORIES = [
-  "Food item missing or damaged",
-  "Delivery is delayed",
-  "Wrong order delivered",
-  "Quality or taste issue",
-  "Payment or billing issue",
-  "Other order issue",
-];
-
-export default function OrderTracking({ isSharedView = false }) {
+export default function OrderTracking() {
   const companyName = useCompanyName()
-  const { orderId: orderIdParam, shareId: shareIdParam } = useParams()
-  const isShared = isSharedView || Boolean(shareIdParam)
-  const shareId = shareIdParam || null
-  const orderId = isShared ? null : orderIdParam
-  const trackingKey = isShared ? shareId : orderId
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { orderId } = useParams()
   const [searchParams] = useSearchParams()
-  const confirmed = !isShared && searchParams.get("confirmed") === "true"
-  const sharedViewerName = searchParams.get("name")
-  const { getOrderById } = useOrders()
-  const { userProfile, getDefaultAddress } = useProfile()
+  const confirmed = searchParams.get("confirmed") === "true"
+  const { profile, getDefaultAddress } = useProfile()
   const { location: userLiveLocation } = useUserLocation()
+  const { getOrderById } = useOrders()
 
-  const { isConnected: isSocketConnected } = useUserNotifications()
+  const [isSocketConnected, setIsSocketConnected] = useState(() => {
+    return typeof window !== 'undefined' ? !!window.orderSocketConnected : false
+  })
 
-  // State for order data (pre-hydrated from cache for instant 0ms load)
-  const [order, setOrder] = useState(() => {
-    if (isShared || !orderId) return null;
-    try {
-      const cachedStr = localStorage.getItem("lastPlacedOrder");
-      if (cachedStr) {
-        const parsed = JSON.parse(cachedStr);
-        const needle = String(orderId).trim().toLowerCase();
-        const candidates = [parsed?.id, parsed?._id, parsed?.mongoId, parsed?.orderId].filter(Boolean).map(s => String(s).trim().toLowerCase());
-        if (candidates.includes(needle)) {
-          return transformOrderForTracking(parsed);
-        }
-      }
-    } catch {}
-    return null;
-  });
-  const [loading, setLoading] = useState(() => !order);
+  useEffect(() => {
+    const handleConnectionChange = (e) => {
+      setIsSocketConnected(!!e?.detail?.isConnected)
+    }
+    window.addEventListener('userSocketConnectionChange', handleConnectionChange)
+    return () => {
+      window.removeEventListener('userSocketConnectionChange', handleConnectionChange)
+    }
+  }, [])
+  
+  // Extract initial order from location state or context for instant 0ms rendering
+  const locationOrder = location.state?.order || location.state?.placedOrder
+  const contextOrder = getOrderById(orderId)
+  const initialOrder = locationOrder || contextOrder || null
+
+  // State for order data
+  const [order, setOrder] = useState(() => initialOrder ? transformOrderForTracking(initialOrder) : null)
+  const [loading, setLoading] = useState(() => !initialOrder)
   const [error, setError] = useState(null)
 
   const [showConfirmation, setShowConfirmation] = useState(confirmed)
   const [orderStatus, setOrderStatus] = useState('placed')
   const [estimatedTime, setEstimatedTime] = useState(29)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [showCancelDialog, setShowCancelDialog] = useState(false)
-  const [showSupportModal, setShowSupportModal] = useState(false)
-  const [supportCategory, setSupportCategory] = useState("Food item missing or damaged")
-  const [supportDescription, setSupportDescription] = useState("")
-  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false)
-  const [showOrderDetails, setShowOrderDetails] = useState(false)
-  const [showPlatformFeeModal, setShowPlatformFeeModal] = useState(false)
-  const [showDeliveryFeeModal, setShowDeliveryFeeModal] = useState(false)
-  const [cancellationReason, setCancellationReason] = useState("")
-  const [customCancellationComment, setCustomCancellationComment] = useState("")
-  const [cancellationPolicyText, setCancellationPolicyText] = useState("")
-  const [isCancelling, setIsCancelling] = useState(false)
 
-  // Fetch admin configured cancellation policy
+  const orderRef = useRef(order)
+  const estimatedTimeRef = useRef(estimatedTime)
+
   useEffect(() => {
-    const fetchCancellationPolicy = async () => {
-      try {
-        const response = await api.get(API_ENDPOINTS.ADMIN.CANCELLATION_PUBLIC)
-        const contentData = response?.data?.data?.content || response?.data?.content
-        if (contentData) {
-          const raw = contentData
-          const cleaned = typeof document !== 'undefined'
-            ? (new DOMParser().parseFromString(raw, 'text/html').body.textContent || '')
-            : raw.replace(/<[^>]*>?/gm, '')
-          if (cleaned.trim()) {
-            setCancellationPolicyText(cleaned.trim())
-          }
-        }
-      } catch (error) {
-        // keep fallback
-      }
-    }
-    fetchCancellationPolicy()
-  }, [])
+    orderRef.current = order
+  }, [order])
+
+  useEffect(() => {
+    estimatedTimeRef.current = estimatedTime
+  }, [estimatedTime])
+
+  const isRefreshingRef = useRef(isRefreshing)
+  useEffect(() => {
+    isRefreshingRef.current = isRefreshing
+  }, [isRefreshing])
+
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [showOrderDetails, setShowOrderDetails] = useState(false)
+  const [cancellationReason, setCancellationReason] = useState("")
+  const [refundDestination, setRefundDestination] = useState("source")
+  const [isCancelling, setIsCancelling] = useState(false)
   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false)
   const [deliveryInstructions, setDeliveryInstructions] = useState("")
   const [isUpdatingInstructions, setIsUpdatingInstructions] = useState(false)
+  const [resolvedLookupId, setResolvedLookupId] = useState("")
+  const [timerNow, setTimerNow] = useState(Date.now())
+  
+  const navigateToHomeAfterRating = useRef(false)
 
-  // Post-Delivery Rating State
-  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false)
-  const [restaurantRating, setRestaurantRating] = useState(5)
-  const [deliveryRating, setDeliveryRating] = useState(5)
-  const [restaurantComment, setRestaurantComment] = useState("")
-  const [deliveryComment, setDeliveryComment] = useState("")
+  // Rating states
+  const [showRatingModal, setShowRatingModal] = useState(false)
+  const [selectedRestaurantRating, setSelectedRestaurantRating] = useState(null)
+  const [selectedDeliveryRating, setSelectedDeliveryRating] = useState(null)
+  const [restaurantFeedbackText, setRestaurantFeedbackText] = useState("")
+  const [deliveryFeedbackText, setDeliveryFeedbackText] = useState("")
   const [submittingRating, setSubmittingRating] = useState(false)
+  const [isLocalRated, setIsLocalRated] = useState(false)
 
-  const isAlreadyRated = Boolean(
-    order?.ratings?.restaurant?.rating ||
-    order?.restaurantRating ||
-    order?.ratings?.deliveryPartner?.rating
-  )
+  // Sync with localStorage on load/change
+  useEffect(() => {
+    const key = `rated_order_${orderId}`;
+    if (localStorage.getItem(key) === 'true') {
+      setIsLocalRated(true);
+    }
+  }, [orderId]);
 
-  const handleRatingSubmit = async () => {
-    if (!order) return
+  // Check if order is already rated
+  const resRatingVal = Number(order?.ratings?.restaurant?.rating || order?.restaurantRating || 0)
+  const delRatingVal = Number(order?.ratings?.deliveryPartner?.rating || order?.deliveryPartnerRating || 0)
+
+  const hasRestaurantRating = resRatingVal > 0
+  const hasDeliveryPartner = !!(order?.deliveryPartnerId || order?.deliveryPartnerName)
+  const hasDeliveryRating = delRatingVal > 0
+  const isOrderRated = hasRestaurantRating && (!hasDeliveryPartner || hasDeliveryRating)
+
+
+  const handleOpenRating = () => {
+    setSelectedRestaurantRating(order?.ratings?.restaurant?.rating || order?.restaurantRating || null)
+    setSelectedDeliveryRating(order?.ratings?.deliveryPartner?.rating || order?.deliveryPartnerRating || null)
+    setRestaurantFeedbackText(order?.ratings?.restaurant?.comment || "")
+    setDeliveryFeedbackText(order?.ratings?.deliveryPartner?.comment || "")
+    setShowRatingModal(true)
+  }
+
+  useEffect(() => {
+    if (!showRatingModal && navigateToHomeAfterRating.current) {
+      navigateToHomeAfterRating.current = false
+      navigate("/user/home")
+    }
+  }, [showRatingModal])
+
+  const handleBackClick = () => {
+    const isDelivered = orderStatus === "delivered" || order?.status === "delivered" || Boolean(order?.deliveredAt)
+    if (isDelivered && !isOrderRated) {
+      navigateToHomeAfterRating.current = true
+      handleOpenRating()
+    } else {
+      navigate(isDelivered ? "/user/home" : "/user/orders")
+    }
+  }
+
+  const handleSubmitRating = async () => {
+    const deliveryPartnerCheck = !!(order?.deliveryPartnerId || order?.deliveryPartnerName)
+    const isMissingDeliveryRating = deliveryPartnerCheck && selectedDeliveryRating === null
+    if (!order || selectedRestaurantRating === null || isMissingDeliveryRating) {
+      toast.error("Please select all required ratings first")
+      return
+    }
+
     try {
       setSubmittingRating(true)
-      const hasDeliveryPartner = Boolean(order?.deliveryPartnerId || order?.deliveryPartner)
-      const payload = {
-        restaurantRating,
-        restaurantComment: restaurantComment.trim() || undefined,
-        ...(hasDeliveryPartner ? {
-          deliveryPartnerRating: deliveryRating,
-          deliveryPartnerComment: deliveryComment.trim() || undefined,
-        } : {})
-      }
+      const response = await orderAPI.submitOrderRatings(order.mongoId || order._id || order.id, {
+        restaurantRating: selectedRestaurantRating,
+        deliveryPartnerRating: deliveryPartnerCheck ? selectedDeliveryRating : undefined,
+        restaurantComment: restaurantFeedbackText || undefined,
+        deliveryPartnerComment: deliveryPartnerCheck ? (deliveryFeedbackText || undefined) : undefined,
+      })
+      
+      const updatedOrderData = response?.data?.data?.order || response?.data?.order
+      
+      // Save rating state locally to prevent duplicate rating clicks/popups
+      const oId = order.mongoId || order._id || order.id || orderId;
+      localStorage.setItem(`rated_order_${oId}`, "true");
+      setIsLocalRated(true);
 
-      const response = await orderAPI.submitOrderRatings(resolvedLookupId || orderId, payload)
-      toast.success("Thank you for rating your delivery & food!")
-      setIsRatingModalOpen(false)
+      setOrder(prev => {
+        const prevRatings = prev?.ratings || {};
+        const newRestRating = selectedRestaurantRating;
+        const newDelivRating = selectedDeliveryRating;
+        const apiRatings = updatedOrderData?.ratings || {};
+        
+        return {
+          ...prev,
+          ...(updatedOrderData || {}),
+          ratings: {
+            ...prevRatings,
+            ...apiRatings,
+            restaurant: {
+              ...(prevRatings.restaurant || {}),
+              ...(apiRatings.restaurant || {}),
+              rating: newRestRating,
+              comment: restaurantFeedbackText || prevRatings.restaurant?.comment || ""
+            },
+            deliveryPartner: {
+              ...(prevRatings.deliveryPartner || {}),
+              ...(apiRatings.deliveryPartner || {}),
+              rating: newDelivRating,
+              comment: deliveryFeedbackText || prevRatings.deliveryPartner?.comment || ""
+            }
+          },
+          restaurantRating: newRestRating,
+          deliveryPartnerRating: newDelivRating
+        };
+      });
 
-      // Update order state locally so UI updates immediately
-      setOrder(prev => prev ? {
-        ...prev,
-        ratings: response?.data?.data?.order?.ratings || {
-          restaurant: { rating: restaurantRating, comment: restaurantComment },
-          deliveryPartner: hasDeliveryPartner ? { rating: deliveryRating, comment: deliveryComment } : null
-        }
-      } : prev)
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to submit rating. Please try again.")
+      toast.success("Thanks for your feedback!")
+      setShowRatingModal(false)
+    } catch (error) {
+      debugError("Error submitting order ratings:", error)
+      toast.error(error?.response?.data?.message || "Failed to submit ratings")
     } finally {
       setSubmittingRating(false)
     }
   }
 
-  const handleSupportSubmit = async () => {
-    if (!supportCategory) return
-    try {
-      setIsSubmittingSupport(true)
-      const mongoOrderId = order?.mongoId || order?._id
-      const payload = {
-        type: "order",
-        issueType: supportCategory,
-        description: supportDescription.trim() || supportCategory,
-        ...(mongoOrderId ? { orderId: mongoOrderId } : {})
-      }
-      await api.post("/food/user/support/ticket", payload).catch(() => {})
-
-      toast.success(`Support request submitted for Order #${displayOrderRef}! Our support team will assist you shortly.`)
-      setShowSupportModal(false)
-      setSupportDescription("")
-    } catch {
-      toast.success(`Support request logged for Order #${displayOrderRef}.`)
-      setShowSupportModal(false)
-      setSupportDescription("")
-    } finally {
-      setIsSubmittingSupport(false)
-    }
-  }
-  const [resolvedLookupId, setResolvedLookupId] = useState("")
-  const [timerNow, setTimerNow] = useState(Date.now())
   const handleEtaUpdate = useCallback((newEta) => {
-    if (newEta == null) return;
-    const str = String(newEta).trim();
-    if (str.toLowerCase().includes("nan")) return;
-
-    const match = str.match(/(\d+)/);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      if (Number.isFinite(num) && !isNaN(num) && num > 0) {
-        setEstimatedTime(num);
+    if (typeof newEta === 'string') {
+      const match = newEta.match(/(\d+)/);
+      if (match) {
+        setEstimatedTime(parseInt(match[1], 10));
+        return;
       }
     }
-  }, []);
+    if (typeof newEta === 'number' && !isNaN(newEta)) {
+      setEstimatedTime(newEta);
+    }
+  }, [])
   const lastRealtimeRefreshRef = useRef(0)
   const trackingOrderIdsRef = useRef(new Set())
   const terminalPollStopRef = useRef(false)
   const lookupIdsRef = useRef([])
   const isInitialPollRequestedRef = useRef(null)
   const lastPollExecutionRef = useRef(0) // New: Hard throttle for extreme cases
+  const lastStatusToastRef = useRef({ key: '', at: 0 })
+
+  const ORDER_STATUS_TOAST_ID = 'order-tracking-status-update'
+  const ORDER_STATUS_TOAST_DEDUPE_MS = 4000
 
   // Delivery handover OTP received via socket event.
   // Kept separately so UI still renders even if the event arrives
@@ -752,9 +1131,10 @@ export default function OrderTracking({ isSharedView = false }) {
 
       // If the order is already loaded, match by either orderId or mongoId.
       // Otherwise, match against the current URL param.
-      const currentIds = [orderId, order?.orderId, order?.mongoId, order?._id]
-        .filter(Boolean)
-        .map(String)
+      const currentIds = [String(orderId)]
+      if (order?.orderId) currentIds.push(String(order.orderId))
+      if (order?.mongoId) currentIds.push(String(order.mongoId))
+      if (order?._id) currentIds.push(String(order._id))
 
       const matches =
         (evtOrderId && currentIds.includes(evtOrderId)) ||
@@ -769,10 +1149,10 @@ export default function OrderTracking({ isSharedView = false }) {
         if (!prev) return prev
         const prevDV = prev.deliveryVerification || {}
         const prevDropOtp = prevDV.dropOtp || {}
-
+        
         // Only update if code actually changed to avoid render loops
         if (prevDropOtp.code === otp) return prev;
-
+        
         return {
           ...prev,
           deliveryVerification: {
@@ -792,6 +1172,62 @@ export default function OrderTracking({ isSharedView = false }) {
     return () => window.removeEventListener('deliveryDropOtp', handleDeliveryDropOtp)
   }, [orderId, order])
 
+  // --- Start: Sync arrival time and status ---
+  const getDeliveryTargetTime = useCallback((orderData) => {
+    if (!orderData) return null;
+
+    // If preparationTime is set by the restaurant, use acceptedAt + preparationTime
+    if (orderData.preparationTime && orderData.acceptedAt) {
+      const acceptTime = new Date(orderData.acceptedAt);
+      return new Date(acceptTime.getTime() + orderData.preparationTime * 60000);
+    }
+
+    // Use scheduled time if available, fallback to creation time
+    const orderTime = new Date(
+      orderData.scheduledAt || orderData.createdAt || orderData.orderDate || orderData.created_at || orderData.date || Date.now()
+    );
+
+    // For non-scheduled orders, we add the estimated delivery time to the creation time.
+    // For scheduled orders, scheduledAt is already the target time.
+    const isScheduled = !!orderData.scheduledAt;
+    const estimatedMinutes = isScheduled 
+      ? 0 
+      : (orderData.estimatedDeliveryTime || orderData.estimatedTime || orderData.estimated_delivery_time || 35);
+
+    return new Date(orderTime.getTime() + estimatedMinutes * 60000);
+  }, []);
+
+  // Single clock source for estimatedTime and orderStatus sync
+  useEffect(() => {
+    if (!order) return;
+
+    const targetTime = getDeliveryTargetTime(order);
+
+    const updateTimerAndStatus = () => {
+      const actualStatus = mapOrderToTrackingUiStatus(order);
+      let diffMs = 0;
+      if (targetTime) {
+        diffMs = targetTime.getTime() - Date.now();
+      }
+
+      if (diffMs <= 0) {
+        setEstimatedTime(0);
+        // Do NOT auto-set to 'ready' — that status must come from the restaurant
+        setOrderStatus(actualStatus);
+      } else {
+        const mins = Math.ceil(diffMs / 60000);
+        setEstimatedTime(mins);
+        setOrderStatus(actualStatus);
+      }
+    };
+
+    updateTimerAndStatus();
+    const interval = setInterval(updateTimerAndStatus, 1000); // Check every second for instant response
+
+    return () => clearInterval(interval);
+  }, [order, getDeliveryTargetTime]);
+  // --- End: Sync arrival time and status ---
+
   // --------------------------------------------------------------------------
   // DATA FETCHING & POLLING STABILITY (FIXED FOR HAMMERING)
   // --------------------------------------------------------------------------
@@ -799,7 +1235,7 @@ export default function OrderTracking({ isSharedView = false }) {
   // Socket notifications include order ids — keep a set so events match this page.
   useEffect(() => {
     const s = trackingOrderIdsRef.current
-    if (orderId) s.add(String(orderId))
+    s.add(String(orderId))
     if (order?.orderId) s.add(String(order.orderId))
     if (order?.mongoId) s.add(String(order.mongoId))
     if (order?.id) s.add(String(order.id))
@@ -825,7 +1261,7 @@ export default function OrderTracking({ isSharedView = false }) {
       const needle = normalizeLookupId(rawLookupId)
       if (!needle) return null
       try {
-        const listResponse = await orderAPI.getOrders({ page: 1, limit: 20 })
+        const listResponse = await orderAPI.getOrders({ page: 1, limit: 50 })
         let orders = []
         if (listResponse?.data?.success && listResponse?.data?.data?.orders) {
           orders = listResponse.data.data.orders || []
@@ -842,7 +1278,9 @@ export default function OrderTracking({ isSharedView = false }) {
           return candidates.includes(needle)
         })
         if (matched) return matched
-      } catch { }
+      } catch (err) {
+        debugWarn('resolveOrderFromList error:', err)
+      }
       return null
     },
     fetchOrderDetailsWithFallback: async (options = {}) => {
@@ -901,6 +1339,13 @@ export default function OrderTracking({ isSharedView = false }) {
       }
     }
 
+    const orderLocObj = order?.address?.location || order?.address
+    const orderObjLat = Number(orderLocObj?.lat ?? orderLocObj?.latitude)
+    const orderObjLng = Number(orderLocObj?.lng ?? orderLocObj?.longitude)
+    if (Number.isFinite(orderObjLat) && Number.isFinite(orderObjLng)) {
+      return { lat: orderObjLat, lng: orderObjLng }
+    }
+
     const defaultCoords = defaultAddress?.location?.coordinates
     if (Array.isArray(defaultCoords) && defaultCoords.length >= 2) {
       const lng = Number(defaultCoords[0])
@@ -908,6 +1353,13 @@ export default function OrderTracking({ isSharedView = false }) {
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
         return { lat, lng }
       }
+    }
+
+    const defaultLocObj = defaultAddress?.location || defaultAddress
+    const defaultObjLat = Number(defaultLocObj?.lat ?? defaultLocObj?.latitude)
+    const defaultObjLng = Number(defaultLocObj?.lng ?? defaultLocObj?.longitude)
+    if (Number.isFinite(defaultObjLat) && Number.isFinite(defaultObjLng)) {
+      return { lat: defaultObjLat, lng: defaultObjLng }
     }
 
     const liveLat = Number(userLiveLocation?.latitude)
@@ -932,20 +1384,9 @@ export default function OrderTracking({ isSharedView = false }) {
     return { lat, lng }
   }, [userLiveLocation?.latitude, userLiveLocation?.longitude])
 
-  const mapOrderId = useMemo(
-    () => order?.orderId || order?.mongoId || order?._id || orderId || '',
-    [order?.orderId, order?.mongoId, order?._id, orderId],
-  )
-
-  const displayOrderRef = useMemo(() => {
-    const id = mapOrderId || trackingKey || ''
-    return id ? String(id).slice(-6).toUpperCase() : '------'
-  }, [mapOrderId, trackingKey])
-
   const isAdminAccepted = useMemo(() => {
     const status = order?.status
     return [
-      "confirmed",
       "preparing",
       "ready",
       "ready_for_pickup",
@@ -953,26 +1394,17 @@ export default function OrderTracking({ isSharedView = false }) {
     ].includes(status)
   }, [order?.status])
 
-  // Single source of truth: backend order.status (+ deliveryState phase for live ride)
-  useEffect(() => {
-    if (!order) return
-    setOrderStatus(mapOrderToTrackingUiStatus(order))
-  }, [
-    order?.status,
-    order?.deliveryState?.currentPhase,
-    order?.deliveryState?.status,
-  ])
+  // Single source of truth is now handled by the unified sync clock useEffect above.
 
   const acceptedAtMs = useMemo(() => {
     const timestamp =
-      order?.tracking?.confirmed?.timestamp ||
       order?.tracking?.preparing?.timestamp ||
       order?.updatedAt ||
       order?.createdAt
 
     const parsed = timestamp ? new Date(timestamp).getTime() : NaN
     return Number.isFinite(parsed) ? parsed : null
-  }, [order?.tracking?.confirmed?.timestamp, order?.tracking?.preparing?.timestamp, order?.updatedAt, order?.createdAt])
+  }, [order?.tracking?.preparing?.timestamp, order?.updatedAt, order?.createdAt])
 
   const editWindowRemainingMs = useMemo(() => {
     if (!isAdminAccepted || !acceptedAtMs) return 0
@@ -1004,14 +1436,14 @@ export default function OrderTracking({ isSharedView = false }) {
       '';
 
     const cleanPhone = String(rawPhone).replace(/[^\d+]/g, '');
-
+    
     if (!cleanPhone || cleanPhone.length < 5) {
       toast.error('Restaurant phone number not available');
       return;
     }
 
     debugLog('?? Attempting to call restaurant:', cleanPhone);
-
+    
     // Most compatible way to trigger dialer on overall mobile/web environments:
     // Create a temporary hidden anchor and programmatically click it.
     try {
@@ -1020,7 +1452,7 @@ export default function OrderTracking({ isSharedView = false }) {
       link.setAttribute('target', '_self');
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      if (document.body.contains(link)) document.body.removeChild(link);
     } catch (err) {
       debugError('Call failed via link click:', err);
       // Last-ditch fallback
@@ -1028,9 +1460,91 @@ export default function OrderTracking({ isSharedView = false }) {
     }
   };
 
-  const handleCallRider = (e) => {
+  const handleOpenDirections = async (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
+    let lat = null;
+    let lng = null;
+
+    // Helper to extract coords
+    const extractCoords = (obj) => {
+      if (!obj) return null;
+      // If array [lng, lat]
+      if (Array.isArray(obj) && obj.length >= 2) {
+        return { lat: Number(obj[1]), lng: Number(obj[0]) };
+      }
+      // If array nested in coordinates
+      if (obj.coordinates && Array.isArray(obj.coordinates) && obj.coordinates.length >= 2) {
+        return { lat: Number(obj.coordinates[1]), lng: Number(obj.coordinates[0]) };
+      }
+      // If object with lat/lng or latitude/longitude
+      const latVal = obj.lat || obj.latitude;
+      const lngVal = obj.lng || obj.longitude;
+      if (latVal != null && lngVal != null) {
+        return { lat: Number(latVal), lng: Number(lngVal) };
+      }
+      return null;
+    };
+
+    // Try multiple sources on order
+    let resolved = extractCoords(order?.restaurantLocation) || 
+                   extractCoords(order?.restaurantId?.location) ||
+                   extractCoords(order?.restaurant?.location);
+
+    if (resolved) {
+      lat = resolved.lat;
+      lng = resolved.lng;
+    }
+
+    // Fallbacks on order object properties
+    if (lat === null || lng === null) {
+      const loc = order?.restaurantId?.location || order?.restaurant?.location;
+      if (loc && Number.isFinite(Number(loc.latitude)) && Number.isFinite(Number(loc.longitude))) {
+        lat = Number(loc.latitude);
+        lng = Number(loc.longitude);
+      } else if (loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng))) {
+        lat = Number(loc.lat);
+        lng = Number(loc.lng);
+      }
+    }
+
+    // Dynamic fetch from restaurant API if coords are still missing
+    if (lat === null || lng === null) {
+      const restId = order?.restaurantId?._id || order?.restaurantId?.id || (typeof order?.restaurantId === 'string' ? order.restaurantId : null);
+      if (restId) {
+        try {
+          const restaurantResponse = await restaurantAPI.getRestaurantById(restId);
+          if (restaurantResponse?.data?.success && restaurantResponse.data.data?.restaurant) {
+            const restaurant = restaurantResponse.data.data.restaurant;
+            const fetched = extractCoords(restaurant.location);
+            if (fetched) {
+              lat = fetched.lat;
+              lng = fetched.lng;
+            }
+          }
+        } catch (err) {
+          debugError('Failed to fetch restaurant details in handleOpenDirections:', err);
+        }
+      }
+    }
+
+    let mapsUrl = '';
+    const name = order?.restaurant || 'Restaurant';
+
+    if (lat !== null && lng !== null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      mapsUrl = `https://maps.google.com/?q=${lat},${lng}+(${encodeURIComponent(name)})`;
+    } else {
+      const address = order?.restaurantAddress || '';
+      const query = address ? `${name} ${address}` : name;
+      mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(query)}`;
+    }
+
+    window.open(mapsUrl, '_blank');
+  };
+
+  const handleCallRider = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    
     const rawPhone = order?.deliveryPartner?.phone || '';
     const cleanPhone = String(rawPhone).replace(/[^\d+]/g, '');
 
@@ -1040,14 +1554,14 @@ export default function OrderTracking({ isSharedView = false }) {
     }
 
     debugLog('?? Attempting to call rider:', cleanPhone);
-
+    
     try {
       const link = document.createElement('a');
       link.href = `tel:${cleanPhone}`;
       link.setAttribute('target', '_self');
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      if (document.body.contains(link)) document.body.removeChild(link);
     } catch (err) {
       debugError('Call failed via link click:', err);
       window.location.assign(`tel:${cleanPhone}`);
@@ -1074,7 +1588,7 @@ export default function OrderTracking({ isSharedView = false }) {
 
   // Main fetch & polling core logic. (Isolated from socket connection stat-changes)
   useEffect(() => {
-    if (!trackingKey) return;
+    if (!orderId) return;
 
     let isSubscribed = true;
     let requestInProgress = false;
@@ -1084,58 +1598,48 @@ export default function OrderTracking({ isSharedView = false }) {
       if (terminalPollStopRef.current && !isInitial) return;
 
       const now = Date.now();
-      if (isInitial && now - lastPollExecutionRef.current < 1000) return;
-      if (isInitial) lastPollExecutionRef.current = now;
+      
+      let hasOrderData = !!orderRef.current;
 
-      // Check context and local cache immediately to eliminate loading delay
-      if (isInitial && !isShared && orderId) {
-        let rawContext = getOrderById(orderId);
-        if (!rawContext) {
-          try {
-            const cachedStr = localStorage.getItem("lastPlacedOrder");
-            if (cachedStr) {
-              const parsed = JSON.parse(cachedStr);
-              const needle = String(orderId).trim().toLowerCase();
-              const candidates = [parsed?.id, parsed?._id, parsed?.mongoId, parsed?.orderId].filter(Boolean).map(s => String(s).trim().toLowerCase());
-              if (candidates.includes(needle)) rawContext = parsed;
-            }
-          } catch { }
-        }
+      // Check context immediately to avoid loaders if data exists locally
+      if (isInitial) {
+        const rawContext = getOrderById(orderId);
         if (rawContext) {
           setOrder(transformOrderForTracking(rawContext));
           setLoading(false);
+          hasOrderData = true;
         }
       }
 
+      // Global throttle across component remounts to prevent rapid API hammering
+      const globalLastFetch = getGlobalLastFetchTime(orderId);
+      if (isInitial && hasOrderData && now - globalLastFetch < 2000) {
+        debugLog("?? Throttling initial poll - too soon since last fetch");
+        setLoading(false);
+        return;
+      }
+      if (isInitial) {
+        setGlobalLastFetchTime(orderId, now);
+      }
+
+      if (isInitial && now - lastPollExecutionRef.current < 1000) return;
+      if (isInitial) lastPollExecutionRef.current = now;
+
       requestInProgress = true;
       try {
-        let finalOrderData = null;
-
-        if (isShared) {
-          finalOrderData = await fetchPublicOrderDetails(shareId);
-        } else {
-          const response = await fetchOrderDetailsWithFallback({ force: isInitial });
-          if (!isSubscribed) return;
-
-          if (response.data?.success && response.data.data?.order) {
-            finalOrderData = response.data.data.order;
-          } else if (isInitial) {
-            const matchedOrder = await resolveOrderFromList(orderId);
-            if (matchedOrder) finalOrderData = matchedOrder;
-          }
-        }
-
+        const response = await fetchOrderDetailsWithFallback({ force: isInitial });
         if (!isSubscribed) return;
 
-        if (finalOrderData) {
-          if (isShared) {
-            const sharedName = resolveSharerDisplayName({
-              urlName: sharedViewerName,
-              order: finalOrderData,
-            });
-            saveSharedOrder(shareId, sharedName);
-          }
+        let finalOrderData = null;
 
+        if (response.data?.success && response.data.data?.order) {
+          finalOrderData = response.data.data.order;
+        } else if (isInitial) {
+          const matchedOrder = await resolveOrderFromList(orderId);
+          if (matchedOrder) finalOrderData = matchedOrder;
+        }
+
+        if (finalOrderData) {
           setOrder(prev => {
             const transformedOrder = transformOrderForTracking(finalOrderData, prev);
             const ui = mapOrderToTrackingUiStatus(transformedOrder);
@@ -1148,29 +1652,23 @@ export default function OrderTracking({ isSharedView = false }) {
         }
 
         if (isInitial && !order) {
-          setError(isShared ? 'Order not found' : 'Order not found');
+          setError(response.data?.message || 'Order not found');
           terminalPollStopRef.current = true;
         }
       } catch (err) {
         if (isInitial && !order) {
-          if (!isShared) {
-            try {
-              const matchedOrder = await resolveOrderFromList(orderId);
-              if (matchedOrder) {
-                if (!isSubscribed) return;
-                setOrder(prev => transformOrderForTracking(matchedOrder, prev));
-                setError(null);
-                setLoading(false);
-                return;
-              }
-            } catch { }
-          }
+          try {
+            const matchedOrder = await resolveOrderFromList(orderId);
+            if (matchedOrder) {
+              if (!isSubscribed) return;
+              setOrder(prev => transformOrderForTracking(matchedOrder, prev));
+              setError(null);
+              setLoading(false);
+              return;
+            }
+          } catch {}
           if (!isSubscribed) return;
-          setError(
-            isShared
-              ? err?.message || 'Failed to fetch order details'
-              : err.response?.data?.message || 'Failed to fetch order details',
-          );
+          setError(err.response?.data?.message || 'Failed to fetch order details');
           terminalPollStopRef.current = true;
         }
       } finally {
@@ -1182,28 +1680,19 @@ export default function OrderTracking({ isSharedView = false }) {
     pollRef.current = poll;
     terminalPollStopRef.current = false;
 
-    if (isInitialPollRequestedRef.current !== trackingKey) {
-      isInitialPollRequestedRef.current = trackingKey;
+    if (isInitialPollRequestedRef.current !== orderId) {
+      isInitialPollRequestedRef.current = orderId;
       poll(true);
     }
 
     return () => {
       isSubscribed = false;
     };
-  }, [
-    trackingKey,
-    isShared,
-    shareId,
-    orderId,
-    sharedViewerName,
-    fetchOrderDetailsWithFallback,
-    resolveOrderFromList,
-    getOrderById,
-  ]);
+  }, [orderId, fetchOrderDetailsWithFallback, resolveOrderFromList]);
 
   // Interval Manager (dynamically adapts based on socket connection state independently)
   useEffect(() => {
-    if (!trackingKey) return;
+    if (!orderId) return;
 
     const tick = () => {
       if (terminalPollStopRef.current) return;
@@ -1211,12 +1700,12 @@ export default function OrderTracking({ isSharedView = false }) {
       // Delegate to the latest instance of our polling function capturing current state
       if (pollRef.current) pollRef.current(false);
     };
-
-    const pollInterval = (isSocketConnected || window.orderSocketConnected) ? 12000 : 5000;
+    
+    const pollInterval = (isSocketConnected || window.orderSocketConnected) ? 60000 : 20000;
     const interval = setInterval(tick, pollInterval);
 
     return () => clearInterval(interval);
-  }, [trackingKey, isSocketConnected]);
+  }, [orderId, isSocketConnected]);
 
   useEffect(() => {
     if (!order) return
@@ -1224,24 +1713,14 @@ export default function OrderTracking({ isSharedView = false }) {
     terminalPollStopRef.current = ui === 'delivered' || ui === 'cancelled'
   }, [order])
 
-  // Post-checkout splash - dismiss fast as soon as order is ready or after 1.2s max
+  // Post-checkout splash only — real status comes from API / poll / socket.
   useEffect(() => {
-    if (!showConfirmation) return;
-    if (order && !loading) {
-      const timer = setTimeout(() => setShowConfirmation(false), 500);
-      return () => clearTimeout(timer);
-    }
-    const timer1 = setTimeout(() => setShowConfirmation(false), 1200);
-    return () => clearTimeout(timer1);
-  }, [showConfirmation, order, loading]);
+    if (!confirmed) return
+    const timer1 = setTimeout(() => setShowConfirmation(false), 3000)
+    return () => clearTimeout(timer1)
+  }, [confirmed])
 
-  // Countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setEstimatedTime((prev) => Math.max(0, prev - 1))
-    }, 60000)
-    return () => clearInterval(timer)
-  }, [])
+  // Countdown timer is now handled by the unified sync clock useEffect above.
 
   // Listen for order status updates from socket (e.g., "Delivery partner on the way")
   useEffect(() => {
@@ -1263,43 +1742,51 @@ export default function OrderTracking({ isSharedView = false }) {
           orderStatus: payload.orderStatus || status,
           deliveryState: payload.deliveryState,
         });
-        setOrderStatus(next);
-
-        // Optimistically update order state from socket payload
-        if (payload.note || payload.orderStatus || payload.status) {
-          setOrder(prev => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              status: payload.orderStatus || payload.status || prev.status,
-              note: payload.note || prev.note
-            };
-          });
+        const currentOrder = orderRef.current;
+        const currentEstTime = estimatedTimeRef.current;
+        if ((currentOrder?.orderType === 'takeaway' || currentOrder?.orderType === 'dining') && 
+            currentEstTime <= 0 && 
+            ['placed', 'preparing'].includes(next)) {
+          setOrderStatus('ready');
+        } else {
+          setOrderStatus(next);
         }
 
         // Pull latest order state without refresh spam on bursty socket events.
         const now = Date.now();
-        if (now - lastRealtimeRefreshRef.current > 1500 && !isRefreshing) {
+        if (now - lastRealtimeRefreshRef.current > 1500 && !isRefreshingRef.current) {
           lastRealtimeRefreshRef.current = now;
           handleRefresh();
         }
       }
 
-      // Show notification toast
-      if (message) {
+      // Show a single deduped notification toast
+      if (message && idMatches) {
+        const toastKey = `${String(evtOrderId || orderMongoId || orderId)}:${String(status || payload.orderStatus || '')}`
+        const now = Date.now()
+        const isDuplicateToast =
+          toastKey &&
+          toastKey === lastStatusToastRef.current.key &&
+          now - lastStatusToastRef.current.at < ORDER_STATUS_TOAST_DEDUPE_MS
+
+        if (isDuplicateToast) return
+
+        lastStatusToastRef.current = { key: toastKey, at: now }
+        toast.dismiss(ORDER_STATUS_TOAST_ID)
         toast.success(message, {
+          id: ORDER_STATUS_TOAST_ID,
           duration: 5000,
-          icon: '🛎️',
           position: 'top-center',
-          id: `order-status-${evtOrderId || orderMongoId}-${status}`,
           description: estimatedDeliveryTime
             ? `Estimated delivery in ${Math.round(estimatedDeliveryTime / 60)} minutes`
             : undefined
         });
 
-        // Optional: Vibrate device if supported
-        if (navigator.vibrate) {
-          navigator.vibrate([200, 100, 200]);
+        // Optional: Vibrate device if supported and user has interacted
+        if (typeof window !== 'undefined' && window.__userHasInteracted && navigator.vibrate) {
+          try {
+            navigator.vibrate([200, 100, 200]);
+          } catch (_) {}
         }
       }
     };
@@ -1313,8 +1800,6 @@ export default function OrderTracking({ isSharedView = false }) {
   }, [orderId])
 
   const handleCancelOrder = () => {
-    if (isShared) return;
-
     // Check if order can be cancelled (only Razorpay orders that aren't delivered/cancelled)
     if (!order) return;
 
@@ -1336,16 +1821,19 @@ export default function OrderTracking({ isSharedView = false }) {
     // Allow cancellation for all payment methods (Razorpay, COD, Wallet)
     // Only restrict if order is already cancelled or delivered (checked above)
 
+    const method = String(order?.payment?.method || order?.paymentMethod || "").toLowerCase()
+    const status = String(order?.payment?.status || "").toLowerCase()
+    const isRazorpayPaid =
+      method === "razorpay" && ["paid", "authorized", "captured", "settled", "refunded"].includes(status)
+
+    setRefundDestination(isRazorpayPaid ? "source" : "wallet")
+
     setShowCancelDialog(true);
   };
 
   const handleConfirmCancel = async () => {
-    if (!cancellationReason) {
-      toast.error('Please select a cancellation reason');
-      return;
-    }
-    if (cancellationReason === 'Other' && !customCancellationComment.trim()) {
-      toast.error('Please specify your reason in the text box');
+    if (!cancellationReason.trim()) {
+      toast.error('Please provide a reason for cancellation');
       return;
     }
 
@@ -1353,26 +1841,35 @@ export default function OrderTracking({ isSharedView = false }) {
     try {
       const cancelLookupId =
         lookupIdsRef.current[0] || normalizeLookupId(orderId)
-      const response = await orderAPI.cancelOrder(cancelLookupId, {
-        cancellationReason,
-        cancellationComment: customCancellationComment.trim(),
-        reason: cancellationReason === 'Other' ? customCancellationComment.trim() : cancellationReason
-      });
+      const method = String(order?.payment?.method || order?.paymentMethod || "").toLowerCase()
+      const status = String(order?.payment?.status || "").toLowerCase()
+      const isRazorpayPaid =
+        method === "razorpay" && ["paid", "authorized", "captured", "settled", "refunded"].includes(status)
+
+      const payload = {
+        reason: cancellationReason.trim(),
+        ...(isRazorpayPaid ? { refundDestination } : {}),
+      }
+
+      const response = await orderAPI.cancelOrder(cancelLookupId, payload);
       if (response.data?.success) {
-        toast.success("Your order has been cancelled successfully.");
+        const paymentMethod = order?.payment?.method || order?.paymentMethod;
+        const successMessage = response.data?.message ||
+          (paymentMethod === 'cash' || paymentMethod === 'cod'
+            ? 'Order cancelled successfully. No refund required as payment was not made.'
+            : refundDestination === 'wallet'
+              ? 'Order cancelled successfully. Refund has been added to your wallet.'
+              : 'Order cancelled successfully. Refund will be processed to your original payment method.');
+        toast.success(successMessage);
         setShowCancelDialog(false);
         setCancellationReason("");
-        setCustomCancellationComment("");
-        setOrderStatus('cancelled');
-        setOrder((prev) => (prev ? { ...prev, status: 'cancelled_by_user', orderStatus: 'cancelled_by_user' } : prev));
+        setRefundDestination("source");
         // Refresh order data
-        try {
-          const orderResponse = await fetchOrderDetailsWithFallback({ force: true });
-          if (orderResponse.data?.success && orderResponse.data.data?.order) {
-            const apiOrder = orderResponse.data.data.order;
-            setOrder(transformOrderForTracking(apiOrder, order));
-          }
-        } catch (_) {}
+        const orderResponse = await fetchOrderDetailsWithFallback({ force: true });
+        if (orderResponse.data?.success && orderResponse.data.data?.order) {
+          const apiOrder = orderResponse.data.data.order;
+          setOrder(transformOrderForTracking(apiOrder, order));
+        }
       } else {
         toast.error(response.data?.message || 'Failed to cancel order');
       }
@@ -1408,49 +1905,30 @@ export default function OrderTracking({ isSharedView = false }) {
   };
 
   const handleShare = async () => {
-    let shareId = order?.shareTrackingId;
-    if (!shareId) {
-      try {
-        const response = await fetchOrderDetailsWithFallback({ force: true });
-        const apiOrder = response?.data?.data?.order;
-        shareId = apiOrder?.shareTrackingId;
-        if (apiOrder) {
-          setOrder((prev) => transformOrderForTracking(apiOrder, prev));
-        }
-      } catch {
-        toast.error('Unable to generate share link. Please try again.');
-        return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Track my order from ${order?.restaurant || companyName}`,
+          text: `Hey! Track my order from ${order?.restaurant || companyName} with ID #${order?.orderId || order?.id}.`,
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success("Tracking link copied to clipboard!");
       }
-    }
-    if (!shareId) {
-      toast.error('Share link is not available for this order yet.');
-      return;
-    }
-    const sharerName = userProfile?.name || userProfile?.fullName || userProfile?.displayName || 'Someone';
-    const url = `${window.location.origin}/food/user/track-shared/${shareId}?name=${encodeURIComponent(sharerName)}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Track my order', url });
-      } catch (error) {
-        if (error?.name !== 'AbortError') {
-          toast.error('Failed to share link');
-        }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        debugError('Error sharing:', error);
+        toast.error("Failed to share link");
       }
-    } else {
-      await navigator.clipboard.writeText(url);
-      toast.success('Link copied!');
     }
   };
 
   const handleRefresh = async () => {
+    if (isRefreshingRef.current) return
+    isRefreshingRef.current = true
     setIsRefreshing(true)
     try {
-      if (isShared) {
-        const apiOrder = await fetchPublicOrderDetails(shareId)
-        setOrder((prev) => transformOrderForTracking(apiOrder, prev))
-        return
-      }
-
       const response = await fetchOrderDetailsWithFallback({ force: true })
       if (response.data?.success && response.data.data?.order) {
         const apiOrder = response.data.data.order
@@ -1495,11 +1973,12 @@ export default function OrderTracking({ isSharedView = false }) {
           }
         }
 
-        setOrder(transformOrderForTracking(apiOrder, order, restaurantCoords, restaurantAddress))
+        setOrder(prev => transformOrderForTracking(apiOrder, prev, restaurantCoords, restaurantAddress))
       }
     } catch (err) {
       debugError('Error refreshing order:', err)
     } finally {
+      isRefreshingRef.current = false
       setIsRefreshing(false)
     }
   }
@@ -1511,7 +1990,7 @@ export default function OrderTracking({ isSharedView = false }) {
   // Loading state (moved after hooks)
   if (loading) {
     return (
-      <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-zinc-950 p-4">
+      <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] p-4">
         <div className="max-w-lg mx-auto text-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-gray-600 dark:text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">Loading order details...</p>
@@ -1523,12 +2002,12 @@ export default function OrderTracking({ isSharedView = false }) {
   // Error state (moved after hooks)
   if (error || !order) {
     return (
-      <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-zinc-950 p-4">
+      <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] p-4">
         <div className="max-w-lg mx-auto text-center py-20">
-          <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-4 dark:text-white">Order Not Found</h1>
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-4 dark:text-gray-100">Order Not Found</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{error || 'The order you\'re looking for doesn\'t exist.'}</p>
-          <Link to={isShared ? '/food/user' : '/user/orders'}>
-            <Button className="bg-[#EB590E] hover:bg-[#D44D0D] text-white">Back to Orders</Button>
+          <Link to="/user/orders">
+            <Button>Back to Orders</Button>
           </Link>
         </div>
       </AnimatedPage>
@@ -1543,46 +2022,46 @@ export default function OrderTracking({ isSharedView = false }) {
       iconType: 'food'
     },
     confirmed: {
-      title: "Order Confirmed",
-      subtitle: "Restaurant has accepted your order",
+      title: "Order Placed",
+      subtitle: "Waiting for restaurant to accept",
       color: "bg-green-600",
       iconType: 'food'
     },
     preparing: {
-      title: (order?.deliveryState?.currentPhase === 'at_pickup' || order?.deliveryState?.status === 'reached_pickup')
-        ? "Food preparation in progress 🟠"
-        : "Food is being prepared",
-      subtitle: (order?.deliveryState?.currentPhase === 'at_pickup' || order?.deliveryState?.status === 'reached_pickup')
-        ? "Your delivery partner has arrived at the restaurant and is waiting for your order to be ready."
-        : formatEtaText(estimatedTime, "Cooking your meal"),
-      color: "bg-orange-500",
+      title: "Food is being prepared",
+      subtitle: (order?.orderType === "takeaway" || order?.orderType === "dining")
+        ? (typeof estimatedTime === 'number' 
+            ? (estimatedTime <= 0 ? "Waiting for restaurant to mark ready" : `Ready for pickup in ${estimatedTime} mins`) 
+            : "Cooking your meal")
+        : (typeof estimatedTime === 'number' 
+            ? (estimatedTime <= 0 ? "Arriving soon" : `Arriving in ${estimatedTime} mins`) 
+            : "Cooking your meal"),
+      color: "bg-green-600",
       iconType: 'food'
     },
     assigned: {
       title: "Rider is arriving",
       subtitle: "A delivery partner is arriving at the restaurant",
-      color: "bg-orange-500",
+      color: "bg-green-600",
       iconType: 'rider'
     },
     at_pickup: {
-      title: (order?.orderStatus === 'ready_for_pickup' || order?.orderStatus === 'ready') 
-        ? "Food is ready for pickup 🟢" 
-        : "Food preparation in progress 🟠",
-      subtitle: (order?.orderStatus === 'ready_for_pickup' || order?.orderStatus === 'ready')
-        ? "Your order is ready and your delivery partner is collecting it."
-        : "Your delivery partner has arrived at the restaurant and is waiting for your order to be ready.",
-      color: (order?.orderStatus === 'ready_for_pickup' || order?.orderStatus === 'ready') ? "bg-emerald-600" : "bg-amber-600",
+      title: "Rider at restaurant",
+      subtitle: "Rider is waiting for your order",
+      color: "bg-green-600",
       iconType: 'rider'
     },
     ready: {
-      title: "Food is ready for pickup 🟢",
-      subtitle: "Your order is ready and your delivery partner is collecting it.",
-      color: "bg-emerald-600",
-      iconType: 'rider'
+      title: (order?.orderType === "takeaway" || order?.orderType === "dining") ? "Ready for pickup" : "Handover in progress",
+      subtitle: (order?.orderType === "takeaway" || order?.orderType === "dining") ? "Please collect your order from the restaurant" : "Rider is picking up your order",
+      color: "bg-green-600",
+      iconType: (order?.orderType === "takeaway" || order?.orderType === "dining") ? 'delivered' : 'rider'
     },
     on_way: {
       title: "Out for delivery",
-      subtitle: formatEtaText(estimatedTime, "Rider is out for delivery"),
+      subtitle: typeof estimatedTime === 'number' 
+        ? (estimatedTime <= 0 ? "Arriving soon" : `Arriving in ${estimatedTime} mins`) 
+        : "Rider is out for delivery",
       color: "bg-green-600",
       iconType: 'rider'
     },
@@ -1593,39 +2072,49 @@ export default function OrderTracking({ isSharedView = false }) {
       iconType: 'rider'
     },
     delivered: {
-      title: "Order delivered",
-      subtitle: "Enjoy your meal!",
+      title: order?.orderType === "takeaway" ? "Picked UP" : "Order delivered",
+      subtitle: order?.orderType === "takeaway" ? "Thank you for ordering!" : "Enjoy your meal!",
       color: "bg-green-600",
       iconType: 'delivered'
     },
     cancelled: {
-      title: "Order cancelled",
-      subtitle: "This order has been cancelled",
+      title: order?.orderType === "takeaway"
+        ? "Takeaway order cancelled"
+        : order?.orderType === "dining"
+          ? "Dining order cancelled"
+          : "Order cancelled",
+      subtitle: order?.cancellationReason || "This order has been cancelled",
       color: "bg-red-600",
       iconType: 'cancelled'
     }
   }
 
   const currentStatus = statusConfig[orderStatus] || statusConfig.placed
+  const isScheduledOrder = Boolean(order?.scheduledAt) && !['delivered', 'cancelled'].includes(orderStatus)
+  const scheduledDateFormatted = order?.scheduledAt
+    ? new Date(order.scheduledAt).toLocaleString("en-IN", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null
   const isDeliveredOrder =
     orderStatus === "delivered" ||
     order?.status === "delivered" ||
     Boolean(order?.deliveredAt)
 
-  const isCancelledOrder =
-    orderStatus === "cancelled" ||
-    isFoodOrderCancelledStatus(order?.status)
-
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a] pb-24">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
       {/* Order Confirmed Modal */}
       <AnimatePresence>
         {showConfirmation && (
           <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-white dark:bg-[#0a0a0a] flex flex-col items-center justify-center"
+            className="fixed inset-0 z-50 bg-white dark:bg-[#1a1a1a] flex flex-col items-center justify-center"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -1638,17 +2127,19 @@ export default function OrderTracking({ isSharedView = false }) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.9 }}
-                className="text-2xl font-bold text-gray-900 dark:text-white mt-6"
+                className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-6"
               >
-                Order Confirmed!
+                {isScheduledOrder ? "Order Scheduled!" : "Order Placed!"}
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1.1 }}
-                className="text-gray-600 dark:text-gray-400 mt-2"
+                className="text-gray-600 dark:text-gray-300 mt-2"
               >
-                Your order has been placed successfully
+                {isScheduledOrder
+                  ? `Scheduled for ${scheduledDateFormatted}`
+                  : "Waiting for the restaurant to accept your order"}
               </motion.p>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -1656,8 +2147,20 @@ export default function OrderTracking({ isSharedView = false }) {
                 transition={{ delay: 1.5 }}
                 className="mt-8"
               >
-                <div className="w-8 h-8 border-2 border-[#EB590E] border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">Loading order details...</p>
+                <div className="w-8 h-8 border-2 border-[#DC2626] border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-sm text-gray-500 mt-3">Loading order details...</p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 2.0 }}
+                className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800"
+              >
+                <div className="flex items-center justify-center gap-2 text-[#DC2626] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}>
+                  <Shield className="w-4 h-4" />
+                  <span className="text-sm">Learn about delivery partner safety</span>
+                </div>
               </motion.div>
             </motion.div>
           </motion.div>
@@ -1670,488 +2173,887 @@ export default function OrderTracking({ isSharedView = false }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
-        {/* Header */}
-        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-4 flex items-center justify-between sticky top-0 z-50 border-b border-gray-100 dark:border-zinc-800">
-          <div className="flex items-center gap-3">
-            <Link to={isShared ? '/food/user' : '/user/orders'}>
-              <button className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-                <ArrowLeft className="w-6 h-6 text-gray-700 dark:text-gray-200" />
-              </button>
-            </Link>
-            <div>
-              <h1 className="text-lg font-bold text-gray-800 dark:text-white">Track Order</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Order #{displayOrderRef}</p>
-            </div>
-          </div>
-          {!isShared && (
-            <motion.button
-              className="w-10 h-10 flex items-center justify-center cursor-pointer text-gray-700 dark:text-gray-200"
-              whileTap={{ scale: 0.9 }}
-              onClick={handleShare}
-            >
-              <Share2 className="w-5 h-5" />
-            </motion.button>
-          )}
+        {/* Navigation bar */}
+        <div className="flex items-center justify-between px-4 py-3">
+          <motion.button
+            className="w-10 h-10 flex items-center justify-center"
+            whileTap={{ scale: 0.9 }}
+            onClick={handleBackClick}
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </motion.button>
+          <h2 className="font-semibold text-lg">{order.restaurant}</h2>
+          <motion.button
+            className="w-10 h-10 flex items-center justify-center cursor-pointer"
+            whileTap={{ scale: 0.9 }}
+            onClick={handleShare}
+          >
+            <Share2 className="w-5 h-5" />
+          </motion.button>
         </div>
+
+        {/* Status section - hidden for success milestones as requested */}
+        {isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus) ? (
+          <div className="px-4 pb-5 text-center">
+            <motion.div
+              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-1.5 mb-3"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+            >
+              <Clock className="w-4 h-4" />
+              <span className="text-sm font-semibold">Scheduled Order</span>
+            </motion.div>
+            <motion.h1
+              className="text-2xl font-bold mb-2"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              Order Scheduled
+            </motion.h1>
+            <motion.div
+              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-5 py-2.5"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Calendar className="w-4 h-4" />
+              <span className="text-sm font-medium">{scheduledDateFormatted}</span>
+              <span className="w-1 h-1 rounded-full bg-white/60" />
+              <motion.button
+                onClick={handleRefresh}
+                className="ml-1"
+                animate={{ rotate: isRefreshing ? 360 : 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <RefreshCw className="w-4 h-4" />
+              </motion.button>
+            </motion.div>
+            <motion.p
+              className="text-xs mt-3 text-white/80"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              The restaurant will start preparing your order closer to the scheduled time
+            </motion.p>
+          </div>
+        ) : !['at_pickup', 'ready', 'on_way', 'at_drop', 'delivered'].includes(orderStatus) && (
+          <div className="px-4 pb-4 text-center">
+            <motion.h1
+              className="text-2xl font-bold mb-3"
+              key={currentStatus.title}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              {currentStatus.title}
+            </motion.h1>
+
+            {/* Status pill */}
+            <motion.div
+              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <span className="text-sm font-medium">{currentStatus.subtitle}</span>
+              <motion.button
+                onClick={handleRefresh}
+                className="ml-1 flex items-center justify-center"
+                animate={{ rotate: isRefreshing ? 360 : 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <RefreshCw className="w-4 h-4" />
+              </motion.button>
+            </motion.div>
+        </div>
+      )}
       </motion.div>
 
-      {/* Map Section */}
-      {!isDeliveredOrder && orderStatus !== 'cancelled' && (
-        <MapErrorBoundary>
-          <DeliveryMap
-            orderId={mapOrderId}
-            order={order}
-            isVisible={order !== null}
-            fallbackCustomerCoords={fallbackCustomerCoords}
-            userLiveCoords={userLiveCoords}
-            userLocationAccuracy={userLiveLocation?.accuracy ?? null}
-            onEtaUpdate={handleEtaUpdate}
-          />
-        </MapErrorBoundary>
+      {/* Map Section, Takeaway, or Dining Animation */}
+      {!isDeliveredOrder && orderStatus !== 'cancelled' && !(isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus)) && (
+        order?.orderType === 'takeaway' ? (
+          <TakeawayAnimation order={order} />
+        ) : order?.orderType === 'dining' ? (
+          <DiningAnimation order={order} />
+        ) : (
+          <MapErrorBoundary>
+            <DeliveryMap
+              orderId={orderId}
+              order={order}
+              isVisible={order !== null}
+              fallbackCustomerCoords={fallbackCustomerCoords}
+              userLiveCoords={userLiveCoords}
+              userLocationAccuracy={userLiveLocation?.accuracy ?? null}
+              onEtaUpdate={handleEtaUpdate}
+            />
+          </MapErrorBoundary>
+        )
       )}
 
       {/* Scrollable Content */}
-      <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 pt-6 pb-28 flex flex-col gap-6">
+      <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">
+        {/* Cancellation window removed as per user request to hide immediately after acceptance */}
 
-        {/* Main Status Card */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-zinc-800 relative overflow-hidden">
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-950/30 text-[#EB590E] mb-3">
-                {currentStatus.title}
-              </span>
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight">
-                {isDeliveredOrder
-                  ? "Delivered!"
-                  : (isCancelledOrder && order?.status === 'cancelled_by_restaurant')
-                    ? "Cancelled by Restaurant"
-                    : isCancelledOrder
-                      ? "Order Cancelled"
-                      : currentStatus.subtitle}
-              </h2>
-              {isCancelledOrder && order?.status === 'cancelled_by_restaurant' && order?.note && (
-                <p className="mt-2 text-gray-500 dark:text-gray-400 font-medium">
-                  {order.note}
-                </p>
-              )}
-            </div>
-            <motion.button
-              onClick={handleRefresh}
-              className="p-2 bg-gray-50 dark:bg-zinc-800 rounded-full"
-              animate={{ rotate: isRefreshing ? 360 : 0 }}
-            >
-              <RefreshCw className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </motion.button>
-          </div>
-        </div>
-
-        {/* Cancel Button - Only show if placed and waiting for restaurant confirmation */}
-        {!isShared && orderStatus === "placed" && (
-          <div className="px-2">
-            <button onClick={handleCancelOrder} className="w-full py-4 text-sm font-bold text-red-500 bg-red-50 dark:bg-red-950/20 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2">
-              <X className="w-4 h-4" />
-              Cancel Order
-            </button>
-          </div>
-        )}
-
-        {customerDeliveryOtp && !isDeliveredOrder && !isCancelledOrder && (
+        {customerDeliveryOtp && orderStatus !== 'delivered' && orderStatus !== 'cancelled' && (
           <motion.div
-            className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-5 shadow-sm border border-blue-100 dark:border-blue-800"
+            className={`rounded-xl p-4 shadow-sm border ${
+              order?.orderType === 'takeaway'
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30'
+                : 'bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30'
+            }`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
           >
-            <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Delivery OTP</p>
-            <p className="text-3xl font-black text-blue-900 dark:text-blue-100 mt-1 tracking-[0.2em]">{customerDeliveryOtp}</p>
+            <p className={`text-xs font-semibold uppercase tracking-wide ${
+              order?.orderType === 'takeaway' ? 'text-emerald-700 dark:text-emerald-400' : 'text-blue-700 dark:text-blue-400'
+            }`}>
+              {order?.orderType === 'takeaway' ? 'Takeaway OTP' : 'Delivery OTP'}
+            </p>
+            <p className={`text-2xl font-extrabold mt-1 tracking-widest ${
+              order?.orderType === 'takeaway' ? 'text-emerald-900 dark:text-emerald-250' : 'text-blue-900 dark:text-blue-200'
+            }`}>
+              {customerDeliveryOtp}
+            </p>
+            <p className={`text-xs mt-1 ${
+              order?.orderType === 'takeaway' ? 'text-emerald-700 dark:text-emerald-400' : 'text-blue-700 dark:text-blue-400'
+            }`}>
+              {order?.orderType === 'takeaway'
+                ? 'Share this 4-digit OTP with the restaurant at the counter to verify and complete your pick-up.'
+                : 'Share this 4-digit OTP with your delivery partner at drop-off.'}
+            </p>
           </motion.div>
         )}
 
-        {/* Address Card */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-zinc-800">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
-              <MapPin className="w-5 h-5 text-blue-500" />
+        {/* Takeaway / Self Pickup Card */}
+        {order?.orderType === 'takeaway' && orderStatus !== 'ready' && orderStatus !== 'delivered' && orderStatus !== 'cancelled' && (
+          <motion.div
+            className="bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 rounded-xl p-4 shadow-sm flex items-start gap-3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+          >
+            <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
+              <ShoppingBag className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <div>
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-1">Delivering to Home</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                {order?.address?.formattedAddress || 'Address not available'}
+            <div className="flex-1">
+              <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm">Takeaway / Self Pickup</h4>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                {orderStatus === 'preparing'
+                  ? "Your order is being prepared. We'll notify you when it's ready."
+                  : "Waiting for the restaurant to accept and prepare your order."}
               </p>
             </div>
-          </div>
-        </div>
-
-        {/* Restaurant Profile Card */}
-        {(order?.restaurant?.restaurantName || order?.restaurantId?.restaurantName || order?.restaurantPhone || order?.restaurant?.phone || order?.restaurant?.ownerPhone) && (
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center border-2 border-white dark:border-zinc-800">
-                    <Store className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 bg-[#EB590E] w-4 h-4 rounded-full border-2 border-white dark:border-zinc-900" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">
-                    {order?.restaurant?.restaurantName || order?.restaurantId?.restaurantName || 'Restaurant'}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Restaurant</p>
-                </div>
-              </div>
-              <motion.button className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center" onClick={handleCallRestaurant}>
-                <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </motion.button>
-            </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Delivery Partner Profile Card */}
-        {order?.deliveryPartnerId && (
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
+        {/* Dynamic Status Card */}
+        {['at_pickup', 'ready', 'on_way', 'at_drop', 'delivered'].includes(orderStatus) && (
+          <motion.div
+            className="bg-white dark:bg-[#1a1a1a] rounded-xl p-3 sm:p-4 shadow-sm"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            {isScheduledOrder && ['placed', 'confirmed'].includes(orderStatus) ? (
               <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center border-2 border-white dark:border-zinc-800">
-                    <User className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-900" />
+                <div className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-blue-100 bg-blue-50">
+                  <Clock className="w-7 h-7 text-blue-600" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">{order.deliveryPartner?.name || 'Delivery Partner'}</h3>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">4.9</span>
-                  </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100 leading-tight">Order Scheduled</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                    {scheduledDateFormatted}
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    We'll notify you when the restaurant starts preparing
+                  </p>
                 </div>
               </div>
-              <motion.button className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center" onClick={handleCallRider}>
-                <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm border border-gray-100 dark:border-gray-800 ${
+                  currentStatus.iconType === 'rider' ? 'bg-blue-50 dark:bg-blue-900/20' : 
+                  currentStatus.iconType === 'cancelled' ? 'bg-red-50 dark:bg-red-900/20' : 
+                  currentStatus.iconType === 'delivered' ? 'bg-green-50 dark:bg-green-900/20' : 
+                  'bg-orange-50 dark:bg-orange-900/20'
+                }`}>
+                  {currentStatus.iconType === 'rider' ? (
+                    <div 
+                      dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
+                      className="w-full h-full" 
+                    />
+                  ) : currentStatus.iconType === 'cancelled' ? (
+                    <div className="w-full h-full flex items-center justify-center p-2 text-red-500">
+                      <X className="w-full h-full" />
+                    </div>
+                  ) : currentStatus.iconType === 'delivered' ? (
+                    <div className="w-full h-full flex items-center justify-center p-2 text-green-500">
+                      <Check className="w-full h-full" />
+                    </div>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center p-2 text-orange-500">
+                      <Receipt className="w-full h-full" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100 leading-tight">{currentStatus.title}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">{currentStatus.subtitle}</p>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Rating Logic: Show rating card after delivery */}
+        {orderStatus === 'delivered' && !isOrderRated && (
+          <motion.div
+            className={`bg-white dark:bg-[#1a1a1a] rounded-xl p-6 shadow-sm border-2 border-[#DC2626]/10 relative overflow-hidden group transition-all duration-200 ${
+              isLocalRated 
+                ? "cursor-default opacity-95" 
+                : "cursor-pointer hover:bg-gray-50/80 dark:hover:bg-gray-800/20"
+            }`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45 }}
+            onClick={isLocalRated ? undefined : handleOpenRating}
+          >
+            {/* Background pattern decoration */}
+            <div className="absolute -top-4 -right-4 w-24 h-24 bg-[#DC2626]/5 rounded-full blur-2xl group-hover:bg-[#DC2626]/10 transition-colors" />
+            
+            <div className="flex flex-col items-center text-center relative z-10">
+              <div className="w-16 h-16 bg-[#DC2626]/10 dark:bg-[#DC2626]/20 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-300">
+                <Star className="w-8 h-8 text-[#DC2626] fill-[#DC2626]" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                {isLocalRated ? "Feedback Received" : "Enjoyed your food?"}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 mb-6 max-w-[280px]">
+                {isLocalRated 
+                  ? "Thank you for rating your experience! Your feedback has been submitted." 
+                  : `Rate your experience with ${order?.restaurant || "The Restaurant"} and help us improve!`}
+              </p>
+              
+              <Button 
+                disabled={isLocalRated}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isLocalRated) {
+                    handleOpenRating();
+                  }
+                }}
+                className={`w-full max-w-[200px] font-bold h-12 rounded-xl border-none shadow-lg transition-all duration-150 ${
+                  isLocalRated
+                    ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none"
+                    : "bg-[#DC2626] hover:bg-[#991B1B] text-white shadow-[#DC2626]/20"
+                }`}
+              >
+                {isLocalRated ? "Submitted" : "Give Rating"}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Rating Summary: Show what the user rated */}
+        {orderStatus === 'delivered' && isOrderRated && (
+          <motion.div
+            className="bg-white dark:bg-[#1a1a1a] rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800 transition-all duration-200"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-50 dark:border-gray-800/50">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                Your Feedback
+              </h3>
+              <button 
+                disabled
+                className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest cursor-not-allowed opacity-50"
+              >
+                Rating Submitted
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{order?.restaurant || "Food & Restaurant"}</span>
+                  {order?.ratings?.restaurant?.comment && (
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-0.5 line-clamp-1">"{order.ratings.restaurant.comment}"</span>
+                  )}
+                </div>
+                <div className="flex gap-0.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={`res-rated-${star}`}
+                      className={`w-3.5 h-3.5 ${
+                        star <= (order?.ratings?.restaurant?.rating || order?.restaurantRating)
+                          ? "text-yellow-400 fill-yellow-400"
+                          : "text-gray-200 dark:text-gray-800"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              {hasDeliveryPartner && (
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Delivery Service</span>
+                    {order?.ratings?.deliveryPartner?.comment && (
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400 italic mt-0.5 line-clamp-1">"{order.ratings.deliveryPartner.comment}"</span>
+                    )}
+                  </div>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={`del-rated-${star}`}
+                        className={`w-3.5 h-3.5 ${
+                          star <= (order?.ratings?.deliveryPartner?.rating || order?.deliveryPartnerRating)
+                            ? "text-yellow-400 fill-yellow-400"
+                            : "text-gray-200 dark:text-gray-800"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Delivery Partner Info */}
+        {order?.deliveryPartnerId && (
+          <motion.div
+            className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm overflow-hidden"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55 }}
+          >
+            <div className="flex items-center gap-3 p-4 border-b border-dashed border-gray-200 dark:border-gray-800">
+              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 overflow-hidden flex items-center justify-center flex-shrink-0 border border-blue-100 dark:border-blue-900/30 p-1">
+                {order.deliveryPartner?.avatar ? (
+                  <img src={order.deliveryPartner.avatar} alt="Rider" className="w-full h-full object-cover" />
+                ) : (
+                  <div 
+                    dangerouslySetInnerHTML={{ __html: RIDER_BIKE_SVG.replace(/width="\d+"/, 'width="100%"').replace(/height="\d+"/, 'height="100%"') }} 
+                    className="w-full h-full p-1" 
+                  />
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900 dark:text-gray-100">{order.deliveryPartner?.name || 'Delivery Partner'}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {orderStatus === 'delivered' ? 'Delivered your order' : 'Your delivery partner is arriving'}
+                </p>
+              </div>
+              <motion.button
+                className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"
+                onClick={handleCallRider}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Phone className="w-5 h-5 text-blue-600" />
               </motion.button>
             </div>
             {order?.note && (
-              <div className="bg-blue-50/50 dark:bg-blue-900/10 p-4 mt-4 rounded-xl flex items-start gap-3 border border-blue-100 dark:border-blue-900">
-                <MessageSquare className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic">"{order.note}"</p>
+              <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 mx-4 mb-4 rounded-lg flex items-start gap-2 border border-blue-100 dark:border-blue-900/20">
+                <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-0.5">Instruction for Rider</p>
+                  <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed font-medium">"{order.note}"</p>
+                </div>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
-        {/* Post-Delivery Rating & Complaint Card */}
-        {isDeliveredOrder && (
-          <div className="space-y-3 px-1 mb-3">
-            {/* Rating Banner */}
-            <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-3xl p-5 shadow-lg text-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-yellow-300">
-                    <Star className="w-7 h-7 fill-yellow-300 stroke-yellow-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg leading-tight">
-                      {isAlreadyRated ? "You Rated This Order!" : "Rate Food & Delivery"}
-                    </h3>
-                    <p className="text-xs text-orange-100 mt-0.5 font-medium">
-                      {isAlreadyRated
-                        ? `Food: ${order?.ratings?.restaurant?.rating || 5}★ | Delivery: ${order?.ratings?.deliveryPartner?.rating || 5}★`
-                        : "How was your food quality and delivery service?"}
-                    </p>
-                  </div>
-                </div>
-                {!isAlreadyRated ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsRatingModalOpen(true)}
-                    className="px-4 py-2.5 bg-white text-[#EB590E] font-extrabold text-xs rounded-xl shadow-md hover:bg-orange-50 transition-all active:scale-95 flex items-center gap-1.5"
-                  >
-                    Rate Now <ChevronRight className="w-4 h-4" />
-                  </button>
+        {/* Delivery Partner Safety */}
+        {orderStatus !== 'delivered' && orderStatus !== 'cancelled' && order?.orderType !== 'takeaway' && order?.orderType !== 'dining' && (
+          <motion.button
+            className="w-full bg-white dark:bg-[#1a1a1a] rounded-xl p-4 shadow-sm flex items-center gap-3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={() => navigate('/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}
+          >
+            <Shield className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+            <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">
+              Learn about delivery partner safety
+            </span>
+            <ChevronRight className="w-5 h-5 text-gray-400" />
+          </motion.button>
+        )}
+
+        {/* Delivery Details Banner */}
+        {orderStatus !== 'delivered' && orderStatus !== 'cancelled' && order?.orderType !== 'takeaway' && order?.orderType !== 'dining' && (
+          <motion.div
+            className="bg-yellow-50 dark:bg-yellow-900/10 rounded-xl p-4 text-center border dark:border-yellow-900/30"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.65 }}
+          >
+            <p className="text-yellow-800 dark:text-yellow-400 font-medium text-sm">
+              All your delivery details in one place 🥡
+            </p>
+          </motion.div>
+        )}
+
+        {/* Contact & Address Section */}
+        {order?.orderType !== 'takeaway' && (
+          <motion.div
+            className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm overflow-hidden"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+          >
+            <SectionItem
+              icon={User}
+              title={
+                order?.userName ||
+                order?.userId?.fullName ||
+                order?.userId?.name ||
+                profile?.fullName ||
+                profile?.name ||
+                'Customer'
+              }
+              subtitle={
+                order?.userPhone ||
+                order?.userId?.phone ||
+                profile?.phone ||
+                defaultAddress?.phone ||
+                'Phone number not available'
+              }
+              showArrow={false}
+            />
+            <SectionItem
+              iconNode={
+                order?.orderType === 'dining' ? (
+                  <Users className="w-5 h-5 text-blue-600" />
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsRatingModalOpen(true)}
-                    className="px-3 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-xs font-bold text-white flex items-center gap-1 hover:bg-white/30"
-                  >
-                    <Check className="w-4 h-4 text-emerald-300" /> View Rating
-                  </button>
-                )}
-              </div>
-            </div>
+                  <div
+                    dangerouslySetInnerHTML={{ __html: SAFE_CUSTOMER_PIN }}
+                    className="w-6 h-6 [&_svg]:w-full [&_svg]:h-full [&_svg]:block"
+                  />
+                )
+              }
+              title={
+                order?.orderType === 'dining'
+                  ? "Dining / Table Service"
+                  : "Delivery at Location"
+              }
+              subtitle={(() => {
+                if (order?.orderType === 'dining') {
+                  return `Enjoy your food in the restaurant. Table service.`
+                }
 
-            {/* Raise Complaint Button */}
-            <Link to="/user/profile/support" className="flex items-center justify-center gap-2 py-4 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 font-bold text-gray-800 dark:text-white text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors w-full">
-              <AlertCircle className="w-4 h-4 text-red-500" /> Raise a Complaint
-            </Link>
-          </div>
+                // Priority 1: Use order address formattedAddress (live location address)
+                if (order?.address?.formattedAddress && order.address.formattedAddress !== "Select location") {
+                  return order.address.formattedAddress
+                }
+
+                // Priority 2: Build full address from order address parts
+                if (order?.address) {
+                  const orderAddressParts = []
+                  if (order.address.street) orderAddressParts.push(order.address.street)
+                  if (order.address.additionalDetails) orderAddressParts.push(order.address.additionalDetails)
+                  if (order.address.city) orderAddressParts.push(order.address.city)
+                  if (order.address.state) orderAddressParts.push(order.address.state)
+                  if (order.address.zipCode) orderAddressParts.push(order.address.zipCode)
+                  if (orderAddressParts.length > 0) {
+                    return orderAddressParts.join(', ')
+                  }
+                }
+
+                // Priority 3: Use defaultAddress formattedAddress (live location address)
+                if (defaultAddress?.formattedAddress && defaultAddress.formattedAddress !== "Select location") {
+                  return defaultAddress.formattedAddress
+                }
+
+                // Priority 4: Build full address from defaultAddress parts
+                if (defaultAddress) {
+                  const defaultAddressParts = []
+                  if (defaultAddress.street) defaultAddressParts.push(defaultAddress.street)
+                  if (defaultAddress.additionalDetails) defaultAddressParts.push(defaultAddress.additionalDetails)
+                  if (defaultAddress.city) defaultAddressParts.push(defaultAddress.city)
+                  if (defaultAddress.state) defaultAddressParts.push(defaultAddress.state)
+                  if (defaultAddress.zipCode) defaultAddressParts.push(defaultAddress.zipCode)
+                  if (defaultAddressParts.length > 0) {
+                    return defaultAddressParts.join(', ')
+                  }
+                }
+
+                return 'Add delivery address'
+              })()}
+              showArrow={false}
+            />
+            {!isAdminAccepted && orderStatus !== 'cancelled' && orderStatus !== 'delivered' && order?.orderType !== 'dining' && (
+              <SectionItem
+                icon={MessageSquare}
+                title={order?.note ? "Edit delivery instructions" : "Add delivery instructions"}
+                subtitle={order?.note ? order.note.substring(0, 35) + (order.note.length > 35 ? "..." : "") : ""}
+                onClick={() => {
+                  setDeliveryInstructions(order?.note || "");
+                  setIsInstructionsModalOpen(true);
+                }}
+              />
+            )}
+          </motion.div>
         )}
 
-        {/* Delivery Instructions - Only show if NOT delivered */}
-        {!isShared && !isDeliveredOrder && !isCancelledOrder && (
-          <div onClick={() => setIsInstructionsModalOpen(true)} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-zinc-800 mb-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
-                  <FileText className="w-4 h-4 text-purple-500" />
-                </div>
-                <span className="text-sm font-bold text-gray-800 dark:text-white">Add delivery instructions</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            </div>
-          </div>
-        )}
-
-        {/* Order Summary & Restaurant Info */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-gray-100 dark:border-zinc-800">
-          <div className="flex items-center gap-4 mb-5">
-            <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-zinc-800 overflow-hidden flex items-center justify-center">
-              <Store className="w-6 h-6 text-gray-400" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-900 dark:text-white">{order.restaurant}</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{order.restaurantAddress || 'Location'}</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {order?.items?.map((item, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">{item.quantity} x {item.name}{(item.variantName || item.variant || item.variation) ? ` (${item.variantName || item.variant || item.variation})` : ""}</span>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">{"\u20B9"}{((item?.price || 0) * (item?.quantity || 0)).toFixed(0)}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Bill Summary Breakdown */}
-          <div className="border-t border-dashed border-gray-200 dark:border-zinc-800 my-4 pt-4 space-y-2.5 text-xs md:text-sm">
-            <div className="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Item Total</span>
-              <span className="font-medium text-gray-900 dark:text-white">{"\u20B9"}{(order.subtotal || order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-start text-gray-600 dark:text-gray-400 py-1">
-              <div className="flex flex-col">
-                <button
-                  type="button"
-                  onClick={() => setShowDeliveryFeeModal(true)}
-                  className="font-medium hover:text-gray-900 dark:hover:text-white transition-colors underline decoration-dotted underline-offset-4 decoration-gray-400 dark:decoration-gray-500 text-left w-fit text-sm text-gray-800 dark:text-gray-300"
-                >
-                  Delivery partner fee (up to {(() => {
-                    const d = parseFloat(order?.pricing?.deliveryFeeBreakdown?.distanceKm ?? order?.pricing?.distanceKm ?? order?.distanceKm);
-                    if (!isNaN(d) && d > 0) return d % 1 === 0 ? d.toFixed(0) : d.toFixed(1);
-                    return "1.2";
-                  })()} km)
-                </button>
-                <span className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">Goes to them for their time and effort</span>
-              </div>
-              <span className={Number(order?.deliveryFee || 0) === 0 ? "font-medium text-[#EB590E] mt-0.5 text-sm uppercase" : "font-medium text-gray-900 dark:text-white mt-0.5 text-sm"}>
-                {Number(order?.deliveryFee || 0) === 0 ? "FREE" : `₹${Number(order?.deliveryFee || 0).toFixed(2)}`}
-              </span>
-            </div>
-            {Number(order.platformFee || 0) > 0 && (
-              <div className="flex justify-between text-gray-600 dark:text-gray-400 items-center">
-                <button
-                  type="button"
-                  onClick={() => setShowPlatformFeeModal(true)}
-                  className="hover:text-gray-800 dark:hover:text-gray-200 transition-colors underline decoration-dotted underline-offset-4 decoration-gray-400 dark:decoration-gray-500"
-                >
-                  Platform Fee
-                </button>
-                <span className="font-medium text-gray-900 dark:text-white">{"\u20B9"}{Number(order.platformFee).toFixed(2)}</span>
-              </div>
-            )}
-            {Number(order.packagingFee || order.pricing?.packagingFee || 0) > 0 && (
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Restaurant Packaging Fee</span>
-                <span className="font-medium text-gray-900 dark:text-white">{"\u20B9"}{Number(order.packagingFee || order.pricing?.packagingFee).toFixed(2)}</span>
-              </div>
-            )}
-            {Number(order.deliveryPartnerTip || order.tip || order.pricing?.deliveryPartnerTip || 0) > 0 && (
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Delivery partner tip</span>
-                <span className="font-medium text-gray-900 dark:text-white">{"\u20B9"}{Number(order.deliveryPartnerTip || order.tip || order.pricing?.deliveryPartnerTip).toFixed(2)}</span>
-              </div>
-            )}
-            {Number(order.surgeAmount || order.pricing?.surgeAmount || 0) > 0 && (
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>{order.surgeTitle || order.pricing?.surgeTitle || "Surge Charge"}</span>
-                <span className="font-medium text-gray-900 dark:text-white">{"\u20B9"}{Number(order.surgeAmount || order.pricing?.surgeAmount).toFixed(2)}</span>
-              </div>
-            )}
-            {Number(order.gst || order.tax || 0) > 0 && (
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>GST and Restaurant Charges</span>
-                <span className="font-medium text-gray-900 dark:text-white">{"\u20B9"}{Number(order.gst || order.tax).toFixed(2)}</span>
-              </div>
-            )}
-            {Number(order.discount || 0) > 0 && (
-              <div className="flex justify-between text-[#EB590E] font-medium">
-                <span>Coupon Discount</span>
-                <span>-{"\u20B9"}{Number(order.discount).toFixed(2)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold text-sm md:text-base text-gray-900 dark:text-white pt-2.5 border-t border-gray-100 dark:border-zinc-800">
-              <span>To Pay</span>
-              <span>{"\u20B9"}{Number(order.totalAmount || order.total || 0).toFixed(2)}</span>
-            </div>
-          </div>
-
-          {!isDeliveredOrder && (
-            <>
-              <div className="h-px bg-gray-50 dark:bg-zinc-800 my-4" />
-              <button
-                type="button"
-                onClick={() => setShowSupportModal(true)}
-                className="w-full flex items-center justify-between p-2.5 -mx-2 hover:bg-gray-50 dark:hover:bg-zinc-800/60 rounded-2xl transition-colors cursor-pointer group text-left"
-              >
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200">
-                  Order issues? Reach out to support
-                </p>
-                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-transform group-hover:translate-x-0.5" />
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Cute Food Wastage Card */}
-        {["confirmed", "preparing", "assigned", "at_pickup", "ready", "on_way", "at_drop"].includes(orderStatus) && (
-          <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-3xl p-5 flex gap-4 items-start relative overflow-hidden transition-all duration-300 shadow-sm">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-100/30 dark:bg-amber-950/20 rounded-full blur-2xl pointer-events-none" />
-            <div className="w-10 h-10 rounded-2xl bg-amber-100/80 dark:bg-amber-950/30 flex items-center justify-center text-amber-600 shrink-0 select-none">
-              <span className="text-xl">🌱</span>
+        {/* Restaurant Section */}
+        <motion.div
+          className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm overflow-hidden"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.75 }}
+        >
+          <div className="flex items-center gap-3 p-4 border-b border-dashed border-gray-200 dark:border-gray-800">
+            <div className="w-12 h-12 rounded-full bg-orange-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+              <div
+                dangerouslySetInnerHTML={{ __html: SAFE_RESTAURANT_PIN }}
+                className="w-7 h-7 [&_svg]:w-full [&_svg]:h-full [&_svg]:block"
+              />
             </div>
             <div className="flex-1">
-              <p className="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest mb-1 select-none">
-                Cancellation & Wastage Policy
-              </p>
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 leading-relaxed">
-                {cancellationPolicyText || "In order to reduce the food wastage, once the order gets confirmed by the restaurant, it can't be cancelled"}
-              </p>
+              <p className="font-semibold text-gray-900 dark:text-gray-100">{order.restaurant}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{order.restaurantAddress || 'Restaurant location'}</p>
+            </div>
+            <div className="flex flex-col gap-2 shrink-0">
+              <motion.button
+                className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center shadow-sm"
+                onClick={handleOpenDirections}
+                whileTap={{ scale: 0.9 }}
+                title="Get Directions"
+              >
+                <Navigation className="w-5 h-5 text-[#DC2626]" />
+              </motion.button>
+              <motion.button
+                className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center shadow-sm"
+                onClick={handleCallRestaurant}
+                whileTap={{ scale: 0.9 }}
+                title="Call Restaurant"
+              >
+                <Phone className="w-5 h-5 text-[#DC2626]" />
+              </motion.button>
             </div>
           </div>
+
+          {/* Order Items */}
+          <div
+            className="p-4 border-b border-dashed border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            onClick={() => setShowOrderDetails(true)}
+          >
+            <div className="flex items-start gap-3">
+              <Receipt className="w-5 h-5 text-gray-500 mt-0.5" />
+              <div className="flex-1">
+                <div className="mt-2 space-y-1">
+                  {order?.items?.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <span className="w-4 h-4 rounded border border-green-600 flex items-center justify-center">
+                        <span className="w-2 h-2 rounded-full bg-green-600" />
+                      </span>
+                      <span>{item.quantity} x {item.name}{item.variantName ? ` (${item.variantName})` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            </div>
+          </div>
+        </motion.div>
+
+        {!isAdminAccepted && orderStatus !== 'cancelled' && orderStatus !== 'delivered' && (
+          <motion.div
+            className="flex flex-col gap-3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+          >
+            <Button
+              variant="outline"
+              className="w-full h-12 rounded-xl font-semibold bg-red-600 text-white border-red-600 shadow-sm hover:bg-red-700 hover:text-white hover:border-red-700"
+              onClick={handleCancelOrder}
+            >
+              Cancel Order
+            </Button>
+            <p className="text-[10px] text-gray-400 text-center px-4">
+              You can cancel your order until the restaurant accepts it.
+            </p>
+          </motion.div>
         )}
+
       </div>
 
       {/* Cancel Order Dialog */}
-      {!isShared && (
-        <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-          <DialogContent className="sm:max-w-xl w-[95%] max-w-[600px] bg-white dark:bg-zinc-900 border-none rounded-3xl max-h-[90vh] flex flex-col overflow-hidden">
-            <DialogHeader className="shrink-0">
-              <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white">
-                Cancel Order
-              </DialogTitle>
-            </DialogHeader>
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="sm:max-w-xl w-[95%] max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-gray-900">
+              Cancel Order
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-6 px-2">
+            {(() => {
+              const method = String(order?.payment?.method || order?.paymentMethod || "").toLowerCase()
+              const status = String(order?.payment?.status || "").toLowerCase()
+              const isRazorpayPaid =
+                method === "razorpay" && ["paid", "authorized", "captured", "settled", "refunded"].includes(status)
 
-            <div className="space-y-4 py-3 px-1 overflow-y-auto flex-1">
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                Please select a reason for cancelling this order <span className="text-red-500">*</span>
-              </p>
+              if (!isRazorpayPaid) return null
 
-              {cancellationPolicyText && (
-                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-3 text-xs font-medium text-amber-800 dark:text-amber-300 leading-relaxed">
-                  {cancellationPolicyText}
+              return (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-gray-900">Refund preference</p>
+                  <div className="space-y-2">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                      <input
+                        type="radio"
+                        name="refund-destination"
+                        value="source"
+                        checked={refundDestination === "source"}
+                        onChange={() => setRefundDestination("source")}
+                        disabled={isCancelling}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm text-gray-700">Refund to original payment method (5-7 working days)</span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                      <input
+                        type="radio"
+                        name="refund-destination"
+                        value="wallet"
+                        checked={refundDestination === "wallet"}
+                        onChange={() => setRefundDestination("wallet")}
+                        disabled={isCancelling}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm text-gray-700">Refund to wallet (instant credit)</span>
+                    </label>
+                  </div>
                 </div>
-              )}
+              )
+            })()}
 
-              {/* Predefined Reasons Radio Pills */}
-              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                {CANCELLATION_REASONS.map((reason) => {
-                  const isSelected = cancellationReason === reason;
-                  return (
-                    <button
-                      key={reason}
-                      type="button"
-                      onClick={() => setCancellationReason(reason)}
-                      className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-semibold border transition-all flex items-center justify-between ${
-                        isSelected
-                          ? 'bg-red-50 dark:bg-red-950/30 border-red-500 text-red-600 dark:text-red-400 shadow-sm'
-                          : 'bg-gray-50 dark:bg-zinc-800/60 border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      <span>{reason}</span>
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        isSelected ? 'border-red-500 bg-red-500' : 'border-gray-300 dark:border-zinc-600'
-                      }`}>
-                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="space-y-2 w-full">
+              <Textarea
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                placeholder="e.g., Changed my mind, Wrong address, etc."
+                className="w-full min-h-[100px] resize-none border-2 border-gray-300 rounded-lg px-4 py-3 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:border-gray-200"
+                disabled={isCancelling}
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelDialog(false);
+                  setCancellationReason("");
+                  setRefundDestination("source");
+                }}
+                disabled={isCancelling}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmCancel}
+                disabled={isCancelling || !cancellationReason.trim()}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isCancelling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  'Confirm Cancellation'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-              {/* Mandatory Custom Reason Text Box if "Other" is selected */}
-              {cancellationReason === 'Other' && (
-                <div className="space-y-1.5 animate-in fade-in duration-200 pt-2">
-                  <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                    Please tell us why you want to cancel this order <span className="text-red-500">*</span>
-                  </label>
-                  <Textarea
-                    value={customCancellationComment}
-                    onChange={(e) => setCustomCancellationComment(e.target.value)}
-                    placeholder="Please tell us why you want to cancel this order..."
-                    className="w-full min-h-[90px] resize-none border-2 border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 rounded-xl px-4 py-3 text-sm text-gray-800 dark:text-gray-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none transition-colors"
-                    disabled={isCancelling}
-                  />
+      {/* Order Details Dialog */}
+      <Dialog open={showOrderDetails} onOpenChange={setShowOrderDetails}>
+        <DialogContent className="max-w-[calc(100vw-32px)] sm:max-w-md bg-white dark:bg-[#1a1a1a] rounded-2xl p-0 overflow-hidden border-none outline-none">
+          <DialogHeader className="p-6 pb-4 border-b border-gray-100 dark:border-gray-800 pr-12">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-bold text-gray-900">Order Details</DialogTitle>
+            </div>
+          </DialogHeader>
+
+          <div className="p-6 pt-4 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Order Meta Info */}
+            <div className="flex flex-col gap-1 b">
+              <div className="flex items-center gap-4 mt-2">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Date & Time</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {order?.createdAt ? new Date(order.createdAt).toLocaleString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    }) : 'N/A'}
+                  </p>
                 </div>
-              )}
-
-              <div className="flex gap-3 pt-3 shrink-0">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowCancelDialog(false);
-                    setCancellationReason("");
-                    setCustomCancellationComment("");
-                  }}
-                  disabled={isCancelling}
-                  className="flex-1 dark:bg-zinc-800 dark:text-white dark:border-zinc-700 rounded-2xl h-12 font-bold"
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={handleConfirmCancel}
-                  disabled={
-                    isCancelling ||
-                    !cancellationReason ||
-                    (cancellationReason === 'Other' && !customCancellationComment.trim())
-                  }
-                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white border-none rounded-2xl h-12 font-bold shadow-md"
-                >
-                  {isCancelling ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Cancelling...
-                    </>
-                  ) : (
-                    'Confirm Cancellation'
-                  )}
-                </Button>
+                <div className="h-8 w-px bg-gray-100" />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Status</p>
+                  <span className="text-sm font-bold text-green-600 uppercase">
+                    {order?.status === 'placed' ? 'order placed' : order?.status?.replace('_', ' ')}
+                  </span>
+                </div>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
+            {/* Delivery Instructions Section */}
+            {order?.note && (
+              <div className="bg-orange-50/50 rounded-xl p-4 border border-orange-100 flex gap-3">
+                <MessageSquare className="w-5 h-5 text-[#DC2626] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-[#DC2626] dark:text-red-400 font-bold uppercase tracking-wider mb-1">Delivery Instructions</p>
+                  <p className="text-sm text-gray-800 leading-relaxed font-medium capitalize">
+                    {order.note}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Items Section */}
+            <div>
+              <p className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Order Items</p>
+              <div className="space-y-4">
+                {order?.items?.map((item, index) => (
+                  <div key={index} className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="w-5 h-5 rounded border border-green-600 flex items-center justify-center mt-0.5 shrink-0">
+                        <div className="w-2.5 h-2.5 rounded-full bg-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 leading-tight">{item.name}</p>
+                        {item.variantName ? (
+                          <p className="text-sm text-gray-500 mt-0.5">{item.variantName}</p>
+                        ) : null}
+                        <p className="text-sm text-gray-500 mt-0.5">Quantity: {item.quantity}</p>
+                      </div>
+                    </div>
+                    <p className="font-semibold text-gray-900">₹{((item?.price || 0) * (item?.quantity || 0)).toFixed(2)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bill Summary */}
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-1">Bill Summary</p>
+              
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">Item Total</span>
+                <span className="text-gray-900 font-medium">₹{Number(order?.subtotal || 0).toFixed(2)}</span>
+              </div>
+
+              {Number(order?.packagingFee) > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Packaging Charges</span>
+                  <span className="text-gray-900 font-medium">₹{Number(order.packagingFee).toFixed(2)}</span>
+                </div>
+              )}
+
+              {Number(order?.platformFee) > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Platform Fee</span>
+                  <span className="text-gray-900 font-medium">₹{Number(order.platformFee).toFixed(2)}</span>
+                </div>
+              )}
+
+              {order?.orderType !== "takeaway" && order?.orderType !== "dining" && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Delivery Fee</span>
+                  <span className="text-gray-900 font-medium">₹{Number(order?.deliveryFee || 0).toFixed(2)}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">GST</span>
+                <span className="text-gray-900 font-medium">₹{Number(order?.gst || 0).toFixed(2)}</span>
+              </div>
+
+              {Number(order?.discount) > 0 && (
+                <div className="flex justify-between items-center text-sm text-green-600 font-medium">
+                  <span>Discount Applied</span>
+                  <span>-₹{Number(order.discount).toFixed(2)}</span>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                <span className="text-base font-bold text-gray-900 dark:text-white flex items-center">
+                  Paid
+                  {(() => {
+                    const method = String(order?.payment?.method || order?.paymentMethod || "online").toLowerCase();
+                    if (method === "cash" || method === "cod") {
+                      return <span className="text-gray-500 dark:text-gray-400 font-bold ml-1.5">(COD)</span>;
+                    }
+                    return <span className="text-green-600 dark:text-green-400 font-bold ml-1.5">(Online)</span>;
+                  })()}
+                </span>
+                <span className="text-lg font-bold text-gray-900 dark:text-white">₹{Number(order?.totalAmount || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Payment Method */}
+            {order?.paymentMethod && (
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Shield className="w-4 h-4" />
+                  <span className="text-sm font-medium">Payment Method</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                  {order.paymentMethod}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="p-6 border-t border-gray-100">
+            <Button
+              onClick={() => setShowOrderDetails(false)}
+              className="w-full bg-gray-900 text-white font-bold h-12 rounded-xl"
+            >
+              Okay
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delivery Instructions Modal */}
       <Dialog open={isInstructionsModalOpen} onOpenChange={setIsInstructionsModalOpen}>
-        <DialogContent className="sm:max-w-md w-[95vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-zinc-900 max-h-[90vh] overflow-y-auto z-[200]">
+        <DialogContent className="sm:max-w-md w-[95vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-[#1a1a1a] max-h-[90vh] overflow-y-auto z-[200]">
           <DialogHeader className="mb-2">
-            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
+            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white">
               Delivery Instructions
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-gray-500">
               Add instructions for the delivery partner to help them find your address or know where to leave your order.
             </p>
             <Textarea
               value={deliveryInstructions}
               onChange={(e) => setDeliveryInstructions(e.target.value)}
               placeholder="E.g. Ring the doorbell, leave at the front desk..."
-              className="min-h-[120px] resize-none border-gray-200 dark:border-zinc-700 focus:ring-orange-500 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 text-base"
+              className="min-h-[120px] resize-none border-gray-200 focus:ring-[#DC2626] rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-base"
             />
-            <Button
-              onClick={handleUpdateInstructions}
+            <Button 
+              onClick={handleUpdateInstructions} 
               disabled={isUpdatingInstructions}
-              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold h-12 rounded-xl border-none"
+              className="w-full bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold h-12 rounded-xl border-none transition-colors"
             >
               {isUpdatingInstructions ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Save Instructions"}
             </Button>
@@ -2159,335 +3061,99 @@ export default function OrderTracking({ isSharedView = false }) {
         </DialogContent>
       </Dialog>
 
-      {/* Platform Fee Dialog */}
-      <Dialog open={showPlatformFeeModal} onOpenChange={setShowPlatformFeeModal}>
-        <DialogContent className="sm:max-w-sm w-[90vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-[#18181b] z-[200]">
-          <DialogHeader className="relative flex items-center justify-center pb-4 border-b border-gray-100 dark:border-zinc-800">
-            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white text-center">
-              Platform Fee
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4 text-center space-y-6">
-            <p className="text-base text-gray-600 dark:text-gray-300 leading-relaxed font-medium">
-              This small fee helps us pay the bills so that we can keep {companyName || "Hello Parth"} running
-            </p>
-            <Button
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowPlatformFeeModal(false); }}
-              className="w-full py-3.5 h-auto bg-[#EB590E] hover:bg-[#d94f0c] text-white font-bold text-base rounded-2xl transition-all shadow-md active:scale-98 uppercase tracking-wider border-none"
-            >
-              OKAY
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      {/* Delivery Fee Dialog */}
-      <Dialog open={showDeliveryFeeModal} onOpenChange={setShowDeliveryFeeModal}>
-        <DialogContent className="sm:max-w-sm w-[90vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-[#18181b] z-[200]">
-          <DialogHeader className="border-b border-gray-100 dark:border-zinc-800 pb-4">
-            <DialogTitle className="text-left font-bold text-gray-900 dark:text-white">
-              <span className="text-base underline decoration-dotted underline-offset-4 decoration-gray-400">
-                Delivery partner fee (up to {(() => {
-                  const d = parseFloat(order?.pricing?.deliveryFeeBreakdown?.distanceKm ?? order?.pricing?.distanceKm ?? order?.distanceKm);
-                  if (!isNaN(d) && d > 0) return d % 1 === 0 ? d.toFixed(0) : d.toFixed(1);
-                  return "1.2";
-                })()} km)
-              </span>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
-                Goes to them for their time and effort
-              </p>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-3 space-y-5">
-            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
-              100% of the delivery charge goes directly to your delivery partner to compensate for food pickup and delivery effort.
-            </p>
-            <Button
-              type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowDeliveryFeeModal(false); }}
-              className="w-full py-3.5 h-auto bg-[#EB590E] hover:bg-[#d94f0c] text-white font-bold text-base rounded-2xl transition-all shadow-md active:scale-98 uppercase tracking-wider border-none"
-            >
-              OKAY
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Rating & Review Dialog */}
-      <Dialog open={isRatingModalOpen} onOpenChange={setIsRatingModalOpen}>
-        <DialogContent className="sm:max-w-md w-[95vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-zinc-900 max-h-[90vh] overflow-y-auto z-[200]">
+      {/* Rating & Feedback Modal */}
+      <Dialog open={showRatingModal} onOpenChange={setShowRatingModal}>
+        <DialogContent className="sm:max-w-md w-[95vw] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-[#1a1a1a] max-h-[90vh] overflow-y-auto">
           <DialogHeader className="mb-2">
-            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent text-center">
-              Rate Your Order Experience
+            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Star className="w-6 h-6 text-[#DC2626] fill-[#DC2626]" />
+              Rate your Experience
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6 py-2">
-            {/* 1. Rate Delivery Partner */}
-            {(order?.deliveryPartnerId || order?.deliveryPartner) && (
-              <div className="bg-gray-50 dark:bg-zinc-800/60 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/40 text-[#EB590E] flex items-center justify-center font-bold">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-gray-900 dark:text-white">
-                      Rate {order?.deliveryPartner?.name || 'Delivery Partner'}
-                    </h4>
-                    <p className="text-xs text-gray-500">Delivery service & behavior</p>
-                  </div>
-                </div>
+            {/* Restaurant Rating */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-gray-800 dark:text-gray-200">How was the food?</p>
+                <span className="text-xs px-2 py-0.5 bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400 rounded-full font-medium">Restaurant</span>
+              </div>
+              <div className="flex justify-center gap-3">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <motion.button
+                    key={`res-star-${star}`}
+                    whileHover={{ scale: 1.15 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setSelectedRestaurantRating(star)}
+                    className="p-1"
+                  >
+                    <Star
+                      className={`w-10 h-10 transition-all duration-300 ${
+                        star <= selectedRestaurantRating
+                          ? "text-yellow-400 fill-yellow-400 drop-shadow-sm"
+                          : "text-gray-200 dark:text-gray-800"
+                      }`}
+                    />
+                  </motion.button>
+                ))}
+              </div>
+              <Textarea
+                placeholder="Write a quick review for the food (optional)"
+                value={restaurantFeedbackText}
+                onChange={(e) => setRestaurantFeedbackText(e.target.value)}
+                className="min-h-[80px] text-sm bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800 resize-none rounded-xl text-gray-800 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              />
+            </div>
 
-                {/* Star Rating */}
-                <div className="flex items-center justify-center gap-2 my-3">
+            {/* Delivery Rating */}
+            {hasDeliveryPartner && (
+              <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-gray-800 dark:text-gray-200">How was the delivery?</p>
+                  <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 rounded-full font-medium">Delivery</span>
+                </div>
+                <div className="flex justify-center gap-3">
                   {[1, 2, 3, 4, 5].map((star) => (
-                    <button
+                    <motion.button
                       key={`del-star-${star}`}
-                      type="button"
-                      onClick={() => setDeliveryRating(star)}
-                      className="p-1 transition-transform hover:scale-125 focus:outline-none"
+                      whileHover={{ scale: 1.15 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setSelectedDeliveryRating(star)}
+                      className="p-1"
                     >
                       <Star
-                        className={`w-8 h-8 ${star <= deliveryRating
-                            ? 'text-amber-400 fill-amber-400'
-                            : 'text-gray-300 dark:text-zinc-600'
-                          }`}
-                      />
-                    </button>
-                  ))}
-                </div>
-
-                {/* Quick Feedback Pills */}
-                <div className="flex flex-wrap gap-1.5 my-2">
-                  {['⚡ On-time delivery', '😊 Polite behavior', '📦 Handled with care'].map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() =>
-                        setDeliveryComment((prev) =>
-                          prev.includes(tag) ? prev.replace(tag, '').trim() : `${prev} ${tag}`.trim()
-                        )
-                      }
-                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${deliveryComment.includes(tag)
-                          ? 'bg-orange-50 dark:bg-orange-950/50 border-orange-500 text-orange-600 dark:text-orange-400'
-                          : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400'
+                        className={`w-10 h-10 transition-all duration-300 ${
+                          star <= selectedDeliveryRating
+                            ? "text-yellow-400 fill-yellow-400 drop-shadow-sm"
+                            : "text-gray-200 dark:text-gray-800"
                         }`}
-                    >
-                      {tag}
-                    </button>
+                      />
+                    </motion.button>
                   ))}
                 </div>
-
                 <Textarea
-                  value={deliveryComment}
-                  onChange={(e) => setDeliveryComment(e.target.value)}
-                  placeholder="Write a review for delivery partner (optional)..."
-                  className="min-h-[60px] text-xs resize-none rounded-xl border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+                  placeholder={`How was ${order?.deliveryPartnerName || 'the rider'}? (optional)`}
+                  value={deliveryFeedbackText}
+                  onChange={(e) => setDeliveryFeedbackText(e.target.value)}
+                  className="min-h-[80px] text-sm bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800 resize-none rounded-xl text-gray-800 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                 />
               </div>
             )}
 
-            {/* 2. Rate Restaurant Food */}
-            <div className="bg-gray-50 dark:bg-zinc-800/60 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center font-bold">
-                  <Store className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm text-gray-900 dark:text-white">
-                    Rate {order?.restaurant || 'Restaurant Food'}
-                  </h4>
-                  <p className="text-xs text-gray-500">Food quality & taste</p>
-                </div>
-              </div>
-
-              {/* Star Rating */}
-              <div className="flex items-center justify-center gap-2 my-3">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={`rest-star-${star}`}
-                    type="button"
-                    onClick={() => setRestaurantRating(star)}
-                    className="p-1 transition-transform hover:scale-125 focus:outline-none"
-                  >
-                    <Star
-                      className={`w-8 h-8 ${star <= restaurantRating
-                          ? 'text-amber-400 fill-amber-400'
-                          : 'text-gray-300 dark:text-zinc-600'
-                        }`}
-                    />
-                  </button>
-                ))}
-              </div>
-
-              {/* Quick Feedback Pills */}
-              <div className="flex flex-wrap gap-1.5 my-2">
-                {['😋 Delicious taste', '🔥 Hot & fresh', '🍱 Great packaging', '👌 Good portion'].map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() =>
-                      setRestaurantComment((prev) =>
-                        prev.includes(tag) ? prev.replace(tag, '').trim() : `${prev} ${tag}`.trim()
-                      )
-                    }
-                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${restaurantComment.includes(tag)
-                        ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400'
-                      }`}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-
-              <Textarea
-                value={restaurantComment}
-                onChange={(e) => setRestaurantComment(e.target.value)}
-                placeholder="Write a review for food & restaurant (optional)..."
-                className="min-h-[60px] text-xs resize-none rounded-xl border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800"
-              />
-            </div>
-
-            {/* Submit Button */}
             <Button
-              onClick={handleRatingSubmit}
-              disabled={submittingRating}
-              className="w-full h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-base rounded-2xl shadow-lg border-none active:scale-98 transition-all"
+              onClick={handleSubmitRating}
+              disabled={submittingRating || selectedRestaurantRating === null || (hasDeliveryPartner && selectedDeliveryRating === null)}
+              className="w-full bg-[#DC2626] hover:bg-[#991B1B] text-white font-bold h-14 rounded-2xl shadow-lg mt-4"
             >
-              {submittingRating ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin mx-auto" /> Submitting Ratings...
-                </div>
-              ) : (
-                "Submit Ratings & Feedback"
-              )}
+              {submittingRating ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Submit Feedback"}
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* In-Page Order Support Modal */}
-      <Dialog open={showSupportModal} onOpenChange={setShowSupportModal}>
-        <DialogContent className="sm:max-w-md w-[95vw] max-w-[500px] rounded-3xl p-6 border-0 shadow-2xl bg-white dark:bg-zinc-900 max-h-[90vh] flex flex-col overflow-hidden z-[200]">
-          <DialogHeader className="shrink-0 mb-1">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-orange-100 dark:bg-orange-950/40 text-[#EB590E] flex items-center justify-center font-bold text-lg shrink-0">
-                🎧
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-gray-900 dark:text-white">
-                  Order Support
-                </DialogTitle>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Order #{displayOrderRef}</p>
-              </div>
-            </div>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
-            {/* Direct Phone Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={handleCallRestaurant}
-                className="flex items-center gap-3 p-3.5 bg-gray-50 dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700/80 rounded-2xl transition-colors text-left"
-              >
-                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Phone className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-gray-900 dark:text-white">Call Restaurant</p>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Direct line</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCallRider}
-                className="flex items-center gap-3 p-3.5 bg-gray-50 dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700/80 rounded-2xl transition-colors text-left"
-              >
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Phone className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-gray-900 dark:text-white">Call Delivery</p>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Rider partner</p>
-                </div>
-              </button>
-            </div>
-
-            <div className="h-px bg-gray-100 dark:bg-zinc-800 my-1" />
-
-            {/* Category Pills */}
-            <div>
-              <p className="text-xs font-bold text-gray-800 dark:text-gray-200 mb-2">
-                Select issue category <span className="text-red-500">*</span>
-              </p>
-              <div className="space-y-2">
-                {ORDER_SUPPORT_CATEGORIES.map((cat) => {
-                  const isSelected = supportCategory === cat;
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSupportCategory(cat)}
-                      className={`w-full text-left px-4 py-2.5 rounded-2xl text-xs font-semibold border transition-all flex items-center justify-between ${
-                        isSelected
-                          ? "bg-orange-50 dark:bg-orange-950/30 border-[#EB590E] text-[#EB590E] dark:text-orange-400 shadow-sm"
-                          : "bg-gray-50 dark:bg-zinc-800/60 border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800"
-                      }`}
-                    >
-                      <span>{cat}</span>
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        isSelected ? "border-[#EB590E] bg-[#EB590E]" : "border-gray-300 dark:border-zinc-600"
-                      }`}>
-                        {isSelected && <Check className="w-2.5 h-2.5 text-white stroke-[3]" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Description Textarea */}
-            <div className="space-y-1.5 pt-1">
-              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                Describe your issue (optional)
-              </label>
-              <Textarea
-                value={supportDescription}
-                onChange={(e) => setSupportDescription(e.target.value)}
-                placeholder="Tell us what went wrong with your order..."
-                className="w-full min-h-[80px] resize-none border-2 border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 rounded-xl px-4 py-2.5 text-xs text-gray-800 dark:text-gray-200 focus:border-[#EB590E] focus:ring-2 focus:ring-orange-200 focus:outline-none transition-colors"
-                disabled={isSubmittingSupport}
-              />
-            </div>
-          </div>
-
-          {/* Footer Buttons */}
-          <div className="flex gap-3 pt-3 border-t border-gray-100 dark:border-zinc-800 shrink-0">
-            <Button
-              variant="outline"
-              onClick={() => setShowSupportModal(false)}
-              disabled={isSubmittingSupport}
-              className="flex-1 dark:bg-zinc-800 dark:text-white dark:border-zinc-700 rounded-2xl h-11 text-xs font-bold"
+            
+            <button
+              onClick={() => setShowRatingModal(false)}
+              className="w-full text-sm text-gray-400 dark:text-gray-500 font-medium hover:text-gray-600 dark:hover:text-gray-400 transition-colors py-2"
             >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSupportSubmit}
-              disabled={isSubmittingSupport || !supportCategory}
-              className="flex-1 bg-[#EB590E] hover:bg-[#d44e0b] disabled:opacity-50 text-white border-none rounded-2xl h-11 text-xs font-bold shadow-md"
-            >
-              {isSubmittingSupport ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                "Submit Ticket"
-              )}
-            </Button>
+              Maybe later
+            </button>
           </div>
         </DialogContent>
       </Dialog>

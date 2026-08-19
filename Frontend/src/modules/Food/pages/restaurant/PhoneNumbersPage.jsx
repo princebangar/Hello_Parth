@@ -66,49 +66,24 @@ export default function PhoneNumbersPage() {
   }
 
   const handleOtpChange = (index, value) => {
-    const digits = String(value || "").replace(/\D/g, "")
+    if (!/^\d*$/.test(value)) return // Only allow digits
+    
     const newOtp = [...otp]
-
-    if (!digits) {
-      newOtp[index] = ""
-      setOtp(newOtp)
-      if (index > 0) {
-        const prevInput = document.getElementById(`otp-${index - 1}`)
-        if (prevInput) prevInput.focus()
-      }
-      return
-    }
-
-    if (digits.length >= 6) {
-      const pasted = digits.slice(0, 6).split("")
-      const fullPastedOtp = ["", "", "", "", "", ""]
-      pasted.forEach((char, i) => { fullPastedOtp[i] = char })
-      setOtp(fullPastedOtp)
-      const lastInput = document.getElementById(`otp-5`)
-      if (lastInput) lastInput.focus()
-      return
-    }
-
-    const newDigit = digits.slice(-1)
-    newOtp[index] = newDigit
-    setOtp(newOtp)
-
-    if (newDigit && index < 5) {
+    newOtp[index] = value.slice(-1) // Only take last character
+    
+    // Auto-focus next input
+    if (value && index < 5) {
       const nextInput = document.getElementById(`otp-${index + 1}`)
       if (nextInput) nextInput.focus()
     }
+    
+    setOtp(newOtp)
   }
 
   const handleOtpKeyDown = (index, e) => {
-    if (e.key === "Backspace") {
-      if (!otp[index] && index > 0) {
-        e.preventDefault()
-        const newOtp = [...otp]
-        newOtp[index - 1] = ""
-        setOtp(newOtp)
-        const prevInput = document.getElementById(`otp-${index - 1}`)
-        if (prevInput) prevInput.focus()
-      }
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`)
+      if (prevInput) prevInput.focus()
     }
   }
 
@@ -178,7 +153,7 @@ export default function PhoneNumbersPage() {
             <div className="flex-1">
               <h2 className="text-base font-bold text-gray-900">Order reminder numbers</h2>
               <p className="text-xs text-gray-600 mt-1">
-                Should always be available for Hello Parth Store to reach out for live order support and order reminders.
+                Should always be available for Zomato to reach out for live order support and order reminders.
               </p>
             </div>
           </div>
@@ -194,7 +169,7 @@ export default function PhoneNumbersPage() {
                 onClick={() => handleEditClick("orderReminder1")}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <Edit className="w-4 h-4 text-blue-600" />
+                <Edit className="w-4 h-4 text-[#B80B3D]" />
               </button>
             </div>
 
@@ -208,7 +183,7 @@ export default function PhoneNumbersPage() {
                 onClick={() => handleEditClick("orderReminder2")}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <Edit className="w-4 h-4 text-blue-600" />
+                <Edit className="w-4 h-4 text-[#B80B3D]" />
               </button>
             </div>
           </div>
@@ -223,7 +198,7 @@ export default function PhoneNumbersPage() {
             <div className="flex-1">
               <h2 className="text-base font-bold text-gray-900">Restaurant page number</h2>
               <p className="text-xs text-gray-600 mt-1">
-                Number for Hello Parth customers to call your restaurant.
+                Number for Zomato customers to call your restaurant.
               </p>
             </div>
           </div>
@@ -237,7 +212,7 @@ export default function PhoneNumbersPage() {
                 onClick={() => handleEditClick("restaurantPage")}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <Edit className="w-4 h-4 text-blue-600" />
+                <Edit className="w-4 h-4 text-[#B80B3D]" />
               </button>
             </div>
           </div>
@@ -322,7 +297,7 @@ export default function PhoneNumbersPage() {
                   disabled={!phoneNumber.trim()}
                   className={`flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
                     phoneNumber.trim()
-                      ? "bg-black text-white hover:bg-gray-800"
+                      ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
@@ -373,7 +348,7 @@ export default function PhoneNumbersPage() {
                       }}
                       className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${
                         countryCode === country.code
-                          ? "bg-gray-900 text-white"
+                          ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white"
                           : "bg-gray-50 text-gray-900 hover:bg-gray-100"
                       }`}
                     >
@@ -451,7 +426,7 @@ export default function PhoneNumbersPage() {
                   <div className="text-center">
                     <button
                       onClick={handleResendOtp}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      className="text-sm text-[#B80B3D] hover:text-blue-700 font-medium"
                     >
                       Resend OTP
                     </button>
@@ -470,7 +445,7 @@ export default function PhoneNumbersPage() {
                   disabled={otp.join("").length !== 6}
                   className={`flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
                     otp.join("").length === 6
-                      ? "bg-black text-white hover:bg-gray-800"
+                      ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
@@ -484,3 +459,10 @@ export default function PhoneNumbersPage() {
     </div>
   )
 }
+
+
+
+
+
+
+

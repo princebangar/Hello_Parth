@@ -65,41 +65,28 @@ const deliveryPartnerSchema = new mongoose.Schema(
             type: [String],
             default: []
         },
-        zoneId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'TaxiZone',
-            default: null
-        },
-        zoneName: {
-            type: String,
-            default: ''
-        },
         aadharPhoto: {
-            type: String
-        },
-        aadharPhotoBack: {
             type: String
         },
         panPhoto: {
             type: String
         },
-        panPhotoBack: {
-            type: String
-        },
         drivingLicensePhoto: {
-            type: String
-        },
-        drivingLicensePhotoBack: {
             type: String
         },
         status: {
             type: String,
-            enum: ['pending', 'approved', 'rejected'],
+            enum: ['pending', 'approved', 'rejected', 'deleted'],
             default: 'pending'
         },
         rejectionReason: { type: String },
         rejectedAt: { type: Date },
         approvedAt: { type: Date },
+        pendingApprovalType: {
+            type: String,
+            enum: ['registration', 'changes'],
+            default: 'registration'
+        },
         bankAccountHolderName: { type: String },
         bankAccountNumber: { type: String },
         bankIfscCode: { type: String },
@@ -110,15 +97,6 @@ const deliveryPartnerSchema = new mongoose.Schema(
             type: String,
             enum: ['online', 'offline'],
             default: 'offline'
-        },
-        onlineSelfie: {
-            imageUrl: { type: String, default: '', trim: true },
-            capturedAt: { type: Date, default: null },
-            uploadedAt: { type: Date, default: null },
-            forDate: { type: String, default: '' },
-            verifiedStatus: { type: String, enum: ['unverified', 'verified', 'failed', 'locked'], default: 'unverified' },
-            failedAttempts: { type: Number, default: 0 },
-            lockedUntil: { type: Date, default: null }
         },
         lastLocation: {
             type: { type: String, enum: ['Point'] },
@@ -142,7 +120,8 @@ const deliveryPartnerSchema = new mongoose.Schema(
             max: 5,
             set: normalizeRatingValue
         },
-        totalRatings: { type: Number, default: 0, min: 0 }
+        totalRatings: { type: Number, default: 0, min: 0 },
+        deletedAt: { type: Date }
     },
     {
         collection: 'food_delivery_partners',

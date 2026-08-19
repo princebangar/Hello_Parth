@@ -6,28 +6,21 @@ import {
     updateRestaurantProfile,
     updateRestaurantAcceptingOrders,
     updateCurrentRestaurantDiningSettings,
+    updateCurrentRestaurantTakeawaySettings,
     uploadRestaurantProfileImage,
     uploadRestaurantMenuImage,
     uploadRestaurantCoverImages,
     uploadRestaurantMenuImages,
-    uploadRestaurantAttachment,
     listPublicOffers,
     getRestaurantComplaints,
-    deleteCurrentRestaurantAccount,
-    getRestaurantReviewsForCurrent
+    listRestaurantsUnderPriceLimit
 } from '../services/restaurant.service.js';
+import {
+    createDiningRequest,
+    getPendingDiningRequest
+} from '../../dining/services/dining.service.js';
 import { validateRestaurantRegisterDto } from '../validators/restaurant.validator.js';
 import { sendResponse } from '../../../../utils/response.js';
-
-export const uploadRestaurantAttachmentController = async (req, res, next) => {
-    try {
-        const { folder } = req.body;
-        const result = await uploadRestaurantAttachment(req.file, folder);
-        return sendResponse(res, 200, 'Image uploaded successfully', result);
-    } catch (error) {
-        next(error);
-    }
-};
 
 export const registerRestaurantController = async (req, res, next) => {
     try {
@@ -50,7 +43,10 @@ export const listApprovedRestaurantsController = async (req, res, next) => {
 
 export const getApprovedRestaurantController = async (req, res, next) => {
     try {
-        const restaurant = await getApprovedRestaurantByIdOrSlug(req.params.id);
+        const userId = req.user?.userId;
+        const lat = req.query?.lat;
+        const lng = req.query?.lng;
+        const restaurant = await getApprovedRestaurantByIdOrSlug(req.params.id, userId, { lat, lng });
         if (!restaurant) {
             return res.status(404).json({ success: false, message: 'Restaurant not found' });
         }
@@ -95,6 +91,16 @@ export const updateCurrentRestaurantDiningSettingsController = async (req, res, 
         const restaurantId = req.user?.userId;
         const restaurant = await updateCurrentRestaurantDiningSettings(restaurantId, req.body || {});
         return sendResponse(res, 200, 'Dining settings updated successfully', { restaurant });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateCurrentRestaurantTakeawaySettingsController = async (req, res, next) => {
+    try {
+        const restaurantId = req.user?.userId;
+        const restaurant = await updateCurrentRestaurantTakeawaySettings(restaurantId, req.body || {});
+        return sendResponse(res, 200, 'Takeaway settings updated successfully', { restaurant });
     } catch (error) {
         next(error);
     }
@@ -158,21 +164,31 @@ export const getRestaurantComplaintsController = async (req, res, next) => {
     }
 };
 
-export const deleteCurrentRestaurantAccountController = async (req, res, next) => {
+export const listRestaurantsUnder250Controller = async (req, res, next) => {
     try {
-        const restaurantId = req.user?.userId;
-        const result = await deleteCurrentRestaurantAccount(restaurantId);
-        return sendResponse(res, 200, 'Restaurant account deleted successfully', result);
+        const priceLimit = Number(req.query?.priceLimit) > 0 ? Number(req.query.priceLimit) : 250;
+        const data = await listRestaurantsUnderPriceLimit(req.query || {}, priceLimit);
+        return sendResponse(res, 200, 'Under 250 restaurants fetched successfully', data);
     } catch (error) {
         next(error);
     }
 };
 
-export const getRestaurantReviewsController = async (req, res, next) => {
+export const createDiningRequestController = async (req, res, next) => {
     try {
         const restaurantId = req.user?.userId;
-        const data = await getRestaurantReviewsForCurrent(restaurantId);
-        return sendResponse(res, 200, 'Reviews fetched successfully', data);
+        const request = await createDiningRequest(restaurantId, req.body || {});
+        return sendResponse(res, 201, 'Dining update request submitted successfully', request);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getPendingDiningRequestController = async (req, res, next) => {
+    try {
+        const restaurantId = req.user?.userId;
+        const request = await getPendingDiningRequest(restaurantId);
+        return sendResponse(res, 200, 'Pending request fetched successfully', request);
     } catch (error) {
         next(error);
     }

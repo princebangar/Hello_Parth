@@ -83,17 +83,6 @@ const restaurantSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
-    /** When true (default), outlet appears in Food vertical; when false, in Grocery vertical. */
-    isRestaurant: {
-      type: Boolean,
-      default: true,
-      index: true,
-    },
-    pricingAttributes: {
-      type: [String],
-      enum: ["same_price", "no_packaging"],
-      default: [],
-    },
     addressLine1: {
       type: String,
     },
@@ -135,11 +124,6 @@ const restaurantSchema = new mongoose.Schema(
     isAcceptingOrders: {
       type: Boolean,
       default: true,
-      index: true,
-    },
-    isSponsored: {
-      type: Boolean,
-      default: false,
       index: true,
     },
     panNumber: {
@@ -217,13 +201,6 @@ const restaurantSchema = new mongoose.Schema(
       ref: "FoodZone",
       index: true,
     },
-    /** Featured home rank (1-10) within the pinned zone. */
-    zoneFeaturedRank: {
-      type: Number,
-      min: 1,
-      max: 10,
-      default: null,
-    },
     businessModel: {
       type: String,
       trim: true,
@@ -256,14 +233,17 @@ const restaurantSchema = new mongoose.Schema(
     diningSettings: {
       isEnabled: { type: Boolean, default: false },
       maxGuests: { type: Number, default: 6 },
-      diningType: { type: String, default: "family-dining" },
+      diningType: { type: [String], default: ["family-dining"] },
+    },
+    takeawaySettings: {
+      isEnabled: { type: Boolean, default: false },
     },
     menu: {
       sections: { type: Array, default: [] },
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "approved", "rejected", "banned", "deleted"],
       default: "pending",
     },
     approvedAt: {
@@ -276,6 +256,14 @@ const restaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    pendingApprovalType: {
+      type: String,
+      enum: ["registration", "changes"],
+      default: "registration",
+    },
+    deletedAt: {
+      type: Date,
+    },
   },
   {
     collection: "food_restaurants",
@@ -286,7 +274,12 @@ const restaurantSchema = new mongoose.Schema(
 restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
   const name =
     typeof this.restaurantName === "string" ? this.restaurantName : "";
-  const normalizedName = name.trim().toLowerCase().replace(/\s+/g, " ");
+  const normalizedName = name
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ");
   this.restaurantNameNormalized = normalizedName || undefined;
 
   const phoneRaw =
@@ -407,6 +400,8 @@ restaurantSchema.index({ restaurantName: 1 });
 restaurantSchema.index({ restaurantNameNormalized: 1 });
 restaurantSchema.index({ city: 1 });
 restaurantSchema.index({ "location.city": 1 });
+restaurantSchema.index({ location: "2dsphere", "takeawaySettings.isEnabled": 1 });
+restaurantSchema.index({ location: "2dsphere", "diningSettings.isEnabled": 1 });
 restaurantSchema.index({ location: "2dsphere" });
 restaurantSchema.index({ restaurantName: 1, ownerPhone: 1 });
 // Enforce uniqueness at the database level to avoid race conditions in registration.
@@ -422,7 +417,9 @@ restaurantSchema.index(
   },
 );
 restaurantSchema.index({ status: 1, createdAt: -1 });
-restaurantSchema.index({ zoneId: 1, zoneFeaturedRank: 1 });
+restaurantSchema.index({ "takeawaySettings.isEnabled": 1 });
+restaurantSchema.index({ "diningSettings.isEnabled": 1 });
+restaurantSchema.index({ zoneId: 1, status: 1 });
 
 export const FoodRestaurant = mongoose.model(
   "FoodRestaurant",

@@ -10,14 +10,23 @@ const debugError = (...args) => {}
  * Features:
  * - HTML5 Geolocation API for user location
  * - No reverse geocoding by default (avoids extra API calls); coords only unless you add a backend later
- * - Hello Parth-style location display
+ * - Zomato-style location display
  * - Comprehensive error handling
  * 
  * @returns {Object} { location, loading, error, permissionGranted, requestLocation }
  */
 export function useLocationSimple() {
-  const [location, setLocation] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [location, setLocation] = useState(() => {
+    try {
+      const cached = localStorage.getItem("userLocation")
+      return cached ? JSON.parse(cached) : null
+    } catch { return null }
+  })
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem("userLocation")
+    } catch { return true }
+  })
   const [error, setError] = useState(null)
   const [permissionGranted, setPermissionGranted] = useState(false)
 
@@ -71,7 +80,7 @@ export function useLocationSimple() {
         }
       }
 
-      // Method 2: Extract from formatted_address (Hello Parth-style parsing)
+      // Method 2: Extract from formatted_address (Zomato-style parsing)
       // Indian address format: "Area, City, State" (e.g., "New Palasia, Indore, Madhya Pradesh")
       if (result.formatted_address) {
         const addressParts = result.formatted_address
@@ -265,9 +274,19 @@ export function useLocationSimple() {
   }
 
   // Initialize: Load cached location; only fetch if missing.
-  // Auto-fetch fresh GPS location on App Mount and when app re-opens / tab focuses
   useEffect(() => {
-    // Load cached location immediately for instant UI render
+    // Check if location prompt should be suppressed
+    const pathname = window.location.pathname.toLowerCase();
+    const isSuppressedPath = 
+      pathname.includes('terms') ||
+      pathname.includes('privacy') ||
+      pathname.includes('support') ||
+      pathname.includes('login') ||
+      pathname.includes('otp');
+
+    const isAuthenticated = !!(localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken'));
+
+    // Load cached location immediately (no loading state)
     const cached = localStorage.getItem("userLocation")
     if (cached) {
       try {
@@ -281,37 +300,24 @@ export function useLocationSimple() {
       setLoading(false)
     }
 
-    const refreshLocationAuto = () => {
-      getCurrentLocation(true)
+    if (isSuppressedPath || !isAuthenticated) {
+      return;
+    }
+
+    // IMPORTANT: Do NOT fetch on every reload.
+    // Only fetch once when userLocation is missing; after that, rely on localStorage
+    // unless the user explicitly requests a refresh via requestLocation().
+    if (!cached) {
+      getCurrentLocation()
         .then((locationData) => {
           setLocation(locationData)
           setPermissionGranted(true)
           setError(null)
         })
         .catch((err) => {
-          if (!cached) {
-            setError(err.message)
-            setPermissionGranted(false)
-          }
+          setError(err.message)
+          setPermissionGranted(false)
         })
-    }
-
-    // Always fetch fresh GPS location on mount
-    refreshLocationAuto()
-
-    // Re-fetch whenever app becomes visible or active again
-    const handleReopen = () => {
-      if (document.visibilityState === "visible") {
-        refreshLocationAuto()
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleReopen)
-    window.addEventListener("focus", handleReopen)
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleReopen)
-      window.removeEventListener("focus", handleReopen)
     }
   }, [])
 

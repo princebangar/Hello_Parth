@@ -407,7 +407,10 @@ export default function FeedNavbar({ className = "" }) {
 
   return (
     <>
-    <div className={`bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-50 border-b border-gray-200 ${className}`}>
+    <div 
+      className={`px-4 py-3 flex items-center justify-between sticky top-0 z-50 border-b border-gray-200 ${className}`}
+      style={{ background: 'linear-gradient(33deg, #15498b 0%, #000000 100%)' }}
+    >
         {/* Logo and Online/Offline Toggle */}
       <div className="flex items-center gap-3">
         {logoUrl && (
@@ -478,7 +481,11 @@ export default function FeedNavbar({ className = "" }) {
               }}
             />
           ) : (
-            <User className="w-5 h-5 text-gray-500" />
+            <img
+              src="/assets/images/profile_avatar.webp"
+              alt="Profile"
+              className="w-full h-full object-cover"
+            />
           )}
         </button>
       </div>

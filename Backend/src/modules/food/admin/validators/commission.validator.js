@@ -51,21 +51,21 @@ export const validateOptionalStatusDto = (body) => {
 };
 
 const deliveryRuleSchema = z.object({
+    zoneId: z.string().optional().or(z.literal('')),
     name: z.string().optional().or(z.literal('')),
     minDistance: z.number().min(0, 'Minimum distance must be 0 or greater'),
     maxDistance: z.number().nullable().optional(),
-    userDeliveryFee: z.number().min(0, 'User delivery fee must be 0 or greater'),
     commissionPerKm: z.number().min(0, 'Commission per km must be 0 or greater'),
     basePayout: z.number().min(0, 'Base payout must be 0 or greater'),
     status: z.boolean().optional()
 });
 
-export const validateDeliveryCommissionRuleDto = (body) => {
+export const validateDeliveryCommissionRuleDto = (body, { requireZoneId = false } = {}) => {
     const normalized = {
+        zoneId: body?.zoneId != null ? String(body.zoneId).trim() : '',
         name: body?.name != null ? String(body.name) : '',
         minDistance: Number(body?.minDistance),
         maxDistance: body?.maxDistance === null || body?.maxDistance === undefined || body?.maxDistance === '' ? null : Number(body.maxDistance),
-        userDeliveryFee: body?.userDeliveryFee === undefined ? Number(body?.commissionPerKm) : Number(body?.userDeliveryFee),
         commissionPerKm: Number(body?.commissionPerKm),
         basePayout: Number(body?.basePayout),
         status: body?.status
@@ -74,43 +74,28 @@ export const validateDeliveryCommissionRuleDto = (body) => {
     if (!result.success) {
         throw new ValidationError(result.error.errors[0].message);
     }
+    if (requireZoneId) {
+        if (!result.data.zoneId) {
+            throw new ValidationError('zoneId is required');
+        }
+        if (!mongoose.Types.ObjectId.isValid(result.data.zoneId)) {
+            throw new ValidationError('Invalid zoneId');
+        }
+    } else if (result.data.zoneId && !mongoose.Types.ObjectId.isValid(result.data.zoneId)) {
+        throw new ValidationError('Invalid zoneId');
+    }
+    const min = result.data.minDistance;
+    const base = result.data.basePayout;
+    if (min !== 0 && base > 0) {
+        throw new ValidationError('Only base slab can have base payout');
+    }
     return {
+        zoneId: result.data.zoneId || undefined,
         name: result.data.name ? result.data.name.trim() : '',
         minDistance: result.data.minDistance,
         maxDistance: result.data.maxDistance ?? null,
-        userDeliveryFee: result.data.userDeliveryFee,
         commissionPerKm: result.data.commissionPerKm,
         basePayout: result.data.basePayout,
         status: typeof result.data.status === 'boolean' ? result.data.status : undefined
-    };
-};
-
-const zoneSurgeUpsertSchema = z.object({
-    zoneId: z.string().min(1, 'zoneId is required'),
-    isEnabled: z.boolean().optional(),
-    surgeAmount: z.number().min(0, 'surgeAmount must be 0 or greater'),
-    surgeTitle: z.string().optional()
-});
-
-export const validateZoneSurgeUpsertDto = (body) => {
-    const normalized = {
-        zoneId: body?.zoneId ? String(body.zoneId) : '',
-        isEnabled: body?.isEnabled,
-        surgeAmount: Number(body?.surgeAmount),
-        surgeTitle: body?.surgeTitle != null ? String(body.surgeTitle).trim() : undefined
-    };
-    const result = zoneSurgeUpsertSchema.safeParse(normalized);
-    if (!result.success) {
-        throw new ValidationError(result.error.errors[0].message);
-    }
-    if (!mongoose.Types.ObjectId.isValid(result.data.zoneId)) {
-        throw new ValidationError('Invalid zoneId');
-    }
-    const rounded = Math.round((Number(result.data.surgeAmount) || 0) * 100) / 100;
-    return {
-        zoneId: result.data.zoneId,
-        isEnabled: typeof result.data.isEnabled === 'boolean' ? result.data.isEnabled : undefined,
-        surgeAmount: rounded,
-        surgeTitle: result.data.surgeTitle ? result.data.surgeTitle.trim() : undefined
     };
 };

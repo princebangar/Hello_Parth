@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
 
 const rangeSchema = z.object({
@@ -7,34 +8,20 @@ const rangeSchema = z.object({
     fee: z.number().min(0)
 });
 
-const distanceSlabAdminDeliveryCommissionSchema = z.object({
-    distanceRuleId: z.string().min(1),
-    isEnabled: z.boolean().optional(),
-    adminDeliveryCommissionPercent: z.number().min(0).max(100).optional()
-});
-
-const deliveryPartnerIncentiveRuleSchema = z.object({
-    isEnabled: z.boolean().optional(),
-    minOrderAmount: z.number().min(0).optional(),
-    incentivePercent: z.number().min(0).max(100).optional()
-});
-
 const feeSettingsUpsertSchema = z.object({
+    zoneId: z.string().min(1, 'zoneId is required'),
     deliveryFee: z.number().min(0).nullable().optional(),
     deliveryFeeRanges: z.array(rangeSchema).optional(),
-    deliveryFeeComputationMode: z.enum(['distance_order_value']).optional(),
-    distanceSlabAdminDeliveryCommission: z.array(distanceSlabAdminDeliveryCommissionSchema).optional(),
-    deliveryPartnerIncentiveRule: deliveryPartnerIncentiveRuleSchema.optional(),
-    freeDeliveryThreshold: z.number().min(0).nullable().optional(),
+    freeDeliveryUpTo: z.number().min(0).nullable().optional(),
     platformFee: z.number().min(0).nullable().optional(),
-    surgeTitle: z.string().optional(),
+    packagingFee: z.number().min(0).nullable().optional(),
     gstRate: z.number().min(0).max(100).nullable().optional(),
-    codLimit: z.number().min(0).nullable().optional(),
     isActive: z.boolean().optional()
 });
 
 export const validateFeeSettingsUpsertDto = (body) => {
     const normalized = {
+        zoneId: body?.zoneId != null ? String(body.zoneId).trim() : '',
         deliveryFee:
             body?.deliveryFee === null
                 ? null
@@ -48,57 +35,27 @@ export const validateFeeSettingsUpsertDto = (body) => {
                 fee: Number(r?.fee)
             }))
             : undefined,
-        deliveryFeeComputationMode:
-            body?.deliveryFeeComputationMode !== undefined
-                ? String(body.deliveryFeeComputationMode)
-                : undefined,
-        distanceSlabAdminDeliveryCommission: Array.isArray(body?.distanceSlabAdminDeliveryCommission)
-            ? body.distanceSlabAdminDeliveryCommission.map((row) => ({
-                distanceRuleId: String(row?.distanceRuleId || ''),
-                isEnabled: row?.isEnabled !== undefined ? Boolean(row.isEnabled) : false,
-                adminDeliveryCommissionPercent:
-                    row?.adminDeliveryCommissionPercent !== undefined
-                        ? Number(row.adminDeliveryCommissionPercent)
-                        : 0
-            }))
-            : undefined,
-        deliveryPartnerIncentiveRule: body?.deliveryPartnerIncentiveRule
-            ? {
-                isEnabled: body.deliveryPartnerIncentiveRule.isEnabled !== undefined
-                    ? Boolean(body.deliveryPartnerIncentiveRule.isEnabled)
-                    : false,
-                minOrderAmount: body.deliveryPartnerIncentiveRule.minOrderAmount !== undefined
-                    ? Number(body.deliveryPartnerIncentiveRule.minOrderAmount)
-                    : 0,
-                incentivePercent: body.deliveryPartnerIncentiveRule.incentivePercent !== undefined
-                    ? Number(body.deliveryPartnerIncentiveRule.incentivePercent)
-                    : 0,
-            }
-            : undefined,
-        freeDeliveryThreshold:
-            body?.freeDeliveryThreshold === null
+        freeDeliveryUpTo:
+            body?.freeDeliveryUpTo === null
                 ? null
-                : body?.freeDeliveryThreshold !== undefined
-                    ? Number(body.freeDeliveryThreshold)
+                : body?.freeDeliveryUpTo !== undefined
+                    ? Number(body.freeDeliveryUpTo)
                     : undefined,
         platformFee:
             body?.platformFee === null ? null : body?.platformFee !== undefined ? Number(body.platformFee) : undefined,
-        surgeTitle:
-            body?.surgeTitle !== undefined ? String(body.surgeTitle).trim() : undefined,
+        packagingFee:
+            body?.packagingFee === null ? null : body?.packagingFee !== undefined ? Number(body.packagingFee) : undefined,
         gstRate:
             body?.gstRate === null ? null : body?.gstRate !== undefined ? Number(body.gstRate) : undefined,
-        codLimit:
-            body?.codLimit === null || body?.codLimit === ''
-                ? null
-                : body?.codLimit !== undefined
-                    ? Number(body.codLimit)
-                    : undefined,
         isActive: body?.isActive !== undefined ? Boolean(body.isActive) : undefined
     };
 
     const result = feeSettingsUpsertSchema.safeParse(normalized);
     if (!result.success) {
         throw new ValidationError(result.error.errors[0].message);
+    }
+    if (!mongoose.Types.ObjectId.isValid(result.data.zoneId)) {
+        throw new ValidationError('Invalid zoneId');
     }
 
     // Validate ranges: min < max, non-overlapping after sorting
@@ -120,30 +77,5 @@ export const validateFeeSettingsUpsertDto = (body) => {
         result.data.deliveryFeeRanges = sorted;
     }
 
-    if (Array.isArray(result.data.distanceSlabAdminDeliveryCommission)) {
-        const dedupe = new Set();
-        result.data.distanceSlabAdminDeliveryCommission = result.data.distanceSlabAdminDeliveryCommission.map((row) => {
-            if (dedupe.has(row.distanceRuleId)) {
-                throw new ValidationError('Duplicate distanceRuleId found in admin delivery commission config');
-            }
-            dedupe.add(row.distanceRuleId);
-            const pct = Math.round((Number(row.adminDeliveryCommissionPercent || 0) * 100)) / 100;
-            return {
-                distanceRuleId: row.distanceRuleId,
-                isEnabled: row.isEnabled === true,
-                adminDeliveryCommissionPercent: pct
-            };
-        });
-    }
-
-    if (result.data.deliveryPartnerIncentiveRule) {
-        result.data.deliveryPartnerIncentiveRule = {
-            isEnabled: result.data.deliveryPartnerIncentiveRule.isEnabled === true,
-            minOrderAmount: Math.round((Number(result.data.deliveryPartnerIncentiveRule.minOrderAmount || 0)) * 100) / 100,
-            incentivePercent: Math.round((Number(result.data.deliveryPartnerIncentiveRule.incentivePercent || 0)) * 100) / 100,
-        };
-    }
-
     return result.data;
 };
-

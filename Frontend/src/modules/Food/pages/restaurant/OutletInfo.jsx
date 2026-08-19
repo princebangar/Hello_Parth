@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
@@ -14,6 +14,9 @@ import {
   ChevronRight,
   X,
   Trash2,
+  Phone,
+  CreditCard,
+  Calendar,
 } from "lucide-react"
 import {
   Dialog,
@@ -26,9 +29,11 @@ import {
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { restaurantAPI } from "@food/api"
+import { formatRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import { toast } from "sonner"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { isFlutterBridgeAvailable, convertBase64ToFile } from "@food/utils/imageUploadUtils"
+import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -37,10 +42,25 @@ const debugError = (...args) => {}
 
 const CUISINES_STORAGE_KEY = "restaurant_cuisines"
 
-
+// Helper component for reusable action buttons
+const ActionButton = ({ icon: Icon, label, onClick }) => (
+  <button 
+    onClick={onClick}
+    className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 hover:border-[#B80B3D]/30 hover:bg-gradient-to-br from-[#B80B3D] to-[#66001D]/5 transition-all active:scale-[0.98] shadow-sm"
+  >
+    <div className="flex items-center gap-4">
+      <div className="bg-gradient-to-br from-[#B80B3D] to-[#66001D]/5 p-2.5 rounded-xl">
+        <Icon className="w-5 h-5 text-[#B80B3D]" />
+      </div>
+      <span className="text-[15px] font-bold text-gray-800 tracking-tight">{label}</span>
+    </div>
+    <ChevronRight className="w-5 h-5 text-gray-300" />
+  </button>
+)
 
 export default function OutletInfo() {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = useRestaurantBackNavigation()
   
   // State management
@@ -64,75 +84,48 @@ export default function OutletInfo() {
   const menuImageInputRef = useRef(null)
   const [activePicker, setActivePicker] = useState(null) // { type: 'profile' | 'cover', ref: any, title: string, multiple: boolean }
 
-  // Format address from location object
-  const formatAddress = (location) => {
-    if (!location) return ""
-    
-    const parts = []
-    if (location.addressLine1) parts.push(location.addressLine1.trim())
-    if (location.addressLine2) parts.push(location.addressLine2.trim())
-    if (location.area) parts.push(location.area.trim())
-    if (location.city) {
-      const city = location.city.trim()
-      // Only add city if it's not already included in area
-      if (!location.area || !location.area.includes(city)) {
-        parts.push(city)
+  // Fetch restaurant data on mount and whenever this page is opened again
+  useEffect(() => {
+    const applyRestaurantData = (data) => {
+      if (!data) return
+
+      setRestaurantData(data)
+      setRestaurantName(data.name || "")
+      setRestaurantId(data.restaurantId || data.id || "")
+      setRestaurantMongoId(String(data.id || data._id || ""))
+      setAddress(formatRestaurantDisplayAddress(data.location, data))
+
+      if (data.cuisines && Array.isArray(data.cuisines) && data.cuisines.length > 0) {
+        setCuisineTags(data.cuisines.join(", "))
+      }
+
+      if (data.profileImage?.url) {
+        setThumbnailImage(data.profileImage.url)
+      }
+
+      if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
+        setCoverImages(data.coverImages.map(img => ({
+          url: img.url || img,
+          publicId: img.publicId
+        })))
+        setMainImage(data.coverImages[0].url || data.coverImages[0])
+      } else if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
+        setCoverImages(data.menuImages.map(img => ({
+          url: img.url,
+          publicId: img.publicId
+        })))
+        setMainImage(data.menuImages[0].url)
+      } else {
+        setCoverImages([])
       }
     }
-    if (location.landmark) parts.push(location.landmark.trim())
-    
-    return parts.join(", ") || ""
-  }
 
-  // Fetch restaurant data on mount
-  useEffect(() => {
     const fetchRestaurantData = async () => {
       try {
         setLoading(true)
-        const response = await restaurantAPI.getCurrentRestaurant()
+        const response = await restaurantAPI.refreshCurrentRestaurant()
         const data = response?.data?.data?.restaurant || response?.data?.restaurant
-        if (data) {
-          setRestaurantData(data)
-          
-          // Set restaurant name
-          setRestaurantName(data.name || "")
-          
-          // Set restaurant ID
-          setRestaurantId(data.restaurantId || data.id || "")
-          // Set MongoDB _id for last 5 digits display
-          const mongoId = String(data.id || data._id || "")
-          setRestaurantMongoId(mongoId)
-          
-          // Format and set address
-          const formattedAddress = formatAddress(data.location)
-          setAddress(formattedAddress)
-          
-          // Format cuisines
-          if (data.cuisines && Array.isArray(data.cuisines) && data.cuisines.length > 0) {
-            setCuisineTags(data.cuisines.join(", "))
-          }
-          
-          // Set images
-          if (data.profileImage?.url) {
-            setThumbnailImage(data.profileImage.url)
-          }
-          // Use coverImages if available, otherwise fallback to menuImages for backward compatibility
-          if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
-            setCoverImages(data.coverImages.map(img => ({
-              url: img.url || img,
-              publicId: img.publicId
-            })))
-            setMainImage(data.coverImages[0].url || data.coverImages[0])
-          } else if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
-            setCoverImages(data.menuImages.map(img => ({
-              url: img.url,
-              publicId: img.publicId
-            })))
-            setMainImage(data.menuImages[0].url)
-          } else {
-            setCoverImages([])
-          }
-        }
+        applyRestaurantData(data)
       } catch (error) {
         if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
           debugError("Error fetching restaurant data:", error)
@@ -142,24 +135,27 @@ export default function OutletInfo() {
       }
     }
 
+    const savedLocation = location.state?.savedLocation
+    if (savedLocation) {
+      setAddress(formatRestaurantDisplayAddress(savedLocation))
+    }
+
     fetchRestaurantData()
 
-    // Listen for updates from edit pages
-    const handleCuisinesUpdate = () => {
-      fetchRestaurantData()
-    }
-    const handleAddressUpdate = () => {
+    const handleRestaurantDataUpdate = () => {
       fetchRestaurantData()
     }
 
-    window.addEventListener("cuisinesUpdated", handleCuisinesUpdate)
-    window.addEventListener("addressUpdated", handleAddressUpdate)
+    window.addEventListener("cuisinesUpdated", handleRestaurantDataUpdate)
+    window.addEventListener("addressUpdated", handleRestaurantDataUpdate)
+    window.addEventListener("ownerDataUpdated", handleRestaurantDataUpdate)
     
     return () => {
-      window.removeEventListener("cuisinesUpdated", handleCuisinesUpdate)
-      window.removeEventListener("addressUpdated", handleAddressUpdate)
+      window.removeEventListener("cuisinesUpdated", handleRestaurantDataUpdate)
+      window.removeEventListener("addressUpdated", handleRestaurantDataUpdate)
+      window.removeEventListener("ownerDataUpdated", handleRestaurantDataUpdate)
     }
-  }, [])
+  }, [location.pathname, location.state?.savedLocation])
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -189,7 +185,7 @@ export default function OutletInfo() {
       setUploadingImage(true)
       setImageType('profile')
 
-      // Upload image to Cloudinary
+      // Upload image to the server (/var/www/uploads as WebP)
       const uploadResponse = await restaurantAPI.uploadProfileImage(file)
       const uploadedImage = uploadResponse?.data?.data?.profileImage
 
@@ -329,6 +325,10 @@ export default function OutletInfo() {
   const handleSaveName = async () => {
     const newName = editNameValue.trim()
     if (!newName) return
+    if (/[\/-]/.test(newName)) {
+      toast.error("Name cannot contain slashes (/) or hyphens (-)")
+      return
+    }
     try {
       await restaurantAPI.updateProfile({ name: newName })
       setRestaurantName(newName)
@@ -341,144 +341,150 @@ export default function OutletInfo() {
 
   return (
     <>
-      <div className="min-h-screen bg-white overflow-x-hidden">
+      <div className="min-h-screen bg-white overflow-x-hidden pb-24">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
+        <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-3 sticky top-0 z-50 shadow-sm">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 flex-1">
-              <button onClick={goBack} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-                <ArrowLeft className="w-6 h-6 text-gray-900" />
+            <div className="flex items-center gap-2 flex-1">
+              <button 
+                onClick={goBack} 
+                className="p-2 hover:bg-gradient-to-br from-[#B80B3D] to-[#66001D]/5 rounded-xl transition-all active:scale-95"
+              >
+                <ArrowLeft className="w-5 h-5 text-[#B80B3D]" />
               </button>
-              <h1 className="text-lg font-bold text-gray-900">Outlet info</h1>
+              <h1 className="text-[17px] font-bold text-gray-900 tracking-tight">Outlet Information</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-900 font-normal">
-                Restaurant id: {loading ? "Loading..." : (restaurantMongoId && restaurantMongoId.length >= 5 ? restaurantMongoId.slice(-5) : (restaurantId || "N/A"))}
-              </span>
+            <div className="bg-gradient-to-br from-[#B80B3D] to-[#66001D] px-3 py-1.5 rounded-full shadow-sm">
+              <p className="text-[11px] font-black text-white uppercase tracking-wider">
+                ID: {loading ? "..." : (restaurantMongoId && restaurantMongoId.length >= 5 ? restaurantMongoId.slice(-5) : (restaurantId || "N/A"))}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Main Image Section */}
-        <div className="relative w-full h-[200px] overflow-visible">
-          <img src={mainImage} alt="Restaurant banner" className="w-full h-full object-cover" />
-          
-          <button
-            onClick={() => handleImageClick('cover', menuImageInputRef, "Add Cover Image", true)}
-            disabled={uploadingImage}
-            className="absolute bottom-4 right-4 bg-black/90 hover:bg-black px-3.5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium text-white transition-colors shadow-lg z-20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{uploadingImage && imageType === 'menu' ? `Uploading ${uploadingCount}...` : 'Add image'}</span>
-          </button>
-          <input
-            ref={menuImageInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => handleCoverImageAdd(Array.from(e.target.files || []))}
-          />
-          
-          {/* Cover Images Gallery */}
-          {coverImages.length > 0 && (
-            <div className="absolute bottom-16 right-4 flex gap-2.5 z-10">
-              {coverImages.slice(0, 4).map((img, index) => (
-                <div
-                  key={index}
-                  className={`relative w-14 h-14 rounded-xl border-2 overflow-hidden bg-gray-200 shadow-md transition-all ${
-                    mainImage === img.url ? "border-black scale-105" : "border-white"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setMainImage(img.url)}
-                    className="w-full h-full"
-                  >
-                    <img src={img.url} alt={`Cover ${index + 1}`} className="w-full h-full object-cover" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCoverImageDelete(index); }}
-                    disabled={uploadingImage}
-                    className="absolute top-1 right-1 bg-red-500/95 hover:bg-red-600 p-1 rounded-full transition-colors z-10"
-                  >
-                    <Trash2 className="w-3 h-3 text-white" />
-                  </button>
-                </div>
-              ))}
-              {coverImages.length > 4 && (
-                <div className="w-14 h-14 rounded-xl border-2 border-white bg-black/70 flex items-center justify-center shadow-md">
-                  <span className="text-white text-sm font-bold">+{coverImages.length - 4}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Thumbnail Section */}
-          <div className="absolute bottom-0 left-4 -mb-[45px] flex flex-col gap-2 shrink-0 z-10">
-            <div className="relative w-[70px] h-[70px] rounded overflow-hidden">
-              <img src={thumbnailImage} alt="Restaurant thumbnail" className="w-full h-full rounded-xl object-cover" />
-            </div>
-            <button
-              onClick={() => handleImageClick('profile', profileImageInputRef, "Update Profile Photo")}
-              disabled={uploadingImage}
-              className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors text-left"
-            >
-              {uploadingImage && imageType === 'profile' ? 'Uploading...' : 'Edit photo'}
-            </button>
-            <input
-              ref={profileImageInputRef}
+        {/* Main Image & Profile Section */}
+        <div className="px-4 pt-4">
+          <div className="relative w-full h-[180px] rounded-[2rem] overflow-hidden shadow-xl ring-1 ring-black/5">
+            <img src={mainImage} alt="Restaurant banner" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        <input
+              ref={menuImageInputRef}
               type="file"
               accept="image/*"
+              multiple
               className="hidden"
-              onChange={(e) => handleProfileImageReplace(e.target.files?.[0])}
+              onChange={(e) => handleCoverImageAdd(Array.from(e.target.files || []))}
             />
           </div>
-        </div>
 
-        {/* Info Section */}
-        <div className="px-4 pt-[50px] pb-4 bg-white">
-          <div className="flex items-start gap-4">
-            <div className="flex flex-col gap-2">
-              <button onClick={() => navigate("/restaurant/ratings-reviews")} className="flex items-center gap-2 text-left w-full">
-                <div className="bg-green-700 px-2.5 py-1.5 rounded flex items-center gap-1 shrink-0">
-                  <span className="text-white text-sm font-bold">{restaurantData?.rating?.toFixed(1) || "0.0"}</span>
-                  <Star className="w-3.5 h-3.5 text-white fill-white" />
+          {/* Profile Overlap & Restaurant Name */}
+          <div className="relative z-10 px-4">
+            <div className="flex flex-col gap-4">
+              {/* Profile Image */}
+              <div className="relative -mt-12 group inline-block w-fit">
+                <div className="w-24 h-24 rounded-[2rem] bg-white p-1.5 shadow-2xl ring-1 ring-black/5 shrink-0">
+                  <img src={thumbnailImage} alt="Restaurant thumbnail" className="w-full h-full rounded-[1.6rem] object-cover" />
                 </div>
-                <span className="text-gray-800 text-sm font-normal">{restaurantData?.totalRatings || 0} DELIVERY REVIEWS</span>
-                <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 ml-auto" />
-              </button>
+              </div>
+
+              {/* Restaurant Name & Rating - Below the overlap area for visibility */}
+              <div className="pb-1">
+                <h2 className="text-2xl font-black text-gray-900 leading-tight">
+                  {loading ? "Loading..." : (restaurantName || "My Restaurant")}
+                </h2>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="bg-green-600 px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 shadow-sm">
+                    <span className="text-white text-xs font-black">{restaurantData?.rating?.toFixed(1) || "0.0"}</span>
+                    <Star className="w-3 h-3 text-white fill-white" />
+                  </div>
+                  <span className="text-gray-400 text-xs font-bold uppercase tracking-widest">{restaurantData?.totalRatings || 0} Reviews</span>
+                </div>
+                
+                <button
+                  onClick={() => navigate("/food/restaurant/edit-owner", { state: { from: location.pathname, activeTab: "restaurant" } })}
+                  className="mt-4 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-[#B80B3D]/20 active:scale-95 transition-all w-fit"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit Outlet Info
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="px-4 py-4"><h2 className="text-base font-bold text-gray-900 text-center">Restaurant Information</h2></div>
+        {/* Info Content Section */}
+        <div className="px-5 pt-8 pb-12 space-y-6">
+          <div className="space-y-4">
 
-        <div className="px-4 pb-6 space-y-3">
-          <div className="bg-blue-100/50 rounded-lg p-4 border border-blue-300">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 font-normal mb-1">Restaurant's name</p>
-                <p className="text-base font-semibold text-gray-900">{loading ? "Loading..." : (restaurantName || "N/A")}</p>
+
+            {/* Restaurant Name Card */}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-gradient-to-br from-blue-50/40 to-blue-50/80 rounded-[1.5rem] p-5 border border-blue-100/50 shadow-sm relative"
+            >
+              <p className="text-[10px] text-[#B80B3D] font-black uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-full"></span>
+                Restaurant Name
+              </p>
+              <p className="text-lg font-black text-gray-900 group-hover:text-[#B80B3D] transition-colors">
+                {loading ? "Loading..." : (restaurantName || "N/A")}
+              </p>
+            </motion.div>
+
+
+
+            {/* Address Card */}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-[1.5rem] p-5 border border-gray-200/50 shadow-sm relative"
+            >
+              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                Location Address
+              </p>
+              <div className="flex items-start gap-3">
+                <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100 shrink-0">
+                  <MapPin className="w-5 h-5 text-[#B80B3D]" />
+                </div>
+                <p className="text-[15px] font-bold text-gray-700 leading-snug">
+                  {loading ? "Loading..." : (address || "No address found")}
+                </p>
               </div>
-              <button onClick={handleOpenEditDialog} className="text-blue-600 text-sm font-normal">Edit</button>
-            </div>
+            </motion.div>
           </div>
-          {/* ... other info cards ... */}
+
+
         </div>
       </div>
 
+      {/* Helper Component for Buttons */}
       <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-xl w-[90%]">
-          <DialogHeader className="p-4 border-b border-gray-100"><DialogTitle className="text-lg font-bold">Edit restaurant name</DialogTitle></DialogHeader>
-          <div className="p-4"><Input value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} placeholder="Enter restaurant name" className="w-full" /></div>
-          <DialogFooter className="p-4 bg-gray-50 flex flex-row gap-3">
-            <Button variant="outline" onClick={() => setShowEditNameDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveName} disabled={!editNameValue.trim()} className="bg-blue-600 text-white">Save</Button>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[2.5rem] w-[92%] border-none shadow-2xl">
+          <DialogHeader className="p-6 bg-gradient-to-br from-white to-gray-50 border-b border-gray-100">
+            <DialogTitle className="text-xl font-black text-gray-900 tracking-tight">Rename Outlet</DialogTitle>
+            <DialogDescription className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Update official restaurant name</DialogDescription>
+          </DialogHeader>
+          <div className="p-6 space-y-4">
+            <div className="relative group">
+              <Input 
+                value={editNameValue} 
+                onChange={(e) => setEditNameValue(e.target.value.replace(/[\/-]/g, ""))} 
+                placeholder="Ex: Hello Parth Food Express" 
+                className="w-full h-14 px-5 rounded-2xl border-2 border-gray-100 focus:border-[#B80B3D] focus:ring-0 transition-all font-bold text-lg bg-gray-50 group-hover:bg-white" 
+              />
+              <Pencil className="absolute right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 group-hover:text-[#B80B3D] transition-colors" />
+            </div>
+            <p className="text-[10px] font-bold text-gray-400 px-1 italic">* This will be visible to all customers on the app.</p>
+          </div>
+          <DialogFooter className="p-6 bg-gray-50/50 flex flex-row gap-3">
+            <Button variant="ghost" onClick={() => setShowEditNameDialog(false)} className="flex-1 h-12 rounded-2xl font-bold text-gray-500">Discard</Button>
+            <Button onClick={handleSaveName} disabled={!editNameValue.trim()} className="flex-[2] h-12 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-[#6a2f56] rounded-2xl font-bold shadow-lg shadow-[#B80B3D]/20 transition-all active:scale-95 disabled:opacity-50">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
- 
 
       <ImageSourcePicker
         isOpen={!!activePicker}
@@ -495,6 +501,15 @@ export default function OutletInfo() {
         fileNamePrefix={`outlet-${activePicker?.type}`}
         galleryInputRef={activePicker?.ref}
       />
+      
+      <BottomNavOrders activeTabOverride="explore" />
     </>
   )
 }
+
+
+
+
+
+
+

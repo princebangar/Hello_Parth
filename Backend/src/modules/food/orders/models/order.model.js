@@ -8,6 +8,16 @@ const orderItemSchema = new mongoose.Schema(
         variantName: { type: String, trim: true, default: '' },
         variantPrice: { type: Number, min: 0, default: 0 },
         price: { type: Number, required: true, min: 0 },
+        /** Restaurant base at order time. */
+        basePrice: { type: Number, default: null, min: 0 },
+        /** @deprecated Prefer markupAmount; kept for older order docs. */
+        otherPrice: { type: Number, default: 0, min: 0 },
+        /** Admin markup per unit (platform share). */
+        markupAmount: { type: Number, default: 0, min: 0 },
+        appliedPricingType: { type: String, default: null },
+        appliedPricingValue: { type: Number, default: null },
+        pricingScope: { type: String, default: null },
+        pricingRule: { type: mongoose.Schema.Types.Mixed, default: null },
         quantity: { type: Number, required: true, min: 1 },
         isVeg: { type: Boolean, default: true },
         image: { type: String, default: '' },
@@ -38,26 +48,19 @@ const deliveryAddressSchema = new mongoose.Schema(
 const pricingSchema = new mongoose.Schema(
     {
         subtotal: { type: Number, required: true, min: 0 },
+        /** Restaurant-owned item total (before admin markup). */
+        baseSubtotal: { type: Number, default: 0, min: 0 },
+        /** Admin markup total (goes to platform). */
+        markupTotal: { type: Number, default: 0, min: 0 },
         tax: { type: Number, default: 0, min: 0 },
         packagingFee: { type: Number, default: 0, min: 0 },
         deliveryFee: { type: Number, default: 0, min: 0 },
-        deliveryFeeBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
-        adminDeliveryCommissionEnabled: { type: Boolean, default: false },
-        adminDeliveryCommissionPercent: { type: Number, default: 0, min: 0, max: 100 },
-        adminDeliveryCommissionAmount: { type: Number, default: 0, min: 0 },
-        riderDeliveryEarningAfterAdminCommission: { type: Number, default: 0, min: 0 },
-        deliveryPartnerIncentiveEnabled: { type: Boolean, default: false },
-        deliveryPartnerIncentivePercent: { type: Number, default: 0, min: 0, max: 100 },
-        deliveryPartnerIncentiveAmount: { type: Number, default: 0, min: 0 },
-        deliveryPartnerIncentiveEligible: { type: Boolean, default: false },
         platformFee: { type: Number, default: 0, min: 0 },
-        surgeAmount: { type: Number, default: 0, min: 0 },
-        surgeTitle: { type: String, default: 'Surge Charge', trim: true },
         restaurantCommission: { type: Number, default: 0, min: 0 },
         discount: { type: Number, default: 0, min: 0 },
-        deliveryPartnerTip: { type: Number, default: 0, min: 0 },
         total: { type: Number, required: true, min: 0 },
-        currency: { type: String, default: 'INR' }
+        currency: { type: String, default: 'INR' },
+        couponCode: { type: String, default: null, trim: true, uppercase: true }
     },
     { _id: false }
 );
@@ -103,6 +106,11 @@ const paymentSchema = new mongoose.Schema(
                 enum: ['none', 'pending', 'processed', 'failed'], 
                 default: 'none' 
             },
+            destination: {
+                type: String,
+                enum: ['source', 'wallet'],
+                default: 'source'
+            },
             amount: { type: Number, default: 0 },
             refundId: { type: String, default: '' },
             processedAt: { type: Date }
@@ -126,7 +134,9 @@ const dispatchSchema = new mongoose.Schema(
         offeredTo: [{
             partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodDeliveryPartner' },
             at: { type: Date, default: Date.now },
-            action: { type: String, enum: ['offered', 'rejected', 'timeout'], default: 'offered' }
+            action: { type: String, enum: ['offered', 'rejected', 'timeout'], default: 'offered' },
+            allowOverLimit: { type: Boolean, default: false },
+            requiredCashForOrder: { type: Number, default: 0 }
         }],
         dispatchingAt: { type: Date }
     },
@@ -151,10 +161,7 @@ const deliveryStateSchema = new mongoose.Schema(
         reachedPickupAt: { type: Date, default: null },
         reachedDropAt: { type: Date, default: null },
         pickedUpAt: { type: Date, default: null },
-        deliveredAt: { type: Date, default: null },
-        foodPrepStartedAt: { type: Date, default: null },
-        foodReadyAt: { type: Date, default: null },
-        riderWaitDurationMs: { type: Number, default: 0 }
+        deliveredAt: { type: Date, default: null }
     },
     { _id: false }
 );
@@ -213,11 +220,11 @@ const orderSchema = new mongoose.Schema(
             sparse: true,
             index: true
         },
-        shareTrackingId: {
+        orderType: {
             type: String,
-            index: true,
-            unique: true,
-            sparse: true
+            enum: ['delivery', 'dining', 'takeaway'],
+            default: 'delivery',
+            index: true
         },
         userId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -246,7 +253,7 @@ const orderSchema = new mongoose.Schema(
         },
         deliveryAddress: {
             type: deliveryAddressSchema,
-            required: true
+            required: false
         },
         customerName: { type: String, default: '', trim: true },
         customerPhone: { type: String, default: '', trim: true },
@@ -265,7 +272,6 @@ const orderSchema = new mongoose.Schema(
         orderStatus: {
             type: String,
             enum: [
-                'pending_payment',
                 'created',
                 'confirmed',
                 'preparing',
@@ -296,19 +302,13 @@ const orderSchema = new mongoose.Schema(
             type: orderRatingsSchema,
             default: () => ({})
         },
+        restaurantNote: { type: String, default: '', trim: true },
         note: { type: String, default: '', trim: true },
-        cancellationReason: { type: String, default: '', trim: true },
-        cancellationComment: { type: String, default: '', trim: true },
-        cancelledAt: { type: Date, default: null },
-        cancelledBy: { type: String, enum: ['USER', 'RESTAURANT', 'ADMIN', 'SYSTEM', ''], default: '' },
         sendCutlery: { type: Boolean, default: true },
+        preparationTime: { type: Number, default: 0 },
+        acceptedAt: { type: Date },
         deliveryFleet: { type: String, default: 'standard', trim: true },
         scheduledAt: { type: Date, default: null },
-        riderBasePay: { type: Number, default: 0, min: 0 },
-        riderSurgePay: { type: Number, default: 0, min: 0 },
-        riderDeliveryFeeShare: { type: Number, default: 0, min: 0 },
-        riderIncentivePay: { type: Number, default: 0, min: 0 },
-        riderTotalPayout: { type: Number, default: 0, min: 0 },
         riderEarning: { type: Number, default: 0, min: 0 },
         platformProfit: { type: Number, default: 0, min: 0 },
         /** Plain 4-digit OTP for handover; cleared after successful verify (never expose to partner in API responses). */
@@ -332,6 +332,8 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ 'deliveryAddress.location': '2dsphere' });
 orderSchema.index({ lastRiderLocation: '2dsphere' });
 orderSchema.index({ userId: 1, createdAt: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ createdAt: -1 });
 orderSchema.index({ restaurantId: 1, orderStatus: 1, createdAt: -1 });
 orderSchema.index({ 'dispatch.deliveryPartnerId': 1, orderStatus: 1 });
 orderSchema.index({ 'dispatch.status': 1, orderStatus: 1 });
@@ -349,6 +351,18 @@ orderSchema.pre('save', async function (next) {
     // Synchronize camelCase alias to satisfy unique index 'orderId_1'
     if (this.order_id) {
         this.orderId = this.order_id;
+    }
+    // Auto-generate takeaway OTP for active states if missing
+    if (this.orderType === 'takeaway' && ['preparing', 'ready_for_pickup'].includes(this.orderStatus)) {
+        if (!this.deliveryOtp) {
+            this.deliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
+        }
+        if (!this.deliveryVerification || !this.deliveryVerification.dropOtp || !this.deliveryVerification.dropOtp.required) {
+            this.deliveryVerification = {
+                ...(this.deliveryVerification?.toObject?.() || this.deliveryVerification || {}),
+                dropOtp: { required: true, verified: false }
+            };
+        }
     }
     next();
 });

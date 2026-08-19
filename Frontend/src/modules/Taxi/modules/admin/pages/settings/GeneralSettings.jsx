@@ -184,7 +184,7 @@ const setLiveFavicon = (faviconUrl = '') => {
     liveFaviconObjectUrl = '';
   }
 
-  let resolvedHref = 'data:,';
+  let resolvedHref = '/assets/images/Hello Parth Logo.png';
 
   if (faviconUrl) {
     const [meta, content] = String(faviconUrl).split(',');
@@ -209,15 +209,9 @@ const setLiveFavicon = (faviconUrl = '') => {
       document.head.appendChild(link);
     }
 
-    if (faviconUrl) {
-      link.href = resolvedHref;
-      link.type = 'image/png';
-      link.sizes = '64x64';
-    } else {
-      link.href = 'data:,';
-      link.removeAttribute('type');
-      link.removeAttribute('sizes');
-    }
+    link.href = resolvedHref;
+    link.type = 'image/png';
+    link.sizes = '64x64';
   });
 };
 

@@ -1,4 +1,4 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 
 const featureSchema = new mongoose.Schema(
     {
@@ -15,14 +15,17 @@ const featureSchema = new mongoose.Schema(
 const legalPageSchema = new mongoose.Schema(
     {
         title: { type: String, default: '' },
-        content: { type: String, default: '' } // stored as HTML string
+        content: { type: String, default: '' }, // stored as HTML string
+        email: { type: String, default: '' },
+        mobile: { type: String, default: '' },
+        faq: { type: String, default: '' }
     },
     { _id: false }
 );
 
 const aboutPageSchema = new mongoose.Schema(
     {
-        appName: { type: String, default: 'Hello Parth' },
+        appName: { type: String, default: 'Hello Parth Food' },
         version: { type: String, default: '1.0.0' },
         description: { type: String, default: '' },
         logo: { type: String, default: '' },
@@ -39,7 +42,12 @@ const pageContentSchema = new mongoose.Schema(
             required: true,
             unique: true,
             index: true,
-            enum: ['terms', 'privacy', 'refund', 'shipping', 'cancellation', 'about']
+            enum: [
+                'terms', 'terms_user', 'terms_restaurant', 'terms_delivery',
+                'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery',
+                'refund', 'shipping', 'cancellation', 'about',
+                'support_user', 'support_restaurant', 'support_delivery'
+            ]
         },
         legal: { type: legalPageSchema, default: undefined },
         about: { type: aboutPageSchema, default: undefined },
@@ -50,5 +58,4 @@ const pageContentSchema = new mongoose.Schema(
 );
 
 export const FoodPageContent = mongoose.model('FoodPageContent', pageContentSchema);
-
 

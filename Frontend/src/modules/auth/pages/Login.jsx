@@ -4,8 +4,8 @@ import { Link, useNavigate, useLocation } from "react-router-dom"
 import { ShieldCheck, Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
 import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
-import { setUnifiedAuthData, isUnifiedAuthenticated } from "@food/utils/auth"
-import { resolveLoginBackRoute, rememberLoginReturnTo } from "@/shared/utils/activeModule.js"
+import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/moduleAuth"
+import { resolveLoginBackRoute, rememberLoginReturnTo, peekLoginReturnTo, ensureFoodGuestSession } from "@/shared/utils/activeModule.js"
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
@@ -44,6 +44,15 @@ export default function UnifiedOTPFastLogin() {
       }
     }
   }, [location.state?.from, navigate])
+
+  const handleSkipForNow = () => {
+    ensureFoodGuestSession()
+    const from = location.state?.from || peekLoginReturnTo()
+    const target = String(from || "").startsWith("/food/")
+      ? "/food/user"
+      : resolveLoginBackRoute(from)
+    navigate(target, { replace: true })
+  }
 
   const handleBack = (e) => {
     if (e) {
@@ -719,6 +728,17 @@ export default function UnifiedOTPFastLogin() {
                       </>
                     )}
                   </button>
+
+                  {step === 1 && !loading && (
+                    <button
+                      type="button"
+                      onClick={handleSkipForNow}
+                      className="mt-4 flex items-center justify-center gap-1.5 px-8 py-2.5 rounded-full border border-gray-300 bg-white text-slate-800 text-[14px] font-semibold hover:bg-gray-50 transition-all active:scale-[0.98]"
+                    >
+                      Skip for now
+                      <ArrowRight className="w-4 h-4 text-[#F38F24]" />
+                    </button>
+                  )}
 
                   <div className="mt-6 mb-2 flex flex-col items-center justify-center gap-3">
                     <div className="flex items-center gap-2 text-[12px] font-medium text-gray-700">

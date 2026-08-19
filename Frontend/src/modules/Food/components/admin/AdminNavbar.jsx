@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Menu,
@@ -40,7 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@food/components/ui/popover";
-import quickSpicyLogo from "@food/assets/hello-parth-logo.png";
+import quickSpicyLogo from "@food/assets/quicky-spicy-logo.png";
 import { adminAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings";
@@ -61,7 +61,11 @@ export default function AdminNavbar({ onMenuClick }) {
   const [adminData, setAdminData] = useState(null);
   const [businessSettings, setBusinessSettings] = useState(() => getCachedSettings() || null);
   const searchInputRef = useRef(null);
-  const { items: adminNotifications } = useAdminNotifications();
+  const {
+    items: adminNotifications,
+    unreadCount: notificationCount,
+    markAsRead,
+  } = useAdminNotifications();
 
   // Load business settings
   useEffect(() => {
@@ -259,10 +263,14 @@ export default function AdminNavbar({ onMenuClick }) {
     }
   };
 
-  const notificationCount = adminNotifications.length;
   const openNotificationsPage = () => {
     setNotificationsOpen(false);
     navigate("/admin/food/notifications");
+  };
+  const handleNotificationClick = (item) => {
+    if (item?.id) markAsRead(item.id);
+    setNotificationsOpen(false);
+    if (item?.path) navigate(item.path);
   };
 
   return (
@@ -325,28 +333,32 @@ export default function AdminNavbar({ onMenuClick }) {
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="relative h-11 w-11 rounded-full border border-neutral-200 bg-neutral-50 text-neutral-700 flex items-center justify-center hover:bg-neutral-100 transition-colors"
-                  aria-label="Notifications"
+                  className="relative h-11 w-11 rounded-full border border-neutral-200 bg-neutral-50 text-neutral-700 flex items-center justify-center hover:bg-neutral-100 transition-colors overflow-visible"
+                  aria-label={notificationCount > 0 ? `Notifications (${notificationCount} unread)` : "Notifications"}
                 >
-                  <Bell className="w-5 h-5" />
+                  <Bell className="w-5 h-5 shrink-0" strokeWidth={2} />
                   {notificationCount > 0 && (
-                    <span className="absolute top-2 right-2 min-w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-                      {notificationCount > 9 ? "9+" : notificationCount}
+                    <span className="absolute -top-1 -right-1 z-10 min-w-[18px] h-[18px] rounded-full bg-amber-500 text-white text-[10px] font-bold leading-none flex items-center justify-center px-1 border-2 border-white shadow-sm pointer-events-none">
+                      {notificationCount > 99 ? "99+" : notificationCount > 9 ? "9+" : notificationCount}
                     </span>
                   )}
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-96 p-0 mt-2 border border-neutral-200 shadow-2xl rounded-2xl overflow-hidden" align="end">
                 <div className="bg-white">
-                  <div className="px-4 py-3 border-b border-neutral-200 flex items-center justify-between">
-                    <div>
+                  <div className="px-4 py-3 border-b border-neutral-200 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-neutral-900">Notifications</p>
-                      <p className="text-xs text-neutral-500">Approval and support alerts</p>
+                      <p className="text-xs text-neutral-500">
+                        {notificationCount > 0
+                          ? `${notificationCount} unread alert${notificationCount === 1 ? "" : "s"}`
+                          : "Approval and support alerts"}
+                      </p>
                     </div>
                     <button
                       type="button"
                       onClick={openNotificationsPage}
-                      className="text-xs font-semibold text-amber-600 hover:text-amber-700"
+                      className="text-xs font-semibold text-amber-600 hover:text-amber-700 shrink-0"
                     >
                       View all
                     </button>
@@ -363,15 +375,28 @@ export default function AdminNavbar({ onMenuClick }) {
                         <button
                           key={item?.id}
                           type="button"
-                          onClick={openNotificationsPage}
-                          className="w-full text-left px-4 py-4 border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 transition-colors"
+                          onClick={() => handleNotificationClick(item)}
+                          className={`w-full text-left px-4 py-4 border-b border-neutral-100 last:border-b-0 transition-colors ${
+                            item.read
+                              ? "hover:bg-neutral-50"
+                              : "bg-amber-50/60 hover:bg-amber-50"
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-neutral-900 truncate">
-                                {item?.title || "Notification"}
-                              </p>
-                              <p className="text-xs text-neutral-600 mt-1 line-clamp-2">
+                              <div className="flex items-center gap-2">
+                                {!item.read && (
+                                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                                )}
+                                <p
+                                  className={`text-sm font-semibold truncate ${
+                                    item.read ? "text-neutral-600" : "text-neutral-900"
+                                  }`}
+                                >
+                                  {item?.title || "Notification"}
+                                </p>
+                              </div>
+                              <p className={`text-xs mt-1 line-clamp-2 ${item.read ? "text-neutral-500" : "text-neutral-600"}`}>
                                 {item?.message || "-"}
                               </p>
                               <p className="text-[11px] text-neutral-400 mt-2">
@@ -464,26 +489,26 @@ export default function AdminNavbar({ onMenuClick }) {
                 </div>
                 <DropdownMenuGroup>
                   <DropdownMenuItem
-                    className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100"
+                    className="group cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100 text-neutral-700 hover:text-neutral-900 focus:text-neutral-900"
                     onClick={() => navigate("/admin/food/profile")}
                   >
-                    <User className="mr-2 w-4 h-4" />
+                    <User className="mr-2 w-4 h-4 text-neutral-500 group-hover:text-neutral-700 group-focus:text-neutral-700" />
                     <span>Profile</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100"
+                    className="group cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100 text-neutral-700 hover:text-neutral-900 focus:text-neutral-900"
                     onClick={() => navigate("/admin/food/settings")}
                   >
-                    <Settings className="mr-2 w-4 h-4" />
+                    <Settings className="mr-2 w-4 h-4 text-neutral-500 group-hover:text-neutral-700 group-focus:text-neutral-700" />
                     <span>Settings</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="cursor-pointer text-red-600 hover:bg-red-50 focus:bg-red-50"
+                  className="group cursor-pointer text-red-600 hover:bg-red-50 focus:bg-red-50 hover:text-red-700 focus:text-red-700"
                   onClick={handleLogout}
                 >
-                  <LogOut className="mr-2 w-4 h-4" />
+                  <LogOut className="mr-2 w-4 h-4 text-red-500 group-hover:text-red-600 group-focus:text-red-600" />
                   <span>Logout</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -622,5 +647,4 @@ export default function AdminNavbar({ onMenuClick }) {
     </>
   );
 }
-
 

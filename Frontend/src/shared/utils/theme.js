@@ -1,6 +1,6 @@
 export const FOOD_USER_THEME_KEY = "foodUserTheme";
 export const APP_THEME_KEY = "appTheme";
-export const THEME_CHANGE_EVENT = "eqosy:theme-change";
+export const THEME_CHANGE_EVENT = "helloparth:theme-change";
 
 const THEME_CSS_VARS = [
   "--background",

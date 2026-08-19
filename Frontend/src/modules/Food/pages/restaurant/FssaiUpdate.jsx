@@ -25,11 +25,7 @@ export default function FssaiUpdate() {
   }
 
   const handleFileClick = () => {
-    if (isFlutterBridgeAvailable()) {
-      setIsPhotoPickerOpen(true)
-    } else {
-      fileInputRef.current?.click()
-    }
+    setIsPhotoPickerOpen(true)
   }
 
   const handleSubmit = (e) => {
@@ -125,7 +121,7 @@ export default function FssaiUpdate() {
           form="fssai-form"
           className={`w-full py-3 rounded-full text-sm font-medium transition-colors ${
             uploadedFile 
-              ? "bg-black text-white hover:bg-gray-900" 
+              ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gradient-to-br from-[#B80B3D] to-[#66001D]" 
               : "bg-gray-200 text-gray-500 cursor-not-allowed"
           }`}
           disabled={!uploadedFile}
@@ -146,3 +142,11 @@ export default function FssaiUpdate() {
     </div>
   )
 }
+
+
+
+
+
+
+
+

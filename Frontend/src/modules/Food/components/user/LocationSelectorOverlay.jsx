@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react"
+import { useNavigate } from "react-router-dom"
 import { ChevronLeft, ChevronRight, Plus, MapPin, MoreHorizontal, Navigation, Home, Building2, Briefcase, Phone, X, Crosshair } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
@@ -48,7 +49,8 @@ const getAddressIcon = (address) => {
 
 export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const { location, loading, requestLocation } = useGeoLocation()
-  const { addresses = [], addAddress, updateAddress, setDefaultAddress, userProfile } = useProfile()
+  const navigate = useNavigate()
+  const { addresses = [], addAddress, updateAddress, setDefaultAddress, userProfile, isAuthenticated } = useProfile()
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [mapPosition, setMapPosition] = useState([22.7196, 75.8577]) // Default Indore coordinates [lat, lng]
   const [addressFormData, setAddressFormData] = useState({
@@ -437,7 +439,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     location?.accuracy || null,
   ])
 
-  // Initialize Google Maps with Loader (HELLO PARTH-STYLE)
+  // Initialize Google Maps with Loader (ZOMATO-STYLE)
   useEffect(() => {
     if (!MAPS_ENABLED) {
       // Maps disabled: ensure loading spinner is off and rely on coordinates-only UX
@@ -472,7 +474,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         const map = new google.maps.Map(mapContainerRef.current, {
           center: initialLocation,
           zoom: 15,
-          disableDefaultUI: true, // Hello Parth-style clean look
+          disableDefaultUI: true, // Zomato-style clean look
           zoomControl: true,
           mapTypeControl: false,
           streetViewControl: false,
@@ -743,10 +745,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         return
       }
 
-      // Show loading toast
+      // Location Fetching is now handled by the global loader in UserLayout
+      /*
       toast.loading("Fetching your current location...", {
         id: "location-request",
       })
+      */
 
       // Request location - this will automatically prompt for permission if needed
       // Clear any cached location first to ensure fresh coordinates
@@ -754,10 +758,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       // Increase timeout to 15 seconds to allow GPS to get accurate fix
       // The getLocation function already has a 15-second timeout, so we match it
-      // Let requestLocation handle its own timeouts
+      const locationPromise = requestLocation()
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Location request is taking longer than expected. Please check your GPS settings.")), 15000)
+      )
+
       let locationData
       try {
-        locationData = await requestLocation()
+        locationData = await Promise.race([locationPromise, timeoutPromise])
 
         // Check if we got valid location data
         if (!locationData || (!locationData.latitude || !locationData.longitude)) {
@@ -984,6 +992,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   }
 
   const handleAddAddress = () => {
+    if (!isAuthenticated) {
+      toast.info("Please login to add an address", {
+        description: "You'll be redirected to the login page",
+        duration: 3000,
+      })
+      onClose()
+      navigate("/login")
+      return
+    }
     setShowAddressForm(true)
     // Initialize form with current location data
     if (location?.latitude && location?.longitude) {
@@ -1666,9 +1683,16 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             area = pointOfInterest || premise || street || ""
           }
 
-          if (formattedAddress && formattedAddress.endsWith(", India")) {
-            formattedAddress = formattedAddress.replace(", India", "").trim()
+          if (formattedAddress) {
+            formattedAddress = formattedAddress.replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, "").trim()
+            if (formattedAddress.endsWith(", India")) {
+              formattedAddress = formattedAddress.replace(", India", "").trim()
+            }
           }
+          if (street) street = street.replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, "").trim()
+          if (area) area = area.replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, "").trim()
+          if (pointOfInterest) pointOfInterest = pointOfInterest.replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, "").trim()
+          if (premise) premise = premise.replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, "").trim()
 
           setCurrentAddress(formattedAddress || coordLabel)
 
@@ -1711,12 +1735,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       toast.loading("Getting your fresh location...", { id: "current-location" })
 
       // Use Promise.race to keep UI responsive, but don't fail too aggressively:
-      // Allow requestLocation to handle its own timeouts (it has a 15s GPS + 5s fallback cycle)
+      // geolocation + reverse geocode can legitimately take a few seconds on slow networks/devices.
+      const locationPromise = requestLocation(true, true) // forceFresh = true, updateDB = true
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Location timeout")), 10000)
+      )
+
       let locationData
       try {
-        locationData = await requestLocation(true, true) // forceFresh = true, updateDB = true
+        locationData = await Promise.race([locationPromise, timeoutPromise])
       } catch (raceError) {
-        // If timeout or error, try to use cached location immediately
+        // If timeout, try to use cached location immediately (and don't show an error if we can proceed).
         const stored = localStorage.getItem("userLocation")
         if (stored) {
           try {
@@ -1985,6 +2014,25 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         } catch {}
       }
 
+      // Update active location in localStorage to this newly saved address
+      try {
+        const locationData = {
+          label: addressToSave.label || "Home",
+          city: addressToSave.city,
+          state: addressToSave.state,
+          address: `${addressToSave.street}, ${addressToSave.city}`,
+          area: addressToSave.additionalDetails || "",
+          zipCode: addressToSave.zipCode,
+          latitude: addressToSave.latitude,
+          longitude: addressToSave.longitude,
+          formattedAddress: `${addressToSave.street}, ${addressToSave.city}, ${addressToSave.state}`
+        }
+        localStorage.setItem("userLocation", JSON.stringify(locationData))
+        window.dispatchEvent(new CustomEvent("userLocationUpdated"))
+      } catch (locationErr) {
+        debugError("Failed to update userLocation after save:", locationErr)
+      }
+
       // Reset form
       setAddressFormData({
         street: "",
@@ -2074,6 +2122,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         formattedAddress: `${address.street}, ${address.city}, ${address.state}`
       }
       localStorage.setItem("userLocation", JSON.stringify(locationData))
+      try {
+        window.dispatchEvent(new CustomEvent("userLocationUpdated"))
+      } catch (evtErr) {
+        debugWarn("Failed to dispatch custom event:", evtErr)
+      }
 
       // Update map position to show selected address
       setMapPosition([latitude, longitude])
@@ -2515,7 +2568,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 <div className="text-left">
                   <p className="font-semibold text-green-700 dark:text-green-400">Use current location</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {loading ? "Getting location..." : currentLocationText}
+                    {loading ? "Getting location..." : (currentLocationText ? currentLocationText.replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, '') : "")}
                   </p>
                 </div>
               </div>
@@ -2586,7 +2639,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                                   address.city,
                                   address.state,
                                   address.zipCode
-                                ].filter(Boolean).join(", ")}
+                                ].filter(Boolean).join(", ").replace(/^[a-z0-9]{2,8}\+[a-z0-9]{0,3}[,\s]*/i, '')}
                               </p>
                               <p className="text-sm text-gray-500 dark:text-gray-400">
                                 Phone number: {address.phone || userProfile?.phone || "Not provided"}

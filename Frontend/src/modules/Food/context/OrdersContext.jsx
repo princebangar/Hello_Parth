@@ -43,32 +43,13 @@ export function OrdersProvider({ children }) {
   }
 
   const getOrderById = useCallback((orderId) => {
-    if (!orderId) return null;
-    const needle = String(orderId).trim().toLowerCase();
-    return orders.find(order => {
-      const candidates = [order?.id, order?._id, order?.mongoId, order?.orderId].filter(Boolean).map(s => String(s).trim().toLowerCase());
-      return candidates.includes(needle);
-    });
+    return orders.find(order => 
+      order.id === orderId || 
+      order._id === orderId || 
+      order.mongoId === orderId || 
+      order.orderId === orderId
+    )
   }, [orders])
-
-  const addOrder = useCallback((order) => {
-    if (!order) return;
-    setOrders((prevOrders) => {
-      const needle = String(order._id || order.mongoId || order.orderId || order.id || "").trim().toLowerCase();
-      if (!needle) return [order, ...prevOrders];
-      const exists = prevOrders.some(o => {
-        const candidates = [o?.id, o?._id, o?.mongoId, o?.orderId].filter(Boolean).map(s => String(s).trim().toLowerCase());
-        return candidates.includes(needle);
-      });
-      if (exists) {
-        return prevOrders.map(o => {
-          const candidates = [o?.id, o?._id, o?.mongoId, o?.orderId].filter(Boolean).map(s => String(s).trim().toLowerCase());
-          return candidates.includes(needle) ? { ...o, ...order } : o;
-        });
-      }
-      return [order, ...prevOrders];
-    });
-  }, []);
 
   const getAllOrders = useCallback(() => {
     return [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -76,9 +57,7 @@ export function OrdersProvider({ children }) {
 
   const updateOrderStatus = useCallback((orderId, status) => {
     setOrders((prevOrders) => prevOrders.map(order => {
-      const needle = String(orderId).trim().toLowerCase();
-      const candidates = [order?.id, order?._id, order?.mongoId, order?.orderId].filter(Boolean).map(s => String(s).trim().toLowerCase());
-      if (candidates.includes(needle)) {
+      if (order.id === orderId) {
         const updatedTracking = { ...order.tracking }
         if (status === "preparing") {
           updatedTracking.preparing = { status: true, timestamp: new Date().toISOString() }
@@ -100,11 +79,10 @@ export function OrdersProvider({ children }) {
   const value = useMemo(() => ({
     orders,
     createOrder,
-    addOrder,
     getOrderById,
     getAllOrders,
     updateOrderStatus
-  }), [orders, addOrder, getOrderById, getAllOrders, updateOrderStatus])
+  }), [orders])
 
   return <OrdersContext.Provider value={value}>{children}</OrdersContext.Provider>
 }

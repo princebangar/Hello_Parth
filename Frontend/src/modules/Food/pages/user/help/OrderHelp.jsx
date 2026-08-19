@@ -1,4 +1,4 @@
-﻿import { useParams, Link, useNavigate } from "react-router-dom"
+import { useParams, Link, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
   Package,
@@ -143,13 +143,13 @@ export default function OrderHelp() {
   const getStatusColor = (status) => {
     switch (status) {
       case "confirmed":
-        return "bg-[#EB590E]"
+        return "bg-[#DC2626]"
       case "preparing":
-        return "bg-primary-orange"
+        return "bg-[#DC2626]"
       case "outForDelivery":
-        return "bg-orange-500"
+        return "bg-[#DC2626]"
       case "delivered":
-        return "bg-[#EB590E]"
+        return "bg-[#DC2626]"
       default:
         return "bg-gray-500"
     }
@@ -157,6 +157,8 @@ export default function OrderHelp() {
 
   const getStatusLabel = (status) => {
     switch (status) {
+      case "placed":
+        return "Order Placed"
       case "confirmed":
         return "Confirmed"
       case "preparing":
@@ -240,7 +242,7 @@ export default function OrderHelp() {
             <CardHeader className="p-4 md:p-5 lg:p-6">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg md:text-xl lg:text-2xl">
-                  <Package className="h-4 w-4 md:h-5 md:w-5 text-primary-orange" />
+                  <Package className="h-4 w-4 md:h-5 md:w-5 text-[#DC2626]" />
                   Order Summary
                 </CardTitle>
                 <Badge className={`${getStatusColor(order.status)} text-white text-xs md:text-sm`}>
@@ -260,7 +262,7 @@ export default function OrderHelp() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
-                  <p className="font-semibold text-primary-orange text-xl">${order.total.toFixed(2)}</p>
+                  <p className="font-semibold text-[#DC2626] text-xl">${order.total.toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Items</p>
@@ -301,7 +303,7 @@ export default function OrderHelp() {
                     <CardHeader className="p-4 md:p-5 lg:p-6">
                       <div className="flex items-start gap-3 md:gap-4">
                         <div className="p-2 md:p-3 bg-yellow-100 rounded-lg">
-                          <Icon className="h-4 w-4 md:h-5 md:w-5 text-primary-orange" />
+                          <Icon className="h-4 w-4 md:h-5 md:w-5 text-[#DC2626]" />
                         </div>
                         <div className="flex-1">
                           <CardTitle className="text-base md:text-lg lg:text-xl">{issue.title}</CardTitle>
@@ -327,7 +329,7 @@ export default function OrderHelp() {
                             key={idx}
                             variant={idx === 0 ? "default" : "outline"}
                             size="sm"
-                            className={idx === 0 ? "bg-primary-orange hover:opacity-90" : ""}
+                            className={idx === 0 ? "bg-[#DC2626] hover:opacity-90" : ""}
                             onClick={() => handleAction(action.path)}
                           >
                             {action.label}
@@ -347,7 +349,7 @@ export default function OrderHelp() {
           <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200 shadow-lg">
             <CardHeader className="p-4 md:p-5 lg:p-6">
               <CardTitle className="flex items-center gap-2 text-lg md:text-xl lg:text-2xl">
-                <HelpCircle className="h-4 w-4 md:h-5 md:w-5 text-primary-orange" />
+                <HelpCircle className="h-4 w-4 md:h-5 md:w-5 text-[#DC2626]" />
                 Quick Actions
               </CardTitle>
             </CardHeader>
@@ -398,7 +400,7 @@ export default function OrderHelp() {
           <Card id="contact-support" className="shadow-lg">
             <CardHeader className="p-4 md:p-5 lg:p-6">
               <CardTitle className="text-xl md:text-2xl lg:text-3xl flex items-center gap-2">
-                <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-primary-orange" />
+                <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-[#DC2626]" />
                 Contact Support for This Order
               </CardTitle>
               <CardDescription className="text-sm md:text-base">
@@ -409,7 +411,7 @@ export default function OrderHelp() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 lg:gap-6">
                 <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
                   <div className="p-2 bg-orange-100 rounded-lg">
-                    <Phone className="h-5 w-5 text-[#EB590E]" />
+                    <Phone className="h-5 w-5 text-[#DC2626]" />
                   </div>
                   <div>
                     <h3 className="font-semibold mb-1">Phone Support</h3>
@@ -426,7 +428,7 @@ export default function OrderHelp() {
                 </div>
                 <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
                   <div className="p-2 bg-orange-100 rounded-lg">
-                    <Mail className="h-5 w-5 text-[#EB590E]" />
+                    <Mail className="h-5 w-5 text-[#DC2626]" />
                   </div>
                   <div>
                     <h3 className="font-semibold mb-1">Email Support</h3>
@@ -444,7 +446,7 @@ export default function OrderHelp() {
               </div>
               <div className="pt-4 border-t">
                 <Button
-                  className="w-full bg-primary-orange hover:opacity-90"
+                  className="w-full bg-[#DC2626] hover:opacity-90"
                   onClick={() => alert("Live chat would open here with order context")}
                 >
                   <MessageCircle className="h-4 w-4 mr-2" />
@@ -476,4 +478,3 @@ export default function OrderHelp() {
     </AnimatedPage>
   )
 }
-

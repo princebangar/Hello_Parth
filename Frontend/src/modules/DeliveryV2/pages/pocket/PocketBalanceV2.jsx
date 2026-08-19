@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { deliveryAPI } from '@food/api';
 import { toast } from 'sonner';
+import { showUserFacingApiError } from '@/shared/utils/apiError';
 import { formatCurrency } from '@food/utils/currency';
 import useDeliveryBackNavigation from '../../hooks/useDeliveryBackNavigation';
 
@@ -30,21 +31,28 @@ export const PocketBalanceV2 = () => {
      withdrawableAmount: 0,
      canWithdraw: false
   });
+  const [withdrawalStatus, setWithdrawalStatus] = useState({
+     status: 'No request',
+     updatedAt: null
+  });
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [profileRes, earningsRes, walletRes] = await Promise.all([
+            const [profileRes, earningsRes, walletRes, withdrawalRes] = await Promise.all([
           deliveryAPI.getProfile(),
           deliveryAPI.getEarnings({ period: 'week' }),
-          deliveryAPI.getWallet()
+               deliveryAPI.getWallet(),
+               deliveryAPI.getWalletTransactions({ type: 'withdrawal', limit: 1 })
         ]);
         
         const profile = profileRes?.data?.data?.profile || {};
         const summary = earningsRes?.data?.data?.summary || {};
         const wallet = walletRes?.data?.data?.wallet || {};
+      const withdrawalTx = withdrawalRes?.data?.data?.transactions?.[0] || null;
         
         // Use wallet data from backend instead of non-existent profile.walletBalance
         const pocketBalance = Number(wallet.pocketBalance) || 0;
@@ -62,6 +70,28 @@ export const PocketBalanceV2 = () => {
            withdrawableAmount,
            canWithdraw: withdrawableAmount >= withdrawalLimit
         });
+
+            if (withdrawalTx) {
+               const rawStatus = String(withdrawalTx.status || 'Pending').toLowerCase();
+               const statusLabel = rawStatus === 'approved' || rawStatus === 'completed'
+                  ? 'Approved'
+                  : rawStatus === 'rejected' || rawStatus === 'denied'
+                     ? 'Rejected'
+                     : 'Pending';
+               const updatedAt = withdrawalTx.processedAt || withdrawalTx.updatedAt || withdrawalTx.createdAt || null;
+               setWithdrawalStatus({
+                  status: statusLabel,
+                  updatedAt: updatedAt ? new Date(updatedAt).toLocaleString('en-IN', {
+                     day: '2-digit',
+                     month: 'short',
+                     year: 'numeric',
+                     hour: '2-digit',
+                     minute: '2-digit'
+                  }) : null
+               });
+            } else {
+               setWithdrawalStatus({ status: 'No request', updatedAt: null });
+            }
       } catch (err) {
         toast.error('Failed to load pocket details');
       } finally {
@@ -71,7 +101,39 @@ export const PocketBalanceV2 = () => {
     fetchData();
   }, []);
 
+  const parsedWithdrawAmount = parseFloat(withdrawAmount);
+  const hasPendingWithdrawal = String(withdrawalStatus.status || '').toLowerCase() === 'pending';
+  const isValidWithdrawAmount =
+    Number.isFinite(parsedWithdrawAmount) &&
+    parsedWithdrawAmount >= walletState.withdrawalLimit &&
+    parsedWithdrawAmount <= walletState.withdrawableAmount;
+
+  const handleWithdrawAmountChange = (e) => {
+    let val = String(e.target.value || '').replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) val = `${parts[0]}.${parts.slice(1).join('')}`;
+    if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+      val = val.replace(/^0+/, '');
+    }
+    setWithdrawAmount(val);
+  };
+
   const handleWithdraw = async () => {
+     if (hasPendingWithdrawal) {
+        toast.error('You already have a pending withdrawal request');
+        return;
+     }
+     if (!isValidWithdrawAmount) {
+        if (!Number.isFinite(parsedWithdrawAmount) || parsedWithdrawAmount <= 0) {
+          toast.error('Please enter the amount you want to withdraw');
+        } else if (parsedWithdrawAmount < walletState.withdrawalLimit) {
+          toast.error(`Minimum withdrawal amount is ₹${walletState.withdrawalLimit}`);
+        } else {
+          toast.error('Amount cannot exceed withdrawable balance');
+        }
+        return;
+     }
+
      // Simplified verification
      const profileRes = await deliveryAPI.getProfile();
      const profile = profileRes?.data?.data?.profile || {};
@@ -86,15 +148,16 @@ export const PocketBalanceV2 = () => {
      setWithdrawSubmitting(true);
      try {
         const res = await deliveryAPI.createWithdrawalRequest({
-           amount: walletState.withdrawableAmount,
+           amount: parsedWithdrawAmount,
            paymentMethod: 'bank_transfer'
         });
         if (res?.data?.success) {
            toast.success("Withdrawal request submitted");
+           setWithdrawAmount('');
            goBack();
         }
      } catch (err) {
-        toast.error("Withdrawal failed");
+        showUserFacingApiError(err, 'Withdrawal failed');
      } finally {
         setWithdrawSubmitting(false);
      }
@@ -143,13 +206,46 @@ export const PocketBalanceV2 = () => {
              {/* Top Withdraw Section */}
              <div className="bg-white p-8 mb-4 text-center border-b border-gray-100 shadow-sm">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Withdrawable Amount</p>
-                <h2 className="text-5xl font-black text-black mb-6 tracking-tighter">₹{walletState.withdrawableAmount.toFixed(0)}</h2>
+                <h2 className="text-5xl font-black text-black mb-4 tracking-tighter">₹{walletState.withdrawableAmount.toFixed(0)}</h2>
+
+                <div className="text-left mb-4">
+                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                      Enter amount to withdraw
+                   </label>
+                   <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
+                      <input
+                         type="text"
+                         inputMode="decimal"
+                         value={withdrawAmount}
+                         onChange={handleWithdrawAmountChange}
+                         disabled={!walletState.canWithdraw || hasPendingWithdrawal || withdrawSubmitting}
+                         placeholder={`Min ₹${walletState.withdrawalLimit}`}
+                         className="w-full pl-8 pr-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 text-lg font-bold text-black outline-none focus:border-black focus:bg-white disabled:opacity-50"
+                      />
+                   </div>
+                   {withdrawAmount && Number.isFinite(parsedWithdrawAmount) && parsedWithdrawAmount > walletState.withdrawableAmount && (
+                      <p className="text-[11px] text-red-500 font-semibold mt-2">
+                         Amount cannot exceed ₹{walletState.withdrawableAmount.toFixed(0)}
+                      </p>
+                   )}
+                   {withdrawAmount && Number.isFinite(parsedWithdrawAmount) && parsedWithdrawAmount > 0 && parsedWithdrawAmount < walletState.withdrawalLimit && (
+                      <p className="text-[11px] text-red-500 font-semibold mt-2">
+                         Minimum withdrawal is ₹{walletState.withdrawalLimit}
+                      </p>
+                   )}
+                   {hasPendingWithdrawal && (
+                      <p className="text-[11px] text-amber-600 font-semibold mt-2">
+                         A withdrawal request is already pending admin approval.
+                      </p>
+                   )}
+                </div>
                 
                 <button 
                   onClick={handleWithdraw}
-                  disabled={!walletState.canWithdraw || withdrawSubmitting}
+                  disabled={!walletState.canWithdraw || hasPendingWithdrawal || !isValidWithdrawAmount || withdrawSubmitting}
                   className={`w-full py-4 rounded-xl font-bold text-sm shadow-lg transition-all active:scale-[0.98] ${
-                     walletState.canWithdraw 
+                     walletState.canWithdraw && !hasPendingWithdrawal && isValidWithdrawAmount
                      ? 'bg-black text-white' 
                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   } flex items-center justify-center gap-2`}
@@ -171,6 +267,11 @@ export const PocketBalanceV2 = () => {
                 <DetailRow label="Cash collected" value={formatCurrency(walletState.cashCollected)} />
                 <DetailRow label="Deductions" value={formatCurrency(walletState.deductions)} />
                 <DetailRow label="Pocket balance" value={formatCurrency(walletState.pocketBalance)} />
+                <DetailRow
+                   label="Withdrawal status"
+                   value={withdrawalStatus.status}
+                   subLabel={withdrawalStatus.updatedAt ? `Updated: ${withdrawalStatus.updatedAt}` : 'Admin approval status'}
+                />
                 <DetailRow 
                    label="Min. withdrawal amount" 
                    value={formatCurrency(walletState.withdrawalLimit)} 

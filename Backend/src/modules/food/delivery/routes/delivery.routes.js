@@ -3,18 +3,15 @@ import { upload } from '../../../../middleware/upload.js';
 import { authMiddleware } from '../../../../core/auth/auth.middleware.js';
 import { requireRoles } from '../../../../core/roles/role.middleware.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
-import { registerDeliveryPartnerController, updateDeliveryPartnerProfileController, updateDeliveryPartnerBankDetailsController, listSupportTicketsController, createSupportTicketController, getSupportTicketByIdController, updateDeliveryPartnerDetailsController, updateDeliveryPartnerProfilePhotoBase64Controller, updateAvailabilityController, getWalletController, createWithdrawalRequestController, createCashDepositOrderController, verifyCashDepositPaymentController, getEarningsController, getTripHistoryController, getPocketDetailsController, getEmergencyHelpController, getCashLimitController, getDeliveryReferralStatsController, getActiveEarningAddonsController, deleteDeliveryPartnerAccountController, getDeliveryPartnerReviewsController } from '../controllers/delivery.controller.js';
+import { registerDeliveryPartnerController, updateDeliveryPartnerProfileController, updateDeliveryPartnerBankDetailsController, listSupportTicketsController, createSupportTicketController, getSupportTicketByIdController, updateDeliveryPartnerDetailsController, updateDeliveryPartnerProfilePhotoBase64Controller, updateAvailabilityController, getWalletController, createWithdrawalRequestController, createCashDepositOrderController, verifyCashDepositPaymentController, submitCashDepositByHandController, getEarningsController, getTripHistoryController, getPocketDetailsController, getEmergencyHelpController, getCashLimitController, getDeliveryReferralStatsController, getActiveEarningAddonsController, getMyReviewsController } from '../controllers/delivery.controller.js';
 
 const router = express.Router();
 
 const uploadFields = upload.fields([
     { name: 'profilePhoto', maxCount: 1 },
     { name: 'aadharPhoto', maxCount: 1 },
-    { name: 'aadharPhotoBack', maxCount: 1 },
     { name: 'panPhoto', maxCount: 1 },
-    { name: 'panPhotoBack', maxCount: 1 },
     { name: 'drivingLicensePhoto', maxCount: 1 },
-    { name: 'drivingLicensePhotoBack', maxCount: 1 },
     { name: 'upiQrCode', maxCount: 1 }
 ]);
 
@@ -29,7 +26,6 @@ router.patch('/profile/details', authMiddleware, requireRoles('DELIVERY_PARTNER'
 router.post('/profile/photo-base64', authMiddleware, requireRoles('DELIVERY_PARTNER'), updateDeliveryPartnerProfilePhotoBase64Controller);
 
 router.patch('/profile/bank-details', authMiddleware, requireRoles('DELIVERY_PARTNER'), uploadFields, updateDeliveryPartnerBankDetailsController);
-router.delete('/profile/account', authMiddleware, requireRoles('DELIVERY_PARTNER'), deleteDeliveryPartnerAccountController);
 
 router.patch('/availability', authMiddleware, requireRoles('DELIVERY_PARTNER'), updateAvailabilityController);
 
@@ -40,6 +36,10 @@ router.get('/support-tickets/:id', authMiddleware, requireRoles('DELIVERY_PARTNE
 // ----- Orders -----
 router.get('/orders/current', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.getCurrentTripDeliveryController);
 router.get('/orders/available', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.listOrdersAvailableDeliveryController);
+// Legacy Flutter InAppWebView polls these — MUST be registered before /orders/:orderId
+router.get('/orders/assigned', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.listLegacyAssignedActiveDeliveryController);
+router.get('/orders/active', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.listLegacyAssignedActiveDeliveryController);
+router.get('/orders/pending', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.listLegacyPendingDeliveryController);
 router.get('/orders/:orderId', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.getOrderByIdDeliveryController);
 router.patch('/orders/:orderId/accept', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.acceptOrderDeliveryController);
 router.patch('/orders/:orderId/reject', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.rejectOrderDeliveryController);
@@ -50,10 +50,7 @@ router.post('/orders/:orderId/verify-drop-otp', authMiddleware, requireRoles('DE
 router.patch('/orders/:orderId/complete', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.completeDeliveryController);
 router.patch('/orders/:orderId/status', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.updateOrderStatusDeliveryController);
 router.post('/orders/:orderId/collect/qr', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.createCollectQrController);
-
 router.get('/orders/:orderId/payment-status', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.getPaymentStatusController);
-router.post('/orders/:orderId/collect/cash', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.switchToCashController);
-
 
 // ----- Earnings / Settings -----
 router.get('/earning-addons/active', authMiddleware, requireRoles('DELIVERY_PARTNER'), getActiveEarningAddonsController);
@@ -64,13 +61,15 @@ router.get('/wallet', authMiddleware, requireRoles('DELIVERY_PARTNER'), getWalle
 router.post('/wallet/withdraw', authMiddleware, requireRoles('DELIVERY_PARTNER'), createWithdrawalRequestController);
 router.post('/wallet/deposit/order', authMiddleware, requireRoles('DELIVERY_PARTNER'), createCashDepositOrderController);
 router.post('/wallet/deposit/verify', authMiddleware, requireRoles('DELIVERY_PARTNER'), verifyCashDepositPaymentController);
+router.post('/wallet/deposit/cash-submit', authMiddleware, requireRoles('DELIVERY_PARTNER'), submitCashDepositByHandController);
 router.get('/earnings', authMiddleware, requireRoles('DELIVERY_PARTNER'), getEarningsController);
 router.get('/trip-history', authMiddleware, requireRoles('DELIVERY_PARTNER'), getTripHistoryController);
 router.get('/pocket-details', authMiddleware, requireRoles('DELIVERY_PARTNER'), getPocketDetailsController);
 router.get('/emergency-help', authMiddleware, requireRoles('DELIVERY_PARTNER'), getEmergencyHelpController);
 router.get('/cash-limit', authMiddleware, requireRoles('DELIVERY_PARTNER'), getCashLimitController);
 router.get('/referrals/stats', authMiddleware, requireRoles('DELIVERY_PARTNER'), getDeliveryReferralStatsController);
-router.get('/reviews', authMiddleware, requireRoles('DELIVERY_PARTNER'), getDeliveryPartnerReviewsController);
+router.get('/my-reviews', authMiddleware, requireRoles('DELIVERY_PARTNER'), getMyReviewsController);
+
 
 export default router;
 

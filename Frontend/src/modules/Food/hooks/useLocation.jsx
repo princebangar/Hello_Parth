@@ -1,9 +1,54 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { locationAPI, userAPI } from "@food/api"
+import { useProfile } from "@food/context/ProfileContext"
+import apiClient from "@food/api/axios"
 
-const debugLog = (...args) => { }
-const debugWarn = (...args) => { }
-const debugError = (...args) => { }
+const debugLog = (...args) => {}
+const debugWarn = (...args) => {}
+const debugError = (...args) => {}
+
+let globalCustomizationSettings = null
+let customizationFetchPromise = null
+
+const loadCustomizationSettings = async () => {
+  if (globalCustomizationSettings) return globalCustomizationSettings
+  if (customizationFetchPromise) return customizationFetchPromise
+
+  // Try loading from localStorage first
+  try {
+    const saved = localStorage.getItem("helloparth_customization_settings")
+    if (saved) {
+      globalCustomizationSettings = JSON.parse(saved)
+    }
+  } catch (e) {}
+
+  // Fetch in background to update
+  customizationFetchPromise = (async () => {
+    try {
+      const response = await apiClient.get("/food/public/customization-settings")
+      const settings = response?.data?.data || response?.data
+      if (settings) {
+        globalCustomizationSettings = settings
+        try {
+          localStorage.setItem("helloparth_customization_settings", JSON.stringify(settings))
+        } catch (e) {}
+        // Fire a custom event to notify components that customization settings have loaded
+        window.dispatchEvent(new CustomEvent("customizationSettingsLoaded"))
+        return settings
+      }
+    } catch (error) {
+      debugError("Error fetching public customization settings:", error)
+    } finally {
+      customizationFetchPromise = null
+    }
+    return globalCustomizationSettings || {}
+  })()
+
+  return globalCustomizationSettings || customizationFetchPromise
+}
+
+// Start loading customization settings immediately in background
+loadCustomizationSettings()
 
 // BigDataCloud reverse-geocode is expensive/noisy if many components mount `useLocation()`.
 // This module-level guard dedupes concurrent calls + rate-limits starts across the whole app.
@@ -28,9 +73,67 @@ let globalReverseGeocodeLastStartAt = 0
 let globalReverseGeocodeLastCoords = { latitude: null, longitude: null }
 let globalReverseGeocodeLastSuccess = null
 
-// Default behavior: resolve from cache/DB quickly, and when permission is already granted
-// keep a live geolocation watch so zone/location updates react without page refresh.
-const AUTO_START_LIVE_WATCH = true
+// --- Global Loading State Management ---
+let globalLocationLoading = false
+const loadingListeners = new Set()
+
+const setGlobalLocationLoading = (isLoading) => {
+  globalLocationLoading = isLoading
+  loadingListeners.forEach(listener => listener(isLoading))
+}
+
+// Default behavior: only resolve an address once on initial app load,
+// then rely on localStorage/DB. Live watching is enabled only via explicit user action.
+const AUTO_START_LIVE_WATCH = false
+
+const SERVICE_CITIES = [
+  "Indore",
+  "Bhopal",
+  "Ujjain",
+  "Dewas",
+  "Mhow",
+  "Pithampur",
+  "Rau",
+]
+
+/**
+ * Prefer metro/service city over village/locality (e.g. Dhabli → Indore)
+ * so restaurant APIs filtered by city don't return empty lists.
+ */
+export function resolveServiceCity({
+  locality = "",
+  adminArea2 = "",
+  formattedAddress = "",
+  fallback = "Indore",
+} = {}) {
+  const findKnown = (text) => {
+    const match = String(text || "").match(
+      new RegExp(`\\b(${SERVICE_CITIES.join("|")})\\b`, "i"),
+    )
+    if (!match) return ""
+    const hit = match[1]
+    return (
+      SERVICE_CITIES.find((city) => city.toLowerCase() === hit.toLowerCase()) ||
+      hit
+    )
+  }
+
+  const fromFormatted = findKnown(formattedAddress)
+  if (fromFormatted) return fromFormatted
+
+  const localityTrim = String(locality || "").trim()
+  if (localityTrim) {
+    const knownLocality = SERVICE_CITIES.find(
+      (city) => city.toLowerCase() === localityTrim.toLowerCase(),
+    )
+    if (knownLocality) return knownLocality
+  }
+
+  const fromAdmin = findKnown(adminArea2)
+  if (fromAdmin) return fromAdmin
+
+  return localityTrim || fallback
+}
 
 const reverseGeocodeDirect = async (latitude, longitude) => {
   const now = Date.now()
@@ -74,7 +177,7 @@ const reverseGeocodeDirect = async (latitude, longitude) => {
   const run = (async () => {
     try {
       const controller = new AbortController()
-      setTimeout(() => controller.abort(), 15000) // 15s safe timeout for mobile connections
+      setTimeout(() => controller.abort(), 3000) // Faster timeout
 
       const res = await fetch(
         `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
@@ -83,19 +186,74 @@ const reverseGeocodeDirect = async (latitude, longitude) => {
 
       const data = await res.json()
 
+      // Extract parts from formatted address for better area/city isolation
+      const formattedAddress = data.formattedAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+      const addrParts = formattedAddress.split(',').map(p => p.trim()).filter(Boolean)
+      
+      // Dig into informative locations if available
+      let area = data.subLocality || ""
+      if (!area && data.localityInfo?.informative) {
+        // Find sublocality in informative array
+        const infoArea = data.localityInfo.informative.find(i => 
+          i.description?.toLowerCase().includes("sublocality") || 
+          i.description?.toLowerCase().includes("neighborhood")
+        )
+        if (infoArea) area = infoArea.name
+      }
+
+      if (!area && addrParts.length >= 1) {
+        // Find the first part that isn't the city or state
+        const cityLower = (data.city || data.locality || "").toLowerCase()
+        const stateLower = (data.principalSubdivision || "").toLowerCase()
+        
+        for (const part of addrParts) {
+          const partLower = part.toLowerCase()
+          if (partLower !== cityLower && 
+              partLower !== stateLower && 
+              !/^-?\d/.test(part) && 
+              part.length > 2) {
+            area = part
+            break
+          }
+        }
+      }
+
+      const city = resolveServiceCity({
+        locality: data.city || data.locality || "",
+        adminArea2: Array.isArray(data?.localityInfo?.administrative)
+          ? data.localityInfo.administrative.find((entry) => {
+              const desc = String(entry?.description || "").toLowerCase()
+              return (
+                desc.includes("city") ||
+                desc.includes("district") ||
+                desc.includes("municipality") ||
+                desc.includes("order3") ||
+                desc.includes("order 3")
+              )
+            })?.name || ""
+          : "",
+        formattedAddress,
+        fallback: addrParts.length > 1 ? addrParts[addrParts.length - 2] : "Indore",
+      })
+
+      // Keep village/locality as area when city was upgraded to metro name
+      const localityName = String(data.locality || data.city || "").trim()
+      if (
+        !area &&
+        localityName &&
+        localityName.toLowerCase() !== String(city).toLowerCase()
+      ) {
+        area = localityName
+      }
+
       const value = {
-        city: data.city || data.locality || "Unknown City",
-        state: data.principalSubdivision || "",
+        city: city,
+        state: data.principalSubdivision || (addrParts.length > 0 ? addrParts[addrParts.length - 1] : ""),
         country: data.countryName || "",
-        area: data.subLocality || data.neighbourhood || data.locality || "",
-        address:
-          data.formattedAddress ||
-          data.address ||
-          `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-        formattedAddress:
-          data.formattedAddress ||
-          data.address ||
-          `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        area: area,
+        mainTitle: area || city, // Useful for components that prefer a single title
+        address: formattedAddress,
+        formattedAddress: formattedAddress,
       }
 
       globalReverseGeocodeLastSuccess = value
@@ -117,21 +275,178 @@ const reverseGeocodeDirect = async (latitude, longitude) => {
   return run
 }
 
-export function useLocation() {
-  const [location, setLocation] = useState(() => {
-    if (typeof window === "undefined") return null;
+// TEMPORARY DEFAULT: Indore (Vijay Nagar) - for App Store submission
+// Remove this constant and revert useLocation initial state when reverting
+const TEMPORARY_DEFAULT_INDORE_LOCATION = {
+  latitude: 22.7533,
+  longitude: 75.8937,
+  city: "Indore",
+  state: "Madhya Pradesh",
+  country: "India",
+  area: "Vijay Nagar",
+  address: "Vijay Nagar, Indore, Madhya Pradesh",
+  formattedAddress: "Vijay Nagar, Indore, Madhya Pradesh",
+}
+
+export const isPlaceholderLocation = (loc) => {
+  if (!loc || typeof loc !== "object") return true
+  const lat = Number(loc.latitude)
+  const lng = Number(loc.longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true
+  const formatted = String(loc.formattedAddress || "").trim().toLowerCase()
+  const address = String(loc.address || "").trim().toLowerCase()
+  const city = String(loc.city || "").trim().toLowerCase()
+  if (formatted === "select location" || address === "select location") return true
+  if (city === "current location" || city === "select location") return true
+  return false
+}
+
+export const hasValidStoredUserLocation = () => {
+  try {
+    const raw = localStorage.getItem("userLocation")
+    if (!raw) return false
+    return !isPlaceholderLocation(JSON.parse(raw))
+  } catch {
+    return false
+  }
+}
+
+let pageLoadAutoRefreshStarted = false
+let pageLoadDeliveryModeBootstrapped = false
+let cachedIsNewAppSession = false
+let autoLocationRefreshInFlight = null
+const AUTO_LOCATION_REFRESH_COOLDOWN_MS = 15_000
+let lastAutoLocationRefreshAt = 0
+
+/** Marks an active tab after boot; not used alone for stickiness (Chrome can restore it). */
+export const LOCATION_APP_SESSION_KEY = "helloparth_location_session"
+
+function isBrowserPageReload() {
+  try {
+    return (
+      performance.getEntriesByType("navigation")[0]?.type === "reload" ||
+      window.performance?.navigation?.type === 1
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stick selected delivery location only on F5/reload.
+ * New tab / cold open / reopened closed tab → force current GPS
+ * (sessionStorage alone is unreliable — Chrome often restores it on reopen).
+ * @returns {{ isNewAppSession: boolean }}
+ */
+function bootstrapLocationModeOnAppOpen() {
+  if (pageLoadDeliveryModeBootstrapped) {
+    return { isNewAppSession: cachedIsNewAppSession }
+  }
+  pageLoadDeliveryModeBootstrapped = true
+
+  if (isBrowserPageReload()) {
+    cachedIsNewAppSession = false
     try {
-      const stored = localStorage.getItem("userLocation");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.latitude && parsed?.longitude) return parsed;
+      sessionStorage.setItem(LOCATION_APP_SESSION_KEY, "1")
+    } catch {
+      /* ignore */
+    }
+    return { isNewAppSession: false }
+  }
+
+  cachedIsNewAppSession = true
+  try {
+    sessionStorage.setItem(LOCATION_APP_SESSION_KEY, "1")
+    localStorage.setItem("deliveryAddressMode", "current")
+  } catch {
+    /* ignore */
+  }
+  return { isNewAppSession: true }
+}
+
+const runDedupedAutoRefresh = (refreshFn) => {
+  const now = Date.now()
+  if (now - lastAutoLocationRefreshAt < AUTO_LOCATION_REFRESH_COOLDOWN_MS && autoLocationRefreshInFlight) {
+    return autoLocationRefreshInFlight
+  }
+  lastAutoLocationRefreshAt = now
+  autoLocationRefreshInFlight = Promise.resolve(refreshFn()).finally(() => {
+    autoLocationRefreshInFlight = null
+  })
+  return autoLocationRefreshInFlight
+}
+
+export function useLocation() {
+  // Must run before addressMode state init so first paint knows session mode.
+  const { isNewAppSession } = bootstrapLocationModeOnAppOpen()
+
+  const [isDefaultLocationMode, setIsDefaultLocationMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem("helloparth_customization_settings")
+      if (saved) {
+        return JSON.parse(saved).default_location_enabled === true
       }
     } catch {}
-    return null;
-  });
-  const [loading, setLoading] = useState(() => !location);
-  const [error, setError] = useState(null);
-  const [permissionGranted, setPermissionGranted] = useState(() => Boolean(location));
+    return false
+  })
+
+  const [location, setLocation] = useState(() => {
+    try {
+      const cached = localStorage.getItem("userLocation")
+      if (cached) return JSON.parse(cached)
+      
+      const savedSettings = localStorage.getItem("helloparth_customization_settings")
+      const isEnabled = savedSettings ? JSON.parse(savedSettings).default_location_enabled === true : false
+      return isEnabled ? TEMPORARY_DEFAULT_INDORE_LOCATION : null
+    } catch {
+      const savedSettings = localStorage.getItem("helloparth_customization_settings")
+      const isEnabled = savedSettings ? JSON.parse(savedSettings).default_location_enabled === true : false
+      return isEnabled ? TEMPORARY_DEFAULT_INDORE_LOCATION : null
+    }
+  })
+  const [loading, setLoading] = useState(globalLocationLoading)
+
+  useEffect(() => {
+    const handleSettingsLoaded = () => {
+      try {
+        const saved = localStorage.getItem("helloparth_customization_settings")
+        if (saved) {
+          const enabled = JSON.parse(saved).default_location_enabled === true
+          setIsDefaultLocationMode(enabled)
+          
+          if (!enabled) {
+            // If default location mode is disabled, check if the current userLocation is the default Indore one
+            const currentStored = localStorage.getItem("userLocation")
+            if (currentStored) {
+              const parsed = JSON.parse(currentStored)
+              if (parsed?.latitude === TEMPORARY_DEFAULT_INDORE_LOCATION.latitude && 
+                  parsed?.longitude === TEMPORARY_DEFAULT_INDORE_LOCATION.longitude) {
+                // Clear it so the original flow triggers location prompt
+                localStorage.removeItem("userLocation")
+                setLocation(null)
+                debugLog("?? Default location mode disabled. Cleared default Indore location from storage.")
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+    
+    window.addEventListener("customizationSettingsLoaded", handleSettingsLoaded)
+    handleSettingsLoaded()
+
+    return () => {
+      window.removeEventListener("customizationSettingsLoaded", handleSettingsLoaded)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadingListeners.add(setLoading)
+    return () => loadingListeners.delete(setLoading)
+  }, [])
+
+  const [error, setError] = useState(null)
+  const [permissionGranted, setPermissionGranted] = useState(false)
 
   const watchIdRef = useRef(null)
   const updateTimerRef = useRef(null)
@@ -263,9 +578,102 @@ export function useLocation() {
 
   // Google Places API removed - using OLA Maps only
 
-  /* Removed Google Geocoding/Places (maps.googleapis.com). Uses BigDataCloud reverse-geocode only. */
-  const reverseGeocodeWithGoogleMaps = async (latitude, longitude, _options = {}) =>
-    reverseGeocodeDirect(latitude, longitude)
+  /* Reverse geocode via backend proxy so the Maps key never hits the browser Network tab. */
+  const reverseGeocodeWithGoogleMaps = async (latitude, longitude, _options = {}) => {
+    try {
+      debugLog("?? Fetching exact address from Google Maps (proxy) for:", latitude, longitude)
+
+      const { geocodeAPI } = await import("@food/api")
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000)
+
+      let response
+      try {
+        response = await geocodeAPI.reverse(latitude, longitude, {}, { signal: controller.signal })
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
+      const data = response?.data?.data
+
+      if (data?.status !== "OK" || !data.results || data.results.length === 0) {
+        debugWarn("?? Google Geocoding failed or returned no results:", data?.status)
+        return reverseGeocodeDirect(latitude, longitude)
+      }
+
+      // We use the first result which is usually the most specific (premise/street address)
+      const result = data.results[0]
+      const components = result.address_components
+      
+      const getComponent = (types) => {
+        const comp = components.find(c => types.some(t => c.types.includes(t)))
+        return comp ? comp.long_name : ""
+      }
+
+      // Extract parts
+      const streetNumber = getComponent(["street_number"])
+      const route = getComponent(["route"])
+      const sublocality = getComponent(["sublocality_level_1"]) || getComponent(["sublocality"])
+      const neighborhood = getComponent(["neighborhood"])
+      const locality = getComponent(["locality"])
+      const adminArea2 = getComponent(["administrative_area_level_2"])
+      const state = getComponent(["administrative_area_level_1"])
+      const country = getComponent(["country"])
+      const pincode = getComponent(["postal_code"])
+
+      // Prefer Indore (etc.) over village locality like Dhabli so restaurant city filter works
+      const city = resolveServiceCity({
+        locality,
+        adminArea2,
+        formattedAddress: result.formatted_address,
+        fallback: "Indore",
+      })
+      
+      // Determine area - prioritize sublocality/neighborhood for "Exact" feel
+      let area = sublocality || neighborhood || ""
+      if (
+        !area &&
+        locality &&
+        locality.toLowerCase() !== String(city).toLowerCase()
+      ) {
+        area = locality
+      }
+      
+      // If we have building/apartment info (premise/subpremise)
+      const premise = getComponent(["premise"]) || getComponent(["subpremise"]) || getComponent(["point_of_interest"])
+
+      // Construct a clean display address
+      // e.g. "B-204, Silver Oak Apartment, New Palasia"
+      let addressParts = []
+      if (premise) addressParts.push(premise)
+      if (streetNumber && route) addressParts.push(`${streetNumber}, ${route}`)
+      else if (route) addressParts.push(route)
+      if (area) addressParts.push(area)
+      
+      const displayAddress = addressParts.join(", ") || result.formatted_address.split(",")[0]
+
+      const value = {
+        city: city || "Indore",
+        state: state,
+        country: country,
+        area: area,
+        pincode: pincode,
+        mainTitle: area || city,
+        address: displayAddress,
+        formattedAddress: result.formatted_address,
+        premise: premise || "",
+        streetNumber: streetNumber,
+        route: route,
+        placeId: result.place_id
+      }
+
+      debugLog("? Google Geocoding successful (Exact):", value)
+      return value
+    } catch (err) {
+      debugError("?? Google Geocoding error:", err.message)
+      return reverseGeocodeDirect(latitude, longitude)
+    }
+  }
 
 
   /* ===================== OLA MAPS REVERSE GEOCODE (DEPRECATED - KEPT FOR FALLBACK) ===================== */
@@ -402,7 +810,7 @@ export function useLocation() {
 
         debugLog("?? Parsing formatted address for area:", { formattedAddress, addressParts, city, state, currentArea: area })
 
-        // HELLO PARTH-STYLE: If we have 3+ parts, first part is ALWAYS the area/locality
+        // ZOMATO-STYLE: If we have 3+ parts, first part is ALWAYS the area/locality
         // Format: "New Palasia, Indore, Madhya Pradesh" -> area = "New Palasia"
         if (addressParts.length >= 3) {
           const firstPart = addressParts[0]
@@ -535,7 +943,7 @@ export function useLocation() {
       }
 
       // FINAL FALLBACK: If area is still empty, force extract from formatted_address
-      // This is the last resort - be very aggressive (HELLO PARTH-STYLE)
+      // This is the last resort - be very aggressive (ZOMATO-STYLE)
       // Even if formatted_address only has 2 parts (City, State), try to extract area
       if (!area && formattedAddress) {
         const parts = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
@@ -580,7 +988,7 @@ export function useLocation() {
 
         // If we have 3+ parts, extract area from first part
         if (parts.length >= 3) {
-          // HELLO PARTH PATTERN: "New Palasia, Indore, Madhya Pradesh"
+          // ZOMATO PATTERN: "New Palasia, Indore, Madhya Pradesh"
           // First part = Area, Second = City, Third = State
           const potentialArea = parts[0]
           // Validate it's not state, city, or generic names
@@ -592,7 +1000,7 @@ export function useLocation() {
             area = potentialArea
             if (!city && parts[1]) city = parts[1]
             if (!state && parts[2]) state = parts[2]
-            debugLog("??? HELLO PARTH-STYLE EXTRACTION:", { area, city, state })
+            debugLog("??? ZOMATO-STYLE EXTRACTION:", { area, city, state })
           }
         } else if (parts.length === 2) {
           // Only 2 parts: "Indore, Madhya Pradesh" - area is missing
@@ -761,13 +1169,13 @@ export function useLocation() {
     let dbLocation = !forceFresh ? await fetchLocationFromDB() : null
     if (dbLocation && !forceFresh) {
       setLocation(dbLocation)
-      if (showLoading) setLoading(false)
+      if (showLoading) setGlobalLocationLoading(false)
       return dbLocation
     }
 
     if (!navigator.geolocation) {
       setError("Geolocation not supported")
-      if (showLoading) setLoading(false)
+      if (showLoading) setGlobalLocationLoading(false)
       return dbLocation
     }
 
@@ -801,60 +1209,56 @@ export function useLocation() {
 
               // Validate coordinates are in India range BEFORE attempting geocoding
               // India: Latitude 6.5� to 37.1� N, Longitude 68.7� to 97.4� E
+              let finalLat = latitude
+              let finalLng = longitude
               const isInIndiaRange = latitude >= 6.5 && latitude <= 37.1 && longitude >= 68.7 && longitude <= 97.4 && longitude > 0
 
-              // Reverse geocode (BigDataCloud via reverseGeocodeWithGoogleMaps wrapper)
-              let addr
               if (!isInIndiaRange || longitude < 0) {
-                // Coordinates are outside India - skip geocoding and use placeholder
-                debugWarn("?? Coordinates outside India range, skipping geocoding:", { latitude, longitude })
-                addr = {
-                  city: "Current Location",
-                  state: "",
-                  country: "",
-                  area: "",
-                  address: "Select location",
-                  formattedAddress: "Select location",
-                }
-              } else {
-                debugLog("?? Calling reverse geocode with coordinates:", { latitude, longitude })
-                try {
-                  addr = await reverseGeocodeWithGoogleMaps(latitude, longitude, {
-                    includePlaceDetails: Boolean(forceFresh && showLoading)
-                  })
-                  debugLog("? Reverse geocoding successful:", addr)
-                } catch (geocodeErr) {
-                  debugWarn("?? Primary geocoding failed, trying fallback:", geocodeErr.message)
-                  try {
-                    // Fallback to direct reverse geocode (BigDataCloud)
-                    addr = await reverseGeocodeDirect(latitude, longitude)
-                    debugLog("? Fallback geocoding successful:", addr)
+                debugWarn("?? Coordinates outside India range:", { latitude, longitude })
+              }
 
-                    // Validate fallback result - if it still has placeholder values, don't use it
-                    if (addr.city === "Current Location" || addr.address.includes(latitude.toFixed(4))) {
-                      debugWarn("?? Fallback geocoding returned placeholder, will not save")
-                      addr = {
-                        city: "Current Location",
-                        state: "",
-                        country: "",
-                        area: "",
-                        address: "Select location",
-                        formattedAddress: "Select location",
-                      }
-                    }
-                  } catch (fallbackErr) {
-                    debugError("? All geocoding methods failed:", fallbackErr.message)
+              debugLog("?? Calling reverse geocode with coordinates:", { latitude: finalLat, longitude: finalLng })
+              let addr
+              try {
+                addr = await reverseGeocodeWithGoogleMaps(finalLat, finalLng, {
+                  includePlaceDetails: Boolean(forceFresh && showLoading)
+                })
+                debugLog("? Reverse geocoding successful:", addr)
+              } catch (geocodeErr) {
+                debugWarn("?? Primary geocoding failed, trying fallback:", geocodeErr.message)
+                try {
+                  // Fallback to direct reverse geocode (BigDataCloud)
+                  addr = await reverseGeocodeDirect(finalLat, finalLng)
+                  debugLog("? Fallback geocoding successful:", addr)
+
+                  // Validate fallback result - if it still has placeholder values, don't use it
+                  if (addr.city === "Current Location" || addr.address.includes(finalLat.toFixed(4))) {
+                    debugWarn("?? Fallback geocoding returned placeholder, will use Vijay Nagar default")
                     addr = {
-                      city: "Current Location",
-                      state: "",
-                      country: "",
-                      area: "",
-                      address: "Select location",
-                      formattedAddress: "Select location",
+                      city: "Indore",
+                      state: "Madhya Pradesh",
+                      country: "India",
+                      area: "Vijay Nagar",
+                      address: "Vijay Nagar, Indore, Madhya Pradesh",
+                      formattedAddress: "Vijay Nagar, Indore, Madhya Pradesh",
                     }
+                  }
+                } catch (fallbackErr) {
+                  debugError("? All geocoding methods failed:", fallbackErr.message)
+                  addr = {
+                    city: "Indore",
+                    state: "Madhya Pradesh",
+                    country: "India",
+                    area: "Vijay Nagar",
+                    address: "Vijay Nagar, Indore, Madhya Pradesh",
+                    formattedAddress: "Vijay Nagar, Indore, Madhya Pradesh",
                   }
                 }
               }
+
+              // Update coordinates in original variables for consistency
+              let finalLocLatitude = finalLat
+              let finalLocLongitude = finalLng
               debugLog("Reverse geocode result:", addr)
               if (addr?.formattedAddress && addr.formattedAddress !== "Select location") {
                 lastResolvedAddressRef.current = addr
@@ -879,8 +1283,8 @@ export function useLocation() {
               // Build location object with ALL fields from reverse geocoding
               const finalLoc = {
                 ...addr, // This includes: city, state, area, street, streetNumber, postalCode, formattedAddress
-                latitude,
-                longitude,
+                latitude: finalLocLatitude,
+                longitude: finalLocLongitude,
                 accuracy: accuracy || null,
                 address: displayAddress, // Locality parts for navbar display
                 formattedAddress: completeFormattedAddress || addr.formattedAddress || displayAddress // Complete detailed address
@@ -907,7 +1311,7 @@ export function useLocation() {
                 }
                 setLocation(coordOnlyLoc)
                 setPermissionGranted(true)
-                if (showLoading) setLoading(false)
+                if (showLoading) setGlobalLocationLoading(false)
                 setError(null)
                 resolve(coordOnlyLoc)
                 return
@@ -917,7 +1321,7 @@ export function useLocation() {
               localStorage.setItem("userLocation", JSON.stringify(finalLoc))
               setLocation(finalLoc)
               setPermissionGranted(true)
-              if (showLoading) setLoading(false)
+              if (showLoading) setGlobalLocationLoading(false)
               setError(null)
 
               if (updateDB) {
@@ -990,8 +1394,8 @@ export function useLocation() {
               // Retry with lower accuracy - faster response (uses network-based location)
               getPositionWithRetry({
                 enableHighAccuracy: false,
-                timeout: 5000,  // 5 seconds for lower accuracy (network-based is faster)
-                maximumAge: 300000 // Allow 5 minute old cached location for instant response
+                timeout: forceFresh ? 12000 : 8000,
+                maximumAge: forceFresh ? 0 : 300000,
               }, 1).then(resolve).catch(reject)
               return
             }
@@ -1002,6 +1406,15 @@ export function useLocation() {
             } else {
               debugError("? Geolocation error:", err.code, err.message)
             }
+
+            // Explicit user action must not silently reuse stale cached coordinates.
+            if (forceFresh && showLoading) {
+              setPermissionGranted(false)
+              if (showLoading) setGlobalLocationLoading(false)
+              reject(err)
+              return
+            }
+
             // Try multiple fallback strategies
             try {
               // Strategy 1: Use DB location if available
@@ -1031,7 +1444,7 @@ export function useLocation() {
                   setError(err.message)
                 }
                 setPermissionGranted(true) // Still grant permission if we have location
-                if (showLoading) setLoading(false)
+                if (showLoading) setGlobalLocationLoading(false)
                 resolve(fallback)
               } else {
                 // No fallback available - set a default location so UI doesn't hang
@@ -1042,39 +1455,15 @@ export function useLocation() {
                   formattedAddress: "Select location"
                 }
                 setLocation(defaultLocation)
-
-                let userFriendlyError = err.message;
-                if (err.code === 1) {
-                  userFriendlyError = "Please turn on location services and allow access in your browser settings.";
-                } else if (err.code === 2) {
-                  userFriendlyError = "Unable to detect your location. Please check your device's GPS signal.";
-                } else if (err.code === 3) {
-                  userFriendlyError = "Location request timed out. Please try again or check your signal.";
-                } else if (!userFriendlyError) {
-                  userFriendlyError = "An unexpected error occurred while fetching your location.";
-                }
-
-                setError(userFriendlyError)
+                setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
                 setPermissionGranted(false)
-                if (showLoading) setLoading(false)
+                if (showLoading) setGlobalLocationLoading(false)
                 resolve(defaultLocation) // Always resolve with something
               }
             } catch (fallbackErr) {
               debugWarn("?? Fallback retrieval failed:", fallbackErr)
               setLocation(null)
-
-              let userFriendlyError = err.message;
-              if (err.code === 1) {
-                userFriendlyError = "Please turn on location services and allow access in your browser settings.";
-              } else if (err.code === 2) {
-                userFriendlyError = "Unable to detect your location. Please check your device's GPS signal.";
-              } else if (err.code === 3) {
-                userFriendlyError = "Location request timed out. Please try again or check your signal.";
-              } else if (!userFriendlyError) {
-                userFriendlyError = "An unexpected error occurred while fetching your location.";
-              }
-
-              setError(userFriendlyError)
+              setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
               setPermissionGranted(false)
               if (showLoading) setLoading(false)
               resolve(null)
@@ -1089,9 +1478,9 @@ export function useLocation() {
     // If forceFresh is true, don't use cached location (maximumAge: 0)
     // Otherwise, allow cached location for faster response
     return getPositionWithRetry({
-      enableHighAccuracy: false,  // Fast network location (~200ms) instead of long hardware GPS lock
-      timeout: 2500,             // 2.5s fast timeout
-      maximumAge: forceFresh ? 0 : 180000  // 3-minute location cache allowed
+      enableHighAccuracy: true,
+      timeout: forceFresh ? 15000 : 10000,
+      maximumAge: forceFresh ? 0 : 120000,
     })
   }
 
@@ -1208,7 +1597,7 @@ export function useLocation() {
 
             // Build location object with ALL fields from reverse geocoding
             // NEVER include coordinates in formattedAddress or address
-            let loc = {
+            const loc = {
               ...addr, // This includes: city, state, area, street, streetNumber, postalCode
               latitude,
               longitude,
@@ -1253,43 +1642,9 @@ export function useLocation() {
               loc.formattedAddress === "Select location" ||
               (!loc.city && !loc.address && !loc.formattedAddress && !loc.area);
 
-            const shouldPersistLocation = !hasPlaceholder
             if (hasPlaceholder) {
-              // Keep coordinates reactive even when reverse geocode is unavailable.
-              // This allows downstream zone detection to update instantly on location changes.
-              const existingAddress =
-                (location && typeof location === "object" ? location : null) ||
-                (() => {
-                  try {
-                    const raw = localStorage.getItem("userLocation")
-                    return raw ? JSON.parse(raw) : null
-                  } catch {
-                    return null
-                  }
-                })()
-
-              loc = {
-                ...loc,
-                city:
-                  existingAddress?.city && existingAddress.city !== "Current Location"
-                    ? existingAddress.city
-                    : loc.city,
-                area: existingAddress?.area || loc.area,
-                state: existingAddress?.state || loc.state,
-                address:
-                  existingAddress?.address && existingAddress.address !== "Select location"
-                    ? existingAddress.address
-                    : loc.address,
-                formattedAddress:
-                  existingAddress?.formattedAddress &&
-                    existingAddress.formattedAddress !== "Select location"
-                    ? existingAddress.formattedAddress
-                    : loc.formattedAddress,
-              }
-
-              debugWarn(
-                "?? Live location has placeholder address; updating coordinates without persisting placeholder address",
-              )
+              debugWarn("?? Skipping live location update - contains placeholder values:", loc)
+              return // Don't update location or save to DB
             }
 
             // Check if coordinates have changed significantly (threshold: ~10 meters)
@@ -1315,29 +1670,23 @@ export function useLocation() {
             if (coordsChanged) {
               prevLocationCoordsRef.current = { latitude: loc.latitude, longitude: loc.longitude }
               debugLog("?? Updating live location:", loc)
-              if (shouldPersistLocation) {
-                localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
-              }
+              localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
               setLocation(persistedLocation)
               setPermissionGranted(true)
               setError(null)
             } else {
               // Coordinates haven't changed significantly, skip state update to prevent re-renders
               // Still update localStorage silently for persistence
-              if (shouldPersistLocation) {
-                localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
-              }
+              localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
             }
 
             // Debounce DB updates - only update every 5 seconds
-            if (shouldPersistLocation) {
-              clearTimeout(updateTimerRef.current)
-              updateTimerRef.current = setTimeout(() => {
-                updateLocationInDB(loc).catch(err => {
-                  debugWarn("Failed to update location in DB:", err)
-                })
-              }, 5000)
-            }
+            clearTimeout(updateTimerRef.current)
+            updateTimerRef.current = setTimeout(() => {
+              updateLocationInDB(loc).catch(err => {
+                debugWarn("Failed to update location in DB:", err)
+              })
+            }, 5000)
           } catch (err) {
             debugError("? Error processing live location update:", err)
             // If reverse geocoding fails, DON'T use coordinates - use placeholder
@@ -1428,8 +1777,57 @@ export function useLocation() {
     clearTimeout(updateTimerRef.current)
   }
 
+  const refreshLocationIfPermitted = async ({ showLoading = false } = {}) => {
+    if (isDefaultLocationMode || !navigator.geolocation) return null
+
+    let permissionState = "unknown"
+    if (navigator.permissions?.query) {
+      try {
+        const result = await navigator.permissions.query({ name: "geolocation" })
+        permissionState = result.state
+        if (permissionState === "denied") return null
+      } catch {
+        permissionState = "unknown"
+      }
+    }
+
+    const hasPriorSavedLocation = hasValidStoredUserLocation()
+
+    // First visit: wait for the location popup button so we don't trigger a browser prompt on load.
+    if (permissionState !== "granted" && !hasPriorSavedLocation) {
+      return null
+    }
+
+    try {
+      if (showLoading) setGlobalLocationLoading(true)
+      const loc = await getLocation(true, true, showLoading)
+      if (loc && !isPlaceholderLocation(loc)) {
+        setLocation(loc)
+        setPermissionGranted(true)
+        window.dispatchEvent(new CustomEvent("userLocationUpdated"))
+      }
+      return loc
+    } catch (err) {
+      debugWarn("Background location refresh failed:", err?.message || err)
+      return null
+    } finally {
+      if (showLoading) setGlobalLocationLoading(false)
+    }
+  }
+
   /* ===================== INIT ===================== */
   useEffect(() => {
+    // Check if location should be suppressed on the current path/auth state
+    const pathname = window.location.pathname.toLowerCase();
+    const isSuppressedPath = 
+      pathname.includes('terms') ||
+      pathname.includes('privacy') ||
+      pathname.includes('support') ||
+      pathname.includes('login') ||
+      pathname.includes('otp');
+
+    const isAuthenticated = !!(localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken'));
+
     // Load stored location first for IMMEDIATE display (no loading state)
     const stored = localStorage.getItem("userLocation")
     let shouldForceRefresh = false
@@ -1461,28 +1859,44 @@ export function useLocation() {
         debugError("Failed to parse stored location:", err)
         shouldForceRefresh = true
       }
+    } else {
+      if (isDefaultLocationMode) {
+        // TEMPORARY: No stored location found - set default Indore in localStorage
+        // This ensures PageNavbar and other components see the default immediately.
+        try {
+          localStorage.setItem("userLocation", JSON.stringify(TEMPORARY_DEFAULT_INDORE_LOCATION))
+          setLocation(TEMPORARY_DEFAULT_INDORE_LOCATION)
+          setLoading(false)
+          hasInitialLocation = true
+          debugLog("?? TEMPORARY: Set default Indore location in localStorage")
+        } catch (e) {
+          debugError("Failed to set default Indore location:", e)
+        }
+      }
     }
 
-    // If no cached location, try DB
-    if (!hasInitialLocation) {
+    // If no cached location, try DB (only if authenticated and path is not suppressed)
+    if (!hasInitialLocation && !isSuppressedPath && isAuthenticated) {
       fetchLocationFromDB()
         .then((dbLoc) => {
           if (dbLoc && Number.isFinite(Number(dbLoc.latitude)) && Number.isFinite(Number(dbLoc.longitude))) {
             setLocation(dbLoc)
             setPermissionGranted(true)
-            setLoading(false)
+            setGlobalLocationLoading(false)
             hasInitialLocation = true
             debugLog("?? Loaded location from DB:", dbLoc)
           } else {
             // No location found - set loading to false and show fallback
-            setLoading(false)
+            setGlobalLocationLoading(false)
             shouldForceRefresh = true
           }
         })
         .catch(() => {
-          setLoading(false)
+          setGlobalLocationLoading(false)
           shouldForceRefresh = true
         })
+    } else if (!isAuthenticated || isSuppressedPath) {
+      setGlobalLocationLoading(false)
     }
 
     // Always ensure loading is false after initial check
@@ -1496,10 +1910,14 @@ export function useLocation() {
             if (!currentLocation ||
               (currentLocation.formattedAddress === "Select location" &&
                 !currentLocation.latitude && !currentLocation.city)) {
-              return {
-                city: "Select location",
-                address: "Select location",
-                formattedAddress: "Select location"
+              if (isDefaultLocationMode) {
+                return TEMPORARY_DEFAULT_INDORE_LOCATION
+              } else {
+                return {
+                  city: "Select location",
+                  address: "Select location",
+                  formattedAddress: "Select location"
+                }
               }
             }
             return currentLocation
@@ -1507,103 +1925,110 @@ export function useLocation() {
         }
         return false
       })
-    }, 5000) // 5 second safety timeout (increased to allow background fetch to complete)
+    }, 5000) // 5 second safety timeout
 
-    // Don't set fallback immediately - wait for background fetch to complete
-    // The background fetch will set the location, or we'll use the cached/DB location
-    // Only set fallback if we have no location after all attempts
+    // Fresh tab/app open → force current GPS (F5 keeps selected city via isNewAppSession=false).
+    const startAutoLocationRefresh = () => {
+      runDedupedAutoRefresh(() => refreshLocationIfPermitted({ showLoading: false }))
+    }
 
-    // Request fresh location in BACKGROUND (non-blocking)
-    // CRITICAL FIX: Only auto-request if permission is ALREADY granted
-    // This prevents "Requests geolocation permission on page load" warning
-    const checkPermissionAndStart = async () => {
+    if (!isDefaultLocationMode && !isSuppressedPath && isNewAppSession) {
+      if (!pageLoadAutoRefreshStarted) {
+        pageLoadAutoRefreshStarted = true
+        try {
+          sessionStorage.setItem("manual_location_update", "true")
+          localStorage.setItem("deliveryAddressMode", "current")
+          window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
+        } catch {}
+        // requestLocation clears the prior city pin and pulls live GPS (not a silent cache hit).
+        runDedupedAutoRefresh(() =>
+          requestLocation().catch((err) => {
+            debugError("New-tab current location fetch failed, falling back:", err)
+            return refreshLocationIfPermitted({ showLoading: true })
+          }),
+        )
+      }
+    } else {
+      setLoading(false)
+    }
+
+    // Listen for storage changes to keep location in sync across components/tabs
+    const handleStorageChange = (e) => {
+      if (e.key === "userLocation" && e.newValue) {
+        try {
+          const newLoc = JSON.parse(e.newValue)
+          setLocation(newLoc)
+          debugLog("?? Location updated from storage event:", newLoc)
+        } catch (err) {
+          debugError("Failed to parse location from storage event:", err)
+        }
+      }
+    }
+
+    // Also listen for custom event that might be fired within the same window
+    const handleCustomUpdate = () => {
+      const stored = localStorage.getItem("userLocation")
+      if (stored) {
+        try {
+          const newLoc = JSON.parse(stored)
+          setLocation(newLoc)
+          debugLog("?? Location updated from custom update event:", newLoc)
+        } catch {}
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('userLocationUpdated', handleCustomUpdate)
+    
+    // Auto-fetch current location on login (even if this tab already had a session).
+    const handleLoginSuccess = () => {
+      if (isDefaultLocationMode) {
+        debugLog("?? Default Location Mode is active. Suppressing login success location fetch.")
+        return
+      }
+
+      const hasFetchedThisLogin = sessionStorage.getItem('lastLoginLocationFetch');
+      if (hasFetchedThisLogin) return;
+
+      debugLog("?? Login success, triggering one-time automatic location fetch...")
       try {
-        let permissionGranted = false;
+        sessionStorage.setItem(LOCATION_APP_SESSION_KEY, "1")
+        localStorage.setItem("deliveryAddressMode", "current")
+        window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
+      } catch {}
+      setTimeout(() => {
+        requestLocation().then(() => {
+          sessionStorage.setItem('lastLoginLocationFetch', 'true');
+        }).catch(err => {
+          debugError("Failed to auto-fetch location after login:", err)
+        })
+      }, 1000)
+    }
+    
+    window.addEventListener('userLoginSuccess', handleLoginSuccess)
 
-        if (navigator.permissions && navigator.permissions.query) {
-          try {
-            const result = await navigator.permissions.query({ name: 'geolocation' });
-            if (result.state === 'granted') {
-              permissionGranted = true;
-            } else {
-              debugLog(`?? Geolocation permission is '${result.state}'`);
-            }
-
-            result.onchange = () => {
-              if (result.state === 'granted') {
-                debugLog("?? Geolocation permission granted dynamically - auto fetching location");
-                setPermissionGranted(true);
-                setLoading(true);
-                getLocation(true, true, true).then((loc) => {
-                  if (loc) {
-                    setLocation(loc);
-                    if (AUTO_START_LIVE_WATCH) startWatchingLocation();
-                  }
-                  setLoading(false);
-                }).catch(() => setLoading(false));
-              }
-            };
-          } catch (permErr) {
-            debugWarn("?? Permission query failed:", permErr);
-          }
-        }
-
-        // Auto-fetch real GPS location if navigator.geolocation is available
-        if (navigator.geolocation) {
-          setLoading(true);
-          getLocation(true, true, true)
-            .then((loc) => {
-              if (loc && loc.latitude && loc.longitude) {
-                debugLog("?? Auto GPS location fetched successfully:", loc);
-                setLocation(loc);
-                setPermissionGranted(true);
-                if (AUTO_START_LIVE_WATCH) startWatchingLocation();
-              }
-              setLoading(false);
-            })
-            .catch((err) => {
-              debugWarn("?? Auto GPS fetch failed or denied:", err?.message);
-              setLoading(false);
-            });
-        } else {
-          setLoading(false);
-        }
-      } catch (err) {
-        debugError("Error in checkPermissionAndStart:", err);
-        setLoading(false);
-      }
-    };
-
-    // Always check permission state on startup.
-    // This does NOT trigger browser prompt by itself; it only auto-fetches when permission is already granted.
-    checkPermissionAndStart();
-
-    // Re-fetch location automatically whenever app/tab is re-opened
-    const handleReopen = () => {
-      if (document.visibilityState === 'visible') {
-        checkPermissionAndStart();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleReopen);
-    window.addEventListener('focus', handleReopen);
-
-    // Cleanup timeout, listeners, and watcher
+    // Cleanup timeout and watcher
     return () => {
       clearTimeout(loadingTimeout)
-      document.removeEventListener('visibilitychange', handleReopen);
-      window.removeEventListener('focus', handleReopen);
       debugLog("?? Cleaning up location watcher")
       stopWatchingLocation()
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('userLocationUpdated', handleCustomUpdate)
+      window.removeEventListener('userLoginSuccess', handleLoginSuccess)
     }
   }, [])
 
   const requestLocation = async () => {
     debugLog("?????? User requested location update - clearing cache and fetching fresh")
-    setLoading(true)
+    setGlobalLocationLoading(true)
     setError(null)
 
     try {
+      try {
+        localStorage.setItem("deliveryAddressMode", "current")
+        window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
+      } catch {}
+
       // Clear cached location to force fresh fetch
       localStorage.removeItem("userLocation")
       debugLog("??? Cleared cached location from localStorage")
@@ -1612,8 +2037,6 @@ export function useLocation() {
       // forceFresh = true, updateDB = true, showLoading = true
       // This ensures we get fresh GPS coordinates and reverse geocode
       const location = await getLocation(true, true, true)
-      setPermissionGranted(true)
-      if (AUTO_START_LIVE_WATCH) startWatchingLocation()
 
       debugLog("??? Fresh location requested successfully:", location)
       debugLog("??? Complete Location details:", {
@@ -1648,22 +2071,199 @@ export function useLocation() {
         debugLog("? Full address:", location.formattedAddress)
       }
 
+      // Dispatch custom event to notify all other mounted hook instances (Navbar, Home, etc.)
+      try {
+        window.dispatchEvent(new CustomEvent("userLocationUpdated"))
+      } catch (evtErr) {
+        debugWarn("Failed to dispatch custom event:", evtErr)
+      }
+
       return location
     } catch (err) {
       debugError("? Failed to request location:", err)
       setError(err.message || "Failed to get location")
       throw err
     } finally {
-      setLoading(false)
+      setGlobalLocationLoading(false)
     }
   }
 
+  /**
+   * Fast path for Address Selector "Use current location".
+   * - Does not clear cache first
+   * - Prefers recent GPS (≤30s) + low-accuracy first (much faster)
+   * - Single reverse-geocode, DB update in background
+   */
+  const requestLocationFast = async () => {
+    setError(null)
+
+    if (!navigator.geolocation) {
+      throw new Error("Geolocation not supported")
+    }
+
+    try {
+      try {
+        localStorage.setItem("deliveryAddressMode", "current")
+        window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
+      } catch {}
+
+      const getPosition = (options) =>
+        new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, options)
+        })
+
+      let pos
+      try {
+        // Fast path: network/wifi location + accept a recent fix
+        pos = await getPosition({
+          enableHighAccuracy: false,
+          timeout: 6000,
+          maximumAge: 30000,
+        })
+      } catch {
+        // Fallback: true GPS if low-accuracy fails
+        pos = await getPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        })
+      }
+
+      const { latitude, longitude, accuracy } = pos.coords
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error("Invalid coordinates")
+      }
+
+      let addr
+      try {
+        addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
+      } catch {
+        addr = await reverseGeocodeDirect(latitude, longitude)
+      }
+
+      const finalLoc = {
+        ...addr,
+        city: resolveServiceCity({
+          locality: addr?.city || "",
+          formattedAddress: addr?.formattedAddress || addr?.address || "",
+          fallback: addr?.city || "Indore",
+        }),
+        latitude,
+        longitude,
+        accuracy: accuracy ?? null,
+      }
+
+      localStorage.setItem("userLocation", JSON.stringify(finalLoc))
+      setLocation(finalLoc)
+      setPermissionGranted(true)
+
+      // Don't block UI on DB write
+      updateLocationInDB(finalLoc).catch(() => {})
+
+      try {
+        window.dispatchEvent(new CustomEvent("userLocationUpdated"))
+      } catch {}
+
+      return finalLoc
+    } catch (err) {
+      debugError("? Fast location request failed:", err)
+      setError(err.message || "Failed to get location")
+      throw err
+    }
+  }
+
+  const { getDefaultAddress } = useProfile()
+  const defaultSavedAddress = getDefaultAddress?.() || null
+
+  const defaultSavedAddressLocation = useMemo(() => {
+    if (!defaultSavedAddress) return null
+    const coordinates = defaultSavedAddress?.location?.coordinates
+    if (Array.isArray(coordinates) && coordinates.length >= 2) {
+      const lng = parseFloat(coordinates[0])
+      const lat = parseFloat(coordinates[1])
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { latitude: lat, longitude: lng }
+      }
+    }
+
+    const lat = parseFloat(defaultSavedAddress?.latitude || defaultSavedAddress?.lat)
+    const lng = parseFloat(defaultSavedAddress?.longitude || defaultSavedAddress?.lng)
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat, longitude: lng }
+    }
+
+    return null
+  }, [defaultSavedAddress])
+
+  // Listen to deliveryAddressMode changes using a local state
+  const [addressMode, setAddressMode] = useState(() => {
+    try {
+      // New app/tab sessions force "current"; same-session refresh keeps prior mode.
+      return localStorage.getItem("deliveryAddressMode") || "current"
+    } catch {
+      return "current"
+    }
+  })
+
+  useEffect(() => {
+    const handleModeUpdate = () => {
+      try {
+        setAddressMode(localStorage.getItem("deliveryAddressMode") || "current")
+      } catch {}
+    }
+    window.addEventListener("userLocationUpdated", handleModeUpdate)
+    window.addEventListener("deliveryAddressModeUpdated", handleModeUpdate)
+    return () => {
+      window.removeEventListener("userLocationUpdated", handleModeUpdate)
+      window.removeEventListener("deliveryAddressModeUpdated", handleModeUpdate)
+    }
+  }, [])
+
+  const effectiveLocation = useMemo(() => {
+    if (addressMode === "current") {
+      return location
+    }
+
+    if (
+      defaultSavedAddressLocation &&
+      Number.isFinite(defaultSavedAddressLocation.latitude) &&
+      Number.isFinite(defaultSavedAddressLocation.longitude)
+    ) {
+      const parts = [
+        defaultSavedAddress?.additionalDetails,
+        defaultSavedAddress?.street,
+        defaultSavedAddress?.city,
+        defaultSavedAddress?.state,
+        defaultSavedAddress?.zipCode,
+      ].filter(Boolean)
+
+      const resolvedAddress = parts.length > 0 ? parts.join(", ") : defaultSavedAddress?.formattedAddress || defaultSavedAddress?.address || ""
+
+      return {
+        ...(location || {}),
+        latitude: defaultSavedAddressLocation.latitude,
+        longitude: defaultSavedAddressLocation.longitude,
+        area: defaultSavedAddress?.additionalDetails || defaultSavedAddress?.street || defaultSavedAddress?.area || "",
+        city: defaultSavedAddress?.city || "",
+        state: defaultSavedAddress?.state || "",
+        address: resolvedAddress,
+        formattedAddress: resolvedAddress,
+        pincode: defaultSavedAddress?.zipCode || "",
+      }
+    }
+
+    return location
+  }, [location, defaultSavedAddressLocation, addressMode, defaultSavedAddress])
+
   return {
-    location,
+    location: effectiveLocation,
+    geoLocation: location,
+    effectiveLocation,
     loading,
     error,
     permissionGranted,
     requestLocation,
+    requestLocationFast,
     startWatchingLocation,
     stopWatchingLocation,
   }

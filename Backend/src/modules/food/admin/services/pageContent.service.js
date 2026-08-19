@@ -3,6 +3,8 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 
 const normalizeKey = (key) => String(key || '').trim().toLowerCase();
 
+const EMPTY_LEGAL = { title: '', content: '', email: '', mobile: '', faq: '' };
+
 const decodeHtmlEntities = (value) => {
     if (value === null || value === undefined) return value;
     let s = String(value);
@@ -21,7 +23,10 @@ const normalizeLegalForResponse = (legal) => {
     if (!legal || typeof legal !== 'object') return legal;
     const title = legal.title ?? '';
     const content = decodeHtmlEntities(legal.content ?? '');
-    return { ...legal, title, content };
+    const email = legal.email ?? '';
+    const mobile = legal.mobile ?? '';
+    const faq = decodeHtmlEntities(legal.faq ?? '');
+    return { ...legal, title, content, email, mobile, faq };
 };
 
 const normalizeAboutForResponse = (about) => {
@@ -35,47 +40,42 @@ const normalizeAboutForResponse = (about) => {
     };
 };
 
-const DEFAULT_PAGES = {
-    terms: { title: 'Terms and Conditions', content: '' },
-    privacy: { title: 'Privacy Policy', content: '' },
-    refund: { title: 'Refund Policy', content: '' },
-    shipping: { title: 'Shipping Policy', content: '' },
-    cancellation: { title: 'Cancellation Policy', content: 'A cancellation charge will apply as per configured rules once order is confirmed.' }
-};
-
 export const getPublicPageByKey = async (key) => {
     const k = normalizeKey(key);
     const doc = await FoodPageContent.findOne({ key: k }).lean();
     if (!doc) {
-        if (k === 'about') {
-            return { key: k, data: { appName: 'Hello Parth', version: '1.0.0', description: '', logo: '' } };
-        }
-        return { key: k, data: DEFAULT_PAGES[k] || { title: '', content: '' } };
+        if (k === 'about') return { key: k, data: null };
+        return { key: k, data: normalizeLegalForResponse({ ...EMPTY_LEGAL }) };
     }
     if (k === 'about') return { key: k, data: normalizeAboutForResponse(doc.about || null) };
-    const legalData = normalizeLegalForResponse(doc.legal || null);
-    if (!legalData || !legalData.content || !legalData.content.trim()) {
-        return { key: k, data: DEFAULT_PAGES[k] || legalData || { title: '', content: '' } };
-    }
-    return { key: k, data: legalData };
+    return { key: k, data: normalizeLegalForResponse(doc.legal || EMPTY_LEGAL) };
 };
 
 export const getAdminPageByKey = async (key) => getPublicPageByKey(key);
 
 export const upsertLegalPage = async (key, payload, updatedBy) => {
     const k = normalizeKey(key);
-    if (!['terms', 'privacy', 'refund', 'shipping', 'cancellation'].includes(k)) {
+    const allowedKeys = [
+        'terms', 'terms_user', 'terms_restaurant', 'terms_delivery',
+        'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery',
+        'refund', 'shipping', 'cancellation',
+        'support_user', 'support_restaurant', 'support_delivery'
+    ];
+    if (!allowedKeys.includes(k)) {
         throw new ValidationError('Invalid page key');
     }
     const title = String(payload?.title || '').trim();
     const content = decodeHtmlEntities(String(payload?.content || '')).trim();
+    const email = String(payload?.email || '').trim();
+    const mobile = String(payload?.mobile || '').trim();
+    const faq = decodeHtmlEntities(String(payload?.faq || '')).trim();
 
     const doc = await FoodPageContent.findOneAndUpdate(
         { key: k },
         {
             $set: {
                 key: k,
-                legal: { title, content },
+                legal: { title, content, email, mobile, faq },
                 about: undefined,
                 updatedBy: updatedBy || null,
                 updatedByRole: 'ADMIN'
@@ -88,7 +88,7 @@ export const upsertLegalPage = async (key, payload, updatedBy) => {
 };
 
 export const upsertAboutPage = async (payload, updatedBy) => {
-    const appName = decodeHtmlEntities(String(payload?.appName || '')).trim() || 'Hello Parth';
+    const appName = decodeHtmlEntities(String(payload?.appName || '')).trim() || 'Hello Parth Food';
     const version = decodeHtmlEntities(String(payload?.version || '')).trim() || '1.0.0';
     const description = decodeHtmlEntities(String(payload?.description || '')).trim();
     const logo = decodeHtmlEntities(String(payload?.logo || '')).trim();
@@ -120,5 +120,4 @@ export const upsertAboutPage = async (payload, updatedBy) => {
 
     return { key: 'about', data: normalizeAboutForResponse(doc?.about || null) };
 };
-
 

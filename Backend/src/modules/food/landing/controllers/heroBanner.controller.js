@@ -1,6 +1,7 @@
 import {
     listHeroBanners,
     createHeroBannersFromFiles,
+    linkRestaurantsToHeroBanner,
     deleteHeroBanner,
     updateHeroBannerOrder,
     toggleHeroBannerStatus
@@ -10,7 +11,8 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 
 export const listHeroBannersController = async (req, res, next) => {
     try {
-        const data = await listHeroBanners();
+        const { zoneId } = req.query;
+        const data = await listHeroBanners(zoneId);
         // Wrap in { banners } to match LandingPageManagement.jsx expectations
         return sendResponse(res, 200, 'Hero banners fetched successfully', { banners: data });
     } catch (error) {
@@ -27,11 +29,33 @@ export const uploadHeroBannersController = async (req, res, next) => {
         const meta = {
             title: req.body.title,
             ctaText: req.body.ctaText,
-            ctaLink: req.body.ctaLink
+            ctaLink: req.body.ctaLink,
+            zoneId: req.body.zoneId
         };
 
         const results = await createHeroBannersFromFiles(req.files, meta);
-        return sendResponse(res, 201, 'Hero banners uploaded', { results });
+        const banners = results.filter((r) => r.success).map((r) => r.banner);
+        const errors = results.filter((r) => !r.success).map((r) => r.error);
+
+        return sendResponse(res, 201, 'Hero banners uploaded', { banners, errors, results });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const linkRestaurantsToHeroBannerController = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { restaurantIds } = req.body;
+        if (!id || !Array.isArray(restaurantIds)) {
+            throw new ValidationError('id and restaurantIds array are required');
+        }
+
+        const updated = await linkRestaurantsToHeroBanner(id, restaurantIds);
+        if (!updated) {
+            return sendResponse(res, 404, 'Hero banner not found');
+        }
+        return sendResponse(res, 200, 'Restaurants linked to banner successfully', { banner: updated });
     } catch (error) {
         next(error);
     }
@@ -67,11 +91,14 @@ export const updateHeroBannerOrderController = async (req, res, next) => {
 export const toggleHeroBannerStatusController = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { isActive } = req.body;
-        if (!id || typeof isActive !== 'boolean') {
-            throw new ValidationError('id and boolean isActive are required');
+        const { isActive } = req.body || {};
+        if (!id) {
+            throw new ValidationError('Banner id is required');
         }
         const updated = await toggleHeroBannerStatus(id, isActive);
+        if (!updated) {
+            return sendResponse(res, 404, 'Hero banner not found');
+        }
         return sendResponse(res, 200, 'Hero banner status updated', updated);
     } catch (error) {
         next(error);

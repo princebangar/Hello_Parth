@@ -60,18 +60,6 @@ const restaurantRegisterSchema = z.object({
     ownerPhone: phoneSchema.optional(),
     primaryContactNumber: phoneSchema.optional(),
     pureVegRestaurant: requiredBooleanSchema,
-    pricingAttributes: z.preprocess((val) => {
-        if (!val) return [];
-        if (Array.isArray(val)) return val;
-        if (typeof val === 'string') {
-            try {
-                const parsed = JSON.parse(val);
-                if (Array.isArray(parsed)) return parsed;
-            } catch (e) {}
-            return val.split(',').map(s => s.trim()).filter(Boolean);
-        }
-        return [];
-    }, z.array(z.enum(["same_price", "no_packaging"])).optional().default([])),
     addressLine1: z.string().optional(),
     addressLine2: z.string().optional(),
     area: z.string().optional(),
@@ -113,12 +101,10 @@ const restaurantRegisterSchema = z.object({
     ifscCode: z.string().optional(),
     accountHolderName: z.string().optional(),
     accountType: z.string().optional(),
-    // Allow pre-uploaded image URLs for background upload flow
-    profileImage: z.string().optional(),
-    panImage: z.string().optional(),
-    gstImage: z.string().optional(),
-    fssaiImage: z.string().optional(),
-    menuImages: z.string().optional() // can be a stringified array
+    isTakeawayEnabled: z.string().optional(),
+    isTakeawayCodEnabled: z.string().optional(),
+    fcmToken: z.string().optional().nullable(),
+    platform: z.string().optional().nullable()
 });
 
 export const validateRestaurantRegisterDto = (body) => {
@@ -143,3 +129,4 @@ export const validateRestaurantRegisterDto = (body) => {
         gstRegistered: data.gstRegistered ?? false
     };
 };
+
