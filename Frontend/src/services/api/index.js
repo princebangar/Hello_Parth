@@ -131,6 +131,26 @@ export const authAPI = {
   logoutFromAllDevices: (module = "user") => authService.logoutFromAllDevices(module),
   deleteAccount: (module = "user") => authService.deleteAccount(module),
   checkBalance: (module = "user") => authService.checkAccountBalance(module),
+  sendUnifiedOTP: (phone) => {
+    if (!phone) return Promise.reject(new Error("Phone is required"));
+    return authService.requestUserOtp(phone);
+  },
+  verifyUnifiedOTP: (phone, otp, ref = null, name = null, fcmToken = null, platform = "web") => {
+    if (!phone || !otp) {
+      return Promise.reject(new Error("Phone and OTP are required"));
+    }
+    return authService.verifyUserOtp(phone, otp, ref, name, fcmToken, platform);
+  },
+  saveLoginFcmToken: (token, platform = "web") => {
+    if (!token) return Promise.resolve();
+    const path =
+      platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
+    return apiClient.post(
+      path,
+      { token: String(token), platform },
+      { contextModule: "user" },
+    );
+  },
 };
 
 export const supportAPI = {

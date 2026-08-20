@@ -15,6 +15,7 @@ import { useLocationSelector } from "./UserLayout"
 import { useProfile } from "@food/context/ProfileContext"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import { isModuleAuthenticated } from "@food/utils/auth"
+import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}

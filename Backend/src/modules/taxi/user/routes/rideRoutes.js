@@ -30,7 +30,7 @@ rideRouter.get('/', authenticateOrResolveUser(['user', 'driver']), asyncHandler(
 rideRouter.get('/pending-cancellation-dues', authenticate(['user']), asyncHandler(getPendingCancellationDues));
 rideRouter.get('/app-settings/tip', asyncHandler(getRideAppTipSettings));
 rideRouter.get('/available-drivers', asyncHandler(listAvailableDrivers));
-rideRouter.get('/active/me', authenticateOrResolveUser(['user', 'driver']), asyncHandler(getMyActiveRide));
+rideRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getMyActiveRide));
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
 rideRouter.post('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
 rideRouter.get('/:rideId/cancellation-bill', authenticateOrResolveUser(['user', 'driver', 'admin']), asyncHandler(getCancellationBillReceipt));

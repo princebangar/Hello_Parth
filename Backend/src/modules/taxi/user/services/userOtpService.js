@@ -3,9 +3,9 @@ import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { UserAuthSession } from '../models/UserAuthSession.js';
 import { User } from '../models/User.js';
-import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
+import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const VERIFIED_SESSION_TTL_MS = 10 * 60 * 1000;
@@ -74,10 +74,18 @@ const toUserPayload = (user) => ({
   currentRideId: user.currentRideId || null,
 });
 
-const createUserSession = (user) => ({
-  token: signAccessToken({ sub: String(user._id), role: 'user' }),
-  user: toUserPayload(user),
-});
+const createUserSession = (user) => {
+  const unified = buildUnifiedUserSession(user);
+  return {
+    token: unified.taxiAuth.token,
+    user: toUserPayload(user),
+    foodAuth: {
+      accessToken: unified.accessToken,
+      refreshToken: unified.refreshToken,
+      user: { ...toUserPayload(user), role: 'USER' },
+    },
+  };
+};
 
 const getOtpSession = async (phone) => {
   const normalizedPhone = normalizeUserPhone(phone);

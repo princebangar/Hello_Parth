@@ -20,6 +20,7 @@ import api from '../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { userService } from '../services/userService';
+import { getLocalUserToken } from '../services/authService';
 import { RENTAL_ENABLED } from '../../../shared/featureFlags';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
@@ -74,6 +75,11 @@ const getCurrentRideIcon = (ride) => {
 };
 
 const unwrapApiPayload = (response) => response?.data?.data || response?.data || response;
+
+const isIgnorableRideSyncError = (error) => {
+  const status = Number(error?.response?.status || error?.status || 0);
+  return status === 401 || status === 403 || status === 404;
+};
 
 const formatScheduledDateTime = (value) => {
   if (!value) {
@@ -344,13 +350,20 @@ const Home = ({ embedded = false }) => {
 
       syncInFlight = true;
       try {
+        if (!getLocalUserToken()) {
+          if (!cancelled) {
+            persistCurrentRide(null);
+            currentRideRef.current = null;
+          }
+          return;
+        }
+
         let rideData = null;
 
         try {
           rideData = unwrapApiPayload(await api.get('/rides/active/me'));
         } catch (error) {
-          const status = Number(error?.response?.status || 0);
-          if (status !== 404) {
+          if (!isIgnorableRideSyncError(error)) {
             throw error;
           }
         }
@@ -421,9 +434,7 @@ const Home = ({ embedded = false }) => {
           return;
         }
       } catch (error) {
-        const status = Number(error?.response?.status || 0);
-        if (status !== 404) {
-          // Keep the previous card on transient failures, but don't block normal cleanup on 404/not found.
+        if (!isIgnorableRideSyncError(error)) {
           return;
         }
       }
@@ -431,6 +442,8 @@ const Home = ({ embedded = false }) => {
         if (cancelled) return;
         persistCurrentRide(null);
         currentRideRef.current = null;
+      } catch {
+        // Guest / no active ride / transient API errors should not crash Home.
       } finally {
         syncInFlight = false;
         scheduleNextSync();

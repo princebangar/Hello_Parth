@@ -9,6 +9,7 @@ import { Notification } from '../../admin/promotions/models/Notification.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
+import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
 import { env } from '../../../../config/env.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
@@ -1088,10 +1089,18 @@ const buildReactivatedUserPayload = async ({ req, name, phone, email, countryCod
   },
 });
 
-const createUserSession = (user) => ({
-  token: signAccessToken({ sub: String(user._id), role: 'user' }),
-  user: toUserPayload(user),
-});
+const createUserSession = (user) => {
+  const unified = buildUnifiedUserSession(user);
+  return {
+    token: unified.taxiAuth.token,
+    user: toUserPayload(user),
+    foodAuth: {
+      accessToken: unified.accessToken,
+      refreshToken: unified.refreshToken,
+      user: { ...toUserPayload(user), role: 'USER' },
+    },
+  };
+};
 
 const generateUserReferralCode = (user) => {
   const idPart = String(user?._id || '').slice(-6).toUpperCase();

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { userAuthService } from '../../services/authService';
+import { persistTaxiUserLogin } from '@/shared/utils/moduleAuth';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const PENDING_SIGNUP_PHONE_KEY = 'pendingUserSignupPhone';
@@ -175,10 +175,7 @@ const VerifyOTP = () => {
       setSuccess(true);
 
       if (payload.exists) {
-        localStorage.setItem('token', payload.token || '');
-        localStorage.setItem('userToken', payload.token || '');
-        localStorage.setItem('role', 'user');
-        localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+        persistTaxiUserLogin(payload);
         syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);
         sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);

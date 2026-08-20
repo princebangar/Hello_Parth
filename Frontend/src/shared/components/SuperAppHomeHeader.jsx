@@ -4,22 +4,34 @@ import { MapPin, ChevronDown } from 'lucide-react';
 import { getVerticalTheme } from '@/shared/constants/superAppVerticalTheme';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import { ensureFoodGuestSession } from '@/shared/utils/activeModule.js';
-
-const LOCATION_STORAGE_KEY = 'helloparth:lastLocation';
-const LOCATION_UPDATED_EVENT = 'helloparth:location-updated';
+import { readSharedFoodLocation, getFoodStyleLocationParts, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
 
 function readHelloParthLocation() {
   if (typeof window === 'undefined') return null;
+  const food = readSharedFoodLocation();
+  if (food) {
+    const parts = getFoodStyleLocationParts(food);
+    return {
+      ...food,
+      formattedAddress: food.formattedAddress || food.address || parts.title,
+      area: parts.title,
+      city: food.city || '',
+      state: parts.state || food.state || '',
+      pincode: parts.pincode,
+      zipCode: parts.pincode,
+      address: food.address || food.formattedAddress || parts.title,
+    };
+  }
   try {
-    const saved = JSON.parse(window.localStorage.getItem(LOCATION_STORAGE_KEY) || '{}');
-    const address = String(saved?.address || '').trim();
+    const saved = JSON.parse(window.localStorage.getItem(TAXI_LOCATION_STORAGE_KEY) || '{}');
+    const address = String(saved?.address || saved?.area || '').trim();
     if (!address) return null;
-    const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+    const chunks = address.split(',').map((p) => p.trim()).filter(Boolean);
     return {
       formattedAddress: address,
-      area: parts[0] || address,
-      city: parts.length > 2 ? parts[parts.length - 2] : parts[1] || '',
-      state: parts.length > 1 ? parts[parts.length - 1] : '',
+      area: saved.area || chunks[0] || address,
+      city: chunks.length > 2 ? chunks[chunks.length - 2] : chunks[1] || '',
+      state: chunks.length > 1 ? chunks[chunks.length - 1] : '',
       address,
     };
   } catch {
@@ -149,10 +161,12 @@ export default function SuperAppHomeHeader({
     const syncLocation = () => setStoredLocation(readHelloParthLocation());
     syncLocation();
     window.addEventListener('storage', syncLocation);
-    window.addEventListener(LOCATION_UPDATED_EVENT, syncLocation);
+    window.addEventListener(TAXI_LOCATION_UPDATED_EVENT, syncLocation);
+    window.addEventListener(FOOD_LOCATION_UPDATED_EVENT, syncLocation);
     return () => {
       window.removeEventListener('storage', syncLocation);
-      window.removeEventListener(LOCATION_UPDATED_EVENT, syncLocation);
+      window.removeEventListener(TAXI_LOCATION_UPDATED_EVENT, syncLocation);
+      window.removeEventListener(FOOD_LOCATION_UPDATED_EVENT, syncLocation);
     };
   }, []);
 
@@ -161,18 +175,21 @@ export default function SuperAppHomeHeader({
 
   const displayTitle = useMemo(() => {
     if (locationTitle?.trim()) return locationTitle.trim();
+    if (location?.area) return location.area;
     if (savedAddressText?.trim()) {
       const firstPart = savedAddressText.split(',')[0]?.trim();
       return firstPart || savedAddressText;
     }
-    if (location?.area && location?.city) return `${location.area}, ${location.city}`;
-    return location?.area || location?.city || location?.formattedAddress?.split(',')[0] || 'Select Location';
+    return location?.city || location?.formattedAddress?.split(',')[0] || 'Select Location';
   }, [locationTitle, savedAddressText, location]);
 
   const displaySubtitle = useMemo(() => {
     if (locationSubtitle?.trim()) return locationSubtitle.trim();
-    const parts = [location?.state, location?.zipCode || location?.postalCode].filter(Boolean);
-    return parts.join(', ');
+    const parts = [location?.state, location?.pincode || location?.zipCode || location?.postalCode].filter(Boolean);
+    if (parts.length) return parts.join(', ');
+    const addr = String(location?.address || location?.formattedAddress || '');
+    if (addr.length > 10) return addr.split(',').slice(1, 3).join(',').trim();
+    return '';
   }, [locationSubtitle, location]);
 
   const onLocationClick = useCallback(() => {

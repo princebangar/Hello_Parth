@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react"
-import { locationAPI, userAPI } from "@food/api"
+import { persistFoodUserLocation } from "@/shared/utils/sharedUserLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import apiClient from "@food/api/axios"
 
@@ -1318,7 +1318,7 @@ export function useLocation() {
               }
 
               debugLog("?? Saving location:", finalLoc)
-              localStorage.setItem("userLocation", JSON.stringify(finalLoc))
+              persistFoodUserLocation(finalLoc)
               setLocation(finalLoc)
               setPermissionGranted(true)
               if (showLoading) setGlobalLocationLoading(false)
@@ -1352,7 +1352,7 @@ export function useLocation() {
                     accuracy: pos.coords.accuracy || null
                   }
                   debugLog("? Last resort geocoding succeeded:", lastResortLoc)
-                  localStorage.setItem("userLocation", JSON.stringify(lastResortLoc))
+                  persistFoodUserLocation(lastResortLoc)
                   setLocation(lastResortLoc)
                   setPermissionGranted(true)
                   if (showLoading) setLoading(false)
@@ -1670,14 +1670,14 @@ export function useLocation() {
             if (coordsChanged) {
               prevLocationCoordsRef.current = { latitude: loc.latitude, longitude: loc.longitude }
               debugLog("?? Updating live location:", loc)
-              localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
+              persistFoodUserLocation(persistedLocation)
               setLocation(persistedLocation)
               setPermissionGranted(true)
               setError(null)
             } else {
               // Coordinates haven't changed significantly, skip state update to prevent re-renders
               // Still update localStorage silently for persistence
-              localStorage.setItem("userLocation", JSON.stringify(persistedLocation))
+              persistFoodUserLocation(persistedLocation)
             }
 
             // Debounce DB updates - only update every 5 seconds
@@ -1864,7 +1864,7 @@ export function useLocation() {
         // TEMPORARY: No stored location found - set default Indore in localStorage
         // This ensures PageNavbar and other components see the default immediately.
         try {
-          localStorage.setItem("userLocation", JSON.stringify(TEMPORARY_DEFAULT_INDORE_LOCATION))
+          persistFoodUserLocation(TEMPORARY_DEFAULT_INDORE_LOCATION)
           setLocation(TEMPORARY_DEFAULT_INDORE_LOCATION)
           setLoading(false)
           hasInitialLocation = true
@@ -2153,7 +2153,7 @@ export function useLocation() {
         accuracy: accuracy ?? null,
       }
 
-      localStorage.setItem("userLocation", JSON.stringify(finalLoc))
+      persistFoodUserLocation(finalLoc)
       setLocation(finalLoc)
       setPermissionGranted(true)
 

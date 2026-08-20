@@ -154,8 +154,8 @@ export default function UnifiedOTPFastLogin() {
   }, [location.state?.from, navigate])
 
   const normalizedPhone = () => {
-    const digits = String(phoneNumber).replace(/\D/g, "").slice(-15)
-    return digits.length >= 8 ? digits : ""
+    const digits = String(phoneNumber).replace(/\D/g, "").slice(-10)
+    return digits.length === 10 ? digits : ""
   }
 
   const withTimeout = async (promise, timeoutMs, label) => {
@@ -203,8 +203,8 @@ export default function UnifiedOTPFastLogin() {
   const handleSendOTP = async (e) => {
     e.preventDefault()
     const phone = normalizedPhone()
-    if (phone.length < 8) {
-      toast.error("Please enter a valid phone number (at least 8 digits)")
+    if (phone.length !== 10) {
+      toast.error("Phone number must be exactly 10 digits")
       return
     }
     if (submitting.current) return
@@ -230,8 +230,8 @@ export default function UnifiedOTPFastLogin() {
 
   const handleResendOTP = async () => {
     const phone = normalizedPhone()
-    if (phone.length < 8) {
-      toast.error("Please enter a valid phone number (at least 8 digits)")
+    if (phone.length !== 10) {
+      toast.error("Phone number must be exactly 10 digits")
       return
     }
     if (resendTimer > 0 || submitting.current) return
@@ -266,6 +266,10 @@ export default function UnifiedOTPFastLogin() {
     e.preventDefault()
     const phone = normalizedPhone()
     const otpDigits = String(otp).replace(/\D/g, "").slice(0, 4)
+    if (phone.length !== 10) {
+      toast.error("Phone number must be exactly 10 digits")
+      return
+    }
     if (otpDigits.length !== 4) {
       toast.error("Please enter the 4-digit OTP")
       return

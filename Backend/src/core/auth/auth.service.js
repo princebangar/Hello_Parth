@@ -11,6 +11,7 @@ import { FoodReferralSettings } from "../../modules/food/admin/models/referralSe
 import { FoodReferralLog } from "../../modules/food/admin/models/referralLog.model.js";
 import { createOrUpdateOtp, verifyOtp } from "../otp/otp.service.js";
 import { signAccessToken, signRefreshToken } from "./token.util.js";
+import { buildUnifiedUserSession } from "./unifiedUserSession.js";
 import { FoodRefreshToken } from "../refreshTokens/refreshToken.model.js";
 import { ValidationError, AuthError } from "./errors.js";
 import { config } from "../../config/env.js";
@@ -252,10 +253,10 @@ export const verifyUserOtpAndLogin = async (
   }
 
   const user = userDoc.toObject();
-  const payload = { userId: user._id.toString(), role: user.role || "USER" };
+  const unifiedSession = buildUnifiedUserSession(userDoc);
 
-  const accessToken = signAccessToken(payload);
-  const refreshToken = signRefreshToken(payload);
+  const accessToken = unifiedSession.accessToken;
+  const refreshToken = unifiedSession.refreshToken;
 
   const ttlMs = ms(config.jwtRefreshExpiresIn || "7d");
   const expiresAt = new Date(Date.now() + ttlMs);
@@ -279,7 +280,13 @@ export const verifyUserOtpAndLogin = async (
     `[Auth Verify] Login success phone=${phone} total=${Date.now() - loginStart}ms`,
   );
 
-  return { accessToken, refreshToken, user, isNewUser };
+  return {
+    accessToken,
+    refreshToken,
+    user,
+    isNewUser,
+    taxiAuth: unifiedSession.taxiAuth,
+  };
 };
 
 export const adminLogin = async (email, password) => {

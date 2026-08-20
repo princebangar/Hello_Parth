@@ -4,10 +4,10 @@ import { LoaderCircle, Navigation } from 'lucide-react';
 import { GoogleMap } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { getSavedLocation, saveLocation } from '../services/locationStore';
+import { locationPartsFromGoogleResult } from '@/shared/utils/sharedUserLocation';
 const DEFAULT_CENTER = { lat: 17.385, lon: 78.4867 };
 const DEFAULT_ZOOM = 16;
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
-const AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const areCentersNearlyEqual = (first, second, threshold = 0.00001) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lon ?? 0) - Number(second?.lon ?? 0)) < threshold
@@ -33,8 +33,15 @@ const LocationMapSection = ({ plain = false }) => {
     });
   };
 
-  const persistAddress = (address) => {
-    saveLocation({ address: String(address || '').trim() });
+  const persistGeocodeResult = (result) => {
+    const parts = locationPartsFromGoogleResult(result);
+    if (!parts.title) return;
+    saveLocation({
+      address: parts.address,
+      area: parts.area,
+      state: parts.state,
+      pincode: parts.pincode,
+    });
   };
 
   useEffect(() => {
@@ -43,14 +50,8 @@ const LocationMapSection = ({ plain = false }) => {
       persistCoords({ lat: saved.lat, lon: saved.lon });
     }
 
-    const shouldRefreshCurrentLocation =
-      !saved
-      || typeof saved?.lat !== 'number'
-      || typeof saved?.lon !== 'number'
-      || !saved?.updatedAt
-      || (Date.now() - saved.updatedAt) > AUTO_REFRESH_INTERVAL_MS;
-
-    if (shouldRefreshCurrentLocation && !requestedLocationRef.current) {
+    const hasSavedCoords = typeof saved?.lat === 'number' && typeof saved?.lon === 'number';
+    if (!hasSavedCoords && !requestedLocationRef.current) {
       requestedLocationRef.current = true;
       requestLocation();
     }
@@ -86,9 +87,9 @@ const LocationMapSection = ({ plain = false }) => {
       if (window.google?.maps?.Geocoder) {
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ location: { lat: next.lat, lng: next.lon } }, (results, geocodeStatus) => {
-          if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
+          if (geocodeStatus === 'OK' && results?.[0]) {
             try {
-              persistAddress(results[0].formatted_address);
+              persistGeocodeResult(results[0]);
             } catch {
               // ignore
             }
@@ -260,7 +261,7 @@ const LocationMapSection = ({ plain = false }) => {
                       { location: { lat: center.lat(), lng: center.lng() } },
                       (results, geocodeStatus) => {
                         if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
-                          persistAddress(results[0].formatted_address);
+                          persistGeocodeResult(results[0]);
                         }
                       },
                     );

@@ -74,8 +74,6 @@ const UserCMSHelpSupportPage = lazy(() => import("@food/pages/user/profile/UserC
 const Settings = lazy(() => import("@food/pages/user/profile/Settings"))
 
 // Auth
-const SignIn = lazy(() => import("@food/pages/user/auth/SignIn"))
-const OTP = lazy(() => import("@food/pages/user/auth/OTP"))
 const AuthCallback = lazy(() => import("@food/pages/user/auth/AuthCallback"))
 
 // Help
@@ -143,7 +141,7 @@ export default function UserRouter() {
           } />
           <Route path="auth/otp" element={
             <AuthRedirect module="user">
-              <OTP />
+              <Navigate to="/login" replace />
             </AuthRedirect>
           } />
           <Route path="auth/callback" element={<AuthCallback />} />

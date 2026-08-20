@@ -402,9 +402,9 @@ export function setAuthData(module, token, user, refreshToken = null) {
 export function setUnifiedAuthData(data) {
   if (!data) return;
 
-  const foodToken = data.accessToken;
-  const foodUser = data.user;
-  const foodRefreshToken = data.refreshToken;
+  const foodToken = data.accessToken || data.foodAuth?.accessToken;
+  const foodUser = data.user || data.foodAuth?.user;
+  const foodRefreshToken = data.refreshToken || data.foodAuth?.refreshToken;
   if (foodToken && foodUser) {
     setAuthData("user", foodToken, foodUser, foodRefreshToken);
   }
@@ -412,6 +412,7 @@ export function setUnifiedAuthData(data) {
   const taxiAuth = data.taxiAuth;
   if (taxiAuth && taxiAuth.token && taxiAuth.user) {
     localStorage.setItem("userToken", taxiAuth.token);
+    localStorage.setItem("token", taxiAuth.token);
     localStorage.setItem("userInfo", JSON.stringify(taxiAuth.user));
     localStorage.setItem("role", "user");
     localStorage.setItem("chatRole", "user");
@@ -420,6 +421,7 @@ export function setUnifiedAuthData(data) {
 
   if (foodToken && foodUser) {
     localStorage.setItem("userToken", foodToken);
+    localStorage.setItem("token", foodToken);
     localStorage.setItem("userInfo", JSON.stringify(foodUser));
     localStorage.setItem("role", "user");
     localStorage.setItem("chatRole", "user");

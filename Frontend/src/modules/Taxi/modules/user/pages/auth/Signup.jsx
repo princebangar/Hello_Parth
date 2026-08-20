@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/AuthLayout';
 import { User, Mail, Camera, Smartphone, ImagePlus, LifeBuoy } from 'lucide-react';
-import { clearLocalUserSession, userAuthService } from '../../services/authService';
+import { persistTaxiUserLogin } from '@/shared/utils/moduleAuth';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const fieldShellClassName =
@@ -152,10 +152,7 @@ const Signup = () => {
       });
       const payload = response?.data || {};
 
-      localStorage.setItem('token', payload.token || '');
-      localStorage.setItem('userToken', payload.token || '');
-      localStorage.setItem('role', 'user');
-      localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+      persistTaxiUserLogin(payload);
       syncPushTokens();
       sessionStorage.removeItem(PENDING_SIGNUP_PHONE_KEY);
       sessionStorage.removeItem(PENDING_SIGNUP_REFERRAL_CODE_KEY);

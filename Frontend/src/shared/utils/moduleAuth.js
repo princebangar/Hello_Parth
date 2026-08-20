@@ -343,32 +343,44 @@ export function setAuthData(module, token, user, refreshToken = null) {
 export function setUnifiedAuthData(data) {
   if (!data) return;
 
-  // 1. Set Food Auth Data
-  const foodToken = data.accessToken;
-  const foodUser = data.user;
-  const foodRefreshToken = data.refreshToken;
+  const foodToken = data.accessToken || data.foodAuth?.accessToken;
+  const foodUser = data.user || data.foodAuth?.user;
+  const foodRefreshToken = data.refreshToken || data.foodAuth?.refreshToken;
   if (foodToken && foodUser) {
     setAuthData("user", foodToken, foodUser, foodRefreshToken);
   }
 
-  // 2. Set Taxi Auth Data
   const taxiAuth = data.taxiAuth;
   if (taxiAuth && taxiAuth.token && taxiAuth.user) {
     localStorage.setItem("userToken", taxiAuth.token);
+    localStorage.setItem("token", taxiAuth.token);
     localStorage.setItem("userInfo", JSON.stringify(taxiAuth.user));
     localStorage.setItem("role", "user");
     localStorage.setItem("chatRole", "user");
     return;
   }
 
-  // Fallback bridge: when unified API doesn't return taxiAuth, reuse common USER session
-  // so taxi module does not force a second login.
   if (foodToken && foodUser) {
     localStorage.setItem("userToken", foodToken);
+    localStorage.setItem("token", foodToken);
     localStorage.setItem("userInfo", JSON.stringify(foodUser));
     localStorage.setItem("role", "user");
     localStorage.setItem("chatRole", "user");
   }
+}
+
+export function persistTaxiUserLogin(payload = {}) {
+  if (!payload) return;
+
+  setUnifiedAuthData({
+    accessToken: payload.foodAuth?.accessToken,
+    refreshToken: payload.foodAuth?.refreshToken,
+    user: payload.foodAuth?.user,
+    taxiAuth: {
+      token: payload.token,
+      user: payload.user,
+    },
+  });
 }
 
 /**

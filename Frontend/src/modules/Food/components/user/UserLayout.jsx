@@ -2,7 +2,6 @@ import { Outlet, useLocation, useNavigate, useNavigationType } from "react-route
 import { useEffect, useState, createContext, useContext, useRef, useCallback, useMemo } from "react"
 import { toast } from "sonner"
 import { ProfileProvider } from "@food/context/ProfileContext"
-import LocationPrompt from "./LocationPrompt"
 import { CartProvider } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
 const debugLog = (...args) => {}
@@ -530,7 +529,6 @@ function UserLayoutContent() {
       <div className="hidden md:block">
         {showBottomNav && !isOutOfZone && <DesktopNavbar showLogo={!isUnder250} />}
       </div>
-      {!isPolicyPage && !isAuthPage && <LocationPrompt />}
       
       {isInitialChecking && !location.pathname.includes('/search') ? (
         <AppShellSkeleton />

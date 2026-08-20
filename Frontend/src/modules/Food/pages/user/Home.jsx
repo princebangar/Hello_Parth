@@ -91,7 +91,6 @@ import {
 } from "@food/components/ui/dropdown-menu";
 import { useLocation, resolveServiceCity } from "@food/hooks/useLocation";
 import { useZone } from "@food/hooks/useZone";
-import quickSpicyLogo from "@food/assets/quicky-spicy-logo.png";
 import offerImage from "@food/assets/offerimage.png";
 import api, { publicGetOnce, restaurantAPI, adminAPI } from "@food/api";
 import { API_BASE_URL } from "@food/api/config";

@@ -12,6 +12,8 @@ import { serializeAdminContext, resolveAdminModule } from '../../../core/admin/a
 const roleModelMap = {
   admin: Admin,
   'super-admin': Admin,
+  USER: User,
+  user: User,
   driver: Driver,
   bus_driver: BusDriver,
   owner: Owner,
