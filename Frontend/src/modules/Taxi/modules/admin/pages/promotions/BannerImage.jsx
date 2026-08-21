@@ -13,6 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getUnifiedAdminToken } from '../../services/adminSession';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const Motion = motion;
 const LIST_PATH = '/admin/promotions/banner-image';
@@ -130,12 +131,11 @@ const BannerImage = () => {
       let imageData = formData.use_url ? formData.image_url.trim() : '';
 
       if (!formData.use_url && formData.image instanceof File) {
-        imageData = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(formData.image);
-        });
+        const uploadResult = await uploadService.uploadImageFile(formData.image, 'promotions/banners');
+        imageData = uploadResult?.secureUrl || uploadResult?.url || '';
+        if (!imageData) {
+          throw new Error('Banner image upload failed');
+        }
       }
 
       const payload = {

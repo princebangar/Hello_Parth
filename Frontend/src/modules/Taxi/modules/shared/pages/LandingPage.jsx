@@ -87,10 +87,10 @@ function LandingPage() {
               <Link to="/faq" className={`new-nav-link ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => { setActiveTab('faq'); setIsMobileMenuOpen(false); }}>FAQs</Link>
               <Link to="/blog" className={`new-nav-link ${activeTab === 'blog' ? 'active' : ''}`} onClick={() => { setActiveTab('blog'); setIsMobileMenuOpen(false); }}>Blog</Link>
               <Link to="/contact" className={`new-nav-link ${activeTab === 'contact' ? 'active' : ''}`} onClick={() => { setActiveTab('contact'); setIsMobileMenuOpen(false); }}>Contact</Link>
-              <Link to="/taxi/user/login" className={`new-nav-link ${activeTab === 'login' ? 'active' : ''}`} onClick={() => { setActiveTab('login'); setIsMobileMenuOpen(false); }}>Login</Link>
+              <Link to="/login" state={{ from: '/taxi/user' }} className={`new-nav-link ${activeTab === 'login' ? 'active' : ''}`} onClick={() => { setActiveTab('login'); setIsMobileMenuOpen(false); }}>Login</Link>
             </nav>
             <div className="new-nav-actions">
-              <button className="new-login-btn hidden-mobile" onClick={() => navigate('/taxi/user/login')}>Login</button>
+              <button className="new-login-btn hidden-mobile" onClick={() => navigate('/login', { state: { from: '/taxi/user' } })}>Login</button>
               <button className="new-book-btn hidden-mobile" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.helloparth.user', '_blank')}>Book a Taxi</button>
               <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
                 ☰
@@ -107,7 +107,7 @@ function LandingPage() {
             <p className="new-hero-desc">Everything your taxi business needs is already here!<br/>Hello Parth made for taxi service companies!</p>
             <div className="new-hero-cta-row">
               <button className="new-hero-action-btn" onClick={() => window.open('https://play.google.com/store/apps/details?id=com.helloparth.user', '_blank')}>Book Your Ride</button>
-              <button className="new-hero-login-btn" onClick={() => navigate('/taxi/user/login')}>
+              <button className="new-hero-login-btn" onClick={() => navigate('/login', { state: { from: '/taxi/user' } })}>
                 <LogIn size={18} />
                 <span>Login</span>
               </button>
@@ -223,7 +223,7 @@ function LandingPage() {
             </p>
           </div>
           <div className="landing-login-actions">
-            <button className="landing-login-primary" onClick={() => navigate('/taxi/user/login')}>
+            <button className="landing-login-primary" onClick={() => navigate('/login', { state: { from: '/taxi/user' } })}>
               <LogIn size={18} />
               <span>Go to Login</span>
             </button>

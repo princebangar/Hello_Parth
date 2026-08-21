@@ -358,25 +358,24 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                       type="file"
                       accept="image/*"
                       onChange={async (e) => {
-                        const file = e.target.files[0];
+                        const file = e.target.files?.[0];
                         if (!file) return;
-                        
-                        const reader = new FileReader();
-                        reader.onloadend = async () => {
-                          const base64 = reader.result;
-                          const loadingToast = toast.loading('Uploading image...');
-                          try {
-                            const res = await adminService.uploadImage(base64);
-                            setFormData(prev => ({
-                              ...prev,
-                              images: [...prev.images, res.data.url]
-                            }));
-                            toast.success('Image uploaded', { id: loadingToast });
-                          } catch (error) {
-                            toast.error('Upload failed', { id: loadingToast });
-                          }
-                        };
-                        reader.readAsDataURL(file);
+
+                        const loadingToast = toast.loading('Uploading image...');
+                        try {
+                          const res = await adminService.uploadImage(file);
+                          const url = res?.data?.url || res?.data?.secureUrl || res?.url || res?.secureUrl || '';
+                          if (!url) throw new Error('Upload failed');
+                          setFormData((prev) => ({
+                            ...prev,
+                            images: [...prev.images, url],
+                          }));
+                          toast.success('Image uploaded', { id: loadingToast });
+                        } catch (error) {
+                          toast.error('Upload failed', { id: loadingToast });
+                        } finally {
+                          e.target.value = '';
+                        }
                       }}
                       className="absolute inset-0 cursor-pointer opacity-0"
                       id="vehicle-image-upload"

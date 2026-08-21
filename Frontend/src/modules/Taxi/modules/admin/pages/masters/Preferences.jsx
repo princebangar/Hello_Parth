@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, Upload, Plus, Trash2, Edit2, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
@@ -35,12 +36,10 @@ const Preferences = () => {
   useEffect(() => { fetchPreferences(); }, []);
 
   const handleIconChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
-      setFormData(prev => ({ ...prev, icon: file }));
-      const reader = new FileReader();
-      reader.onloadend = () => setIconPreview(reader.result);
-      reader.readAsDataURL(file);
+      setFormData((prev) => ({ ...prev, icon: file }));
+      setIconPreview(URL.createObjectURL(file));
     }
   };
 
@@ -48,7 +47,12 @@ const Preferences = () => {
     if (!formData.name) return alert('Please enter preference name');
     try {
       setIsSubmitting(true);
-      const data = { name: formData.name };
+      let iconUrl = '';
+      if (formData.icon instanceof File) {
+        const uploadResult = await uploadService.uploadImageFile(formData.icon, 'preferences');
+        iconUrl = uploadResult?.secureUrl || uploadResult?.url || '';
+      }
+      const data = { name: formData.name, ...(iconUrl ? { icon: iconUrl } : {}) };
       await adminService.createPreference(data);
       setFormData({ name: '', icon: null });
       setIconPreview(null);

@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useRef } from "react"
+import React, { useEffect, useState, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Link, useNavigate, useLocation } from "react-router-dom"
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { ShieldCheck, Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
 import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
 import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/moduleAuth"
-import { resolveLoginBackRoute, rememberLoginReturnTo, peekLoginReturnTo, ensureFoodGuestSession } from "@/shared/utils/activeModule.js"
+import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo } from "@/shared/utils/activeModule.js"
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
@@ -21,6 +21,11 @@ export default function UnifiedOTPFastLogin() {
   const [pendingAuthData, setPendingAuthData] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const referralCode = useMemo(
+    () => String(searchParams.get("ref") || location.state?.referralCode || "").trim(),
+    [searchParams, location.state?.referralCode],
+  )
   const submitting = useRef(false)
 
   // Dismiss soft keyboard on unmount & auto-redirect if already logged in
@@ -31,7 +36,7 @@ export default function UnifiedOTPFastLogin() {
     }
 
     if (isUnifiedAuthenticated()) {
-      navigate(resolveLoginBackRoute(fromPath), { replace: true })
+      navigate(resolveConsumerPostLoginRoute(), { replace: true })
     }
     return () => {
       if (typeof document !== 'undefined') {
@@ -47,11 +52,9 @@ export default function UnifiedOTPFastLogin() {
 
   const handleSkipForNow = () => {
     ensureFoodGuestSession()
-    const from = location.state?.from || peekLoginReturnTo()
-    const target = String(from || "").startsWith("/food/")
-      ? "/food/user"
-      : resolveLoginBackRoute(from)
-    navigate(target, { replace: true })
+    consumeLoginReturnTo()
+    // Guest browse is Food-only; Taxi requires login.
+    navigate("/food/user", { replace: true })
   }
 
   const handleBack = (e) => {
@@ -79,11 +82,11 @@ export default function UnifiedOTPFastLogin() {
       return
     }
 
-    const targetPath = resolveLoginBackRoute(location.state?.from)
-
-    // Wait 30ms for soft keyboard dismiss before unmounting inputs.
+    // Guest / logged-out back always returns to Food browse (Taxi is login-only).
+    ensureFoodGuestSession()
+    consumeLoginReturnTo()
     setTimeout(() => {
-      navigate(targetPath, { replace: true })
+      navigate("/food/user", { replace: true })
     }, 30)
   }
 
@@ -149,7 +152,7 @@ export default function UnifiedOTPFastLogin() {
   // Check if already logged in on mount
   useEffect(() => {
     if (isUnifiedAuthenticated()) {
-      navigate(resolveLoginBackRoute(location.state?.from), { replace: true })
+      navigate(resolveConsumerPostLoginRoute(), { replace: true })
     }
   }, [location.state?.from, navigate])
 
@@ -316,7 +319,7 @@ export default function UnifiedOTPFastLogin() {
       })
 
       const response = await withTimeout(
-        authAPI.verifyUnifiedOTP(phoneNumber, otpDigits, null, null, fcmToken, platform),
+        authAPI.verifyUnifiedOTP(phoneNumber, otpDigits, referralCode || null, null, fcmToken, platform),
         VERIFY_REQUEST_TIMEOUT_MS,
         "OTP verification request",
       )
@@ -348,8 +351,17 @@ export default function UnifiedOTPFastLogin() {
         console.warn("[Auth] FCM save route failed after login:", fcmSaveError?.message || fcmSaveError)
       }
       toast.success("Authentication successful!")
-      const targetRoute = resolveLoginBackRoute(location.state?.from)
-      navigate(targetRoute, { replace: true })
+      consumeLoginReturnTo()
+      const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
+      const fromHint = String(location.state?.from || "").split("?")[0]
+      navigate(
+        postLoginTo.startsWith("/taxi/")
+          ? "/taxi/user"
+          : fromHint.startsWith("/taxi/")
+            ? "/taxi/user"
+            : resolveConsumerPostLoginRoute(),
+        { replace: true },
+      )
     } catch (err) {
       const status = err?.response?.status
       let msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Invalid OTP. Please try again."
@@ -407,8 +419,17 @@ export default function UnifiedOTPFastLogin() {
 
       setUnifiedAuthData(nextData)
       toast.success("Profile completed successfully!")
-      const targetRoute = resolveLoginBackRoute(location.state?.from)
-      navigate(targetRoute, { replace: true })
+      consumeLoginReturnTo()
+      const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
+      const fromHint = String(location.state?.from || "").split("?")[0]
+      navigate(
+        postLoginTo.startsWith("/taxi/")
+          ? "/taxi/user"
+          : fromHint.startsWith("/taxi/")
+            ? "/taxi/user"
+            : resolveConsumerPostLoginRoute(),
+        { replace: true },
+      )
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
@@ -539,10 +560,20 @@ export default function UnifiedOTPFastLogin() {
 
               <div className="text-center mb-8">
                 <h2 className="text-[32px] leading-tight font-black text-[#1A1A1A] tracking-tight mb-2">
-                  Welcome to Hello Parth
+                  {step === 3
+                    ? "Complete your profile"
+                    : step === 2
+                      ? "Verify OTP"
+                      : "Welcome to Hello Parth"}
                 </h2>
                 <p className="text-[#1A1A1A] text-[15px] font-medium max-w-[28ch] mx-auto">
-                  Enter your phone number to<br />access the unified ecosystem.
+                  {step === 3 ? (
+                    <>Enter your name to finish signup<br />for Food & Taxi.</>
+                  ) : step === 2 ? (
+                    <>Enter the 4-digit code we sent<br />to your phone.</>
+                  ) : (
+                    <>Enter your phone number to<br />access Food & Taxi.</>
+                  )}
                 </p>
               </div>
 
@@ -689,6 +720,11 @@ export default function UnifiedOTPFastLogin() {
                           placeholder="Enter your full name"
                         />
                       </div>
+                      {referralCode ? (
+                        <p className="text-center text-[12px] font-semibold text-gray-500">
+                          Referral applied: <span className="text-[#F38F24]">{referralCode}</span>
+                        </p>
+                      ) : null}
                     </div>
                   )}
                 </div>

@@ -106,14 +106,6 @@ const formatDispatchType = (value = "") => {
   return "Normal";
 };
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
 const getDocumentSideLabel = (field = {}) => {
   if (field.side === "front") return "Front";
   if (field.side === "back") return "Back";
@@ -239,9 +231,8 @@ const AddVehicle = () => {
           throw new Error(`${field.label || "Document"} currently supports image files only.`);
         }
 
-        const dataUrl = await fileToDataUrl(selectedFile);
-        const uploadResult = await uploadService.uploadImage(
-          dataUrl,
+        const uploadResult = await uploadService.uploadImageFile(
+          selectedFile,
           "fleet-vehicle-documents",
         );
         const uploadedUrl = uploadResult?.url || uploadResult?.secureUrl || "";

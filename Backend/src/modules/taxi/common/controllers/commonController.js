@@ -1,7 +1,6 @@
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import {
     storeImageBuffer,
-    storeImageFromDataUrl,
     deleteStoredAsset,
     extractAssetUrl,
 } from '../../../../services/storage.service.js';
@@ -13,21 +12,26 @@ import { getReferralSettings, getReferralTranslationContent } from '../../admin/
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
 
 /**
- * Shared upload endpoint for taxi app/web.
+ * Shared upload endpoint for taxi app/web (food-style multipart).
  * Uses the same storage.service as food (sharp → WebP → /var/www/uploads).
  */
 export const uploadImage = asyncHandler(async (req, res) => {
+    if (!req.file?.buffer) {
+        return res.status(400).json({
+            success: false,
+            message: 'Image file is required (multipart field: image)',
+        });
+    }
+
     const folder = String(req.body?.folder || 'general').trim() || 'general';
     const scopedFolder = `taxi/${folder}`;
     const replaceUrl = extractAssetUrl(req.body?.replaceUrl);
 
-    const stored = req.file
-        ? await storeImageBuffer(req.file.buffer, scopedFolder, {
-            mimeType: req.file.mimetype || 'image/jpeg',
-            originalName: req.file.originalname,
-            replaceUrl,
-        })
-        : await storeImageFromDataUrl(req.body?.image, scopedFolder, { replaceUrl });
+    const stored = await storeImageBuffer(req.file.buffer, scopedFolder, {
+        mimeType: req.file.mimetype || 'image/jpeg',
+        originalName: req.file.originalname,
+        replaceUrl,
+    });
 
     const url = stored.url || stored.secure_url;
 

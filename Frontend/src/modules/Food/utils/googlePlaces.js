@@ -1,6 +1,7 @@
 import { getGoogleMapsApiKey } from "./googleMapsApiKey"
 import { geocodeGooglePlaceId } from "./googleGeocoding"
 import { Loader } from "@googlemaps/js-api-loader"
+import { geocodeAPI } from "@food/api"
 
 let mapsLoadPromise = null
 let autocompleteService = null
@@ -206,7 +207,6 @@ async function fetchTextSearchPredictions(query, options = {}) {
   const timeoutId = setTimeout(() => controller.abort(), 7000)
 
   try {
-    const { geocodeAPI } = await import("@food/api")
     const lat = Number(options.latitude)
     const lng = Number(options.longitude)
 

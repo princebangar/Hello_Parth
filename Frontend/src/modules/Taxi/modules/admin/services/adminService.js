@@ -261,7 +261,11 @@ export const adminService = {
   createAdminBusBooking: (payload) => api.post('/admin/bus-bookings/manual', payload),
   cancelAdminBusBookingSeats: (id, payload = {}) => api.post(`/admin/bus-bookings/${id}/cancel`, payload),
 
-  uploadImage: (image) => api.post('/admin/upload-image', { image }),
+  uploadImage: (file) => {
+    const formData = new FormData();
+    formData.append('image', file, file?.name || 'upload.jpg');
+    return api.post('/admin/upload-image', formData);
+  },
 
   /**
    * Languages Management (Master)

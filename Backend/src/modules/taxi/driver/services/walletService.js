@@ -1,11 +1,14 @@
 import mongoose from 'mongoose';
-import { env } from '../../../../config/env.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
 import { Driver } from '../models/Driver.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
 import { Ride } from '../../user/models/Ride.js';
 import { getWalletSettings } from '../../services/appSettingsService.js';
+
+/** Fallbacks when admin SetPrice / wallet settings are missing (same pattern as food). */
+const DEFAULT_DRIVER_COMMISSION_PERCENT = 20;
+const DEFAULT_DRIVER_CASH_LIMIT = 500;
 
 const normalizeAmount = (value, fieldName = 'amount') => {
   const amount = Number(value);
@@ -96,9 +99,9 @@ const resolveCommissionConfigForRide = async (ride, session) => {
   }
 
   return {
-    source: 'env_fallback',
+    source: 'code_fallback',
     type: 1,
-    value: Number(env.driverWallet.commissionPercent || 0),
+    value: DEFAULT_DRIVER_COMMISSION_PERCENT,
   };
 };
 
@@ -120,7 +123,7 @@ const resolveWalletRules = async () => {
   const configuredMinimumBalance = Number(walletSettings.driver_wallet_minimum_amount_to_get_an_order);
   const minimumBalanceForOrders = Number.isFinite(configuredMinimumBalance)
     ? Math.round(configuredMinimumBalance * 100) / 100
-    : -toNonNegativeNumber(env.driverWallet.defaultCashLimit, 500);
+    : -DEFAULT_DRIVER_CASH_LIMIT;
 
   return {
     minimumBalanceForOrders,

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { normalizePoint, toPoint } from '../../../../utils/geo.js';
-import { storeImageFromDataUrl, extractAssetUrl } from '../../../../services/storage.service.js';
+import { extractAssetUrl } from '../../../../services/storage.service.js';
 import {
   normalizeOtpPhone,
   getOtpTtlMs,
@@ -404,65 +404,32 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     return null;
   }
 
-  if (typeof value === 'object' && value.secureUrl) {
-    return normalizeStoredDocument(value);
+  // Already uploaded via multipart (food-style) — persist metadata only.
+  if (typeof value === 'object' && (value.secureUrl || value.url || value.previewUrl)) {
+    const url = extractAssetUrl(value.secureUrl || value.url || value.previewUrl);
+    if (url && !String(url).startsWith('data:')) {
+      return normalizeStoredDocument({
+        ...value,
+        secureUrl: url,
+        previewUrl: url,
+        uploaded: true,
+      });
+    }
   }
 
-  const dataUrl = typeof value === 'string' ? value : value.dataUrl;
-  const originalFilename = typeof value === 'object'
-    ? value.fileName || value.originalFilename || documentKey
-    : documentKey;
-  const identifyNumber = typeof value === 'object'
-    ? String(
-      value.identifyNumber ||
-      value.identify_number ||
-      value.documentNumber ||
-      value.document_number ||
-      '',
-    ).trim()
-    : '';
-  const expiryDate = typeof value === 'object'
-    ? String(value.expiryDate || value.expiry_date || value.expiry || value.expiresAt || '').trim()
-    : '';
-
-  if (!dataUrl) {
-    throw new ApiError(400, `${documentKey} must contain an image data URL`);
+  if (typeof value === 'string' && value && !value.startsWith('data:')) {
+    return normalizeStoredDocument({
+      key: documentKey,
+      secureUrl: value,
+      previewUrl: value,
+      uploaded: true,
+    });
   }
 
-  const safeSuffix = String(originalFilename)
-    .replace(/\.[^.]+$/, '')
-    .replace(/[^a-zA-Z0-9-_]/g, '');
-
-  const replaceUrl = typeof value === 'object'
-    ? extractAssetUrl(value.replaceUrl || value.previousUrl || value.existingUrl)
-    : '';
-
-  const uploaded = await storeImageFromDataUrl(dataUrl, `taxi/drivers/documents/${documentKey}`, {
-    replaceUrl: replaceUrl || undefined,
-  });
-
-  const url = uploaded.url || uploaded.secure_url;
-
-  return {
-    key: documentKey,
-    fileName: originalFilename || safeSuffix || `${documentKey}.webp`,
-    uploaded: true,
-    uploadedAt: new Date().toISOString(),
-    previewUrl: url,
-    secureUrl: url,
-    publicId: uploaded.public_id || uploaded.filename || null,
-    resourceType: uploaded.resource_type || 'image',
-    format: uploaded.format || 'webp',
-    bytes: uploaded.bytes,
-    width: uploaded.width,
-    height: uploaded.height,
-    identifyNumber,
-    identify_number: identifyNumber,
-    documentNumber: identifyNumber,
-    document_number: identifyNumber,
-    expiryDate,
-    expiry_date: expiryDate,
-  };
+  throw new ApiError(
+    400,
+    `${documentKey} must be uploaded as a file first (multipart). Send the returned secureUrl.`,
+  );
 };
 
 export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {

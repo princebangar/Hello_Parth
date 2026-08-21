@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { persistFoodUserLocation } from "@/shared/utils/sharedUserLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import apiClient from "@food/api/axios"
+import { geocodeAPI } from "@food/api"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -583,7 +584,6 @@ export function useLocation() {
     try {
       debugLog("?? Fetching exact address from Google Maps (proxy) for:", latitude, longitude)
 
-      const { geocodeAPI } = await import("@food/api")
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 3000)
 

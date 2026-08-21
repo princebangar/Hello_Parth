@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 import CarIcon from '../../../../assets/icons/car.png';
 import BikeIcon from '../../../../assets/icons/bike.png';
@@ -175,14 +176,6 @@ const normalizeVehicle = (item = {}) => ({
   ...item,
   id: String(item?._id || item?.id || ''),
 });
-
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
@@ -412,9 +405,16 @@ const VehicleType = ({ mode: propMode }) => {
     if (!file) {
       return;
     }
-    const dataUrl = await fileToDataUrl(file);
-    updateForm(field, dataUrl);
-    event.target.value = '';
+    try {
+      const uploadResult = await uploadService.uploadImageFile(file, 'vehicle-types');
+      const url = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!url) throw new Error('Image upload failed');
+      updateForm(field, url);
+    } catch (error) {
+      setErrorMessage(error?.message || 'Failed to upload image');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const handleSave = async () => {

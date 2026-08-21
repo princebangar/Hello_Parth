@@ -23,9 +23,7 @@ import './App.css';
 
 // Lazy loading pages for performance
 const UserHome = lazy(() => import('./modules/user/pages/Home'));
-const Login = lazy(() => import('./modules/user/pages/auth/Login'));
-const VerifyOTP = lazy(() => import('./modules/user/pages/auth/VerifyOTP'));
-const Signup = lazy(() => import('./modules/user/pages/auth/Signup'));
+// User auth: single shared screen at /login (Frontend/src/modules/auth/pages/Login.jsx) for food + taxi.
 
 // Ride Module Pages
 const SelectLocation = lazy(() => import('./modules/user/pages/ride/SelectLocation'));
@@ -94,8 +92,7 @@ const BusPreview = lazy(() => import('./modules/user/pages/bus/BusPreview'));
 const BusDetails = lazy(() => import('./modules/user/pages/bus/BusDetails'));
 const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 
-// Phase 5 — Onboarding
-const Onboarding = lazy(() => import('./modules/user/pages/auth/Onboarding'));
+
 
 // New Feature Pages
 const BikeRentalHome = lazy(() => import('./modules/user/pages/rental/BikeRentalHome'));
@@ -417,9 +414,10 @@ const UserProtectedRoute = () => {
   const location = useLocation();
 
   if (!getLocalUserToken()) {
-    // After login, resume this screen. Back-from-login uses public home instead
-    // (see resolveLoginBackRoute) so guests are not bounced in a login loop.
-    const from = location.pathname;
+    // Guests cannot browse Taxi — send to shared login with taxi return intent.
+    const from = location.pathname.startsWith('/taxi/')
+      ? location.pathname
+      : '/taxi/user';
     return <Navigate to="/login" state={{ from }} replace />;
   }
 
@@ -702,15 +700,10 @@ function TaxiApp() {
               <Route path="privacy-policy" element={<LegalPage />} />
               <Route path="refund" element={<LegalPage />} />
               <Route path="cancellation" element={<LegalPage />} />
-              <Route path="login" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
-              <Route path="onboarding" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
-              <Route path="verify-otp" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
-              <Route path="signup" element={<Signup />} />
-
-              <Route path="ride/select-location" element={<SelectLocation />} />
-              <Route path="ride/select-vehicle" element={<SelectVehicle />} />
 
               <Route element={<UserProtectedRoute />}>
+                <Route path="ride/select-location" element={<SelectLocation />} />
+                <Route path="ride/select-vehicle" element={<SelectVehicle />} />
                 <Route path="ride/searching" element={<SearchingDriver />} />
                 <Route path="ride/tracking" element={<RideTracking />} />
                 <Route path="ride/complete" element={<RideComplete />} />
@@ -802,19 +795,14 @@ function TaxiApp() {
               </Route>
 
               {/* User Module Routes (Taxi-prefixed aliases to match Driver style) */}
-              <Route path="user/onboarding" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
-              <Route path="user/login" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
               <Route path="user/terms" element={<LegalPage />} />
               <Route path="user/privacy" element={<LegalPage />} />
               <Route path="user/refund" element={<LegalPage />} />
-              <Route path="user/verify-otp" element={<Navigate to="/login" replace state={{ from: '/taxi/user' }} />} />
-              <Route path="user/signup" element={<Signup />} />
-              <Route path="user" element={<UserHomeRoute taxiPrefixed />} />
-
-              <Route path="user/ride/select-location" element={<SelectLocation />} />
-              <Route path="user/ride/select-vehicle" element={<SelectVehicle />} />
 
               <Route element={<UserProtectedRoute />}>
+                <Route path="user" element={<UserHomeRoute taxiPrefixed />} />
+                <Route path="user/ride/select-location" element={<SelectLocation />} />
+                <Route path="user/ride/select-vehicle" element={<SelectVehicle />} />
                 <Route
                   path="user/ride/searching"
                   element={<SearchingDriver />}

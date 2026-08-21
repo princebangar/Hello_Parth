@@ -1,11 +1,18 @@
-import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
-import { config } from '../../../../config/env.js';
-import { UserAuthSession } from '../models/UserAuthSession.js';
+import {
+  normalizeOtpPhone,
+  createOrUpdateOtp,
+  verifyOtp,
+} from '../../../../core/otp/otp.service.js';
 import { User } from '../models/User.js';
-import { sendOtpSms, normalizeOtpPhone, getOtpTtlMs, resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
+import { UserAuthSession } from '../models/UserAuthSession.js';
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
+
+/**
+ * Legacy taxi user OTP endpoints — now share the same OTP store + rate/attempt
+ * limits as food (`core/otp/otp.service.js`). Prefer `/food/auth/user/*` (shared /login).
+ */
 
 const VERIFIED_SESSION_TTL_MS = 10 * 60 * 1000;
 
@@ -17,7 +24,6 @@ export const validateUserPhone = (phone) => {
   }
 };
 
-const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
 
 const ensureUserCanLogin = (user) => {
@@ -50,25 +56,9 @@ const createUserSession = (user) => {
   };
 };
 
-const getOtpSession = async (phone) => {
-  const normalizedPhone = normalizeUserPhone(phone);
-  const session = await UserAuthSession.findOne({ phone: normalizedPhone }).select('+otpHash');
-
-  if (!session) {
-    throw new ApiError(404, 'OTP session not found');
-  }
-
-  if (session.expiresAt && new Date(session.expiresAt).getTime() < Date.now()) {
-    await UserAuthSession.deleteOne({ _id: session._id });
-    throw new ApiError(410, 'OTP session expired');
-  }
-
-  return session;
-};
-
-const publicOtpSession = (session, debugOtp = null) => ({
-  phone: session.phone,
-  status: session.otpVerifiedAt ? 'otp_verified' : 'otp_sent',
+const publicOtpSession = (phone, debugOtp = null) => ({
+  phone,
+  status: 'otp_sent',
   debugOtp,
 });
 
@@ -82,140 +72,133 @@ export const startUserOtp = async ({ phone }) => {
     ensureUserCanLogin(user);
   }
 
-  const existingSession = await UserAuthSession.findOne({ phone: normalizedPhone });
-  const windowMs = (config.otpRateWindow || 600) * 1000;
-  const now = Date.now();
-  if (existingSession?.lastOtpRequestedAt) {
-    const elapsed = now - new Date(existingSession.lastOtpRequestedAt).getTime();
-    if (elapsed < windowMs) {
-      const count = Number(existingSession.otpRequestCount || 0);
-      if (count >= (config.otpRateLimit || 3)) {
-        throw new ApiError(
-          429,
-          `Too many OTP requests. Please try again after ${Math.ceil(windowMs / 60000)} minutes.`,
-        );
-      }
+  let otp;
+  try {
+    otp = await createOrUpdateOtp(normalizedPhone, 'user');
+  } catch (err) {
+    if (err?.name === 'ValidationError' || err?.statusCode === 400) {
+      throw new ApiError(err.statusCode || 400, err.message || 'Unable to send OTP');
     }
+    throw err;
   }
 
-  const { otp, isStatic, reason } = resolveOtpForPhone(normalizedPhone);
-  const ttlMs = getOtpTtlMs();
-  const requestCount =
-    existingSession?.lastOtpRequestedAt &&
-    now - new Date(existingSession.lastOtpRequestedAt).getTime() < windowMs
-      ? Number(existingSession.otpRequestCount || 0) + 1
-      : 1;
-
-  const session = await UserAuthSession.findOneAndUpdate(
+  // Keep a short verified-session marker for any legacy taxi signup callers
+  await UserAuthSession.findOneAndUpdate(
     { phone: normalizedPhone },
     {
       phone: normalizedPhone,
-      otpHash: hashOtp(otp),
-      otpExpiresAt: new Date(now + ttlMs),
       otpVerifiedAt: null,
-      otpAttempts: 0,
-      otpRequestCount: requestCount,
-      lastOtpRequestedAt: new Date(now),
-      expiresAt: new Date(now + ttlMs),
+      expiresAt: new Date(Date.now() + VERIFIED_SESSION_TTL_MS),
     },
-    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
+    { upsert: true, setDefaultsOnInsert: true },
   );
 
-  const smsDispatch = isStatic
-    ? { mode: 'static', message: `Static OTP (${reason})` }
-    : await sendOtpSms({
-        phone: normalizedPhone,
-        otp,
-        purpose: 'user OTP',
-      });
   const debugOtp = getVisibleOtp(otp);
-
   if (debugOtp) {
-    console.log(`[userOtpService] OTP for ${normalizedPhone} = ${debugOtp} (${smsDispatch.mode})`);
+    console.log(`[userOtpService] OTP for ${normalizedPhone} = ${debugOtp} (shared otp.service)`);
   }
 
   return {
-    message: smsDispatch.mode === 'live' ? 'OTP sent successfully' : 'OTP generated successfully',
+    message: 'OTP sent successfully',
     exists: Boolean(user && !isReusableSignupUser(user)),
-    session: publicOtpSession(session, debugOtp),
+    session: publicOtpSession(normalizedPhone, debugOtp),
   };
 };
 
 export const verifyUserOtp = async ({ phone, otp, token, fcmToken, platform }) => {
-  const session = await getOtpSession(phone);
-  const normalizedOtp = String(otp || '').trim();
+  const normalizedPhone = normalizeUserPhone(phone);
+  validateUserPhone(normalizedPhone);
 
-  if (!/^\d{4}$/.test(normalizedOtp)) {
-    throw new ApiError(400, 'A valid 4-digit OTP is required');
+  const result = await verifyOtp(normalizedPhone, otp, 'user');
+  if (!result.valid) {
+    const reason = String(result.reason || 'OTP verification failed');
+    if (/max attempts/i.test(reason)) {
+      throw new ApiError(429, 'Max OTP attempts exceeded');
+    }
+    if (/expired/i.test(reason)) {
+      throw new ApiError(410, 'OTP has expired');
+    }
+    throw new ApiError(401, reason || 'Invalid OTP');
   }
 
-  if (!session.otpExpiresAt || new Date(session.otpExpiresAt).getTime() < Date.now()) {
-    await UserAuthSession.deleteOne({ _id: session._id });
-    throw new ApiError(410, 'OTP has expired');
-  }
-
-  const attempts = Number(session.otpAttempts || 0) + 1;
-  session.otpAttempts = attempts;
-  if (attempts > (config.otpMaxAttempts || 4)) {
-    await session.save();
-    throw new ApiError(429, 'Max OTP attempts exceeded');
-  }
-
-  if (session.otpHash !== hashOtp(normalizedOtp)) {
-    await session.save();
-    throw new ApiError(401, 'Invalid OTP');
-  }
-
-  const user = await User.findOne({ phone: session.phone });
+  const user = await User.findOne({ phone: normalizedPhone });
 
   if (user) {
     if (isReusableSignupUser(user)) {
-      session.otpVerifiedAt = new Date();
-      session.expiresAt = new Date(Date.now() + VERIFIED_SESSION_TTL_MS);
-      await session.save();
-
+      await UserAuthSession.findOneAndUpdate(
+        { phone: normalizedPhone },
+        {
+          phone: normalizedPhone,
+          otpVerifiedAt: new Date(),
+          expiresAt: new Date(Date.now() + VERIFIED_SESSION_TTL_MS),
+        },
+        { upsert: true },
+      );
       return {
+        message: 'OTP verified. Continue signup to restore account.',
         exists: false,
-        phone: session.phone,
-        session: publicOtpSession(session),
+        session: { phone: normalizedPhone, status: 'otp_verified' },
       };
     }
 
     ensureUserCanLogin(user);
-    const incomingToken = String(fcmToken || token || '').trim();
-    if (incomingToken) {
-      assignPushTokenToEntity(user, {
-        token: incomingToken,
-        platform: platform || 'web',
+
+    if (token || fcmToken) {
+      await assignPushTokenToEntity({
+        entityType: 'user',
+        entityId: user._id,
+        token: token || fcmToken,
+        platform,
+        markActive: true,
       });
-      await user.save();
     }
-    await UserAuthSession.deleteOne({ _id: session._id });
+
+    await UserAuthSession.deleteOne({ phone: normalizedPhone });
     return {
+      message: 'Login successful',
       exists: true,
       ...createUserSession(user),
     };
   }
 
-  session.otpVerifiedAt = new Date();
-  session.expiresAt = new Date(Date.now() + VERIFIED_SESSION_TTL_MS);
-  await session.save();
+  await UserAuthSession.findOneAndUpdate(
+    { phone: normalizedPhone },
+    {
+      phone: normalizedPhone,
+      otpVerifiedAt: new Date(),
+      expiresAt: new Date(Date.now() + VERIFIED_SESSION_TTL_MS),
+    },
+    { upsert: true },
+  );
 
   return {
+    message: 'OTP verified. Continue signup.',
     exists: false,
-    phone: session.phone,
-    session: publicOtpSession(session),
+    session: { phone: normalizedPhone, status: 'otp_verified' },
   };
 };
 
 export const requireVerifiedUserSignupSession = async (phone) => {
-  const session = await getOtpSession(phone);
+  const normalizedPhone = normalizeUserPhone(phone);
+  validateUserPhone(normalizedPhone);
 
-  if (!session.otpVerifiedAt) {
-    throw new ApiError(400, 'Verify OTP before signup');
+  const session = await UserAuthSession.findOne({ phone: normalizedPhone });
+  if (!session?.otpVerifiedAt) {
+    throw new ApiError(401, 'Verify OTP before continuing signup');
   }
-
+  if (session.expiresAt && new Date(session.expiresAt).getTime() < Date.now()) {
+    await UserAuthSession.deleteOne({ _id: session._id });
+    throw new ApiError(410, 'OTP session expired');
+  }
   return session;
 };
 
-export const consumeUserSignupSession = (session) => UserAuthSession.deleteOne({ _id: session._id });
+export const consumeUserSignupSession = async (sessionOrPhone) => {
+  if (!sessionOrPhone) return;
+  if (typeof sessionOrPhone === 'object' && sessionOrPhone._id) {
+    await UserAuthSession.deleteOne({ _id: sessionOrPhone._id });
+    return;
+  }
+  const normalizedPhone = normalizeUserPhone(sessionOrPhone);
+  await UserAuthSession.deleteOne({ phone: normalizedPhone });
+};

@@ -7,10 +7,8 @@ import { Banner } from '../models/Banner.js';
 import { Notification } from '../models/Notification.js';
 import { PromoCode } from '../models/PromoCode.js';
 import {
-  storeImageFromDataUrl,
   deleteStoredAsset,
   deleteReplacedAssets,
-  extractAssetUrl,
 } from '../../../../../services/storage.service.js';
 import { sendPushNotificationToAudience } from '../../../services/pushNotificationService.js';
 
@@ -372,18 +370,9 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Message is required');
   }
 
-  // If image is a data URL (base64), store compressed WebP on the server
+  // Image must already be uploaded (HTTP URL). Base64 is not accepted.
   if (image.startsWith('data:')) {
-    try {
-      const replaceUrl = extractAssetUrl(existing?.image);
-      const uploaded = await storeImageFromDataUrl(image, 'taxi/promotions/notifications', {
-        replaceUrl: replaceUrl || undefined,
-      });
-      image = uploaded.url || uploaded.secure_url;
-    } catch (error) {
-      console.error('Notification image upload error:', error);
-      throw new ApiError(500, `Failed to upload notification image: ${error.message}`);
-    }
+    throw new ApiError(400, 'Upload the image via multipart first, then send the returned URL');
   }
 
   return {
@@ -412,18 +401,9 @@ const normalizeBannerPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Banner image is required');
   }
 
-  // If image is a data URL (base64), store compressed WebP on the server
+  // Image must already be uploaded (HTTP URL). Base64 is not accepted.
   if (image.startsWith('data:')) {
-    try {
-      const replaceUrl = extractAssetUrl(existing?.image);
-      const uploaded = await storeImageFromDataUrl(image, 'taxi/promotions/banners', {
-        replaceUrl: replaceUrl || undefined,
-      });
-      image = uploaded.url || uploaded.secure_url;
-    } catch (error) {
-      console.error('Banner image upload error:', error);
-      throw new ApiError(500, `Failed to upload banner image: ${error.message}`);
-    }
+    throw new ApiError(400, 'Upload the image via multipart first, then send the returned URL');
   } else if (existing?.image) {
     await deleteReplacedAssets(existing.image, image);
   }

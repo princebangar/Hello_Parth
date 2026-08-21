@@ -11,7 +11,7 @@ import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
 import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
 import { env } from '../../../../config/env.js';
-import { storeImageFromDataUrl, deleteReplacedAssets, extractAssetUrl } from '../../../../services/storage.service.js';
+import { storeImageBuffer, deleteReplacedAssets, extractAssetUrl } from '../../../../services/storage.service.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
 import {
@@ -1479,23 +1479,19 @@ export const getCurrentUser = async (req, res) => {
 };
 
 export const uploadUserProfileImage = async (req, res) => {
-  const dataUrl = String(req.body?.dataUrl || '');
+  if (!req.file?.buffer) {
+    throw new ApiError(400, 'Image file is required (multipart field: file)');
+  }
+
   const userId = req.auth?.sub;
-
-  if (!dataUrl) {
-    throw new ApiError(400, 'dataUrl is required');
-  }
-
-  if (dataUrl.length > 12_000_000) {
-    throw new ApiError(413, 'Image is too large');
-  }
-
   const user = userId ? await User.findById(userId) : null;
   const replaceUrl = extractAssetUrl(req.body?.replaceUrl) || extractAssetUrl(user?.profileImage);
 
-  const stored = await storeImageFromDataUrl(dataUrl, 'taxi/users/profile', {
+  const stored = await storeImageBuffer(req.file.buffer, 'taxi/users/profile', {
     replaceUrl: replaceUrl || undefined,
     maxWidth: 1024,
+    mimeType: req.file.mimetype || 'image/jpeg',
+    originalName: req.file.originalname,
   });
   const url = stored.url || stored.secure_url;
 

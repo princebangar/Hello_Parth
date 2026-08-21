@@ -6,6 +6,7 @@ import Loader from "@food/components/Loader"
 import AuthInitializer from "@food/components/AuthInitializer"
 import PushSoundEnableButton from "@food/components/PushSoundEnableButton"
 import { initPushNotificationClient, registerWebPushForCurrentModule } from "@food/utils/firebaseMessaging"
+import { authAPI } from "@food/api"
 import {
   getCategorySlugFromPath,
   isExactMainTabPath,
@@ -246,12 +247,12 @@ export default function App() {
         admin: '/food/admin/login',
         restaurant: '/food/restaurant/login',
         delivery: '/food/delivery/login',
-        user: '/food/user/login'
+        user: '/login'
       }
 
       // Only redirect if the current tab is actually on the module that failed
       if (location.pathname.startsWith(`/food/${module}`)) {
-        const targetPath = loginPaths[module] || '/food/user/login'
+        const targetPath = loginPaths[module] || '/login'
         navigate(targetPath, { replace: true, state: { from: location.pathname } })
       }
     }
@@ -306,9 +307,7 @@ export default function App() {
         const hasRestaurantToken = !!localStorage.getItem('restaurant_accessToken');
         const hasDeliveryToken = !!localStorage.getItem('delivery_accessToken');
         
-        // Dynamically import authAPI to avoid circular dependencies
         if (hasRestaurantToken || hasDeliveryToken) {
-          const { authAPI } = await import('@food/api');
           if (hasRestaurantToken) authAPI.me('restaurant').catch(() => {});
           if (hasDeliveryToken) authAPI.me('delivery').catch(() => {});
         }

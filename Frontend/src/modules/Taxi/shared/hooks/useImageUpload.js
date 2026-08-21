@@ -4,8 +4,7 @@ import toast from 'react-hot-toast';
 
 /**
  * Hook for managing image uploads with previews.
- * Uses shared backend storage (same as food): WebP → /var/www/uploads.
- * Pass replaceUrl / getReplaceUrl so the previous file is deleted on replace.
+ * Food-style: File → multipart FormData → WebP on /uploads.
  */
 export const useImageUpload = (options = {}) => {
   const {
@@ -30,22 +29,16 @@ export const useImageUpload = (options = {}) => {
     const file = input?.files?.[0];
     if (!file) return;
 
+    if (!String(file.type || '').startsWith('image/')) {
+      toast.error('Please select a valid image file');
+      return;
+    }
+
+    let localPreview = '';
     try {
       setUploading(true);
-
-      const base64 = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onerror = () => reject(new Error('Unable to read selected image'));
-        r.onloadend = () => resolve(r.result);
-        r.readAsDataURL(file);
-      });
-
-      if (!String(base64 || '').startsWith('data:image/')) {
-        toast.error('Please select a valid image file');
-        return;
-      }
-
-      setPreview(base64);
+      localPreview = URL.createObjectURL(file);
+      setPreview(localPreview);
 
       const previous =
         (typeof getReplaceUrl === 'function' ? getReplaceUrl() : null) ||
@@ -53,7 +46,7 @@ export const useImageUpload = (options = {}) => {
         imageUrl ||
         '';
 
-      const result = await uploadService.uploadImage(base64, folder, {
+      const result = await uploadService.uploadImageFile(file, folder, {
         replaceUrl: previous && !String(previous).startsWith('data:') ? previous : undefined,
       });
 
@@ -65,6 +58,10 @@ export const useImageUpload = (options = {}) => {
       console.error('Upload Hook Error:', error);
       toast.error('Failed to upload image. Please try again.');
       onError(error);
+      if (localPreview) {
+        URL.revokeObjectURL(localPreview);
+        setPreview(null);
+      }
     } finally {
       if (input) {
         input.value = '';

@@ -729,6 +729,10 @@ const loadImageFromDataUrl = (dataUrl) =>
   });
 
 const compressInspectionImageForUpload = async (file) => {
+  if (!(file instanceof File) && !(file instanceof Blob)) {
+    throw new Error('Unable to read selected image');
+  }
+
   const originalDataUrl = await fileToDataUrl(file);
 
   if (
@@ -736,7 +740,9 @@ const compressInspectionImageForUpload = async (file) => {
     || !String(file?.type || '').toLowerCase().startsWith('image/')
     || originalDataUrl.length <= 8_500_000
   ) {
-    return originalDataUrl;
+    return file instanceof File
+      ? file
+      : new File([file], 'inspection.jpg', { type: file.type || 'image/jpeg' });
   }
 
   const image = await loadImageFromDataUrl(originalDataUrl);
@@ -752,20 +758,40 @@ const compressInspectionImageForUpload = async (file) => {
 
   const context = canvas.getContext('2d');
   if (!context) {
-    return originalDataUrl;
+    return file instanceof File
+      ? file
+      : new File([file], 'inspection.jpg', { type: file.type || 'image/jpeg' });
   }
 
   context.drawImage(image, 0, 0, width, height);
 
   let quality = 0.82;
-  let compressed = canvas.toDataURL('image/jpeg', quality);
+  const blob = await new Promise((resolve) => {
+    const tryBlob = (q) => {
+      canvas.toBlob(
+        (result) => {
+          if (!result && q > 0.45) {
+            tryBlob(q - 0.1);
+            return;
+          }
+          resolve(result);
+        },
+        'image/jpeg',
+        q,
+      );
+    };
+    tryBlob(quality);
+  });
 
-  while (compressed.length > 8_500_000 && quality > 0.45) {
-    quality -= 0.1;
-    compressed = canvas.toDataURL('image/jpeg', quality);
+  if (!blob) {
+    return file instanceof File
+      ? file
+      : new File([file], 'inspection.jpg', { type: file.type || 'image/jpeg' });
   }
 
-  return compressed;
+  return new File([blob], String(file?.name || 'inspection.jpg').replace(/\.\w+$/, '.jpg'), {
+    type: 'image/jpeg',
+  });
 };
 
 const getBrowserCaptureLocation = () =>
@@ -1628,7 +1654,18 @@ const ServiceCenterDashboard = () => {
   };
 
   const attachInspectionImageToBooking = async (bookingId, field, slotIndex, imageSource, metadata = null) => {
-    const uploadResult = await uploadService.uploadImage(imageSource, 'service-center-condition');
+    let uploadResult;
+    if (imageSource instanceof File || imageSource instanceof Blob) {
+      const file =
+        imageSource instanceof File
+          ? imageSource
+          : new File([imageSource], metadata?.fileName || 'inspection.jpg', {
+              type: imageSource.type || metadata?.mimeType || 'image/jpeg',
+            });
+      uploadResult = await uploadService.uploadImageFile(file, 'service-center-condition');
+    } else {
+      uploadResult = await uploadService.uploadImage(imageSource, 'service-center-condition');
+    }
     const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
     if (!imageUrl) {
       throw new Error('Unable to upload selected image');
@@ -1680,15 +1717,15 @@ const ServiceCenterDashboard = () => {
 
     try {
       const file = files[0];
-      const dataUrl = await compressInspectionImageForUpload(file);
+      const uploadFile = await compressInspectionImageForUpload(file);
       const location = source === 'camera' ? await getBrowserCaptureLocation() : null;
-      await attachInspectionImageToBooking(bookingId, field, slotIndex, dataUrl, {
+      await attachInspectionImageToBooking(bookingId, field, slotIndex, uploadFile, {
         capturedAt: new Date().toISOString(),
         latitude: location?.latitude ?? null,
         longitude: location?.longitude ?? null,
         source,
         fileName: String(file?.name || '').trim(),
-        mimeType: String(file?.type || 'image/jpeg').trim(),
+        mimeType: String(uploadFile?.type || file?.type || 'image/jpeg').trim(),
       });
     } catch (err) {
       setError(err?.message || 'Unable to upload condition images');
@@ -1798,7 +1835,20 @@ const ServiceCenterDashboard = () => {
       }
 
       context.drawImage(videoElement, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (result) => {
+            if (!result) {
+              reject(new Error('Unable to capture the camera frame'));
+              return;
+            }
+            resolve(result);
+          },
+          'image/jpeg',
+          0.9,
+        );
+      });
+      const captureFile = new File([blob], `inspection-${Date.now()}.jpg`, { type: 'image/jpeg' });
       const uploadTarget = `${cameraCaptureState.field}:${cameraCaptureState.slotIndex}:camera`;
       setUploadingConditionSection(uploadTarget);
       const location = await getBrowserCaptureLocation();
@@ -1806,13 +1856,14 @@ const ServiceCenterDashboard = () => {
         cameraCaptureState.bookingId,
         cameraCaptureState.field,
         cameraCaptureState.slotIndex,
-        dataUrl,
+        captureFile,
         {
           capturedAt: new Date().toISOString(),
           latitude: location?.latitude ?? null,
           longitude: location?.longitude ?? null,
           source: 'browser_camera',
           mimeType: 'image/jpeg',
+          fileName: captureFile.name,
         },
       );
 

@@ -20,6 +20,52 @@ export function getModuleHomeRoute(module) {
   return '/food/user'
 }
 
+/** After successful user login/signup: always open Food first (single login hub). */
+export const CONSUMER_POST_LOGIN_HOME = '/food/user'
+
+export function resolveConsumerPostLoginRoute() {
+  return CONSUMER_POST_LOGIN_HOME
+}
+
+/**
+ * App cold start / reopen: remember last Food or Taxi module so users don't
+ * bounce back to Food after closing on Taxi (and vice versa).
+ * Guests always reopen on Food (Taxi is login-only).
+ * Login success still prefers Food, unless login was opened for Taxi intent.
+ */
+export function resolveAppColdStartRoute() {
+  if (typeof localStorage === 'undefined') return CONSUMER_POST_LOGIN_HOME
+
+  const foodToken = String(localStorage.getItem('user_accessToken') || '').trim()
+  const taxiToken = String(localStorage.getItem('userToken') || '').trim()
+  const isLoggedIn = Boolean(foodToken || taxiToken)
+
+  if (!isLoggedIn) {
+    return CONSUMER_POST_LOGIN_HOME
+  }
+
+  const storedRoute = String(localStorage.getItem(NATIVE_LAST_ROUTE_KEY) || '')
+    .trim()
+    .split('?')[0]
+  const activeModule = String(localStorage.getItem(ACTIVE_MODULE_KEY) || '').trim()
+
+  if (storedRoute.startsWith('/taxi/') || activeModule === 'taxi') {
+    return '/taxi/user'
+  }
+  if (
+    storedRoute.startsWith('/food/user') ||
+    (storedRoute.startsWith('/food/') &&
+      !storedRoute.startsWith('/food/restaurant') &&
+      !storedRoute.startsWith('/food/delivery') &&
+      !storedRoute.startsWith('/food/admin')) ||
+    activeModule === 'food'
+  ) {
+    return '/food/user'
+  }
+
+  return CONSUMER_POST_LOGIN_HOME
+}
+
 export function syncActiveModule(pathname = '') {
   if (typeof localStorage === 'undefined') return null
 
@@ -163,39 +209,8 @@ const toPublicModuleHome = (route = '') => {
  * override a normal user login.
  */
 export function resolvePostLoginRoute() {
-  if (typeof localStorage === 'undefined') return '/food/user'
-
-  const storedReturn = peekLoginReturnTo()
-  if (storedReturn && !isAuthPath(storedReturn)) {
-    if (isTransientRoute(storedReturn)) {
-      return storedReturn.startsWith('/taxi/') ? '/taxi/user' : '/food/user'
-    }
-    return storedReturn
-  }
-
-  const storedRoute = String(localStorage.getItem(NATIVE_LAST_ROUTE_KEY) || '').trim()
-
-  // Never restore transient ride-flow routes — state is lost on restart.
-  if (isTransientRoute(storedRoute)) {
-    if (storedRoute.startsWith('/taxi/')) return '/taxi/user'
-    return '/food/user'
-  }
-
-  if (storedRoute.startsWith('/taxi/')) return storedRoute.split('?')[0]
-  if (storedRoute.startsWith('/food/user')) return '/food/user'
-  if (
-    storedRoute.startsWith('/food/') &&
-    !storedRoute.startsWith('/food/restaurant') &&
-    !storedRoute.startsWith('/food/delivery') &&
-    !storedRoute.startsWith('/food/admin')
-  ) {
-    return storedRoute.split('?')[0]
-  }
-
-  const activeModule = String(localStorage.getItem(ACTIVE_MODULE_KEY) || '').trim()
-  if (activeModule === 'taxi') return '/taxi/user'
-  // food (or anything else, including stale "admin") → consumer home
-  return '/food/user'
+  // Single consumer login always lands on Food hub first.
+  return CONSUMER_POST_LOGIN_HOME
 }
 
 /**
@@ -213,29 +228,25 @@ export function ensureFoodGuestSession() {
 
 /**
  * Back from /login while still logged out.
- * Never return auth-gated routes (e.g. /taxi/user/activity) — they redirect
- * straight back to /login and look like a broken back button.
+ * Guests always return to Food — Taxi routes are login-only and would loop.
  */
 export function resolveLoginBackRoute(locationStateFrom) {
   const fromPath = String(locationStateFrom || '').trim().split('?')[0]
   const storedReturn = peekLoginReturnTo()
-  const activeModule = typeof localStorage !== 'undefined'
-    ? String(localStorage.getItem(ACTIVE_MODULE_KEY) || '').trim()
+  const foodToken = typeof localStorage !== 'undefined'
+    ? String(localStorage.getItem('user_accessToken') || '').trim()
     : ''
+  const taxiToken = typeof localStorage !== 'undefined'
+    ? String(localStorage.getItem('userToken') || '').trim()
+    : ''
+  const isLoggedIn = Boolean(foodToken || taxiToken)
 
-  const hint = fromPath || storedReturn || activeModule
+  const hint = fromPath || storedReturn
 
-  if (hint.startsWith('/taxi/') || hint === 'taxi' || hint.includes('/taxi/')) {
+  if (isLoggedIn && (hint.startsWith('/taxi/') || hint === 'taxi' || String(hint).includes('/taxi/'))) {
     return '/taxi/user'
   }
-  if (hint.startsWith('/food/') || hint === 'food') {
-    return '/food/user'
-  }
 
-  // Default: prefer taxi home if module unknown but last gated path was taxi-ish
-  if (isAuthGatedRoute(fromPath) || isAuthGatedRoute(storedReturn)) {
-    return toPublicModuleHome(fromPath || storedReturn) || '/taxi/user'
-  }
-
-  return '/taxi/user'
+  // Default / guest: Food browse
+  return '/food/user'
 }

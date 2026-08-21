@@ -189,6 +189,14 @@ const isAuthTokenFailure = (message = '') => {
 // Request Interceptor: Attach Auth Token automatically
 api.interceptors.request.use(
   (config) => {
+    // FormData must use browser multipart boundary (same as food axios client).
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (config.headers) {
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+      }
+    }
+
     syncAdminSessionBridge();
     const requestPath = String(config.url || '').split('?')[0];
     const existingAuthorization = config.headers?.Authorization || config.headers?.authorization;

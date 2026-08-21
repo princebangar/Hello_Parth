@@ -92,7 +92,14 @@ export const userAuthService = {
       ...(platform ? { platform } : {}),
     }),
   verifyOtpLogin: (phone) => api.post('/users/otp-login', { phone }),
-  uploadProfileImage: (dataUrl) => api.post('/users/profile-image', { dataUrl }),
+  uploadProfileImage: (file, options = {}) => {
+    const formData = new FormData();
+    formData.append('file', file, file?.name || 'profile.jpg');
+    if (options.replaceUrl) {
+      formData.append('replaceUrl', options.replaceUrl);
+    }
+    return api.post('/users/profile-image', formData);
+  },
   updateCurrentUser: (payload) => api.patch('/users/me', payload, withUserAuth()),
   getCurrentUser: () => api.get('/users/me', withUserAuth()),
   getSubscriptionPlans: () => api.get('/users/subscriptions/plans', withUserAuth()),

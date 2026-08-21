@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { upload } from '../../../../middleware/upload.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
   approveOwner,
@@ -341,7 +342,7 @@ adminRouter.delete('/admin/pooling-vehicles/:id', deletePoolingVehicle);
 adminRouter.get('/admin/pooling-bookings', getPoolingBookings);
 adminRouter.patch('/admin/pooling-bookings/:id/status', updatePoolingBookingStatus);
 
-adminRouter.post('/admin/upload-image', uploadImage);
+adminRouter.post('/admin/upload-image', upload.single('image'), uploadImage);
 adminRouter.get('/admin/rental-booking-requests', getRentalBookingRequests);
 adminRouter.get('/admin/rental-tracking', getRentalTrackingDashboard);
 adminRouter.patch('/admin/rental-booking-requests/:id', updateRentalBookingRequest);

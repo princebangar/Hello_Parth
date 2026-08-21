@@ -6,14 +6,6 @@ import { uploadService } from '../../../../shared/services/uploadService';
 
 const IS_KYC_DONE = false;
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Unable to read selected image'));
-    reader.readAsDataURL(file);
-  });
-
 const RentalKYC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,8 +54,7 @@ const RentalKYC = () => {
       };
 
       if (dlImage) {
-        const dlDataUrl = await fileToDataUrl(dlImage);
-        const drivingLicenseUpload = await uploadService.uploadImage(dlDataUrl, 'rental-kyc');
+        const drivingLicenseUpload = await uploadService.uploadImageFile(dlImage, 'rental-kyc');
         const drivingLicenseUrl = drivingLicenseUpload?.url || drivingLicenseUpload?.secureUrl || '';
         if (!drivingLicenseUrl) {
           throw new Error('Driving license upload failed');
@@ -76,8 +67,7 @@ const RentalKYC = () => {
       }
 
       if (aadhaarImage) {
-        const aadhaarDataUrl = await fileToDataUrl(aadhaarImage);
-        const aadhaarUpload = await uploadService.uploadImage(aadhaarDataUrl, 'rental-kyc');
+        const aadhaarUpload = await uploadService.uploadImageFile(aadhaarImage, 'rental-kyc');
         const aadhaarUrl = aadhaarUpload?.url || aadhaarUpload?.secureUrl || '';
         if (!aadhaarUrl) {
           throw new Error('Aadhaar upload failed');

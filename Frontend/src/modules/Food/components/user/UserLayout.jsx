@@ -192,9 +192,12 @@ function UserLayoutContent() {
   const { openLocationSelector } = useLocationSelector()
   const navigationType = useNavigationType()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [loginModalIntent, setLoginModalIntent] = useState("general")
 
   useEffect(() => {
-    const handleShowLoginModal = () => {
+    const handleShowLoginModal = (event) => {
+      const intent = event?.detail?.intent === "taxi" ? "taxi" : "general"
+      setLoginModalIntent(intent)
       setIsLoginModalOpen(true)
     }
     window.addEventListener('show-login-required', handleShowLoginModal)
@@ -565,7 +568,14 @@ function UserLayoutContent() {
       {showBottomNav && !isOutOfZone && <BottomNavigation />}
       
       {/* Central Login Required Modal */}
-      <LoginRequiredModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
+      <LoginRequiredModal
+        isOpen={isLoginModalOpen}
+        intent={loginModalIntent}
+        onClose={() => {
+          setIsLoginModalOpen(false)
+          setLoginModalIntent("general")
+        }}
+      />
     </>
   )
 }

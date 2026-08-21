@@ -4,6 +4,7 @@ import { MapPin, ChevronDown } from 'lucide-react';
 import { getVerticalTheme } from '@/shared/constants/superAppVerticalTheme';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import { ensureFoodGuestSession } from '@/shared/utils/activeModule.js';
+import { isUnifiedAuthenticated } from '@/shared/utils/moduleAuth.js';
 import { readSharedFoodLocation, getFoodStyleLocationParts, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
 
 function readHelloParthLocation() {
@@ -150,6 +151,13 @@ export default function SuperAppHomeHeader({
       return;
     }
     if (verticalId === 'taxi') {
+      // Taxi is login-only — guests stay on Food and see the shared login popup.
+      if (!isUnifiedAuthenticated()) {
+        window.dispatchEvent(new CustomEvent('show-login-required', {
+          detail: { intent: 'taxi' },
+        }));
+        return;
+      }
       syncThemeForPath('/taxi/user');
       navigate('/taxi/user');
     }

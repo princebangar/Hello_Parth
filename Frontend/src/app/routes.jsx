@@ -5,6 +5,7 @@ import {
   NATIVE_LAST_ROUTE_KEY,
   rememberLoginReturnTo,
   syncActiveModule,
+  resolveAppColdStartRoute,
 } from '../shared/utils/activeModule.js'
 
 // Lazy load the Food service module (Quick-spicy app)
@@ -55,18 +56,7 @@ const AppRoutes = () => {
   }, [location.pathname])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const protocol = String(window.location?.protocol || '').toLowerCase()
-    const userAgent = String(window.navigator?.userAgent || '').toLowerCase()
-    const isNativeLikeShell =
-      Boolean(window.flutter_inappwebview) ||
-      Boolean(window.ReactNativeWebView) ||
-      protocol === 'file:' ||
-      userAgent.includes(' wv') ||
-      userAgent.includes('; wv')
-
-    if (!isNativeLikeShell) return
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return
 
     const route = `${location.pathname || ''}${location.search || ''}`
 
@@ -92,7 +82,15 @@ const AppRoutes = () => {
       '/rental/confirmed',
     ]
     const isTransient = TRANSIENT_ROUTE_SEGMENTS.some(seg => route.includes(seg))
-    if (isTransient) return
+    if (isTransient) {
+      // Still remember module so cold start opens Taxi/Food home correctly.
+      if (route.includes('/taxi/')) {
+        localStorage.setItem(NATIVE_LAST_ROUTE_KEY, '/taxi/user')
+      } else if (route.includes('/food/user')) {
+        localStorage.setItem(NATIVE_LAST_ROUTE_KEY, '/food/user')
+      }
+      return
+    }
 
     if (route.startsWith('/taxi/') || route.startsWith('/food/') || route.startsWith('/admin')) {
       localStorage.setItem(NATIVE_LAST_ROUTE_KEY, route)
@@ -101,7 +99,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/taxi/user" replace />} />
+      <Route path="/" element={<Navigate to={resolveAppColdStartRoute()} replace />} />
       <Route path="/login/*" element={<Suspense fallback={<PageLoader />}><AuthApp /></Suspense>} />
       <Route path="/food/*" element={<FoodAppWrapper />} />
       <Route path="/taxi/*" element={<TaxiAppWrapper />} />

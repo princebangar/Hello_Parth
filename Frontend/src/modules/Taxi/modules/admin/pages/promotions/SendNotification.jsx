@@ -15,6 +15,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const Motion = motion;
 const LIST_PATH = '/admin/promotions/send-notification';
@@ -191,13 +192,12 @@ const SendNotification = () => {
     setSaving(true);
     try {
       let imageData = '';
-      if (formData.image) {
-        imageData = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(formData.image);
-        });
+      if (formData.image instanceof File) {
+        const uploadResult = await uploadService.uploadImageFile(formData.image, 'promotions/notifications');
+        imageData = uploadResult?.secureUrl || uploadResult?.url || '';
+        if (!imageData) {
+          throw new Error('Notification image upload failed');
+        }
       }
 
       const payload = {

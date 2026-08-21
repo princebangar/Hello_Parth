@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { showNotificationToast } from "@/shared/utils/customToasts";
-import { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/api";
+import apiClient, { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/api";
 import { initializeApp, getApp, getApps } from "firebase/app";
 const fallbackNotificationSound = "/assets/media/alert.mp3";
 
@@ -410,7 +410,6 @@ export async function persistPendingModuleFcmToken(moduleName, phone, options = 
     if (!normalizedPhone) return false;
 
     try {
-      const apiClient = (await import("@food/api")).default;
       await apiClient.post("/fcm-tokens/pending-save", {
         phone: normalizedPhone,
         token: fcmToken,

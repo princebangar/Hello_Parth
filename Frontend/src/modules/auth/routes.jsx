@@ -11,7 +11,7 @@ function LoginRedirect() {
     location.state?.from ||
     peekLoginReturnTo() ||
     resolvePostLoginRoute() ||
-    "/taxi/user"
+    "/food/user"
 
   // Avoid a redirect loop on the login index itself.
   const path = String(location.pathname || "").replace(/\/+$/, "") || "/login"

@@ -28,6 +28,7 @@ import {
   getDocumentPreviewUrl,
   normalizeDriverDocumentTemplates,
 } from '../../utils/documentTemplates';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 
@@ -84,14 +85,6 @@ const formatMetaLabel = (value) =>
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-
 const normalizeSignupRole = (role) =>
   String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
 
@@ -127,9 +120,8 @@ const isImageLikeFile = (file) => {
   return /\.(jpg|jpeg|png|webp|heic|heif|bmp|gif)$/i.test(String(file.name || ''));
 };
 
-const inferImageMeta = (file, dataUrl) => {
-  const mimeMatch = String(dataUrl || '').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
-  const mimeType = String(file?.type || mimeMatch?.[1] || 'image/jpeg').toLowerCase();
+const inferImageMeta = (file) => {
+  const mimeType = String(file?.type || 'image/jpeg').toLowerCase() || 'image/jpeg';
   const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
   const originalName = String(file?.name || '').trim();
 
@@ -346,23 +338,25 @@ const StepDocuments = () => {
     };
   }, []);
 
-  const processDataUrlUpload = async (templateId, key, dataUrl, fileNameOverride = '') => {
+  const processFileUpload = async (templateId, key, file, fileNameOverride = '') => {
     setUploading(key);
     setError('');
 
+    const localPreview = URL.createObjectURL(file);
+    const { fileName: inferredName, mimeType: inferredMime } = inferImageMeta(file);
+    const mimeType = inferredMime || 'image/jpeg';
+    const fileName = fileNameOverride || inferredName;
+
     try {
-      if (!String(dataUrl || '').startsWith('data:image/')) {
+      if (!isImageLikeFile(file) && !String(file.type || '').startsWith('image/')) {
         throw new Error('Please upload an image file');
       }
-
-      const mimeType = 'image/jpeg';
-      const fileName = fileNameOverride || `capture-${key}-${Date.now()}.jpg`;
 
       setDocs((prev) => ({
         ...prev,
         [key]: {
           ...(prev[key] || {}),
-          previewUrl: dataUrl,
+          previewUrl: localPreview,
           fileName,
           mimeType,
           uploaded: false,
@@ -370,12 +364,20 @@ const StepDocuments = () => {
         },
       }));
 
+      const uploadResult = await uploadService.uploadImageFile(file, 'driver-documents');
+      const secureUrl = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!secureUrl) {
+        throw new Error('Unable to upload document');
+      }
+
+      URL.revokeObjectURL(localPreview);
+
       const response = await saveDriverDocuments({
         registrationId: session.registrationId,
         phone: session.phone,
         documents: {
           [key]: {
-            dataUrl,
+            secureUrl,
             fileName,
             mimeType,
             identifyNumber: documentMeta[templateId]?.identifyNumber || '',
@@ -387,8 +389,8 @@ const StepDocuments = () => {
 
       const uploadedDoc = payload?.documents?.[key] || payload?.session?.documents?.[key];
       const nextDoc = normalizeDocument(uploadedDoc) || {
-        previewUrl: dataUrl,
-        secureUrl: dataUrl,
+        previewUrl: secureUrl,
+        secureUrl,
         fileName,
         mimeType,
         uploaded: true,
@@ -410,6 +412,7 @@ const StepDocuments = () => {
         },
       });
     } catch (uploadError) {
+      URL.revokeObjectURL(localPreview);
       setError(uploadError?.message || 'Unable to upload document');
       setDocs((prev) => ({
         ...prev,
@@ -429,9 +432,8 @@ const StepDocuments = () => {
     }
 
     try {
-      const dataUrl = await fileToDataUrl(file);
-      const { fileName } = inferImageMeta(file, dataUrl);
-      await processDataUrlUpload(templateId, key, dataUrl, fileName);
+      const { fileName } = inferImageMeta(file);
+      await processFileUpload(templateId, key, file, fileName);
     } catch (readErr) {
       setError(readErr?.message || 'Unable to read selected file');
     }
@@ -493,13 +495,29 @@ const StepDocuments = () => {
     }
 
     ctx.drawImage(video, 0, 0, width, height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
     const { templateId, key } = activeCameraTarget;
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (!result) {
+            reject(new Error('Failed to capture frame from camera'));
+            return;
+          }
+          resolve(result);
+        },
+        'image/jpeg',
+        0.92,
+      );
+    });
+
+    const fileName = `license-${key}-${Date.now()}.jpg`;
+    const file = new File([blob], fileName, { type: 'image/jpeg' });
+
     stopCameraStream();
     setActiveCameraTarget(null);
 
-    await processDataUrlUpload(templateId, key, dataUrl, `license-${key}-${Date.now()}.jpg`);
+    await processFileUpload(templateId, key, file, fileName);
   };
 
   const toggleCameraFacingMode = async () => {

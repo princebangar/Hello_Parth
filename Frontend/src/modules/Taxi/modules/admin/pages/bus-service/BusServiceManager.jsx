@@ -28,6 +28,7 @@ import {
   upsertAdminBus as defaultUpsertBus,
 } from '../../services/busService';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const AMENITY_OPTIONS = [
@@ -117,13 +118,12 @@ const buildMirroredReturnRoute = (route = {}) => ({
     : [],
 });
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+const fileToUploadUrl = async (file, folder = 'bus-service') => {
+  const uploadResult = await uploadService.uploadImageFile(file, folder);
+  const url = uploadResult?.secureUrl || uploadResult?.url || '';
+  if (!url) throw new Error('Image upload failed');
+  return url;
+};
 
 const SeatCell = ({ cell, onToggle }) => {
   if (!cell || cell.kind !== 'seat') {
@@ -442,14 +442,14 @@ const BusServiceManager = ({
     if (!file) return;
 
     try {
-      const result = await fileToDataUrl(file);
+      const result = await fileToUploadUrl(file, 'bus-service');
       updateDraft(field, result);
       if (field === 'coverImage' || field === 'image') {
         updateDraft('image', result);
         updateDraft('coverImage', result);
       }
     } catch {
-      toast.error('Failed to read selected image');
+      toast.error('Failed to upload selected image');
     } finally {
       event.target.value = '';
     }
@@ -460,7 +460,7 @@ const BusServiceManager = ({
     if (!files.length) return;
 
     try {
-      const results = await Promise.all(files.map((file) => fileToDataUrl(file)));
+      const results = await Promise.all(files.map((file) => fileToUploadUrl(file, 'bus-service')));
       setDraft((current) => ({
         ...current,
         galleryImages: [
@@ -469,7 +469,7 @@ const BusServiceManager = ({
         ],
       }));
     } catch {
-      toast.error('Failed to read one or more gallery images');
+      toast.error('Failed to upload one or more gallery images');
     } finally {
       event.target.value = '';
     }

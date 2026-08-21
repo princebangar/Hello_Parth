@@ -161,7 +161,7 @@ const Referral = () => {
     if (!referralCode) {
       return;
     }
-    const signupLink = `${window.location.origin}/taxi/user/signup?ref=${encodeURIComponent(referralCode)}`;
+    const signupLink = `${window.location.origin}/login?ref=${encodeURIComponent(referralCode)}`;
     const shareText = `${bannerText}\nUse my referral code ${referralCode} to sign up.\n${signupLink}`;
 
     try {

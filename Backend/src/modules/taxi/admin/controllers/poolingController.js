@@ -4,7 +4,7 @@ import { PoolingRoute } from '../models/PoolingRoute.js';
 import { PoolingSeatReservation } from '../models/PoolingSeatReservation.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
-import { storeImageFromDataUrl } from '../../../../services/storage.service.js';
+import { storeImageBuffer } from '../../../../services/storage.service.js';
 
 const ok = (res, data, message) => res.status(200).json({ success: true, data, message });
 const created = (res, data, message) => res.status(201).json({ success: true, data, message });
@@ -70,11 +70,15 @@ export const getPoolingRoutes = asyncHandler(async (req, res) => {
 // --- Common Upload ---
 
 export const uploadImage = asyncHandler(async (req, res) => {
-  const { image } = req.body;
-  if (!image) throw new ApiError(400, 'Image data is required');
+  if (!req.file?.buffer) {
+    throw new ApiError(400, 'Image file is required (multipart field: image)');
+  }
 
-  const result = await storeImageFromDataUrl(image, 'taxi/pooling/vehicles');
+  const result = await storeImageBuffer(req.file.buffer, 'taxi/pooling/vehicles', {
+    mimeType: req.file.mimetype || 'image/jpeg',
+    originalName: req.file.originalname,
+  });
   const url = result.url || result.secure_url;
 
-  return ok(res, { url }, 'Image uploaded successfully');
+  return ok(res, { url, secureUrl: url }, 'Image uploaded successfully');
 });

@@ -164,8 +164,4 @@ export const env = {
             templateId: config.msg91TemplateId,
         },
     },
-    driverWallet: {
-        defaultCashLimit: Number(process.env.DRIVER_WALLET_DEFAULT_CASH_LIMIT || 500),
-        commissionPercent: Number(process.env.DRIVER_COMMISSION_PERCENT || 20),
-    }
 };

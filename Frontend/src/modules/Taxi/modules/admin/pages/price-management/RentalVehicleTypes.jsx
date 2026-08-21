@@ -19,6 +19,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
@@ -181,14 +182,6 @@ const normalizePricing = (items = DEFAULT_PRICING) =>
     active: item.active !== false,
   }));
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
 const normalizeMediaValue = (value) => {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -196,6 +189,13 @@ const normalizeMediaValue = (value) => {
     return value.url || value.image || value.src || value.path || '';
   }
   return '';
+};
+
+const uploadImageFileToUrl = async (file, folder = 'rental-vehicles') => {
+  const uploadResult = await uploadService.uploadImageFile(file, folder);
+  const url = uploadResult?.secureUrl || uploadResult?.url || '';
+  if (!url) throw new Error('Image upload failed');
+  return url;
 };
 
 const getCoverImage = (item = {}) => normalizeMediaValue(item.coverImage) || normalizeMediaValue(item.image) || '';
@@ -446,24 +446,34 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const handleImageChange = async (event, field) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const result = await fileToDataUrl(file);
-    updateForm(field, result);
-    if (field === 'coverImage' || field === 'image') {
-      updateForm('image', result);
-      updateForm('coverImage', result);
+    try {
+      const result = await uploadImageFileToUrl(file, 'rental-vehicles');
+      updateForm(field, result);
+      if (field === 'coverImage' || field === 'image') {
+        updateForm('image', result);
+        updateForm('coverImage', result);
+      }
+    } catch (error) {
+      toast.error(error?.message || 'Failed to upload image');
+    } finally {
+      event.target.value = '';
     }
-    event.target.value = '';
   };
 
   const handleGalleryImagesChange = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    const results = await Promise.all(files.map((file) => fileToDataUrl(file)));
-    setFormData((current) => ({
-      ...current,
-      galleryImages: [...(Array.isArray(current.galleryImages) ? current.galleryImages : []), ...results.filter(Boolean)],
-    }));
-    event.target.value = '';
+    try {
+      const results = await Promise.all(files.map((file) => uploadImageFileToUrl(file, 'rental-vehicles')));
+      setFormData((current) => ({
+        ...current,
+        galleryImages: [...(Array.isArray(current.galleryImages) ? current.galleryImages : []), ...results.filter(Boolean)],
+      }));
+    } catch (error) {
+      toast.error(error?.message || 'Failed to upload gallery images');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const removeGalleryImage = (indexToRemove) => {
@@ -485,9 +495,14 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const replaceGalleryImage = async (event, indexToReplace) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const result = await fileToDataUrl(file);
-    updateGalleryImage(indexToReplace, result);
-    event.target.value = '';
+    try {
+      const result = await uploadImageFileToUrl(file, 'rental-vehicles');
+      updateGalleryImage(indexToReplace, result);
+    } catch (error) {
+      toast.error(error?.message || 'Failed to upload image');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const addGalleryImageByUrl = () => {

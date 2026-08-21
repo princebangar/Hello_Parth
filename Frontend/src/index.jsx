@@ -4,7 +4,7 @@ import { Toaster } from 'sonner'
 import App from './app/App.jsx'
 import { isModuleAuthenticated } from './shared/utils/moduleAuth.js'
 import { syncThemeForPath } from './shared/utils/theme.js'
-import { NATIVE_LAST_ROUTE_KEY } from './shared/utils/activeModule.js'
+import { NATIVE_LAST_ROUTE_KEY, resolveAppColdStartRoute } from './shared/utils/activeModule.js'
 import './shared/styles/global.css'
 
 // ─── Quick-spicy Food Module Initialization ───────────────────────────────────
@@ -59,25 +59,34 @@ function resolveNativeInitialRoute() {
   ]
   const isTransient = (r) => TRANSIENT_SEGMENTS.some((s) => r.includes(s))
 
+  // Explicit deep-link / in-app path still wins (except broken transient ride flows).
   if (pathname.startsWith('/taxi/')) return isTransient(pathname) ? '/taxi/user' : pathname
   if (pathname.startsWith('/food/')) return pathname
   if (pathname.startsWith('/restaurant')) return `/food${pathname}`
   if (pathname.startsWith('/delivery')) return `/food${pathname}`
   if (pathname.startsWith('/user')) return `/food${pathname}`
   if (pathname.startsWith('/admin')) return pathname
-  if (storedRoute.startsWith('/taxi/')) {
-    return isTransient(storedRoute) ? '/taxi/user' : storedRoute
-  }
-  if (storedRoute.startsWith('/food/') || storedRoute.startsWith('/admin')) {
-    return storedRoute
+
+  // Cold start at `/` or blank: restore last consumer module home.
+  if (storedRoute.startsWith('/taxi/') || storedRoute.startsWith('/food/') || storedRoute.startsWith('/admin')) {
+    if (isModuleAuthenticated('restaurant') && storedRoute.startsWith('/food/restaurant')) {
+      return storedRoute
+    }
+    if (isModuleAuthenticated('delivery') && storedRoute.startsWith('/food/delivery')) {
+      return storedRoute
+    }
+    if (isModuleAuthenticated('admin') && storedRoute.startsWith('/admin')) {
+      return storedRoute
+    }
+    return resolveAppColdStartRoute()
   }
 
   if (isModuleAuthenticated('restaurant')) return '/food/restaurant'
   if (isModuleAuthenticated('delivery')) return '/food/delivery'
   if (isModuleAuthenticated('admin')) return '/admin'
-  if (isModuleAuthenticated('user')) return '/food/user'
+  if (isModuleAuthenticated('user')) return resolveAppColdStartRoute()
 
-  return '/food/user'
+  return resolveAppColdStartRoute()
 }
 
 function bootstrapNativeHashRoute() {

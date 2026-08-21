@@ -11,6 +11,7 @@ import {
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { uploadService } from '../../../../shared/services/uploadService';
 let liveFaviconObjectUrl = '';
 const DEFAULT_ADMIN_THEME_COLOR = '#405189';
 const DEFAULT_LANDING_THEME_COLOR = '#0AB39C';
@@ -187,18 +188,22 @@ const setLiveFavicon = (faviconUrl = '') => {
   let resolvedHref = '/assets/images/Hello Parth Logo.png';
 
   if (faviconUrl) {
-    const [meta, content] = String(faviconUrl).split(',');
-    const mimeMatch = meta.match(/data:(.*?)(;base64)?$/i);
-    const mime = mimeMatch?.[1] || 'image/png';
-    const binary = window.atob(content || '');
-    const bytes = new Uint8Array(binary.length);
+    if (String(faviconUrl).startsWith('data:')) {
+      const [meta, content] = String(faviconUrl).split(',');
+      const mimeMatch = meta.match(/data:(.*?)(;base64)?$/i);
+      const mime = mimeMatch?.[1] || 'image/png';
+      const binary = window.atob(content || '');
+      const bytes = new Uint8Array(binary.length);
 
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+
+      liveFaviconObjectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      resolvedHref = liveFaviconObjectUrl;
+    } else {
+      resolvedHref = faviconUrl;
     }
-
-    liveFaviconObjectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-    resolvedHref = liveFaviconObjectUrl;
   }
 
   rels.forEach((rel) => {
@@ -318,17 +323,39 @@ const GeneralSettings = () => {
   };
 
   const handleLogoUpload = async (file) => {
-    const dataUrl = await fileToDataUrl(file);
-    handleChange('general', 'logo', dataUrl);
+    try {
+      const uploadResult = await uploadService.uploadImageFile(file, 'settings/logo');
+      const url = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!url) throw new Error('Logo upload failed');
+      handleChange('general', 'logo', url);
+    } catch (err) {
+      console.error('Logo upload failed:', err);
+      toast.error('Failed to upload logo');
+    }
   };
 
   const handleFaviconUpload = async (file) => {
     try {
+      // Keep favicon small for browser tab; resize then upload as File.
       const dataUrl = await fileToDataUrl(file);
       const resizedFavicon = await resizeImageDataUrl(dataUrl, 64);
-      handleChange('general', 'favicon', resizedFavicon);
-      setLiveFavicon(resizedFavicon);
-      toast.success('Favicon prepared at 64x64');
+      const [meta, content] = String(resizedFavicon).split(',');
+      const mimeMatch = meta.match(/data:(.*?)(;base64)?$/i);
+      const mime = mimeMatch?.[1] || 'image/png';
+      const binary = window.atob(content || '');
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      const resizedFile = new File([bytes], 'favicon.png', { type: mime });
+
+      const uploadResult = await uploadService.uploadImageFile(resizedFile, 'settings/favicon');
+      const url = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!url) throw new Error('Favicon upload failed');
+
+      handleChange('general', 'favicon', url);
+      setLiveFavicon(url);
+      toast.success('Favicon uploaded');
     } catch (err) {
       console.error('Favicon resize failed:', err);
       toast.error('Failed to prepare favicon');

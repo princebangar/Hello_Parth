@@ -79,14 +79,6 @@ const isReverificationPending = (vehicle = {}) => {
   return Boolean(createdAt && updatedAt && updatedAt > createdAt);
 };
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
 const iconFor = (iconType = "") => {
   const value = String(iconType).toLowerCase();
   if (value.includes("bike")) return Bike;
@@ -348,9 +340,8 @@ const OwnerVehicleFleet = () => {
           throw new Error("RC upload currently supports image files only.");
         }
 
-        const dataUrl = await fileToDataUrl(formData.rcFile);
-        const uploadResult = await uploadService.uploadImage(
-          dataUrl,
+        const uploadResult = await uploadService.uploadImageFile(
+          formData.rcFile,
           "fleet-vehicle-documents",
         );
         rcFileUrl = uploadResult?.url || uploadResult?.secureUrl || "";

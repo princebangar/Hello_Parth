@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
+import { upload } from '../../../../middleware/upload.js';
 import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
 import {
   cancelMyBusBooking,
@@ -77,7 +78,7 @@ userRouter.post('/rental-bookings/:id/location', authenticateOrResolveUser(['use
 userRouter.post('/register', asyncHandler(registerUser));
 userRouter.post('/signup', asyncHandler(signupUser));
 userRouter.post('/login', asyncHandler(loginUser));
-userRouter.post('/profile-image', asyncHandler(uploadUserProfileImage));
+userRouter.post('/profile-image', upload.single('file'), asyncHandler(uploadUserProfileImage));
 userRouter.post('/auth/send-otp', asyncHandler(startUserOtpRequest));
 userRouter.post('/auth/verify-otp', asyncHandler(verifyUserOtpRequest));
 userRouter.post('/otp-login', asyncHandler(verifyUserPhoneForOtpLogin));

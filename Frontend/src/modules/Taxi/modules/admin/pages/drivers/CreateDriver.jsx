@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
 import { normalizeDriverDocumentTemplates } from '../../../driver/utils/documentTemplates';
 import { adminService } from '../../services/adminService';
+import { uploadService } from '../../../../shared/services/uploadService';
 
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -63,14 +64,6 @@ const matchesDocumentRole = (accountType) => {
 
 const normalizeVehicleNumber = (value = '') =>
   String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
-
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
 
 const normalizeDocument = (value) => {
   if (!value) return null;
@@ -396,12 +389,22 @@ const CreateDriver = () => {
     if (!file) return;
 
     setProfileName(file.name);
+    const localPreview = URL.createObjectURL(file);
+    setField('profile_picture', localPreview);
 
     try {
-      const dataUrl = await fileToDataUrl(file);
-      setField('profile_picture', dataUrl);
+      const uploadResult = await uploadService.uploadImageFile(file, 'drivers/profile');
+      const url = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!url) throw new Error('Unable to upload profile image');
+      URL.revokeObjectURL(localPreview);
+      setField('profile_picture', url);
     } catch {
-      setError('Unable to read profile image');
+      URL.revokeObjectURL(localPreview);
+      setField('profile_picture', '');
+      setProfileName('');
+      setError('Unable to upload profile image');
+    } finally {
+      event.target.value = '';
     }
   };
 
@@ -454,15 +457,30 @@ const CreateDriver = () => {
 
     setUploadingDocKey(fieldKey);
     setError('');
+    const localPreview = URL.createObjectURL(file);
 
     try {
-      const dataUrl = await fileToDataUrl(file);
+      setDocuments((current) => ({
+        ...current,
+        [fieldKey]: {
+          ...(current[fieldKey] || {}),
+          previewUrl: localPreview,
+          uploaded: false,
+          uploading: true,
+        },
+      }));
+
+      const uploadResult = await uploadService.uploadImageFile(file, 'drivers/documents');
+      const secureUrl = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!secureUrl) throw new Error('Unable to upload document image');
+
+      URL.revokeObjectURL(localPreview);
       const nextDocument = applyTemplateMetaToDocuments(
         templateId,
         {
           [fieldKey]: {
-            previewUrl: dataUrl,
-            secureUrl: dataUrl,
+            previewUrl: secureUrl,
+            secureUrl,
             fileName: file.name,
             mimeType: file.type || 'image/jpeg',
             uploaded: true,
@@ -475,7 +493,13 @@ const CreateDriver = () => {
         [fieldKey]: nextDocument,
       }));
     } catch {
-      setError('Unable to read document image');
+      URL.revokeObjectURL(localPreview);
+      setError('Unable to upload document image');
+      setDocuments((current) => {
+        const next = { ...current };
+        delete next[fieldKey];
+        return next;
+      });
     } finally {
       setUploadingDocKey('');
     }

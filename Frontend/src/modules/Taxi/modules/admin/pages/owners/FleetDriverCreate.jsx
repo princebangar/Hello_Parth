@@ -3,6 +3,7 @@ import { ChevronRight, Loader2, Menu, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { adminService } from '../../services/adminService';
+import { uploadService } from '../../../../shared/services/uploadService';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
 const inputClass =
@@ -90,14 +91,28 @@ const FleetDriverCreate = () => {
     }));
   };
 
-  const handleProfileChange = (event) => {
+  const handleProfileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setProfileName(file.name);
-    const reader = new FileReader();
-    reader.onloadend = () => setField('profile_picture', reader.result);
-    reader.readAsDataURL(file);
+    const localPreview = URL.createObjectURL(file);
+    setField('profile_picture', localPreview);
+
+    try {
+      const uploadResult = await uploadService.uploadImageFile(file, 'fleet-drivers');
+      const url = uploadResult?.secureUrl || uploadResult?.url || '';
+      if (!url) throw new Error('Profile image upload failed');
+      URL.revokeObjectURL(localPreview);
+      setField('profile_picture', url);
+    } catch (error) {
+      URL.revokeObjectURL(localPreview);
+      setField('profile_picture', '');
+      setProfileName('');
+      alert(error?.message || 'Failed to upload profile image');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const handleSubmit = async (event) => {

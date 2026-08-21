@@ -81,7 +81,7 @@ const Profile = () => {
     const token = getLocalUserToken();
 
     if (!token) {
-      navigate('/taxi/user/login', { replace: true });
+      navigate('/login', { replace: true, state: { from: '/taxi/user' } });
       return;
     }
 
