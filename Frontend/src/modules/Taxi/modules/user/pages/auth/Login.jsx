@@ -9,7 +9,14 @@ import { useSettings } from '../../../../shared/context/SettingsContext';
 const Login = () => {
   const location = useLocation();
   const { settings } = useSettings();
-  const [phoneNumber, setPhoneNumber] = useState(() => String(location.state?.phone || '').replace(/\D/g, '').slice(-10));
+  const [phoneNumber, setPhoneNumber] = useState(() => {
+    const fromState = String(location.state?.phone || '').replace(/\D/g, '').slice(-10);
+    if (fromState) return fromState;
+    if (import.meta.env.VITE_USE_DEFAULT_TEST_PHONE === 'true') {
+      return String(import.meta.env.VITE_DEFAULT_TEST_PHONE || '').replace(/\D/g, '').slice(0, 10);
+    }
+    return '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(() => String(location.state?.error || ''));
   const navigate = useNavigate();

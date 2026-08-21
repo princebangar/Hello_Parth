@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
-import { env } from '../../../../config/env.js';
 import { Owner } from '../../admin/models/Owner.js';
 import { ServiceStore } from '../../admin/models/ServiceStore.js';
 import { ServiceCenterStaff } from '../../admin/models/ServiceCenterStaff.js';
@@ -8,14 +7,9 @@ import { Driver } from '../models/Driver.js';
 import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
-import { sendOtpSms } from '../../services/smsService.js';
+import { sendOtpSms, normalizeOtpPhone, getOtpTtlMs, resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
 
-const LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
-
-const normalizePhone = (phone) => {
-  const digits = String(phone || '').replace(/\D/g, '').trim();
-  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
-};
+const normalizePhone = (phone) => normalizeOtpPhone(phone);
 
 const buildPhoneCandidates = (phone) => {
   const normalizedPhone = normalizePhone(phone);
@@ -49,7 +43,9 @@ const buildPhoneMatcher = (field, phone) => {
   return clauses;
 };
 
-const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
+const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
+const resolveDriverLoginOtpForPhone = (phone) => resolveOtpForPhone(phone);
 const normalizeRole = (role) => {
   const normalized = String(role || 'driver').toLowerCase();
   if (normalized === 'owner') return 'owner';
@@ -72,40 +68,6 @@ const normalizeRole = (role) => {
     return 'bus_driver';
   }
   return 'driver';
-};
-
-const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
-const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
-const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const TEST_LOGIN_OTP_PHONE = '6268423925';
-const TEST_LOGIN_OTP_CODE = '0000';
-const getStaticDriverOtpConfig = () => ({
-  phone: normalizePhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
-  otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
-});
-const resolveDriverLoginOtpForPhone = (phone) => {
-  const normalizedPhone = normalizePhone(phone);
-  const staticOtpConfig = getStaticDriverOtpConfig();
-  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
-
-  if (defaultOtpEnabled && staticOtpConfig.otp) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  return {
-    otp: generateOtp(),
-    isStatic: false,
-  };
 };
 
 const getSession = async (phone) => {
@@ -284,8 +246,9 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   //   );
   // }
 
-  const { otp, isStatic } = resolveDriverLoginOtpForPhone(normalizedPhone);
+  const { otp, isStatic, reason } = resolveDriverLoginOtpForPhone(normalizedPhone);
   const now = Date.now();
+  const ttlMs = getOtpTtlMs();
 
   const session = await DriverLoginSession.findOneAndUpdate(
     { phone: normalizedPhone },
@@ -294,9 +257,9 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
       driverId: account._id,
       accountRole: normalizedRole,
       otpHash: hashOtp(otp),
-      otpExpiresAt: new Date(now + LOGIN_OTP_TTL_MS),
+      otpExpiresAt: new Date(now + ttlMs),
       verifiedAt: null,
-      expiresAt: new Date(now + LOGIN_OTP_TTL_MS),
+      expiresAt: new Date(now + ttlMs),
     },
     { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
   );
@@ -304,7 +267,7 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const smsDispatch = isStatic
     ? {
         mode: 'static',
-        message: 'Static OTP enabled',
+        message: `Static OTP (${reason})`,
       }
     : await sendOtpSms({
         phone: normalizedPhone,

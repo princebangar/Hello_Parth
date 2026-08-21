@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { User } from '../models/User.js';
 import { Ride } from '../models/Ride.js';
-import { UserWallet } from '../models/UserWallet.js';
+import { UserWallet, ensureSharedUserWallet } from '../models/UserWallet.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
 import { BusService } from '../../admin/models/BusService.js';
@@ -84,21 +84,24 @@ const normalizeMoneyAmount = (value) => {
 
 const ensureUserWallet = async (userId) => {
   if (!userId) return;
-  await UserWallet.updateOne(
-    { userId },
-    { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
-    { upsert: true },
-  );
+  await ensureSharedUserWallet(userId);
 };
 
-const serializeUserWalletTransaction = (entry = {}) => ({
-  id: entry._id,
-  kind: entry.kind,
-  amount: Number(entry.amount || 0),
-  title: entry.title || '',
-  counterpartyPhone: entry.counterpartyPhone || '',
-  createdAt: entry.createdAt || null,
-});
+const serializeUserWalletTransaction = (entry = {}) => {
+  const kind =
+    entry.kind ||
+    (entry.type === 'deduction' || entry.type === 'refund' || entry.type === 'debit'
+      ? 'debit'
+      : 'credit');
+  return {
+    id: entry._id,
+    kind,
+    amount: Number(entry.amount || 0),
+    title: entry.title || entry.description || '',
+    counterpartyPhone: entry.counterpartyPhone || '',
+    createdAt: entry.createdAt || null,
+  };
+};
 
 const buildUserWalletPayload = (wallet) => {
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];

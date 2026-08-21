@@ -47,6 +47,15 @@ export const config = {
     otpRateLimit: Number(process.env.OTP_RATE_LIMIT || 3),
     otpRateWindow: Number(process.env.OTP_RATE_WINDOW || 600),
     useDefaultOtp: process.env.USE_DEFAULT_OTP === 'true',
+    useDefaultTestPhone: process.env.USE_DEFAULT_TEST_PHONE === 'true',
+    defaultTestPhone: String(process.env.DEFAULT_TEST_PHONE || '').replace(/\D/g, '').slice(-10),
+
+    // SMS providers (shared food + taxi)
+    smsHubEnabled: process.env.SMS_HUB_ENABLED === 'true',
+    msg91Enabled: process.env.MSG91_ENABLED === 'true',
+    msg91AuthKey: (process.env.MSG91_AUTH_KEY || '').trim(),
+    msg91SenderId: (process.env.MSG91_SENDER_ID || '').trim(),
+    msg91TemplateId: (process.env.MSG91_TEMPLATE_ID || '').trim(),
 
     // SMS India Hub
     smsIndiaHubUsername: (process.env.SMS_INDIA_HUB_USERNAME || '').trim(),
@@ -132,9 +141,15 @@ export const env = {
     },
     sms: {
         useDefaultOtp: config.useDefaultOtp ? 'true' : 'false',
+        useDefaultTestPhone: config.useDefaultTestPhone ? 'true' : 'false',
         otpExpiryMinutes: config.otpExpiryMinutes,
-        staticOtpPhone: process.env.STATIC_OTP_PHONE,
-        staticOtpCode: process.env.STATIC_OTP_CODE,
+        otpExpirySeconds: config.otpExpirySeconds,
+        otpMaxAttempts: config.otpMaxAttempts,
+        otpRateLimit: config.otpRateLimit,
+        otpRateWindow: config.otpRateWindow,
+        defaultTestPhone: config.defaultTestPhone,
+        smsHubEnabled: config.smsHubEnabled,
+        msg91Enabled: config.msg91Enabled,
         indiaHub: {
             username: config.smsIndiaHubUsername,
             password: process.env.SMS_INDIA_HUB_PASSWORD,
@@ -142,7 +157,12 @@ export const env = {
             senderId: config.smsSenderId,
             peId: config.smsPeId,
             dltTemplateId: config.smsDltTemplateId,
-        }
+        },
+        msg91: {
+            authKey: config.msg91AuthKey,
+            senderId: config.msg91SenderId,
+            templateId: config.msg91TemplateId,
+        },
     },
     driverWallet: {
         defaultCashLimit: Number(process.env.DRIVER_WALLET_DEFAULT_CASH_LIMIT || 500),

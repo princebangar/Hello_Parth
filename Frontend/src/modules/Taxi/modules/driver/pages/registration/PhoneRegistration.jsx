@@ -27,7 +27,14 @@ const PhoneRegistration = () => {
         storedSession.referralCode ||
         '',
     ).trim().toUpperCase();
-    const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
+    const [phone, setPhone] = useState(() => {
+        const fromState = String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10);
+        if (fromState) return fromState;
+        if (import.meta.env.VITE_USE_DEFAULT_TEST_PHONE === 'true') {
+            return String(import.meta.env.VITE_DEFAULT_TEST_PHONE || '').replace(/\D/g, '').slice(0, 10);
+        }
+        return '';
+    });
     const [role, setRole] = useState(() => {
         const normalizePortalRole = (value) => {
             const normalized = String(value || '').toLowerCase();

@@ -1,18 +1,13 @@
 import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
-import { FoodUserWallet } from '../models/userWallet.model.js';
+import { FoodUserWallet, ensureSharedUserWallet } from '../models/userWallet.model.js';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature, fetchRazorpayPayment, assertRazorpayPaymentMatches } from '../../orders/helpers/razorpay.helper.js';
 import { config } from '../../../../config/env.js';
 
 const ensureWallet = async (userId) => {
-    const id = String(userId || '');
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-        throw new ValidationError('User not found');
-    }
-    const oid = new mongoose.Types.ObjectId(id);
-    const existing = await FoodUserWallet.findOne({ userId: oid });
-    if (existing) return existing;
-    return FoodUserWallet.create({ userId: oid, balance: 0, transactions: [] });
+    const wallet = await ensureSharedUserWallet(userId);
+    if (!wallet) throw new ValidationError('User not found');
+    return wallet;
 };
 
 export const creditReferralReward = async (userId, amountInr, metadata = {}) => {
@@ -35,14 +30,9 @@ export const creditReferralReward = async (userId, amountInr, metadata = {}) => 
 };
 
 export const getUserWallet = async (userId) => {
-    const id = String(userId || '');
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-        throw new ValidationError('User not found');
-    }
-    const oid = new mongoose.Types.ObjectId(id);
-    const wallet = await FoodUserWallet.findOne({ userId: oid });
+    const wallet = await ensureSharedUserWallet(userId);
     if (!wallet) {
-        return { balance: 0, referralEarnings: 0, transactions: [] };
+        throw new ValidationError('User not found');
     }
     // Return newest first (UI expects recent transactions on top)
     const tx = Array.isArray(wallet.transactions) ? [...wallet.transactions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];

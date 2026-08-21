@@ -1,19 +1,15 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
-import { env } from '../../../../config/env.js';
+import { config } from '../../../../config/env.js';
 import { UserAuthSession } from '../models/UserAuthSession.js';
 import { User } from '../models/User.js';
-import { sendOtpSms } from '../../services/smsService.js';
+import { sendOtpSms, normalizeOtpPhone, getOtpTtlMs, resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
 
-const OTP_TTL_MS = 10 * 60 * 1000;
 const VERIFIED_SESSION_TTL_MS = 10 * 60 * 1000;
 
-export const normalizeUserPhone = (value) => {
-  const digits = String(value || '').replace(/\D/g, '').trim();
-  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
-};
+export const normalizeUserPhone = (value) => normalizeOtpPhone(value);
 
 export const validateUserPhone = (phone) => {
   if (!/^\d{10}$/.test(phone)) {
@@ -21,41 +17,8 @@ export const validateUserPhone = (phone) => {
   }
 };
 
-const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
-
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
-const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const TEST_LOGIN_OTP_PHONE = '7610416911';
-const TEST_LOGIN_OTP_CODE = '0000';
-const getStaticUserOtpConfig = () => ({
-  phone: normalizeUserPhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
-  otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
-});
-const resolveUserOtpForPhone = (phone) => {
-  const normalizedPhone = normalizeUserPhone(phone);
-  const staticOtpConfig = getStaticUserOtpConfig();
-  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
-
-  if (defaultOtpEnabled && staticOtpConfig.otp) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  return {
-    otp: generateOtp(),
-    isStatic: false,
-  };
-};
 
 const ensureUserCanLogin = (user) => {
   if (user?.deletedAt || user?.isActive === false || user?.active === false) {
@@ -119,26 +82,47 @@ export const startUserOtp = async ({ phone }) => {
     ensureUserCanLogin(user);
   }
 
-  const { otp, isStatic } = resolveUserOtpForPhone(normalizedPhone);
+  const existingSession = await UserAuthSession.findOne({ phone: normalizedPhone });
+  const windowMs = (config.otpRateWindow || 600) * 1000;
   const now = Date.now();
+  if (existingSession?.lastOtpRequestedAt) {
+    const elapsed = now - new Date(existingSession.lastOtpRequestedAt).getTime();
+    if (elapsed < windowMs) {
+      const count = Number(existingSession.otpRequestCount || 0);
+      if (count >= (config.otpRateLimit || 3)) {
+        throw new ApiError(
+          429,
+          `Too many OTP requests. Please try again after ${Math.ceil(windowMs / 60000)} minutes.`,
+        );
+      }
+    }
+  }
+
+  const { otp, isStatic, reason } = resolveOtpForPhone(normalizedPhone);
+  const ttlMs = getOtpTtlMs();
+  const requestCount =
+    existingSession?.lastOtpRequestedAt &&
+    now - new Date(existingSession.lastOtpRequestedAt).getTime() < windowMs
+      ? Number(existingSession.otpRequestCount || 0) + 1
+      : 1;
 
   const session = await UserAuthSession.findOneAndUpdate(
     { phone: normalizedPhone },
     {
       phone: normalizedPhone,
       otpHash: hashOtp(otp),
-      otpExpiresAt: new Date(now + OTP_TTL_MS),
+      otpExpiresAt: new Date(now + ttlMs),
       otpVerifiedAt: null,
-      expiresAt: new Date(now + OTP_TTL_MS),
+      otpAttempts: 0,
+      otpRequestCount: requestCount,
+      lastOtpRequestedAt: new Date(now),
+      expiresAt: new Date(now + ttlMs),
     },
     { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
   );
 
   const smsDispatch = isStatic
-    ? {
-        mode: 'static',
-        message: 'Static OTP enabled',
-      }
+    ? { mode: 'static', message: `Static OTP (${reason})` }
     : await sendOtpSms({
         phone: normalizedPhone,
         otp,
@@ -170,7 +154,15 @@ export const verifyUserOtp = async ({ phone, otp, token, fcmToken, platform }) =
     throw new ApiError(410, 'OTP has expired');
   }
 
+  const attempts = Number(session.otpAttempts || 0) + 1;
+  session.otpAttempts = attempts;
+  if (attempts > (config.otpMaxAttempts || 4)) {
+    await session.save();
+    throw new ApiError(429, 'Max OTP attempts exceeded');
+  }
+
   if (session.otpHash !== hashOtp(normalizedOtp)) {
+    await session.save();
     throw new ApiError(401, 'Invalid OTP');
   }
 
