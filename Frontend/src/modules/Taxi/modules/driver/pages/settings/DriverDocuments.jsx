@@ -87,6 +87,11 @@ const DriverDocuments = () => {
     handleFileChange: onDocumentImageChange,
   } = useImageUpload({
     folder: 'driver-documents',
+    getReplaceUrl: () => {
+      const key = uploadingDocumentKeyRef.current;
+      const existing = key ? driver?.documents?.[key] : null;
+      return existing?.secureUrl || existing?.previewUrl || existing?.url || '';
+    },
     onSuccess: async (url) => {
       const activeDocumentKey = uploadingDocumentKeyRef.current;
 

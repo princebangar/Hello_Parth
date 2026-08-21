@@ -266,7 +266,7 @@ function LandingPage() {
               <a href="#" className="social-icon">in</a>
               <a href="#" className="social-icon">y</a>
             </div>
-            <div className="footer-website">www.helloparth.com</div>
+            <div className="footer-website">www.helloparth.in</div>
           </div>
           <div className="footer-col-2">
             <h3>Quick Links</h3>

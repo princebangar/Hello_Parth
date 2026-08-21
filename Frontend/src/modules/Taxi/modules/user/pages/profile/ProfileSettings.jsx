@@ -21,6 +21,7 @@ const ProfileSettings = () => {
     handleFileChange: onPhotoFileChange,
   } = useImageUpload({
     folder: 'user-profiles',
+    replaceUrl: profileImage,
     onSuccess: (url) => setProfileImage(url)
   });
 

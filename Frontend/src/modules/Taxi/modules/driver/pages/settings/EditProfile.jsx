@@ -51,6 +51,7 @@ const EditProfile = () => {
         handleFileChange: onImageFileChange
     } = useImageUpload({
         folder: 'driver-profiles',
+        replaceUrl: driver.profileImage,
         onSuccess: (url) => setDriver(prev => ({ ...prev, profileImage: url }))
     });
 

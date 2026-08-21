@@ -1,6 +1,10 @@
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
-import { uploadDataUrlToCloudinary, uploadBufferToCloudinary } from '../../../../utils/cloudinaryUpload.js';
-import { env } from '../../../../config/env.js';
+import {
+    storeImageBuffer,
+    storeImageFromDataUrl,
+    deleteStoredAsset,
+    extractAssetUrl,
+} from '../../../../services/storage.service.js';
 import { AdminAppSetting } from '../../admin/models/AdminAppSetting.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { createDefaultAppSettings } from '../../admin/data/defaultAppSettings.js';
@@ -9,36 +13,48 @@ import { getReferralSettings, getReferralTranslationContent } from '../../admin/
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
 
 /**
- * Common controller for shared utilities like file uploads
+ * Shared upload endpoint for taxi app/web.
+ * Uses the same storage.service as food (sharp → WebP → /var/www/uploads).
  */
 export const uploadImage = asyncHandler(async (req, res) => {
     const folder = String(req.body?.folder || 'general').trim() || 'general';
-    const scopedFolder = `${env.cloudinary.folder}/${folder}`;
-    const publicIdPrefix = `content-${folder}`;
+    const scopedFolder = `taxi/${folder}`;
+    const replaceUrl = extractAssetUrl(req.body?.replaceUrl);
 
-    const uploadResult = req.file
-        ? await uploadBufferToCloudinary({
-            buffer: req.file.buffer,
+    const stored = req.file
+        ? await storeImageBuffer(req.file.buffer, scopedFolder, {
             mimeType: req.file.mimetype || 'image/jpeg',
-            folder: scopedFolder,
-            publicIdPrefix,
-            // Keep original format for faster selfie uploads.
-            format: undefined,
+            originalName: req.file.originalname,
+            replaceUrl,
         })
-        : await uploadDataUrlToCloudinary({
-            dataUrl: req.body?.image,
-            folder: scopedFolder,
-            publicIdPrefix,
-            format: undefined,
-        });
+        : await storeImageFromDataUrl(req.body?.image, scopedFolder, { replaceUrl });
+
+    const url = stored.url || stored.secure_url;
 
     return res.json({
         success: true,
         data: {
-            url: uploadResult.secureUrl,
-            publicId: uploadResult.publicId,
-            format: uploadResult.format
-        }
+            url,
+            secureUrl: url,
+            publicId: stored.public_id || stored.filename || null,
+            format: stored.format || 'webp',
+        },
+    });
+});
+
+export const deleteUploadedImage = asyncHandler(async (req, res) => {
+    const url = extractAssetUrl(req.body?.url || req.body?.replaceUrl || req.query?.url);
+    if (!url) {
+        return res.status(400).json({
+            success: false,
+            message: 'url is required',
+        });
+    }
+
+    const deleted = await deleteStoredAsset(url);
+    return res.json({
+        success: true,
+        data: { deleted },
     });
 });
 

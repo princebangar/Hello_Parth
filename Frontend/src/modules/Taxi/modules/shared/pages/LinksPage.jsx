@@ -88,7 +88,7 @@ const LinksPage = () => {
         <footer className="links-footer">
           <p>© 2026 Hello Parth. All rights reserved.</p>
           <div className="footer-links">
-            <a href="https://helloparth.com" target="_blank" rel="noopener noreferrer">Visit Website</a>
+            <a href="https://helloparth.in" target="_blank" rel="noopener noreferrer">Visit Website</a>
             <span className="dot"></span>
             <a href="/support">Support</a>
           </div>

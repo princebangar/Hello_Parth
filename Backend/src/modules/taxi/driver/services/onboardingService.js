@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { normalizePoint, toPoint } from '../../../../utils/geo.js';
-import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
+import { storeImageFromDataUrl, extractAssetUrl } from '../../../../services/storage.service.js';
 import { Driver } from '../models/Driver.js';
 import { DriverRegistrationSession } from '../models/DriverRegistrationSession.js';
 import { Owner } from '../../admin/models/Owner.js';
@@ -455,23 +455,26 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     .replace(/\.[^.]+$/, '')
     .replace(/[^a-zA-Z0-9-_]/g, '');
 
-  const uploaded = await uploadDataUrlToCloudinary({
-    dataUrl,
-    folder: `${documentKey}/driver-documents`,
-    publicIdPrefix: `driver-${documentKey}`,
-    publicIdSuffix: safeSuffix,
+  const replaceUrl = typeof value === 'object'
+    ? extractAssetUrl(value.replaceUrl || value.previousUrl || value.existingUrl)
+    : '';
+
+  const uploaded = await storeImageFromDataUrl(dataUrl, `taxi/drivers/documents/${documentKey}`, {
+    replaceUrl: replaceUrl || undefined,
   });
+
+  const url = uploaded.url || uploaded.secure_url;
 
   return {
     key: documentKey,
-    fileName: originalFilename,
+    fileName: originalFilename || safeSuffix || `${documentKey}.webp`,
     uploaded: true,
     uploadedAt: new Date().toISOString(),
-    previewUrl: uploaded.secureUrl,
-    secureUrl: uploaded.secureUrl,
-    publicId: uploaded.publicId,
-    resourceType: uploaded.resourceType,
-    format: uploaded.format,
+    previewUrl: url,
+    secureUrl: url,
+    publicId: uploaded.public_id || uploaded.filename || null,
+    resourceType: uploaded.resource_type || 'image',
+    format: uploaded.format || 'webp',
     bytes: uploaded.bytes,
     width: uploaded.width,
     height: uploaded.height,
@@ -481,7 +484,6 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     document_number: identifyNumber,
     expiryDate,
     expiry_date: expiryDate,
-    cloudinary: uploaded,
   };
 };
 

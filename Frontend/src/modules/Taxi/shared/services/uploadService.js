@@ -1,17 +1,21 @@
 import api from '../api/axiosInstance';
 
+/**
+ * Taxi upload client — hits shared backend storage (same storage.service as food).
+ * Images are compressed to WebP and stored under /var/www/uploads.
+ */
 export const uploadService = {
   /**
-   * Upload an image (base64) to Cloudinary via the backend
-   * @param {string} base64Image - The base64 string of the image
-   * @param {string} folder - Destination folder on Cloudinary
-   * @returns {Promise<{url: string, publicId: string, format: string}>}
+   * @param {string} base64Image
+   * @param {string} folder
+   * @param {{ replaceUrl?: string }} [options]
    */
-  uploadImage: async (base64Image, folder = 'general') => {
+  uploadImage: async (base64Image, folder = 'general', options = {}) => {
     try {
       const response = await api.post('/common/upload/image', {
         image: base64Image,
-        folder
+        folder,
+        replaceUrl: options.replaceUrl || undefined,
       });
       return response?.data || response;
     } catch (error) {
@@ -19,16 +23,20 @@ export const uploadService = {
       throw error;
     }
   },
+
   /**
-   * Upload an image file/blob via multipart form data
-   * @param {File|Blob} file - Image file or blob
-   * @param {string} folder - Destination folder on Cloudinary
+   * @param {File|Blob} file
+   * @param {string} folder
+   * @param {{ replaceUrl?: string }} [options]
    */
-  uploadImageFile: async (file, folder = 'general') => {
+  uploadImageFile: async (file, folder = 'general', options = {}) => {
     try {
       const formData = new FormData();
       formData.append('image', file, file?.name || 'upload.jpg');
       formData.append('folder', folder);
+      if (options.replaceUrl) {
+        formData.append('replaceUrl', options.replaceUrl);
+      }
 
       const response = await api.post('/common/upload/image', formData, {
         headers: {
@@ -40,5 +48,16 @@ export const uploadService = {
       console.error('Upload Service Error:', error);
       throw error;
     }
-  }
+  },
+
+  /** Delete an uploaded asset from the live /uploads folder. */
+  deleteImage: async (url) => {
+    if (!url) return;
+    try {
+      await api.delete('/common/upload/image', { data: { url } });
+    } catch (error) {
+      console.error('Upload delete error:', error);
+      throw error;
+    }
+  },
 };

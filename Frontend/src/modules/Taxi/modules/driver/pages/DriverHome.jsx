@@ -1434,7 +1434,9 @@ const DriverHome = () => {
             });
 
             setStatusMessage('Uploading selfie...');
-            const uploadResult = await uploadService.uploadImageFile(imageFile, 'driver-online-selfies');
+            const uploadResult = await uploadService.uploadImageFile(imageFile, 'driver-online-selfies', {
+                replaceUrl: onlineSelfie?.imageUrl || undefined,
+            });
             const selfieUrl = uploadResult?.url || uploadResult?.secureUrl || '';
 
             if (!selfieUrl) {

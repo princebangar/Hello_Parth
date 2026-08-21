@@ -64,7 +64,7 @@ export const config = {
     // Security
     bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS || 10),
 
-    // Uploads
+    // Uploads (local disk / remote Hostinger /var/www/uploads — no Cloudinary)
     uploadPath,
     uploadsRoot: path.isAbsolute(uploadPath)
         ? path.normalize(uploadPath)
@@ -86,11 +86,6 @@ export const config = {
 
     // BullMQ
     bullmqEnabled: process.env.BULLMQ_ENABLED === 'true',
-
-    // Cloudinary
-    cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
-    cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
 
     // Firebase / FCM
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
@@ -130,12 +125,6 @@ export const env = {
     mongoUri: config.mongodbUri,
     jwtSecret: config.jwtAccessSecret,
     jwtExpiresIn: config.jwtAccessExpiresIn,
-    cloudinary: {
-        cloudName: config.cloudinaryCloudName,
-        apiKey: config.cloudinaryApiKey,
-        apiSecret: config.cloudinaryApiSecret,
-        folder: process.env.CLOUDINARY_FOLDER || 'hello-parth-taxi',
-    },
     firebase: {
         databaseURL: config.firebaseDatabaseUrl,
         serviceAccountPath: config.firebaseServiceAccountPath,

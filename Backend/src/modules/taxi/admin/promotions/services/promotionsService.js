@@ -6,7 +6,12 @@ import { User } from '../../../user/models/User.js';
 import { Banner } from '../models/Banner.js';
 import { Notification } from '../models/Notification.js';
 import { PromoCode } from '../models/PromoCode.js';
-import { uploadDataUrlToCloudinary } from '../../../../../utils/cloudinaryUpload.js';
+import {
+  storeImageFromDataUrl,
+  deleteStoredAsset,
+  deleteReplacedAssets,
+  extractAssetUrl,
+} from '../../../../../services/storage.service.js';
 import { sendPushNotificationToAudience } from '../../../services/pushNotificationService.js';
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
@@ -367,18 +372,16 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Message is required');
   }
 
-  // If image is a data URL (base64), upload it to Cloudinary
+  // If image is a data URL (base64), store compressed WebP on the server
   if (image.startsWith('data:')) {
     try {
-      const uploaded = await uploadDataUrlToCloudinary({
-        dataUrl: image,
-        publicIdPrefix: 'notification',
+      const replaceUrl = extractAssetUrl(existing?.image);
+      const uploaded = await storeImageFromDataUrl(image, 'taxi/promotions/notifications', {
+        replaceUrl: replaceUrl || undefined,
       });
-      image = uploaded.secureUrl;
+      image = uploaded.url || uploaded.secure_url;
     } catch (error) {
-      console.error('Cloudinary upload error:', error);
-      // We don't throw here to allow sending notification even if image upload fails?
-      // Actually, it's better to throw so the user knows why it failed.
+      console.error('Notification image upload error:', error);
       throw new ApiError(500, `Failed to upload notification image: ${error.message}`);
     }
   }
@@ -409,18 +412,20 @@ const normalizeBannerPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Banner image is required');
   }
 
-  // If image is a data URL (base64), upload it to Cloudinary
+  // If image is a data URL (base64), store compressed WebP on the server
   if (image.startsWith('data:')) {
     try {
-      const uploaded = await uploadDataUrlToCloudinary({
-        dataUrl: image,
-        publicIdPrefix: 'banner',
+      const replaceUrl = extractAssetUrl(existing?.image);
+      const uploaded = await storeImageFromDataUrl(image, 'taxi/promotions/banners', {
+        replaceUrl: replaceUrl || undefined,
       });
-      image = uploaded.secureUrl;
+      image = uploaded.url || uploaded.secure_url;
     } catch (error) {
-      console.error('Cloudinary upload error:', error);
+      console.error('Banner image upload error:', error);
       throw new ApiError(500, `Failed to upload banner image: ${error.message}`);
     }
+  } else if (existing?.image) {
+    await deleteReplacedAssets(existing.image, image);
   }
 
   if (!['external_link', 'deep_link'].includes(linkType)) {
@@ -585,6 +590,7 @@ export const deleteNotification = async (id) => {
   if (!deleted) {
     throw new ApiError(404, 'Notification not found');
   }
+  await deleteStoredAsset(deleted.image);
   return true;
 };
 
@@ -637,6 +643,7 @@ export const deleteBanner = async (id) => {
   if (!deleted) {
     throw new ApiError(404, 'Banner not found');
   }
+  await deleteStoredAsset(deleted.image);
   return true;
 };
 

@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { env } from "../../../../config/env.js";
 import { ApiError } from "../../../../utils/ApiError.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
+import { deleteReplacedAssets } from "../../../../services/storage.service.js";
 import { Driver } from "../models/Driver.js";
 import { BusDriver } from "../models/BusDriver.js";
 import { DriverLoginSession } from "../models/DriverLoginSession.js";
@@ -2744,7 +2745,9 @@ export const updateCurrentDriver = async (req, res) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "profileImage")) {
-    driver.profileImage = String(req.body.profileImage || "").trim();
+    const nextImage = String(req.body.profileImage || "").trim();
+    await deleteReplacedAssets(driver.profileImage, nextImage);
+    driver.profileImage = nextImage;
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "registerFor") || Object.prototype.hasOwnProperty.call(req.body || {}, "transport_type") || Object.prototype.hasOwnProperty.call(req.body || {}, "transportType")) {
@@ -2893,6 +2896,11 @@ export const updateCurrentDriverDocument = async (req, res) => {
   if (["verified", "approved"].includes(existingStatus)) {
     throw new ApiError(409, "Verified documents cannot be re-uploaded");
   }
+
+  await deleteReplacedAssets(
+    existingDocument.previewUrl || existingDocument.secureUrl || existingDocument.url || existingDocument.imageUrl,
+    previewUrl,
+  );
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),

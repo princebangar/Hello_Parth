@@ -32,9 +32,34 @@ export const extractAssetUrl = (value) => {
     if (!value) return '';
     if (typeof value === 'string') return value.trim();
     if (typeof value === 'object') {
-        return String(value.url || value.secure_url || value.imageUrl || value.iconUrl || value.src || '').trim();
+        return String(
+            value.url ||
+                value.secure_url ||
+                value.secureUrl ||
+                value.previewUrl ||
+                value.imageUrl ||
+                value.iconUrl ||
+                value.src ||
+                value.image ||
+                ''
+        ).trim();
     }
     return '';
+};
+
+const DATA_URL_PATTERN = /^data:([^;]+);base64,(.+)$/i;
+
+/** Parse a browser data-URL into mime + buffer (shared by food + taxi). */
+export const parseImageDataUrl = (dataUrl) => {
+    const match = String(dataUrl || '').match(DATA_URL_PATTERN);
+    if (!match) {
+        throw new ValidationError('A valid base64 image data URL is required');
+    }
+    const buffer = Buffer.from(match[2], 'base64');
+    if (!buffer.length) {
+        throw new ValidationError('Image buffer is required');
+    }
+    return { mimeType: match[1], buffer };
 };
 
 export const extractAssetUrls = (value) => {
@@ -46,18 +71,34 @@ export const extractAssetUrls = (value) => {
     return one ? [one] : [];
 };
 
-const encodeToWebp = async (buffer, { maxWidth } = {}) => {
+const DEFAULT_MAX_WIDTH = 1920;
+const DEFAULT_WEBP_QUALITY = 80;
+
+/** Any image format → compressed WebP via sharp (food + taxi). */
+const encodeToWebp = async (buffer, { maxWidth = DEFAULT_MAX_WIDTH, quality = DEFAULT_WEBP_QUALITY } = {}) => {
     try {
-        let pipeline = sharp(buffer, { animated: true, failOn: 'none' });
-        if (maxWidth) {
-            pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true });
-        }
         const meta = await sharp(buffer, { failOn: 'none' }).metadata().catch(() => ({}));
-        const out = await pipeline.webp({ quality: 90, effort: 4 }).toBuffer();
+        let pipeline = sharp(buffer, { animated: true, failOn: 'none' });
+        const widthLimit = Number(maxWidth) > 0 ? Number(maxWidth) : DEFAULT_MAX_WIDTH;
+        if (widthLimit) {
+            pipeline = pipeline.resize({
+                width: widthLimit,
+                height: widthLimit,
+                fit: 'inside',
+                withoutEnlargement: true,
+            });
+        }
+        const q = Math.min(100, Math.max(40, Number(quality) || DEFAULT_WEBP_QUALITY));
+        const out = await pipeline.webp({ quality: q, effort: 4 }).toBuffer();
         if (!out?.length) {
             throw new Error('empty webp output');
         }
-        return { buffer: out, ext: 'webp', width: meta.width, height: meta.height };
+        return {
+            buffer: out,
+            ext: 'webp',
+            width: meta.width,
+            height: meta.height,
+        };
     } catch {
         throw new ValidationError('Could not convert image to WebP. Upload a valid image file.');
     }
@@ -251,6 +292,25 @@ export const deleteReplacedAssets = async (previous, next) => {
 
 export const uploadImageBuffer = async (buffer, folder = 'uploads', options = {}) => {
     const result = await storeImageBuffer(buffer, folder, options);
+    return result.url || result.secure_url;
+};
+
+/**
+ * Store a data-URL image (taxi/app flows). Same sharp→WebP→/uploads path as food.
+ * Returns the full storage result ({ url, secure_url, public_id, format, ... }).
+ */
+export const storeImageFromDataUrl = async (dataUrl, folder = 'uploads', options = {}) => {
+    const { mimeType, buffer } = parseImageDataUrl(dataUrl);
+    return storeImageBuffer(buffer, folder, {
+        ...options,
+        mimeType: options.mimeType || mimeType,
+        originalName: options.originalName || 'upload.jpg',
+    });
+};
+
+/** Same as uploadImageBuffer but accepts a data-URL string. */
+export const uploadImageFromDataUrl = async (dataUrl, folder = 'uploads', options = {}) => {
+    const result = await storeImageFromDataUrl(dataUrl, folder, options);
     return result.url || result.secure_url;
 };
 

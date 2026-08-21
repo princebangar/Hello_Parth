@@ -1,16 +1,25 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { uploadService } from '../services/uploadService';
 import toast from 'react-hot-toast';
 
 /**
- * Hook for managing image uploads with previews and optimization
+ * Hook for managing image uploads with previews.
+ * Uses shared backend storage (same as food): WebP → /var/www/uploads.
+ * Pass replaceUrl / getReplaceUrl so the previous file is deleted on replace.
  */
 export const useImageUpload = (options = {}) => {
-  const { 
+  const {
     folder = 'general',
+    replaceUrl,
+    getReplaceUrl,
     onSuccess = () => {},
-    onError = () => {}
+    onError = () => {},
   } = options;
+
+  const replaceUrlRef = useRef(replaceUrl);
+  useEffect(() => {
+    replaceUrlRef.current = replaceUrl;
+  }, [replaceUrl]);
 
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -38,12 +47,20 @@ export const useImageUpload = (options = {}) => {
 
       setPreview(base64);
 
-      const result = await uploadService.uploadImage(base64, folder);
-      
+      const previous =
+        (typeof getReplaceUrl === 'function' ? getReplaceUrl() : null) ||
+        replaceUrlRef.current ||
+        imageUrl ||
+        '';
+
+      const result = await uploadService.uploadImage(base64, folder, {
+        replaceUrl: previous && !String(previous).startsWith('data:') ? previous : undefined,
+      });
+
       const url = result.secureUrl || result.url;
       setImageUrl(url);
       onSuccess(url);
-      toast.success('Professional branding image uploaded');
+      toast.success('Image uploaded successfully');
     } catch (error) {
       console.error('Upload Hook Error:', error);
       toast.error('Failed to upload image. Please try again.');
@@ -54,7 +71,7 @@ export const useImageUpload = (options = {}) => {
       }
       setUploading(false);
     }
-  }, [folder, onSuccess, onError]);
+  }, [folder, getReplaceUrl, imageUrl, onSuccess, onError]);
 
   const reset = useCallback(() => {
     setPreview(null);
@@ -69,6 +86,6 @@ export const useImageUpload = (options = {}) => {
     handleFileChange,
     reset,
     setPreview,
-    setImageUrl
+    setImageUrl,
   };
 };

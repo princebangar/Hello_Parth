@@ -11,7 +11,7 @@ import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
 import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
 import { env } from '../../../../config/env.js';
-import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
+import { storeImageFromDataUrl, deleteReplacedAssets, extractAssetUrl } from '../../../../services/storage.service.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
 import {
@@ -1477,6 +1477,7 @@ export const getCurrentUser = async (req, res) => {
 
 export const uploadUserProfileImage = async (req, res) => {
   const dataUrl = String(req.body?.dataUrl || '');
+  const userId = req.auth?.sub;
 
   if (!dataUrl) {
     throw new ApiError(400, 'dataUrl is required');
@@ -1486,17 +1487,29 @@ export const uploadUserProfileImage = async (req, res) => {
     throw new ApiError(413, 'Image is too large');
   }
 
-  const uploadResult = await uploadDataUrlToCloudinary({
-    dataUrl,
-    folder: `${env.cloudinary.folder}/user-profile`,
-    publicIdPrefix: 'user-profile',
+  const user = userId ? await User.findById(userId) : null;
+  const replaceUrl = extractAssetUrl(req.body?.replaceUrl) || extractAssetUrl(user?.profileImage);
+
+  const stored = await storeImageFromDataUrl(dataUrl, 'taxi/users/profile', {
+    replaceUrl: replaceUrl || undefined,
+    maxWidth: 1024,
   });
+  const url = stored.url || stored.secure_url;
+
+  if (user && url) {
+    await deleteReplacedAssets(user.profileImage, url);
+    user.profileImage = url;
+    await user.save();
+  }
 
   res.status(201).json({
     success: true,
     data: {
-      secureUrl: uploadResult.secureUrl,
-      publicId: uploadResult.publicId,
+      secureUrl: url,
+      url,
+      publicId: stored.public_id || stored.filename || null,
+      format: stored.format || 'webp',
+      profileImage: url,
     },
   });
 };
@@ -1523,7 +1536,9 @@ export const updateCurrentUser = async (req, res) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, 'profileImage')) {
-    user.profileImage = toCleanString(req.body.profileImage);
+    const nextImage = toCleanString(req.body.profileImage);
+    await deleteReplacedAssets(user.profileImage, nextImage);
+    user.profileImage = nextImage;
   }
 
   await user.save();
