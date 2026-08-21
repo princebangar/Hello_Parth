@@ -335,7 +335,7 @@ export default function DesktopNavbar({ showLogo = true }) {
                                 <Button
                                     variant="ghost"
                                     className="h-12 w-12 lg:h-14 lg:w-14 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                    title="Wallet"
+                                    title="My Wallet"
                                 >
                                     <Wallet className="!h-5 !w-5 lg:!h-6 lg:!w-6 text-gray-700 dark:text-gray-300" strokeWidth={2} />
                                 </Button>

@@ -37,7 +37,6 @@ import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils"
 import { compressImageForUpload, PROFILE_PRESET } from "@/shared/utils/imageCompressor"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
-import dayjs from 'dayjs'
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
 const debugError = (...args) => { }
@@ -82,16 +81,6 @@ const buildFormDataFromProfile = (profile = {}) => ({
   name: profile.name || "",
   mobile: normalizePhoneToTenDigits(profile.mobile || profile.phone || ""),
   email: profile.email || "",
-  dateOfBirth: profile.dateOfBirth
-    ? (typeof profile.dateOfBirth === 'string'
-      ? dayjs(profile.dateOfBirth)
-      : dayjs(profile.dateOfBirth))
-    : null,
-  anniversary: profile.anniversary
-    ? (typeof profile.anniversary === 'string'
-      ? dayjs(profile.anniversary)
-      : dayjs(profile.anniversary))
-    : null,
   gender: profile.gender || "",
 })
 
@@ -130,12 +119,9 @@ export default function EditProfile() {
   const [cropImageFile, setCropImageFile] = useState(null)
   const [isCropModalOpen, setIsCropModalOpen] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({
-    mobile: "",
     email: "",
-    dateOfBirth: "",
   })
   const fileInputRef = useRef(null)
-  const mobileInputRef = useRef(null)
   const savedProfileImageRef = useRef(initialProfile?.profileImage || userProfile?.profileImage || "")
 
   // Sync form when real saved profile loads from context (not while user is editing)
@@ -170,32 +156,15 @@ export default function EditProfile() {
     return EMAIL_REGEX.test(value) ? "" : "Please enter a valid email"
   }
 
-  const validateMobile = (value) => {
-    if (!value) return ""
-    return /^\d{10}$/.test(value) ? "" : "Mobile number must be 10 digits"
-  }
-
-  const validateDateOfBirth = (value) => {
-    if (!value) return ""
-    const dob = dayjs(value)
-    if (!dob.isValid()) return "Please select a valid date of birth"
-    return dob.isAfter(dayjs(), "day") ? "Date of birth cannot be in the future" : ""
-  }
-
   const handleChange = (field, value) => {
     let normalizedValue = value
     let errorMessage = ""
 
     if (field === "name") {
       normalizedValue = String(value || "").replace(/[^a-zA-Z\s]/g, "")
-    } else if (field === "mobile") {
-      normalizedValue = String(value || "").replace(/\D/g, "").slice(0, 10)
-      errorMessage = validateMobile(normalizedValue)
     } else if (field === "email") {
       normalizedValue = String(value || "").trim()
       errorMessage = validateEmail(normalizedValue)
-    } else if (field === "dateOfBirth") {
-      errorMessage = validateDateOfBirth(normalizedValue)
     }
 
     setFormData((prev) => ({
@@ -203,7 +172,7 @@ export default function EditProfile() {
       [field]: normalizedValue
     }))
 
-    if (field === "mobile" || field === "email" || field === "dateOfBirth") {
+    if (field === "email") {
       setFieldErrors((prev) => ({
         ...prev,
         [field]: errorMessage
@@ -279,11 +248,7 @@ export default function EditProfile() {
 
   const validateForm = () => {
     const nextErrors = {
-      mobile: !formData.mobile
-        ? "Mobile number is required"
-        : validateMobile(formData.mobile),
       email: validateEmail(formData.email),
-      dateOfBirth: validateDateOfBirth(formData.dateOfBirth),
     }
     setFieldErrors(nextErrors)
     return !Object.values(nextErrors).some(Boolean)
@@ -328,13 +293,9 @@ export default function EditProfile() {
         setIsUploadingImage(false)
       }
 
-      // Prepare data for API — phone only persists when Update profile is clicked
       const updateData = {
         name: formData.name,
-        phone: formData.mobile || undefined,
         email: formData.email || undefined,
-        dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : undefined,
-        anniversary: formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : undefined,
         gender: formData.gender || undefined,
         profileImage: finalImageUrl,
       }
@@ -352,7 +313,6 @@ export default function EditProfile() {
           localImagePreview: imagePreview !== finalImageUrl ? imagePreview : undefined
         })
 
-        // Save to localStorage with complete data
         saveProfileToStorage({
           name: updatedUser.name || formData.name,
           phone: updatedUser.phone || formData.mobile,
@@ -360,8 +320,6 @@ export default function EditProfile() {
           email: updatedUser.email || formData.email,
           profileImage: updatedUser.profileImage || finalImageUrl,
           localImagePreview: imagePreview !== finalImageUrl ? imagePreview : undefined,
-          dateOfBirth: updatedUser.dateOfBirth || formData.dateOfBirth?.format('YYYY-MM-DD'),
-          anniversary: updatedUser.anniversary || formData.anniversary?.format('YYYY-MM-DD'),
           gender: updatedUser.gender || formData.gender,
         })
         clearEditProfileDraft()
@@ -379,15 +337,6 @@ export default function EditProfile() {
     }
   }
 
-  const handleMobileChange = () => {
-    setFormData((prev) => ({ ...prev, mobile: "" }))
-    setFieldErrors((prev) => ({ ...prev, mobile: "" }))
-    requestAnimationFrame(() => {
-      mobileInputRef.current?.focus()
-      mobileInputRef.current?.select?.()
-    })
-  }
-
   const handleEmailChange = () => {
     setFormData((prev) => ({ ...prev, email: "" }))
     setFieldErrors((prev) => ({ ...prev, email: "" }))
@@ -399,83 +348,6 @@ export default function EditProfile() {
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] pb-12">
       <style>{`
-        /* MUI DatePicker overrides */
-        .dark .MuiOutlinedInput-root fieldset {
-          border-color: #4b5563 !important;
-        }
-        .dark .MuiOutlinedInput-root:hover fieldset {
-          border-color: #9ca3af !important;
-        }
-        .dark .MuiOutlinedInput-root.Mui-focused fieldset {
-          border-color: #DC2626 !important;
-        }
-        .dark input,
-        .dark .MuiInputBase-root,
-        .dark .MuiInputBase-root *,
-        .dark .MuiOutlinedInput-root,
-        .dark .MuiOutlinedInput-root * {
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          opacity: 1 !important;
-        }
-        .dark input::placeholder,
-        .dark input::-webkit-input-placeholder,
-        .dark input::-moz-placeholder,
-        .dark input:-ms-input-placeholder {
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          opacity: 0.9 !important;
-        }
-        .dark .MuiInputLabel-root {
-          color: #9ca3af !important;
-        }
-        .dark .MuiIconButton-root {
-          color: #9ca3af !important;
-        }
-
-        /* Date Selector Calendar Popper Overrides in Dark Mode */
-        .dark .MuiPickersPopper-paper,
-        .dark .MuiPaper-root,
-        .dark .MuiPickersLayout-root {
-          background-color: #1e1e1e !important;
-          color: #ffffff !important;
-          border: 1px solid #374151 !important;
-        }
-        .dark .MuiPickersCalendarHeader-label {
-          color: #ffffff !important;
-        }
-        .dark .MuiPickersCalendarHeader-iconButton {
-          color: #ffffff !important;
-        }
-        .dark .MuiDayCalendar-weekDayLabel {
-          color: #9ca3af !important;
-        }
-        .dark .MuiPickersDay-root {
-          color: #ffffff !important;
-        }
-        .dark .MuiPickersDay-root:hover {
-          background-color: rgba(255, 255, 255, 0.08) !important;
-        }
-        .dark .MuiPickersDay-root.Mui-selected {
-          background-color: #DC2626 !important;
-          color: #ffffff !important;
-        }
-        .dark .MuiPickersDay-root.MuiPickersDay-today {
-          border-color: #DC2626 !important;
-        }
-        .dark .MuiPickersYear-yearButton {
-          color: #ffffff !important;
-        }
-        .dark .MuiPickersYear-yearButton.Mui-selected {
-          background-color: #DC2626 !important;
-        }
-        .dark .MuiPickersMonth-monthButton {
-          color: #ffffff !important;
-        }
-        .dark .MuiPickersMonth-monthButton.Mui-selected {
-          background-color: #DC2626 !important;
-        }
-
         /* Radix Select Trigger / Gender overrides */
         .dark [data-slot="select-trigger"] span,
         .dark [data-slot="select-value"] {
@@ -619,35 +491,6 @@ export default function EditProfile() {
               </fieldset>
             </div>
 
-            {/* Mobile Field */}
-            <div>
-              <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
-                <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Mobile</legend>
-                <div className="flex items-center justify-between">
-                  <input
-                    ref={mobileInputRef}
-                    id="mobile"
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    maxLength={10}
-                    value={formData.mobile}
-                    onChange={(e) => handleChange('mobile', e.target.value)}
-                    placeholder="Enter 10-digit mobile number"
-                    className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 placeholder:text-gray-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleMobileChange}
-                    className="text-[#DC2626] text-[13px] font-semibold tracking-wider shrink-0 px-1"
-                  >
-                    CHANGE
-                  </button>
-                </div>
-              </fieldset>
-              {fieldErrors.mobile && <p className="text-xs text-red-600 mt-1">{fieldErrors.mobile}</p>}
-            </div>
-
             {/* Email Field */}
             <div>
               <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
@@ -668,33 +511,18 @@ export default function EditProfile() {
               {fieldErrors.email && <p className="text-xs text-red-600 mt-1">{fieldErrors.email}</p>}
             </div>
 
-            {/* Date of Birth Field */}
+            {/* Phone — read-only (taxi profile style) */}
             <div>
-              <fieldset className="border border-gray-300 dark:border-gray-600 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
-                <legend className="text-[13px] text-gray-400 dark:text-gray-400 px-1 font-normal tracking-wide">Date of birth</legend>
-                <input
-                  id="dateOfBirth"
-                  type="date"
-                  value={formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : ''}
-                  onChange={(e) => handleChange('dateOfBirth', e.target.value ? dayjs(e.target.value) : null)}
-                  max={dayjs().format('YYYY-MM-DD')}
-                  className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 [color-scheme:light] dark:[color-scheme:dark]"
-                />
-              </fieldset>
-              {fieldErrors.dateOfBirth && <p className="text-xs text-red-600 mt-1">{fieldErrors.dateOfBirth}</p>}
-            </div>
-
-            {/* Anniversary Field */}
-            <div>
-              <fieldset className="border border-gray-300 dark:border-gray-600 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
-                <legend className="text-[13px] text-gray-400 dark:text-gray-400 px-1 font-normal tracking-wide">Anniversary</legend>
-                <input
-                  id="anniversary"
-                  type="date"
-                  value={formData.anniversary ? formData.anniversary.format('YYYY-MM-DD') : ''}
-                  onChange={(e) => handleChange('anniversary', e.target.value ? dayjs(e.target.value) : null)}
-                  className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 [color-scheme:light] dark:[color-scheme:dark]"
-                />
+              <fieldset className="border border-slate-100 dark:border-gray-800 rounded-[14px] px-3 pb-2 pt-0 bg-slate-100/50 dark:bg-gray-900/40 opacity-70 cursor-not-allowed shadow-inner">
+                <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Phone Number</legend>
+                <div className="flex items-center justify-between gap-2 pb-1">
+                  <span className="text-[16px] font-medium text-slate-400 dark:text-gray-500">
+                    {formData.mobile ? `+91 ${formData.mobile}` : '+91'}
+                  </span>
+                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wider shrink-0">
+                    Verified
+                  </span>
+                </div>
               </fieldset>
             </div>
 

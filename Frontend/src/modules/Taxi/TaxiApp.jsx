@@ -5,7 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
-import { SettingsProvider } from './shared/context/SettingsContext';
+import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
@@ -523,6 +523,8 @@ const getResponsePayload = (response) => response?.data?.data || response?.data 
 
 const UserUpcomingRideReminderBootstrap = () => {
   const location = useLocation();
+  const { settings, loading: settingsLoading } = useSettings();
+  const busEnabled = String(settings?.transportRide?.enable_bus_service || '0') === '1';
 
   useEffect(() => {
     const isUserRoute =
@@ -532,7 +534,7 @@ const UserUpcomingRideReminderBootstrap = () => {
       location.pathname.startsWith('/pooling') ||
       location.pathname.startsWith('/bus');
 
-    if (!isUserRoute || !getLocalUserToken()) {
+    if (!isUserRoute || !getLocalUserToken() || settingsLoading) {
       return undefined;
     }
 
@@ -541,9 +543,11 @@ const UserUpcomingRideReminderBootstrap = () => {
     const syncReminders = async () => {
       try {
         const [busResult, poolingResult, scheduledRideResult] = await Promise.all([
-          userBusService.getMyBookings({ page: 1, limit: 20, tripState: 'upcoming' }),
+          busEnabled
+            ? userBusService.getMyBookings({ page: 1, limit: 20, tripState: 'upcoming' }).catch(() => ({ data: { results: [] } }))
+            : Promise.resolve({ data: { results: [] } }),
           POOLING_ENABLED
-            ? userService.getMyPoolingBookings()
+            ? userService.getMyPoolingBookings().catch(() => [])
             : Promise.resolve([]),
           api.get('/rides', {
             params: {
@@ -551,7 +555,7 @@ const UserUpcomingRideReminderBootstrap = () => {
               limit: 20,
               category: 'scheduled',
             },
-          }),
+          }).catch(() => ({ data: { results: [] } })),
         ]);
 
         if (cancelled) {
@@ -632,7 +636,7 @@ const UserUpcomingRideReminderBootstrap = () => {
       window.removeEventListener('focus', syncReminders);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
     };
-  }, [location.pathname]);
+  }, [location.pathname, settingsLoading, busEnabled]);
 
   return null;
 };

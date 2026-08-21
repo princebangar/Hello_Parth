@@ -66,11 +66,15 @@ export const API_BASE_URL = trimTrailingSlash(
   rawApiBase.endsWith('/taxi') ? rawApiBase : `${rawApiBase}/taxi`
 );
 
+// Socket / API origin — never use VITE_ASSET_BASE_URL (CDN can differ from API, e.g. local → helloparth.in uploads).
+const originFromApiBase = API_BASE_URL.startsWith('http')
+  ? API_BASE_URL.replace(/\/api(?:\/v1)?(?:\/taxi)?$/, '')
+  : '';
+
 export const BACKEND_ORIGIN = trimTrailingSlash(
   sanitizeHost(import.meta.env.VITE_BACKEND_ORIGIN) ||
   sanitizeHost(import.meta.env.VITE_SOCKET_URL) ||
-  sanitizeHost(import.meta.env.VITE_ASSET_BASE_URL) ||
-  (API_BASE_URL.startsWith('http') ? API_BASE_URL.replace(/\/api(?:\/v1)?(?:\/taxi)?$/, '') : DEFAULT_BACKEND_ORIGIN) ||
+  sanitizeHost(originFromApiBase) ||
   DEFAULT_BACKEND_ORIGIN
 );
 

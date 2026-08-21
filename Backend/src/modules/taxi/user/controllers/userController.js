@@ -1487,7 +1487,7 @@ export const uploadUserProfileImage = async (req, res) => {
   const user = userId ? await User.findById(userId) : null;
   const replaceUrl = extractAssetUrl(req.body?.replaceUrl) || extractAssetUrl(user?.profileImage);
 
-  const stored = await storeImageBuffer(req.file.buffer, 'taxi/users/profile', {
+  const stored = await storeImageBuffer(req.file.buffer, 'user/profile', {
     replaceUrl: replaceUrl || undefined,
     maxWidth: 1024,
     mimeType: req.file.mimetype || 'image/jpeg',

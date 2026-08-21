@@ -85,11 +85,19 @@ const getStoredTokenByRole = (role) => {
       : [
           normalizedRole === 'admin' ? localStorage.getItem('admin_accessToken') : null,
           localStorage.getItem(`${role}Token`),
+          normalizedRole === 'user' ? localStorage.getItem('user_accessToken') : null,
           localStorage.getItem('token'),
         ]
   ).filter(Boolean);
 
-  return entries.find((token) => normalizeAuthRole(getTokenPayload(token)?.role) === normalizedRole) || null;
+  return entries.find((token) => {
+    const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role);
+    if (normalizedRole === 'user') {
+      // Unified food login JWT uses role "USER"; older food tokens may omit role.
+      return tokenRole === 'user' || tokenRole === '';
+    }
+    return tokenRole === normalizedRole;
+  }) || null;
 };
 
 const getRoleFromPathname = () => {

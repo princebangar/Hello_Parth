@@ -7,7 +7,6 @@ import AnimatedPage from "@food/components/user/AnimatedPage"
 import AddMoneyModal from "@food/components/user/AddMoneyModal"
 import { userAPI } from "@food/api"
 import { toast } from "sonner"
-import { useCompanyName } from "@food/hooks/useCompanyName"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { WalletSkeleton } from "@food/components/ui/loading-skeletons"
 
@@ -23,7 +22,6 @@ const TRANSACTION_TYPES = {
 }
 
 export default function Wallet() {
-  const companyName = useCompanyName()
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
   const [selectedFilter, setSelectedFilter] = useState(TRANSACTION_TYPES.ALL)
@@ -140,7 +138,7 @@ export default function Wallet() {
             >
               <ArrowLeft className="h-5 w-5 md:h-6 md:w-6 text-gray-700 dark:text-white" />
             </button>
-            <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">Wallet</h1>
+            <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">My Wallet</h1>
           </div>
         </div>
       </div>
@@ -171,7 +169,7 @@ export default function Wallet() {
 
                 <div className="flex flex-col md:items-start items-center text-center md:text-left">
                   <h2 className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 dark:text-white mb-2 md:mb-3">
-                    {companyName} Money
+                    My Wallet
                   </h2>
 
                   <div className="mb-2 md:mb-3">
