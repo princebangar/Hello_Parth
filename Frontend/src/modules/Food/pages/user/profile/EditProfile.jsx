@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, X, Pencil, Loader2, Camera, Upload, Trash2 } from "lucide-react"
+import { ArrowLeft, X, Pencil, Loader2 } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import {
   DropdownMenu,
@@ -337,14 +337,6 @@ export default function EditProfile() {
     }
   }
 
-  const handleEmailChange = () => {
-    setFormData((prev) => ({ ...prev, email: "" }))
-    setFieldErrors((prev) => ({ ...prev, email: "" }))
-    requestAnimationFrame(() => {
-      document.getElementById("email")?.focus()
-    })
-  }
-
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] pb-12">
       <style>{`
@@ -491,32 +483,28 @@ export default function EditProfile() {
               </fieldset>
             </div>
 
-            {/* Email Field */}
+            {/* Email Field (fieldset — matches Name/Gender) */}
             <div>
               <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 transition-colors focus-within:border-[#DC2626] focus-within:border-[1.5px]">
                 <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Email</legend>
-                <div className="flex items-center justify-between">
-                  <input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleChange('email', e.target.value)}
-                    className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1"
-                  />
-                  <button type="button" onClick={handleEmailChange} className="text-[#DC2626] text-[13px] font-semibold tracking-wider shrink-0 px-1">
-                    CHANGE
-                  </button>
-                </div>
+                <input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange('email', e.target.value)}
+                  placeholder="yourname@example.com"
+                  className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                />
               </fieldset>
               {fieldErrors.email && <p className="text-xs text-red-600 mt-1">{fieldErrors.email}</p>}
             </div>
 
-            {/* Phone — read-only (taxi profile style) */}
+            {/* Phone — read-only */}
             <div>
-              <fieldset className="border border-slate-100 dark:border-gray-800 rounded-[14px] px-3 pb-2 pt-0 bg-slate-100/50 dark:bg-gray-900/40 opacity-70 cursor-not-allowed shadow-inner">
+              <fieldset className="border border-gray-300 dark:border-gray-700 rounded-[14px] px-3 pb-2 pt-0 opacity-70 cursor-not-allowed">
                 <legend className="text-[13px] text-gray-400 dark:text-gray-500 px-1 font-normal tracking-wide">Phone Number</legend>
                 <div className="flex items-center justify-between gap-2 pb-1">
-                  <span className="text-[16px] font-medium text-slate-400 dark:text-gray-500">
+                  <span className="text-[16px] font-medium text-gray-500 dark:text-gray-400">
                     {formData.mobile ? `+91 ${formData.mobile}` : '+91'}
                   </span>
                   <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wider shrink-0">

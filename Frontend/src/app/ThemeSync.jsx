@@ -2,12 +2,17 @@ import { useEffect, useLayoutEffect } from "react";
 import { useLocation } from "react-router-dom";
 import {
   FOOD_USER_THEME_KEY,
+  APP_THEME_KEY,
+  USER_THEME_KEY,
   THEME_CHANGE_EVENT,
   cancelScheduledFoodThemeReassert,
+  isUserAppPath,
   reassertFoodUserTheme,
   scheduleFoodThemeReassert,
   syncThemeForPath,
 } from "../shared/utils/theme.js";
+
+const USER_THEME_STORAGE_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, USER_THEME_KEY];
 
 export default function ThemeSync() {
   const location = useLocation();
@@ -17,7 +22,7 @@ export default function ThemeSync() {
     cancelScheduledFoodThemeReassert();
     syncThemeForPath(pathname);
 
-    if (pathname.startsWith("/food/")) {
+    if (isUserAppPath(pathname)) {
       scheduleFoodThemeReassert(pathname);
     }
   }, [pathname]);
@@ -27,20 +32,21 @@ export default function ThemeSync() {
       cancelScheduledFoodThemeReassert();
       syncThemeForPath(pathname);
 
-      if (pathname.startsWith("/food/")) {
+      if (isUserAppPath(pathname)) {
         scheduleFoodThemeReassert(pathname);
       }
     };
 
     const handleThemeChange = () => {
-      if (pathname.startsWith("/food/")) {
+      if (isUserAppPath(pathname)) {
+        reassertFoodUserTheme();
         scheduleFoodThemeReassert(pathname);
       }
     };
 
     const handleStorage = (event) => {
-      if (event.key && event.key !== FOOD_USER_THEME_KEY) return;
-      if (pathname.startsWith("/food/")) {
+      if (event.key && !USER_THEME_STORAGE_KEYS.includes(event.key)) return;
+      if (isUserAppPath(pathname)) {
         reassertFoodUserTheme();
       }
     };

@@ -34,12 +34,18 @@ const ProfileSettings = () => {
   const navigate = useNavigate();
 
   const avatarSrc = useMemo(() => {
-    return (
-      imagePreview ||
-      profileImage ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=E85D04&color=fff`
-    );
-  }, [name, profileImage, imagePreview]);
+    const candidate = imagePreview || profileImage;
+    if (
+      candidate &&
+      typeof candidate === 'string' &&
+      candidate.trim() &&
+      candidate !== 'null' &&
+      candidate !== 'undefined'
+    ) {
+      return candidate;
+    }
+    return '/assets/images/profile_avatar.webp';
+  }, [profileImage, imagePreview]);
 
   const hasPhoto = Boolean(
     imagePreview &&

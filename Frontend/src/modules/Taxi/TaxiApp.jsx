@@ -8,7 +8,9 @@ import { socketService } from './shared/api/socket';
 import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
-import { clearLocalUserSession, getLocalUserToken } from './modules/user/services/authService';
+import { clearLocalUserSessionData } from '@/shared/utils/userSession.js';
+import { syncThemeForPath } from '@/shared/utils/theme.js';
+import { getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
 import RentalLocationTracker from './modules/user/components/RentalLocationTracker';
 import userBusService from './modules/user/services/busService';
@@ -398,16 +400,9 @@ const ScrollToTop = () => {
 
 const clearUserSession = () => {
   clearCurrentRide();
-  clearLocalUserSession();
-  try {
-    localStorage.removeItem('user_accessToken');
-    localStorage.removeItem('user_refreshToken');
-    localStorage.removeItem('user_authenticated');
-    localStorage.removeItem('user_user');
-    localStorage.removeItem('userToken');
-    localStorage.removeItem('token');
-    localStorage.removeItem('userInfo');
-  } catch {}
+  socketService.disconnect();
+  syncThemeForPath('/login');
+  clearLocalUserSessionData();
 };
 
 const UserProtectedRoute = () => {

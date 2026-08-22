@@ -343,6 +343,75 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
     return { success: true };
 };
 
+const PENDING_ROLE_TO_OWNER_TYPE = {
+    restaurant: 'RESTAURANT',
+    delivery: 'DELIVERY_PARTNER',
+    delivery_partner: 'DELIVERY_PARTNER'
+};
+
+export const upsertPendingFirebaseDeviceTokenByPhone = async ({
+    phone,
+    token,
+    platform = 'web',
+    role
+}) => {
+    const normalizedRole = String(role || '').trim().toLowerCase();
+    const ownerType = PENDING_ROLE_TO_OWNER_TYPE[normalizedRole];
+    if (!ownerType) {
+        const error = new Error(`Unsupported role for pending FCM save: ${role || '<missing>'}`);
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const normalizedToken = sanitizeString(token);
+    if (!normalizedToken) {
+        const error = new Error('FCM token is required');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const normalizedPlatform = platform === 'mobile' ? 'mobile' : 'web';
+    let owner = null;
+
+    if (ownerType === 'RESTAURANT') {
+        const { findRestaurantByPhone } = await import('../../modules/food/restaurant/services/restaurant.service.js');
+        owner = await findRestaurantByPhone(phone);
+    } else {
+        const { findDeliveryPartnerByPhone } = await import('../../modules/food/delivery/services/delivery.service.js');
+        owner = await findDeliveryPartnerByPhone(phone);
+    }
+
+    if (!owner) {
+        const error = new Error('Partner account not found for this phone');
+        error.statusCode = 404;
+        throw error;
+    }
+
+    if (String(owner.status || '').toLowerCase() === 'deleted') {
+        const error = new Error('Partner account is not active');
+        error.statusCode = 410;
+        throw error;
+    }
+
+    logger.info(
+        `[FCM Service] pending-save start ownerType=${ownerType} ownerId=${owner._id} platform=${normalizedPlatform} tokenPreview=${previewToken(normalizedToken)}`
+    );
+
+    await upsertFirebaseDeviceToken({
+        ownerType,
+        ownerId: String(owner._id),
+        token: normalizedToken,
+        platform: normalizedPlatform
+    });
+
+    return {
+        success: true,
+        ownerType,
+        ownerId: String(owner._id),
+        platform: normalizedPlatform
+    };
+};
+
 export const removeFirebaseDeviceToken = async ({ ownerType, ownerId, token, platform }) => {
     const normalizedToken = sanitizeString(token);
     if (!ownerType || !ownerId || !normalizedToken) {

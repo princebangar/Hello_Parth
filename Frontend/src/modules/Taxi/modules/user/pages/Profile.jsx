@@ -2,16 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  User, Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
-  MapPin, Star, Package, Wrench, Gift, Trash2, Check, BusFront, 
-  Settings, CreditCard, Heart, Map, MessageSquare, History, Phone
+  User, Wallet, Bell, Shield, ChevronRight, HelpCircle, FileText,
+  MapPin, Star, Package, Gift, Trash2, Check, BusFront, 
+  Settings, CreditCard, History, Phone, Palette, Power
 } from 'lucide-react';
 import BottomNavbar from '../components/BottomNavbar';
-import { clearLocalUserSession, getLocalUserToken, userAuthService } from '../services/authService';
+import { getLocalUserToken, userAuthService } from '../services/authService';
 import { clearCurrentRide } from '../services/currentRideService';
 import { socketService } from '../../../shared/api/socket';
 import api from '../../../shared/api/axiosInstance';
-import { syncThemeForPath } from '@/shared/utils/theme.js';
+import { syncThemeForPath, getFoodUserTheme, THEME_CHANGE_EVENT } from '@/shared/utils/theme.js';
+import UserAppearanceDialog from '@/shared/components/UserAppearanceDialog.jsx';
+import UserLogoutConfirmDialog from '@/shared/components/UserLogoutConfirmDialog.jsx';
+import { userAPI } from '@food/api';
+import {
+  formatSavedAddressSubtitle,
+  performUserLogout,
+  readCachedUserAddresses,
+} from '@/shared/utils/userSession.js';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -33,7 +41,7 @@ const menuSections = [
     title: 'Personal',
     items: [
       { icon: User, title: 'Profile Settings', sub: 'Manage your personal info', path: '/taxi/user/profile/settings', bg: 'bg-indigo-50', color: 'text-indigo-600' },
-      { icon: MapPin, title: 'Saved Addresses', sub: 'Home, office & others', path: '/taxi/user/profile/addresses', bg: 'bg-emerald-50', color: 'text-emerald-600' },
+      { icon: MapPin, title: 'Saved Addresses', addressSelector: true, bg: 'bg-emerald-50', color: 'text-emerald-600' },
       { icon: History, title: 'My Rides', sub: 'Rides, parcels & trips', path: '/taxi/user/activity', bg: 'bg-blue-50', color: 'text-blue-600' },
     ]
   },
@@ -50,6 +58,7 @@ const menuSections = [
     title: 'Preferences',
     items: [
       { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50', color: 'text-purple-600' },
+      { icon: Palette, title: 'Appearance', sub: 'Light or dark theme', action: 'appearance', bg: 'bg-violet-50', color: 'text-violet-600' },
       { icon: Shield, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos', bg: 'bg-sky-50', color: 'text-sky-600' },
       { icon: HelpCircle, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets', bg: 'bg-slate-50', color: 'text-slate-600' },
     ]
@@ -66,6 +75,11 @@ const menuSections = [
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [appearanceTheme, setAppearanceTheme] = useState(() => getFoodUserTheme());
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState(() => readCachedUserAddresses());
   const [profile, setProfile] = useState({
     name: '',
     phone: '',
@@ -169,6 +183,18 @@ const Profile = () => {
           totalRides: dynamicTripCount,
           rating: dynamicRating,
         }));
+
+        try {
+          const addressResponse = await userAPI.getAddresses();
+          const addressList =
+            addressResponse?.data?.data?.addresses ||
+            addressResponse?.data?.addresses ||
+            [];
+          setSavedAddresses(addressList);
+          localStorage.setItem('userAddresses', JSON.stringify(addressList));
+        } catch {
+          setSavedAddresses(readCachedUserAddresses());
+        }
       } catch (err) {
         console.error('Failed to load profile', err);
       }
@@ -177,24 +203,76 @@ const Profile = () => {
     loadProfile();
   }, [navigate]);
 
-  const handleLogout = () => {
-    clearCurrentRide();
-    socketService.disconnect();
-    clearLocalUserSession();
+  useEffect(() => {
+    const refreshAddresses = () => setSavedAddresses(readCachedUserAddresses());
+    window.addEventListener('focus', refreshAddresses);
+    window.addEventListener('storage', refreshAddresses);
+    return () => {
+      window.removeEventListener('focus', refreshAddresses);
+      window.removeEventListener('storage', refreshAddresses);
+    };
+  }, []);
 
-    // Normalize theme classes before route switch so /login does not momentarily
-    // inherit stale dark-mode DOM classes from the previous screen.
-    syncThemeForPath('/login');
+  const savedAddressSubtitle = formatSavedAddressSubtitle(savedAddresses);
 
-    navigate('/login', { replace: true, state: { from: '/taxi/user' } });
+  useEffect(() => {
+    const syncTheme = () => setAppearanceTheme(getFoodUserTheme());
+    window.addEventListener(THEME_CHANGE_EVENT, syncTheme);
+    window.addEventListener('storage', syncTheme);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, syncTheme);
+      window.removeEventListener('storage', syncTheme);
+    };
+  }, []);
+
+  const handleMenuClick = (item) => {
+    if (item.action === 'appearance') {
+      setAppearanceOpen(true);
+      return;
+    }
+    if (item.addressSelector) {
+      navigate('/food/user/address-selector', { state: { from: '/taxi/user/profile', ui: 'taxi' } });
+      return;
+    }
+    if (item.path) {
+      navigate(item.path);
+    }
   };
 
-  const initials = (profile.name || 'User')
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || '')
-    .join('');
+  const handleLogoutClick = () => {
+    if (isLoggingOut) return;
+    setLogoutConfirmOpen(true);
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+
+    try {
+      await performUserLogout({
+        beforeClear: async () => {
+          clearCurrentRide();
+          socketService.disconnect();
+          syncThemeForPath('/login');
+        },
+      });
+      navigate('/login', { replace: true, state: { from: '/taxi/user' } });
+    } catch (err) {
+      console.error('Failed to log out', err);
+      navigate('/login', { replace: true, state: { from: '/taxi/user' } });
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const hasProfileImage = Boolean(
+    profile.profileImage &&
+      typeof profile.profileImage === 'string' &&
+      profile.profileImage.trim() !== '' &&
+      profile.profileImage !== 'null' &&
+      profile.profileImage !== 'undefined'
+  );
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -216,7 +294,7 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto pb-28 relative overflow-x-hidden font-['Inter']">
+    <div className="min-h-screen bg-background max-w-lg mx-auto pb-28 relative overflow-x-hidden font-['Inter']">
       {/* Premium Header Background */}
       <div className="absolute top-0 inset-x-0 h-80 bg-slate-900 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/30 via-slate-900 to-slate-900" />
@@ -243,19 +321,23 @@ const Profile = () => {
           <MotionDiv
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="rounded-[32px] bg-white p-6 shadow-2xl shadow-slate-900/20"
+            className="rounded-[32px] bg-card p-6 shadow-2xl shadow-slate-900/20"
           >
             <div className="flex items-center gap-5">
               <div className="relative">
-                <div className="w-20 h-20 rounded-[28px] bg-slate-900 flex items-center justify-center shadow-lg overflow-hidden border-2 border-white">
-                  {profile.profileImage ? (
+                <div className="w-20 h-20 rounded-[28px] bg-slate-50 flex items-center justify-center shadow-lg overflow-hidden border-2 border-white">
+                  {hasProfileImage ? (
                     <img 
                       src={profile.profileImage} 
                       alt="User" 
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-2xl font-black text-white opacity-40">{initials || 'U'}</span>
+                    <img
+                      src="/assets/images/profile_avatar.webp"
+                      alt={profile.name || 'User'}
+                      className="w-full h-full object-cover"
+                    />
                   )}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
@@ -263,10 +345,10 @@ const Profile = () => {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="font-['Outfit'] text-[22px] font-extrabold text-slate-900 truncate capitalize leading-tight">
+                <h2 className="font-['Outfit'] text-[22px] font-extrabold text-foreground truncate capitalize leading-tight">
                   {profile.name}
                 </h2>
-                <p className="text-[14px] font-bold text-slate-400 mt-1 flex items-center gap-1.5">
+                <p className="text-[14px] font-bold text-muted-foreground mt-1 flex items-center gap-1.5">
                    <Phone size={14} className="text-slate-300" />
                    {profile.phone ? `+91 ${profile.phone}` : 'Account Active'}
                 </p>
@@ -274,20 +356,20 @@ const Profile = () => {
             </div>
 
             {/* Quick Stats Row */}
-            <div className="grid grid-cols-3 gap-3 mt-8 pt-6 border-t border-slate-50">
+            <div className="grid grid-cols-3 gap-3 mt-8 pt-6 border-t border-border">
               <div className="text-center">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">Total Trips</p>
-                <p className="font-['Outfit'] text-[18px] font-extrabold text-slate-900 mt-1">{profile.stats.trips}</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground">Total Trips</p>
+                <p className="font-['Outfit'] text-[18px] font-extrabold text-foreground mt-1">{profile.stats.trips}</p>
               </div>
-              <div className="text-center border-x border-slate-50">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">Rating</p>
+              <div className="text-center border-x border-border">
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground">Rating</p>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   <Star size={14} className="text-amber-400 fill-amber-400" />
-                  <p className="font-['Outfit'] text-[18px] font-extrabold text-slate-900">{profile.stats.rating}</p>
+                  <p className="font-['Outfit'] text-[18px] font-extrabold text-foreground">{profile.stats.rating}</p>
                 </div>
               </div>
               <div className="text-center">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">Credits</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground">Credits</p>
                 <p className="font-['Outfit'] text-[18px] font-extrabold text-indigo-600 mt-1">₹{profile.stats.wallet}</p>
               </div>
             </div>
@@ -303,26 +385,32 @@ const Profile = () => {
         >
           {menuSections.map((section, sIdx) => (
             <motion.div key={sIdx} variants={itemVariants} className="space-y-4">
-              <h3 className="font-['Outfit'] text-[12px] font-black text-slate-400 uppercase tracking-[0.25em] ml-1">
+              <h3 className="font-['Outfit'] text-[12px] font-black text-muted-foreground uppercase tracking-[0.25em] ml-1">
                 {section.title}
               </h3>
               
-              <div className="bg-white rounded-[32px] border border-slate-100 shadow-premium overflow-hidden divide-y divide-slate-50">
+              <div className="bg-card rounded-[32px] border border-border shadow-premium overflow-hidden divide-y divide-border">
                 {section.items.map((item, iIdx) => (
                   <MotionButton
                     key={iIdx}
                     whileTap={{ backgroundColor: '#F8FAFC' }}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => handleMenuClick(item)}
                     className="w-full flex items-center gap-5 px-6 py-5 text-left transition-colors"
                   >
                     <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0 ${item.bg}`}>
                       <item.icon size={20} className={item.color} strokeWidth={2.5} />
                     </div>
                     <div className="flex-1">
-                      <p className="text-[15px] font-bold text-slate-900 leading-tight tracking-tight">{item.title}</p>
-                      <p className="text-[12px] font-semibold text-slate-400 mt-1 opacity-80">{item.sub}</p>
+                      <p className="text-[15px] font-bold text-foreground leading-tight tracking-tight">{item.title}</p>
+                      <p className="text-[12px] font-semibold text-muted-foreground mt-1 opacity-80">
+                        {item.action === 'appearance'
+                          ? `${appearanceTheme} theme`
+                          : item.addressSelector
+                            ? savedAddressSubtitle
+                            : item.sub}
+                      </p>
                     </div>
-                    <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
+                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground/40">
                       <ChevronRight size={18} strokeWidth={3} />
                     </div>
                   </MotionButton>
@@ -345,24 +433,47 @@ const Profile = () => {
               <p className="text-[14px] font-bold">Request Account Deletion</p>
             </MotionButton>
 
-            <MotionButton
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleLogout}
-              className="w-full h-16 rounded-[24px] bg-slate-900 text-white flex items-center justify-center gap-3 text-[15px] font-black shadow-xl shadow-slate-900/10"
-            >
-              <LogOut size={18} strokeWidth={3} />
-              Sign Out Securely
-            </MotionButton>
+            <div className="bg-card rounded-[32px] border border-border shadow-premium overflow-hidden">
+              <MotionButton
+                whileTap={{ backgroundColor: 'rgba(248,250,252,0.9)' }}
+                onClick={handleLogoutClick}
+                disabled={isLoggingOut}
+                className="w-full flex items-center gap-5 px-6 py-5 text-left transition-colors disabled:opacity-50"
+              >
+                <div className="w-11 h-11 rounded-[16px] bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                  <Power size={20} className="text-gray-700 dark:text-gray-300" strokeWidth={2.5} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[15px] font-bold text-foreground leading-tight tracking-tight">
+                    {isLoggingOut ? 'Logging out...' : 'Log out'}
+                  </p>
+                </div>
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground/40">
+                  <ChevronRight size={18} strokeWidth={3} />
+                </div>
+              </MotionButton>
+            </div>
 
             <div className="text-center pt-6">
-              <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
                 Version 2.4.1 • Built with Love
               </p>
             </div>
           </motion.div>
         </motion.div>
       </div>
+
+      <UserAppearanceDialog open={appearanceOpen} onOpenChange={setAppearanceOpen} />
+
+      <UserLogoutConfirmDialog
+        open={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => {
+          setLogoutConfirmOpen(false);
+          handleLogout();
+        }}
+        isLoggingOut={isLoggingOut}
+      />
 
       <BottomNavbar />
     </div>

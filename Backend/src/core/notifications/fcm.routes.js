@@ -3,7 +3,8 @@ import { sendError } from '../../utils/response.js';
 import {
     removeFirebaseDeviceToken,
     sendTestNotification,
-    upsertFirebaseDeviceToken
+    upsertFirebaseDeviceToken,
+    upsertPendingFirebaseDeviceTokenByPhone
 } from './firebase.service.js';
 import { verifyAccessToken as verifyCoreAccessToken } from '../auth/token.util.js';
 import { verifyAccessToken as verifyTaxiAccessToken } from '../../modules/taxi/services/tokenService.js';
@@ -92,7 +93,7 @@ router.get('/check', (req, res) => {
         success: true, 
         message: 'FCM tokens service is operational',
         timestamp: new Date().toISOString(),
-        endpoints: ['/save', '/mobile/save', '/remove', '/test', '/test-set-token/:phone/:token']
+        endpoints: ['/save', '/mobile/save', '/pending-save', '/remove', '/test', '/test-set-token/:phone/:token']
     });
 });
 
@@ -135,6 +136,55 @@ router.get('/test-get-token/:phone', async (req, res, next) => {
             }
         });
     } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/pending-save', async (req, res, next) => {
+    try {
+        const phone = String(req.body?.phone || '').trim();
+        const token = readTokenFromBody(req);
+        const platform = String(req.body?.platform || 'web').trim();
+        const role = String(req.body?.role || '').trim();
+
+        if (!phone) {
+            return sendError(res, 400, 'phone is required');
+        }
+        if (!role) {
+            return sendError(res, 400, 'role is required');
+        }
+
+        const tokenError = validateToken(token);
+        if (tokenError) {
+            return sendError(res, 400, tokenError);
+        }
+
+        logger.info(
+            `[FCM Route] /pending-save hit role=${role} phoneSuffix=${phone.slice(-4)} platform=${platform} tokenPreview=${previewToken(token)}`
+        );
+
+        const result = await upsertPendingFirebaseDeviceTokenByPhone({
+            phone,
+            token,
+            platform,
+            role
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Pending FCM token saved',
+            data: result
+        });
+    } catch (error) {
+        if (error?.statusCode === 400) {
+            return sendError(res, 400, error.message);
+        }
+        if (error?.statusCode === 404) {
+            return sendError(res, 404, error.message);
+        }
+        if (error?.statusCode === 410) {
+            return sendError(res, 410, error.message);
+        }
         next(error);
     }
 });

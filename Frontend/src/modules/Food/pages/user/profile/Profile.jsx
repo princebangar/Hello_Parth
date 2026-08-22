@@ -11,8 +11,6 @@ import {
   Palette,
   Bookmark,
   Building2,
-  Moon,
-  Sun,
   Check,
   Percent,
   Info,
@@ -62,16 +60,51 @@ import {
   DialogTitle,
 } from "@food/components/ui/dialog";
 import { authAPI, userAPI } from "@food/api";
-import { firebaseAuth } from "@food/firebase";
 import { clearModuleAuth } from "@food/utils/auth";
 import { toast } from "sonner";
 import { showAccountDeletedToast } from "@/shared/utils/customToasts";
+import UserAppearanceDialog from "@/shared/components/UserAppearanceDialog.jsx";
+import UserLogoutConfirmDialog from "@/shared/components/UserLogoutConfirmDialog.jsx";
+import { getFoodUserTheme, THEME_CHANGE_EVENT } from "@/shared/utils/theme.js";
+import {
+  formatSavedAddressSubtitle,
+  performUserLogout,
+} from "@/shared/utils/userSession.js";
 import { resolveProfileBackPath } from "@food/utils/mainTabRoutes";
 
 const debugLog = (...args) => { };
 const debugWarn = (...args) => { };
 const debugError = (...args) => { };
-const USER_SESSION_PREFERENCE_KEYS = ["userVegMode", "userVegModeOption", "food-under-250-filters"];
+
+const PROFILE_ICON = {
+  wallet: { bg: "bg-amber-50 dark:bg-amber-950/30", color: "text-amber-600 dark:text-amber-400" },
+  coupons: { bg: "bg-rose-50 dark:bg-rose-950/30", color: "text-rose-600 dark:text-rose-400" },
+  cart: { bg: "bg-orange-50 dark:bg-orange-950/30", color: "text-orange-600 dark:text-orange-400" },
+  addresses: { bg: "bg-emerald-50 dark:bg-emerald-950/30", color: "text-emerald-600 dark:text-emerald-400" },
+  veg: { bg: "bg-green-50 dark:bg-green-950/30", color: "text-green-600 dark:text-green-400" },
+  appearance: { bg: "bg-violet-50 dark:bg-violet-950/30", color: "text-violet-600 dark:text-violet-400" },
+  collections: { bg: "bg-indigo-50 dark:bg-indigo-950/30", color: "text-indigo-600 dark:text-indigo-400" },
+  dining: { bg: "bg-orange-50 dark:bg-orange-950/30", color: "text-orange-600 dark:text-orange-400" },
+  orders: { bg: "bg-blue-50 dark:bg-blue-950/30", color: "text-blue-600 dark:text-blue-400" },
+  support: { bg: "bg-sky-50 dark:bg-sky-950/30", color: "text-sky-600 dark:text-sky-400" },
+  about: { bg: "bg-slate-50 dark:bg-slate-800/50", color: "text-slate-600 dark:text-slate-400" },
+  safety: { bg: "bg-red-50 dark:bg-red-950/30", color: "text-red-600 dark:text-red-400" },
+  settings: { bg: "bg-indigo-50 dark:bg-indigo-950/30", color: "text-indigo-600 dark:text-indigo-400" },
+  logout: { bg: "bg-gray-100 dark:bg-gray-800", color: "text-gray-700 dark:text-gray-300" },
+};
+
+function ProfileOptionIcon({ styleKey, icon: Icon }) {
+  const style = PROFILE_ICON[styleKey];
+  return (
+    <motion.div
+      className={`${style.bg} rounded-2xl p-2.5 flex items-center justify-center shrink-0`}
+      whileHover={{ rotate: 15, scale: 1.1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Icon className={`h-5 w-5 ${style.color}`} />
+    </motion.div>
+  );
+}
 
 
 export default function Profile() {
@@ -82,17 +115,7 @@ export default function Profile() {
   const location = useLocation();
   const companyName = useCompanyName();
   const defaultAddress = getDefaultAddress?.();
-  const savedAddressSummary = defaultAddress
-    ? [
-      defaultAddress.street,
-      defaultAddress.additionalDetails,
-      defaultAddress.city,
-      defaultAddress.state,
-      defaultAddress.zipCode,
-    ]
-      .filter(Boolean)
-      .join(", ")
-    : "No address saved. Tap to save Home, Work, or Other.";
+  const savedAddressSummary = formatSavedAddressSubtitle(addresses, defaultAddress);
 
   // Popup states
   const [vegModeOpen, setVegModeOpen] = useState(false);
@@ -159,23 +182,17 @@ export default function Profile() {
     }
   };
 
-  // Settings states
-  const [appearance, setAppearance] = useState(() => {
-    // Load theme from localStorage or default to 'light'
-    return localStorage.getItem("appTheme") || "light";
-  });
+  const [appearanceTheme, setAppearanceTheme] = useState(() => getFoodUserTheme());
 
-  // Apply theme to document
   useEffect(() => {
-    const root = document.documentElement;
-    if (appearance === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-    // Save to localStorage
-    localStorage.setItem("appTheme", appearance);
-  }, [appearance]);
+    const syncTheme = () => setAppearanceTheme(getFoodUserTheme());
+    window.addEventListener(THEME_CHANGE_EVENT, syncTheme);
+    window.addEventListener("storage", syncTheme);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, syncTheme);
+      window.removeEventListener("storage", syncTheme);
+    };
+  }, []);
 
   // Get first letter of name for avatar
   const avatarInitial =
@@ -364,105 +381,15 @@ export default function Profile() {
 
   // Handle logout
   const handleLogout = async () => {
-    if (isLoggingOut) return; // Prevent multiple clicks
+    if (isLoggingOut) return;
 
     setIsLoggingOut(true);
 
     try {
-      // Call backend logout API to invalidate refresh token
-      try {
-        let fcmToken = null;
-        let platform = "web";
-        try {
-          if (typeof window !== "undefined") {
-            if (window.flutter_inappwebview) {
-              platform = "mobile";
-              const handlerNames = [
-                "getFcmToken",
-                "getFCMToken",
-                "getPushToken",
-                "getFirebaseToken",
-              ];
-              for (const handlerName of handlerNames) {
-                try {
-                  const t = await window.flutter_inappwebview.callHandler(
-                    handlerName,
-                    { module: "user" },
-                  );
-                  if (t && typeof t === "string" && t.length > 20) {
-                    fcmToken = t.trim();
-                    break;
-                  }
-                } catch (e) { }
-              }
-            } else {
-              fcmToken =
-                localStorage.getItem("fcm_web_registered_token_user") || null;
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to get FCM token during logout", e);
-        }
-        await authAPI.logout(null, fcmToken, platform);
-      } catch (apiError) {
-        // Continue with logout even if API call fails (network issues, etc.)
-        debugWarn(
-          "Logout API call failed, continuing with local cleanup:",
-          apiError,
-        );
-      }
-
-      // Sign out from Firebase if user logged in via Google
-      try {
-        const { signOut } = await import("firebase/auth");
-        // Firebase Auth is lazy-initialized now; only attempt sign out if it was actually used
-        if (firebaseAuth) {
-          const currentUser = firebaseAuth.currentUser;
-          if (currentUser) {
-            await signOut(firebaseAuth);
-          }
-        }
-      } catch (firebaseError) {
-        // Continue even if Firebase logout fails
-        debugWarn(
-          "Firebase logout failed, continuing with local cleanup:",
-          firebaseError,
-        );
-      }
-
-      // Clear user module authentication data using utility function
-      clearModuleAuth("user");
-
-      // Clear legacy token data for backward compatibility
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("user_authenticated");
-      localStorage.removeItem("user_user");
-      localStorage.removeItem("user");
-      localStorage.removeItem("cart");
-      USER_SESSION_PREFERENCE_KEYS.forEach((key) => localStorage.removeItem(key));
-
-      // Dispatch auth change event to notify other components
-      window.dispatchEvent(new Event("userAuthChanged"));
-
-      // Navigate to sign in page
+      await performUserLogout();
       navigate("/login", { replace: true });
     } catch (err) {
-      // Even if there's an error, we should still clear local data and logout
       debugError("Error during logout:", err);
-
-      // Clear local data anyway using utility function
-      clearModuleAuth("user");
-
-      // Clear legacy token data for backward compatibility
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("user_authenticated");
-      localStorage.removeItem("user_user");
-      localStorage.removeItem("user");
-      localStorage.removeItem("cart");
-      USER_SESSION_PREFERENCE_KEYS.forEach((key) => localStorage.removeItem(key));
-      window.dispatchEvent(new Event("userAuthChanged"));
-
-      // Still navigate to login page
       navigate("/login", { replace: true });
     } finally {
       setIsLoggingOut(false);
@@ -573,12 +500,7 @@ export default function Profile() {
               <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <Wallet className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
+                    <ProfileOptionIcon styleKey="wallet" icon={Wallet} />
                     <span className="text-base font-medium text-gray-900 dark:text-white">
                       My Wallet
                     </span>
@@ -609,12 +531,7 @@ export default function Profile() {
               <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <Tag className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
+                    <ProfileOptionIcon styleKey="coupons" icon={Tag} />
                     <span className="text-base font-medium text-gray-900 dark:text-white">
                       Your coupons
                     </span>
@@ -636,12 +553,7 @@ export default function Profile() {
               <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <ShoppingCart className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
+                    <ProfileOptionIcon styleKey="cart" icon={ShoppingCart} />
                     <span className="text-base font-medium text-gray-900 dark:text-white">
                       Your cart
                     </span>
@@ -665,12 +577,7 @@ export default function Profile() {
               onClick={openLocationSelector}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
-                  <motion.div
-                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                    whileHover={{ rotate: 15, scale: 1.1 }}
-                    transition={{ duration: 0.3 }}>
-                    <MapPin className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                  </motion.div>
+                  <ProfileOptionIcon styleKey="addresses" icon={MapPin} />
                   <div className="min-w-0">
                     <p className="text-base font-medium text-gray-900 dark:text-white">
                       Saved addresses
@@ -703,12 +610,7 @@ export default function Profile() {
               onClick={() => setVegModeOpen(true)}>
               <CardContent className="p-4  flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <motion.div
-                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                    whileHover={{ rotate: 15, scale: 1.1 }}
-                    transition={{ duration: 0.3 }}>
-                    <Leaf className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                  </motion.div>
+                  <ProfileOptionIcon styleKey="veg" icon={Leaf} />
                   <span className="text-base font-medium text-gray-900 dark:text-white">
                     Veg Mode
                   </span>
@@ -742,12 +644,7 @@ export default function Profile() {
               onClick={() => setAppearanceOpen(true)}>
               <CardContent className="p-4  flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <motion.div
-                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                    whileHover={{ rotate: 15, scale: 1.1 }}
-                    transition={{ duration: 0.3 }}>
-                    <Palette className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                  </motion.div>
+                  <ProfileOptionIcon styleKey="appearance" icon={Palette} />
                   <span className="text-base font-medium text-gray-900 dark:text-white">
                     Appearance
                   </span>
@@ -757,7 +654,7 @@ export default function Profile() {
                     className="text-base font-medium text-gray-900 dark:text-white capitalize"
                     whileHover={{ scale: 1.1 }}
                     transition={{ duration: 0.2 }}>
-                    {appearance}
+                    {appearanceTheme}
                   </motion.span>
                   <motion.div
                     whileHover={{ x: 4 }}
@@ -785,12 +682,7 @@ export default function Profile() {
               <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                 <CardContent className="p-4  flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <Bookmark className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
+                    <ProfileOptionIcon styleKey="collections" icon={Bookmark} />
                     <span className="text-base font-medium text-gray-900 dark:text-white">
                       Your collections
                     </span>
@@ -821,12 +713,7 @@ export default function Profile() {
               <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <Utensils className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
+                    <ProfileOptionIcon styleKey="dining" icon={Utensils} />
                     <div className="flex flex-col">
                       <span className="text-base font-medium text-gray-900 dark:text-white">
                         Your reservations
@@ -861,12 +748,7 @@ export default function Profile() {
                 <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <motion.div
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}>
-                        <Building2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
+                      <ProfileOptionIcon styleKey="orders" icon={Building2} />
                       <span className="text-base font-medium text-gray-900 dark:text-white">
                         Your orders
                       </span>
@@ -899,12 +781,7 @@ export default function Profile() {
                 <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <motion.div
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}>
-                        <LifeBuoy className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
+                      <ProfileOptionIcon styleKey="support" icon={LifeBuoy} />
                       <span className="text-base font-medium text-gray-900 dark:text-white">
                         Help & Support
                       </span>
@@ -926,12 +803,7 @@ export default function Profile() {
                 <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <motion.div
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}>
-                        <Info className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
+                      <ProfileOptionIcon styleKey="about" icon={Info} />
                       <span className="text-base font-medium text-gray-900 dark:text-white">
                         About
                       </span>
@@ -953,12 +825,7 @@ export default function Profile() {
                 <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <motion.div
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}>
-                        <AlertTriangle className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
+                      <ProfileOptionIcon styleKey="safety" icon={AlertTriangle} />
                       <span className="text-base font-medium text-gray-900 dark:text-white">
                         Report a safety emergency
                       </span>
@@ -980,12 +847,7 @@ export default function Profile() {
                 <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <motion.div
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}>
-                        <SettingsIcon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
+                      <ProfileOptionIcon styleKey="settings" icon={SettingsIcon} />
                       <span className="text-base font-medium text-gray-900 dark:text-white">
                         Settings
                       </span>
@@ -1008,14 +870,7 @@ export default function Profile() {
                 onClick={handleLogoutClick}>
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <motion.div
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}>
-                      <Power
-                        className={`h-5 w-5 text-gray-900 dark:text-white ${isLoggingOut ? "animate-pulse" : ""}`}
-                      />
-                    </motion.div>
+                    <ProfileOptionIcon styleKey="logout" icon={Power} />
                     <span className="text-base font-bold text-gray-900 dark:text-white">
                       {isLoggingOut ? "Logging out..." : "Log out"}
                     </span>
@@ -1132,124 +987,17 @@ export default function Profile() {
       </Dialog>
 
       {/* Logout Confirmation Popup */}
-      {logoutConfirmOpen && (
-        <div className="fixed inset-0 z-[1000] overflow-y-auto bg-black/60 backdrop-blur-sm">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-full max-w-sm rounded-2xl bg-white/75 dark:bg-[#1a1a1a]/75 backdrop-blur-md shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden p-6 text-center">
+      <UserLogoutConfirmDialog
+        open={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => {
+          setLogoutConfirmOpen(false);
+          handleLogout();
+        }}
+        isLoggingOut={isLoggingOut}
+      />
 
-              <div className="flex flex-col items-center mb-4">
-                <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center mb-3">
-                  <Power className="h-7 w-7 text-[#FF3131]" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Log out?
-                </h3>
-              </div>
-
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
-                Are you sure you want to log out?
-              </p>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setLogoutConfirmOpen(false)}
-                  disabled={isLoggingOut}
-                  className="flex-1 h-12 rounded-xl text-md font-bold border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#262626] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#333] transition-colors outline-none"
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLogoutConfirmOpen(false);
-                    handleLogout();
-                  }}
-                  disabled={isLoggingOut}
-                  className="flex-1 h-12 rounded-xl bg-[#FF3131] hover:bg-[#E02626] text-white text-md font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-all outline-none"
-                >
-                  Yes
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      )}
-
-      {/* Appearance Popup */}
-      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen}>
-        <DialogContent className="max-w-sm md:max-w-md lg:max-w-lg w-[calc(100%-2rem)] rounded-2xl p-0 overflow-hidden bg-white dark:bg-[#1a1a1a] border-gray-200 dark:border-gray-800">
-          <DialogHeader className="p-5 pb-3">
-            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-white">
-              Appearance
-            </DialogTitle>
-            <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
-              Choose your preferred theme
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 px-5 pb-5">
-            <button
-              onClick={() => {
-                setAppearanceOpen(false);
-                setTimeout(() => setAppearance("light"), 250);
-              }}
-              className={`w-full p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${appearance === "light"
-                ? "border-[#DC2626] bg-[#fdfafc] dark:border-[#DC2626] dark:bg-[#7F1D1D]/20"
-                : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
-                }`}>
-              <div
-                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${appearance === "light"
-                  ? "border-[#DC2626] bg-[#DC2626]"
-                  : "border-gray-300 dark:border-gray-600"
-                  }`}>
-                {appearance === "light" && (
-                  <Check className="h-3 w-3 text-white" />
-                )}
-              </div>
-              <Sun className="h-5 w-5 text-yellow-500 dark:text-yellow-400 flex-shrink-0" />
-              <div className="text-left">
-                <p className="font-medium text-gray-900 dark:text-white text-sm">
-                  Light
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Default light theme
-                </p>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                setAppearanceOpen(false);
-                setTimeout(() => setAppearance("dark"), 250);
-              }}
-              className={`w-full p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${appearance === "dark"
-                ? "border-[#DC2626] dark:border-[#DC2626] bg-[#fdfafc] dark:bg-[#7F1D1D]/20"
-                : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
-                }`}>
-              <div
-                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${appearance === "dark"
-                  ? "border-[#DC2626] bg-[#DC2626]"
-                  : "border-gray-300 dark:border-gray-600"
-                  }`}>
-                {appearance === "dark" && (
-                  <Check className="h-3 w-3 text-white" />
-                )}
-              </div>
-              <Moon className="h-5 w-5 text-gray-600 dark:text-gray-300 flex-shrink-0" />
-              <div className="text-left">
-                <p className="font-medium text-gray-900 dark:text-white text-sm">
-                  Dark
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Dark theme
-                </p>
-              </div>
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <UserAppearanceDialog open={appearanceOpen} onOpenChange={setAppearanceOpen} />
 
       {/* Balance Warning Popup */}
       {showBalanceWarning && (

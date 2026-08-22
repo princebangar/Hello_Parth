@@ -1,6 +1,9 @@
 export const FOOD_USER_THEME_KEY = "foodUserTheme";
 export const APP_THEME_KEY = "appTheme";
+export const USER_THEME_KEY = "userTheme";
 export const THEME_CHANGE_EVENT = "helloparth:theme-change";
+
+const USER_THEME_STORAGE_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, USER_THEME_KEY];
 
 const THEME_CSS_VARS = [
   "--background",
@@ -71,7 +74,13 @@ export function normalizeTheme(theme) {
 
 export function getFoodUserTheme() {
   if (typeof localStorage === "undefined") return "light";
-  return normalizeTheme(localStorage.getItem(FOOD_USER_THEME_KEY));
+
+  for (const key of USER_THEME_STORAGE_KEYS) {
+    const stored = localStorage.getItem(key);
+    if (stored) return normalizeTheme(stored);
+  }
+
+  return "light";
 }
 
 function clearNestedThemeClasses() {
@@ -104,6 +113,7 @@ export function applyTheme(theme) {
   clearNestedThemeClasses();
 
   root.classList.remove("dark", "light");
+  root.classList.add(resolvedTheme);
   root.dataset.theme = resolvedTheme;
   root.style.colorScheme = useDarkTheme ? "dark" : "light";
   applyInlineThemeVars(root, useDarkTheme);
@@ -119,8 +129,9 @@ export function saveFoodUserTheme(theme) {
   const normalizedTheme = normalizeTheme(theme);
 
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem(FOOD_USER_THEME_KEY, normalizedTheme);
-    localStorage.setItem(APP_THEME_KEY, normalizedTheme);
+    for (const key of USER_THEME_STORAGE_KEYS) {
+      localStorage.setItem(key, normalizedTheme);
+    }
   }
 
   applyTheme(normalizedTheme);
@@ -149,21 +160,21 @@ export function reassertFoodUserTheme() {
   applyTheme(theme);
 
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem(APP_THEME_KEY, theme);
+    for (const key of USER_THEME_STORAGE_KEYS) {
+      localStorage.setItem(key, theme);
+    }
   }
 
   return theme;
 }
 
-export function syncThemeForPath(pathname = "") {
+export function isUserAppPath(pathname = "") {
   const path = String(pathname || "");
+  return path.startsWith("/food/") || path.startsWith("/taxi/user");
+}
 
-  if (path.startsWith("/taxi/user")) {
-    applyTheme("light");
-    return "light";
-  }
-
-  if (path.startsWith("/food/")) {
+export function syncThemeForPath(pathname = "") {
+  if (isUserAppPath(pathname)) {
     return reassertFoodUserTheme();
   }
 
@@ -196,14 +207,14 @@ export function scheduleFoodThemeReassert(pathname) {
     pathname ??
     (typeof window !== "undefined" ? window.location.pathname : "");
 
-  if (!String(path).startsWith("/food/")) return;
+  if (!isUserAppPath(path)) return;
 
   cancelScheduledFoodThemeReassert();
   const generation = reassertGeneration;
 
   const runIfValid = () => {
     if (generation !== reassertGeneration) return;
-    if (!window.location.pathname.startsWith("/food/")) return;
+    if (!isUserAppPath(window.location.pathname)) return;
     reassertFoodUserTheme();
   };
 

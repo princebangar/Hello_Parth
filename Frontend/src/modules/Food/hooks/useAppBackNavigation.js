@@ -13,6 +13,18 @@ const toFoodPath = (value) => {
   return null
 }
 
+const resolveExplicitBackPath = (state) => {
+  for (const key of ["backTo", "from", "returnTo"]) {
+    const foodPath = toFoodPath(state?.[key])
+    if (foodPath) return foodPath
+
+    const rawPath = typeof state?.[key] === "string" ? state[key].trim() : ""
+    if (rawPath.startsWith("/")) return rawPath
+  }
+
+  return null
+}
+
 const getNormalizedUserPath = (pathname) => {
   if (pathname.startsWith("/food")) {
     return pathname.slice(5) || "/"
@@ -27,7 +39,7 @@ const pathsMatch = (a, b) => {
 
 const resolveBackPath = ({ pathname, search, state, orderType }) => {
   const normalizedPath = getNormalizedUserPath(pathname)
-  const explicitBackPath = toFoodPath(state?.backTo) || toFoodPath(state?.from) || toFoodPath(state?.returnTo)
+  const explicitBackPath = resolveExplicitBackPath(state)
   const searchParams = new URLSearchParams(search || "")
   const defaultHomePath = orderType === "takeaway" ? "/food/user/takeaway" : "/food/user"
 
