@@ -440,24 +440,23 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
   }
 
   const normalizedRole = normalizeRole(role);
-  const existingDriver = await Driver.findOne({ phone: normalizedPhone });
-  const existingOwner =
-    normalizedRole === 'owner'
-      ? await Owner.findOne({
-          $or: [
-            { mobile: normalizedPhone },
-            { phone: normalizedPhone },
-          ],
-        })
-      : null;
 
-  if (existingDriver || existingOwner) {
-    throw new ApiError(
-      409,
-      normalizedRole === 'owner'
-        ? 'Phone number is already registered as an owner'
-        : 'Phone number is already registered',
-    );
+  // Driver and owner are separate accounts — only block when the same role already exists.
+  if (normalizedRole === 'owner') {
+    const existingOwner = await Owner.findOne({
+      $or: [
+        { mobile: normalizedPhone },
+        { phone: normalizedPhone },
+      ],
+    });
+    if (existingOwner) {
+      throw new ApiError(409, 'Phone number is already registered as an owner');
+    }
+  } else {
+    const existingDriver = await Driver.findOne({ phone: normalizedPhone });
+    if (existingDriver) {
+      throw new ApiError(409, 'Phone number is already registered as a driver');
+    }
   }
 
   const { otp, isStatic } = resolveDriverOnboardingOtpForPhone(normalizedPhone);
