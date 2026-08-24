@@ -2801,11 +2801,6 @@ const seedInitialData = async () => {
     await User.insertMany(defaults.users.map(u => ({ ...u, phone: u.mobile, password: 'password123' })));
   }
 
-  // Seed Service Locations
-  if (await ServiceLocation.countDocuments() === 0) {
-    await ServiceLocation.insertMany(defaults.serviceLocations);
-  }
-
   // Seed Drivers
   if (await Driver.countDocuments() === 0) {
     await Driver.insertMany(defaults.drivers.map(d => ({ ...d, phone: d.mobile })));
@@ -2857,10 +2852,7 @@ const seedInitialData = async () => {
 };
 
 export const ensureServiceLocationsSeeded = async () => {
-  if (await ServiceLocation.countDocuments() === 0) {
-    const defaults = createDefaultAdminState();
-    await ServiceLocation.insertMany(defaults.serviceLocations);
-  }
+  // Auto-seeding disabled — admin will create locations manually
 };
 
 export const ensureFleetOwnersSeeded = async () => {

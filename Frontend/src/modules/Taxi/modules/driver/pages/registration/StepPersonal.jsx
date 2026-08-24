@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
+    getDriverServiceLocations,
     saveDriverPersonalDetails,
     saveDriverRegistrationSession,
 } from '../../services/registrationService';
@@ -44,8 +45,7 @@ const StepPersonal = () => {
     useEffect(() => {
         const fetchZones = async () => {
             try {
-                const res = await fetch('/api/v1/taxi/user/service-locations');
-                const data = await res.json();
+                const data = await getDriverServiceLocations();
                 const list = data?.data?.results || data?.results || [];
                 setZones(list);
             } catch (err) {
