@@ -22,7 +22,12 @@ const isDriverPendingApprovalScreen = () => {
   }
 
   const pathname = String(window.location.pathname || '').toLowerCase();
-  return pathname === '/taxi/driver/registration-status' || pathname === '/taxi/driver/status';
+  return (
+    pathname === '/taxi/driver/registration-status' ||
+    pathname === '/taxi/driver/status' ||
+    pathname === '/taxi/owner/registration-status' ||
+    pathname === '/taxi/owner/status'
+  );
 };
 
 const hasFirebaseConfig = () =>

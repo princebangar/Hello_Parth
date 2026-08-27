@@ -1709,44 +1709,61 @@ const BusServiceManager = ({
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <input
-                          className={fieldClassName}
-                          value={rule.label || ''}
-                          onChange={(event) => updateCancellationRule(rule.id, 'label', event.target.value)}
-                          placeholder="48h+ before departure"
-                        />
-                        <input
-                          className={fieldClassName}
-                          type="number"
-                          value={rule.hoursBeforeDeparture ?? 0}
-                          onChange={(event) => updateCancellationRule(rule.id, 'hoursBeforeDeparture', event.target.value)}
-                          placeholder="Hours before departure"
-                        />
-                        <select
-                          className={fieldClassName}
-                          value={rule.refundType || 'percentage'}
-                          onChange={(event) => updateCancellationRule(rule.id, 'refundType', event.target.value)}
-                        >
-                          <option value="percentage">Refund %</option>
-                          <option value="fixed">Fixed Refund</option>
-                          <option value="none">No Refund</option>
-                        </select>
-                        <input
-                          className={fieldClassName}
-                          type="number"
-                          value={rule.refundValue ?? 0}
-                          onChange={(event) => updateCancellationRule(rule.id, 'refundValue', event.target.value)}
-                          placeholder={rule.refundType === 'fixed' ? 'Refund amount' : 'Refund percentage'}
-                          disabled={rule.refundType === 'none'}
-                        />
+                        <div>
+                          <label className={labelClassName}>Slab Label</label>
+                          <input
+                            className={fieldClassName}
+                            value={rule.label || ''}
+                            onChange={(event) => updateCancellationRule(rule.id, 'label', event.target.value)}
+                            placeholder="48h+ before departure"
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClassName}>Hours Before Departure</label>
+                          <input
+                            className={fieldClassName}
+                            type="number"
+                            value={rule.hoursBeforeDeparture ?? 0}
+                            onChange={(event) => updateCancellationRule(rule.id, 'hoursBeforeDeparture', event.target.value)}
+                            placeholder="Hours before departure"
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClassName}>Refund Type</label>
+                          <select
+                            className={fieldClassName}
+                            value={rule.refundType || 'percentage'}
+                            onChange={(event) => updateCancellationRule(rule.id, 'refundType', event.target.value)}
+                          >
+                            <option value="percentage">Refund %</option>
+                            <option value="fixed">Fixed Refund</option>
+                            <option value="none">No Refund</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelClassName}>
+                            {rule.refundType === 'fixed' ? 'Refund Amount' : 'Refund Percentage'}
+                          </label>
+                          <input
+                            className={fieldClassName}
+                            type="number"
+                            value={rule.refundValue ?? 0}
+                            onChange={(event) => updateCancellationRule(rule.id, 'refundValue', event.target.value)}
+                            placeholder={rule.refundType === 'fixed' ? 'Refund amount' : 'Refund percentage'}
+                            disabled={rule.refundType === 'none'}
+                          />
+                        </div>
                       </div>
 
-                      <textarea
-                        className={`${fieldClassName} mt-4 min-h-[84px]`}
-                        value={rule.notes || ''}
-                        onChange={(event) => updateCancellationRule(rule.id, 'notes', event.target.value)}
-                        placeholder="Example: 25% cancellation charge applies in this window."
-                      />
+                      <div className="mt-4">
+                        <label className={labelClassName}>Notes</label>
+                        <textarea
+                          className={`${fieldClassName} min-h-[84px]`}
+                          value={rule.notes || ''}
+                          onChange={(event) => updateCancellationRule(rule.id, 'notes', event.target.value)}
+                          placeholder="Example: 25% cancellation charge applies in this window."
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1856,10 +1873,15 @@ const BusServiceManager = ({
                 <input className={fieldClassName} value={draft.route.routeName} onChange={(event) => updateRouteField('routeName', event.target.value)} placeholder="Indore to Bhopal Night Corridor" />
               </div>
               <div>
-                <label className={labelClassName}>Distance / Duration</label>
                 <div className="grid grid-cols-2 gap-3">
-                  <input className={fieldClassName} value={draft.route.distanceKm} onChange={(event) => updateRouteField('distanceKm', event.target.value)} placeholder="195 km" />
-                  <input className={fieldClassName} value={draft.route.durationHours} onChange={(event) => updateRouteField('durationHours', event.target.value)} placeholder="4h 45m" />
+                  <div>
+                    <label className={labelClassName}>Distance</label>
+                    <input className={fieldClassName} value={draft.route.distanceKm} onChange={(event) => updateRouteField('distanceKm', event.target.value)} placeholder="195 km" />
+                  </div>
+                  <div>
+                    <label className={labelClassName}>Duration</label>
+                    <input className={fieldClassName} value={draft.route.durationHours} onChange={(event) => updateRouteField('durationHours', event.target.value)} placeholder="4h 45m" />
+                  </div>
                 </div>
               </div>
               <div>
@@ -1923,15 +1945,30 @@ const BusServiceManager = ({
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                    <input className={fieldClassName} value={stop.city} onChange={(event) => updateStop(stop.id, 'city', event.target.value)} placeholder="City" />
-                    <input className={fieldClassName} value={stop.pointName} onChange={(event) => updateStop(stop.id, 'pointName', event.target.value)} placeholder="Pickup / Drop Point" />
-                    <select className={fieldClassName} value={stop.stopType} onChange={(event) => updateStop(stop.id, 'stopType', event.target.value)}>
-                      <option value="pickup">Pickup Only</option>
-                      <option value="drop">Drop Only</option>
-                      <option value="both">Pickup + Drop</option>
-                    </select>
-                    <input className={fieldClassName} type="time" value={stop.arrivalTime} onChange={(event) => updateStop(stop.id, 'arrivalTime', event.target.value)} />
-                    <input className={fieldClassName} type="time" value={stop.departureTime} onChange={(event) => updateStop(stop.id, 'departureTime', event.target.value)} />
+                    <div>
+                      <label className={labelClassName}>City</label>
+                      <input className={fieldClassName} value={stop.city} onChange={(event) => updateStop(stop.id, 'city', event.target.value)} placeholder="City" />
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Pickup / Drop Point</label>
+                      <input className={fieldClassName} value={stop.pointName} onChange={(event) => updateStop(stop.id, 'pointName', event.target.value)} placeholder="Pickup / Drop Point" />
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Stop Type</label>
+                      <select className={fieldClassName} value={stop.stopType} onChange={(event) => updateStop(stop.id, 'stopType', event.target.value)}>
+                        <option value="pickup">Pickup Only</option>
+                        <option value="drop">Drop Only</option>
+                        <option value="both">Pickup + Drop</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Arrival Time</label>
+                      <input className={fieldClassName} type="time" value={stop.arrivalTime} onChange={(event) => updateStop(stop.id, 'arrivalTime', event.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Departure Time</label>
+                      <input className={fieldClassName} type="time" value={stop.departureTime} onChange={(event) => updateStop(stop.id, 'departureTime', event.target.value)} />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1975,17 +2012,31 @@ const BusServiceManager = ({
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-4">
-                    <input className={fieldClassName} value={schedule.label} onChange={(event) => updateSchedule(schedule.id, 'label', event.target.value)} placeholder="Daily Evening Service" />
-                    <input className={fieldClassName} type="time" value={schedule.departureTime} onChange={(event) => updateSchedule(schedule.id, 'departureTime', event.target.value)} />
-                    <input className={fieldClassName} type="time" value={schedule.arrivalTime} onChange={(event) => updateSchedule(schedule.id, 'arrivalTime', event.target.value)} />
-                    <select className={fieldClassName} value={schedule.status} onChange={(event) => updateSchedule(schedule.id, 'status', event.target.value)}>
-                      <option value="active">Active</option>
-                      <option value="paused">Paused</option>
-                      <option value="draft">Draft</option>
-                    </select>
+                    <div>
+                      <label className={labelClassName}>Schedule Label</label>
+                      <input className={fieldClassName} value={schedule.label} onChange={(event) => updateSchedule(schedule.id, 'label', event.target.value)} placeholder="Daily Evening Service" />
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Departure Time</label>
+                      <input className={fieldClassName} type="time" value={schedule.departureTime} onChange={(event) => updateSchedule(schedule.id, 'departureTime', event.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Arrival Time</label>
+                      <input className={fieldClassName} type="time" value={schedule.arrivalTime} onChange={(event) => updateSchedule(schedule.id, 'arrivalTime', event.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelClassName}>Status</label>
+                      <select className={fieldClassName} value={schedule.status} onChange={(event) => updateSchedule(schedule.id, 'status', event.target.value)}>
+                        <option value="active">Active</option>
+                        <option value="paused">Paused</option>
+                        <option value="draft">Draft</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-4">
+                    <label className={labelClassName}>Active Days</label>
+                    <div className="flex flex-wrap gap-2">
                     {DAY_OPTIONS.map((day) => {
                       const active = schedule.activeDays.includes(day);
                       return (
@@ -2003,6 +2054,7 @@ const BusServiceManager = ({
                         </button>
                       );
                     })}
+                    </div>
                   </div>
                 </div>
               ))}
