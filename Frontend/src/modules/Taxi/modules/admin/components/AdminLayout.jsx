@@ -4,6 +4,7 @@ import {
   FOOD_ADMIN_HOME,
   TAXI_ADMIN_HOME,
   prefetchFoodAdmin,
+  prefetchTaxiAdmin,
 } from '@/shared/utils/activeModule.js';
 import { POOLING_ENABLED, RENTAL_ENABLED } from '../../../shared/featureFlags';
 import { socketService } from '../../../shared/api/socket';
@@ -636,10 +637,22 @@ const AdminLayout = () => {
   }, [showFoodTab]);
 
   const switchAdminModule = (path) => {
-    if (path === FOOD_ADMIN_HOME) prefetchFoodAdmin();
-    startTransition(() => {
-      navigate(path);
-    });
+    const go = () => {
+      startTransition(() => {
+        navigate(path);
+      });
+    };
+
+    // Wait for sibling chunks so the first Food ↔ Taxi switch has no blank flash.
+    if (path === FOOD_ADMIN_HOME) {
+      Promise.resolve(prefetchFoodAdmin()).finally(go);
+      return;
+    }
+    if (path === TAXI_ADMIN_HOME) {
+      Promise.resolve(prefetchTaxiAdmin()).finally(go);
+      return;
+    }
+    go();
   };
 
   useEffect(() => {
@@ -1905,7 +1918,7 @@ const AdminLayout = () => {
         )}
 
         <main className="no-scrollbar flex-1 overflow-y-auto p-4 scroll-smooth lg:p-8">
-          <Suspense fallback={<AdminContentSkeleton />}>
+          <Suspense fallback={null}>
             <Outlet />
           </Suspense>
         </main>

@@ -5,6 +5,34 @@ export const LOGIN_RETURN_TO_KEY = 'hello_parth_login_return_to'
 export const FOOD_ADMIN_HOME = '/admin/food'
 export const TAXI_ADMIN_HOME = '/taxi/admin/dashboard'
 
+/** Logged-in consumer default — Taxi opens first on app/web launch. */
+export const CONSUMER_POST_LOGIN_HOME = '/taxi/user'
+/** Guest browse after "Skip for now" — Food allows limited access without login. */
+export const CONSUMER_GUEST_HOME = '/food/user'
+
+export function resolveConsumerPostLoginRoute() {
+  return CONSUMER_POST_LOGIN_HOME
+}
+
+/**
+ * App cold start / reopen.
+ * Guests → login (Taxi is login-only; Skip for now opens Food).
+ * Logged-in users → Taxi home first.
+ */
+export function resolveAppColdStartRoute() {
+  if (typeof localStorage === 'undefined') return '/login'
+
+  const foodToken = String(localStorage.getItem('user_accessToken') || '').trim()
+  const taxiToken = String(localStorage.getItem('userToken') || '').trim()
+  const isLoggedIn = Boolean(foodToken || taxiToken)
+
+  if (!isLoggedIn) {
+    return '/login'
+  }
+
+  return CONSUMER_POST_LOGIN_HOME
+}
+
 export function getModuleFromPath(pathname = '') {
   const path = String(pathname || '')
   if (path.startsWith('/taxi/')) return 'taxi'
@@ -17,52 +45,6 @@ export function getModuleHomeRoute(module) {
   if (module === 'taxi') return '/taxi/user'
   if (module === 'food') return '/food/user'
   if (module === 'admin') return '/admin'
-  return '/food/user'
-}
-
-/** After successful user login/signup: always open Food first (single login hub). */
-export const CONSUMER_POST_LOGIN_HOME = '/food/user'
-
-export function resolveConsumerPostLoginRoute() {
-  return CONSUMER_POST_LOGIN_HOME
-}
-
-/**
- * App cold start / reopen: remember last Food or Taxi module so users don't
- * bounce back to Food after closing on Taxi (and vice versa).
- * Guests always reopen on Food (Taxi is login-only).
- * Login success still prefers Food, unless login was opened for Taxi intent.
- */
-export function resolveAppColdStartRoute() {
-  if (typeof localStorage === 'undefined') return CONSUMER_POST_LOGIN_HOME
-
-  const foodToken = String(localStorage.getItem('user_accessToken') || '').trim()
-  const taxiToken = String(localStorage.getItem('userToken') || '').trim()
-  const isLoggedIn = Boolean(foodToken || taxiToken)
-
-  if (!isLoggedIn) {
-    return CONSUMER_POST_LOGIN_HOME
-  }
-
-  const storedRoute = String(localStorage.getItem(NATIVE_LAST_ROUTE_KEY) || '')
-    .trim()
-    .split('?')[0]
-  const activeModule = String(localStorage.getItem(ACTIVE_MODULE_KEY) || '').trim()
-
-  if (storedRoute.startsWith('/taxi/') || activeModule === 'taxi') {
-    return '/taxi/user'
-  }
-  if (
-    storedRoute.startsWith('/food/user') ||
-    (storedRoute.startsWith('/food/') &&
-      !storedRoute.startsWith('/food/restaurant') &&
-      !storedRoute.startsWith('/food/delivery') &&
-      !storedRoute.startsWith('/food/admin')) ||
-    activeModule === 'food'
-  ) {
-    return '/food/user'
-  }
-
   return CONSUMER_POST_LOGIN_HOME
 }
 
@@ -126,6 +108,30 @@ export function prefetchTaxiAdmin() {
     import('../../modules/Taxi/modules/admin/components/AdminLayout.jsx'),
     import('../../modules/Taxi/modules/admin/pages/dashboard/MainDashboard.jsx'),
   ]).catch(() => {})
+}
+
+/** Warm Food user shell so Food ↔ Taxi user tab switches stay SPA-smooth. */
+export function prefetchFoodUser() {
+  return Promise.all([
+    import('../../modules/Food/routes.jsx'),
+  ]).catch(() => {})
+}
+
+/** Warm Taxi user shell + main tabs so Food ↔ Taxi / bottom-nav switches stay SPA-smooth. */
+export function prefetchTaxiUser() {
+  return Promise.all([
+    import('../../modules/Taxi/TaxiApp.jsx'),
+    import('../../modules/Taxi/modules/user/pages/Home.jsx'),
+    import('../../modules/Taxi/modules/user/pages/Activity.jsx'),
+    import('../../modules/Taxi/modules/user/pages/Profile.jsx'),
+    import('../../modules/Taxi/modules/user/pages/ride/Support.jsx'),
+  ]).catch(() => {})
+}
+
+/** Prefetch the sibling consumer vertical (call on idle / hover). */
+export function prefetchSiblingUserVertical(currentVertical = 'food') {
+  if (currentVertical === 'taxi') return prefetchFoodUser()
+  return prefetchTaxiUser()
 }
 
 /**
@@ -204,12 +210,9 @@ const toPublicModuleHome = (route = '') => {
 /**
  * Post-login destination for the consumer (/login) auth flow only.
  * Must never send users to admin/restaurant/delivery panels — those have
- * their own login screens. Leftover `hello_parth_active_module=admin` or
- * `native_last_route=/admin/...` from an earlier admin visit must not
- * override a normal user login.
+ * their own login screens.
  */
 export function resolvePostLoginRoute() {
-  // Single consumer login always lands on Food hub first.
   return CONSUMER_POST_LOGIN_HOME
 }
 

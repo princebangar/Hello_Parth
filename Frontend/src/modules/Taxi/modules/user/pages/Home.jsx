@@ -204,7 +204,7 @@ const normalizeRentalCurrentRideSnapshot = (ride = {}, previousRide = {}) => {
   };
 };
 
-const Home = ({ embedded = false }) => {
+const Home = ({ embedded = false, hideBottomNav = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
@@ -586,7 +586,7 @@ const Home = ({ embedded = false }) => {
   const pageBgClass = 'bg-[#EFF5FD]';
 
   return (
-    <div className={`${embedded ? 'relative' : 'min-h-screen'} ${pageBgClass} ${embedded ? 'pb-6' : 'pb-24'} w-full relative font-sans no-scrollbar`}>
+    <div className={`${embedded ? 'relative' : 'min-h-screen'} ${pageBgClass} ${embedded || hideBottomNav ? 'pb-24' : 'pb-24'} w-full relative font-sans no-scrollbar`}>
       {/* Light blue draped vanished shade background elements */}
       <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-full max-w-lg h-[450px] bg-[radial-gradient(ellipse_at_top,_rgba(147,197,253,0.55)_0%,_rgba(219,234,254,0.3)_45%,_rgba(255,255,255,0)_80%)] blur-2xl pointer-events-none" />
       <div className="absolute top-44 -left-20 h-80 w-80 rounded-full bg-blue-300/30 blur-3xl pointer-events-none" />
@@ -825,7 +825,7 @@ const Home = ({ embedded = false }) => {
         )}
       </AnimatePresence>
 
-      {!embedded && <BottomNavbar />}
+      {!embedded && !hideBottomNav && <BottomNavbar />}
     </div>
   );
 };

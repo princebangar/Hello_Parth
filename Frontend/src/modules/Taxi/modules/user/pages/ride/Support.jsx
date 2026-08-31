@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight, Siren } from 'lucide-react';
 import BottomNavbar from '../../components/BottomNavbar';
 
-const Support = () => {
+const Support = ({ embedded = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
@@ -135,7 +135,7 @@ const Support = () => {
         </div>
       </div>
 
-      <BottomNavbar />
+      {!embedded && <BottomNavbar />}
     </div>
   );
 };

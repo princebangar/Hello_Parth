@@ -73,7 +73,7 @@ const buildRentalActivityState = (booking) => ({
   summaryMode: String(booking?.status || '').toLowerCase() === 'completed' ? 'completed' : undefined,
 });
 
-const Activity = () => {
+const Activity = ({ embedded = false }) => {
   const [activeTab, setActiveTab] = useState('All');
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -332,7 +332,7 @@ const Activity = () => {
         )}
       </div>
 
-      <BottomNavbar />
+      {!embedded && <BottomNavbar />}
     </div>
   );
 };

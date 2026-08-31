@@ -1,19 +1,24 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Suspense, lazy, useEffect } from 'react'
-import Loader from '../shared/components/Loader.jsx'
 import {
   NATIVE_LAST_ROUTE_KEY,
   rememberLoginReturnTo,
   syncActiveModule,
   resolveAppColdStartRoute,
+  prefetchFoodUser,
+  prefetchTaxiUser,
+  prefetchFoodAdmin,
+  prefetchTaxiAdmin,
 } from '../shared/utils/activeModule.js'
+import AdminModulesKeepAlive, { AdminKeepAliveSlot } from './AdminModulesKeepAlive.jsx'
 
 // Lazy load the Food service module (Quick-spicy app)
 const FoodApp = lazy(() => import('../modules/Food/routes'))
 const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp'))
 const AuthApp = lazy(() => import('../modules/auth/routes'))
 
-const PageLoader = () => <Loader />
+// Avoid full-screen white spinner flash on Food ↔ Taxi switches.
+const SoftFallback = () => <div className="min-h-screen bg-transparent" aria-hidden="true" />
 
 const FoodAppWrapper = () => {
   const location = useLocation()
@@ -28,14 +33,14 @@ const FoodAppWrapper = () => {
   }
 
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<SoftFallback />}>
       <FoodApp />
     </Suspense>
   )
 }
 
 const TaxiAppWrapper = () => (
-  <Suspense fallback={<PageLoader />}>
+  <Suspense fallback={<SoftFallback />}>
     <TaxiApp />
   </Suspense>
 )
@@ -45,14 +50,40 @@ const RedirectToFood = () => {
   return <Navigate to={`/food${location.pathname}${location.search}`} replace />
 }
 
-const AdminRouter = lazy(() => import('../modules/Food/components/admin/AdminRouter'))
-
 const AppRoutes = () => {
   const location = useLocation()
 
   useEffect(() => {
     syncActiveModule(location.pathname)
     rememberLoginReturnTo(location.pathname)
+  }, [location.pathname])
+
+  // Warm sibling modules on idle so Food ↔ Taxi (user + admin) switches stay smooth.
+  useEffect(() => {
+    const path = location.pathname || ''
+    const warm = () => {
+      if (path.startsWith('/food/user') || path === '/food' || path.startsWith('/food/user/')) {
+        prefetchTaxiUser()
+      } else if (path.startsWith('/taxi/user')) {
+        prefetchFoodUser()
+      } else if (path.startsWith('/admin')) {
+        prefetchTaxiAdmin()
+      } else if (path.startsWith('/taxi/admin')) {
+        prefetchFoodAdmin()
+      }
+    }
+
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(warm, { timeout: 1200 })
+      : window.setTimeout(warm, 300)
+
+    return () => {
+      if (window.cancelIdleCallback && typeof idle === 'number') {
+        window.cancelIdleCallback(idle)
+      } else {
+        window.clearTimeout(idle)
+      }
+    }
   }, [location.pathname])
 
   useEffect(() => {
@@ -98,28 +129,29 @@ const AppRoutes = () => {
   }, [location.pathname, location.search])
 
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to={resolveAppColdStartRoute()} replace />} />
-      <Route path="/login/*" element={<Suspense fallback={<PageLoader />}><AuthApp /></Suspense>} />
-      <Route path="/food/*" element={<FoodAppWrapper />} />
-      <Route path="/taxi/*" element={<TaxiAppWrapper />} />
-      <Route
-        path="/admin/*"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <AdminRouter />
-          </Suspense>
-        }
-      />
-      <Route path="/user/*" element={<RedirectToFood />} />
-      <Route path="/restaurant/*" element={<RedirectToFood />} />
-      <Route path="/delivery/*" element={<RedirectToFood />} />
-      <Route path="/usermain/*" element={<RedirectToFood />} />
-      <Route path="/profile/*" element={<RedirectToFood />} />
-      <Route path="/cart/*" element={<Navigate to="/food/user/cart" replace />} />
-      <Route path="/orders/*" element={<RedirectToFood />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      {/* Food ↔ Taxi admin: keep both shells mounted after first visit (instant hide/show). */}
+      <AdminModulesKeepAlive />
+
+      <Routes>
+        <Route path="/" element={<Navigate to={resolveAppColdStartRoute()} replace />} />
+        <Route path="/login/*" element={<Suspense fallback={<SoftFallback />}><AuthApp /></Suspense>} />
+        <Route path="/food/*" element={<FoodAppWrapper />} />
+        {/* More specific than /taxi/* — UI comes from AdminModulesKeepAlive. */}
+        <Route path="/taxi/admin/*" element={<AdminKeepAliveSlot />} />
+        <Route path="/taxi/*" element={<TaxiAppWrapper />} />
+        {/* UI comes from AdminModulesKeepAlive. */}
+        <Route path="/admin/*" element={<AdminKeepAliveSlot />} />
+        <Route path="/user/*" element={<RedirectToFood />} />
+        <Route path="/restaurant/*" element={<RedirectToFood />} />
+        <Route path="/delivery/*" element={<RedirectToFood />} />
+        <Route path="/usermain/*" element={<RedirectToFood />} />
+        <Route path="/profile/*" element={<RedirectToFood />} />
+        <Route path="/cart/*" element={<Navigate to="/food/user/cart" replace />} />
+        <Route path="/orders/*" element={<RedirectToFood />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }
 

@@ -5,7 +5,7 @@ import { ShieldCheck, Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
 import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
 import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/moduleAuth"
-import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo } from "@/shared/utils/activeModule.js"
+import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo, CONSUMER_GUEST_HOME } from "@/shared/utils/activeModule.js"
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
@@ -54,7 +54,7 @@ export default function UnifiedOTPFastLogin() {
     ensureFoodGuestSession()
     consumeLoginReturnTo()
     // Guest browse is Food-only; Taxi requires login.
-    navigate("/food/user", { replace: true })
+    navigate(CONSUMER_GUEST_HOME, { replace: true })
   }
 
   const handleBack = (e) => {
@@ -86,7 +86,7 @@ export default function UnifiedOTPFastLogin() {
     ensureFoodGuestSession()
     consumeLoginReturnTo()
     setTimeout(() => {
-      navigate("/food/user", { replace: true })
+      navigate(CONSUMER_GUEST_HOME, { replace: true })
     }, 30)
   }
 

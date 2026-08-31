@@ -92,7 +92,7 @@ const getRouteKey = (route, index) => {
   return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || index}`;
 };
 
-const BusHome = () => {
+const BusHome = ({ embedded = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
@@ -634,7 +634,7 @@ const BusHome = () => {
         </div>
       )}
 
-      <BottomNavbar />
+      {!embedded && <BottomNavbar />}
     </div>
   );
 };

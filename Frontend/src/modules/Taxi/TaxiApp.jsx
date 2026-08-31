@@ -20,6 +20,7 @@ import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/drive
 import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistration';
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
+import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
 import './App.css';
 
 
@@ -392,6 +393,18 @@ const ScrollToTop = () => {
   const { pathname } = useLocation();
 
   useEffect(() => {
+    // Main bottom-nav tabs keep scroll via KeepAlive — don't yank to top.
+    const mainTabs = new Set([
+      '/taxi/user',
+      '/taxi/user/activity',
+      '/taxi/user/bus',
+      '/taxi/user/support',
+      '/taxi/user/profile',
+    ]);
+    const normalized = String(pathname || '').replace(/\/$/, '') || '/';
+    if (mainTabs.has(normalized)) {
+      return;
+    }
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [pathname]);
 
@@ -677,12 +690,7 @@ function TaxiApp() {
         <UserAccountInvalidationListener />
         <UserUpcomingRideReminderBootstrap />
         <MainLayout>
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center min-h-screen bg-white">
-                <span className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></span>
-              </div>
-            }>
+          <Suspense fallback={<div className="min-h-screen bg-transparent" aria-hidden="true" />}>
             <Toaster position="top-right" closeButton />
             <Routes>
               {/* Static / Public routes */}
@@ -799,7 +807,7 @@ function TaxiApp() {
               <Route path="user/refund" element={<LegalPage />} />
 
               <Route element={<UserProtectedRoute />}>
-                <Route path="user" element={<UserHomeRoute taxiPrefixed />} />
+                <Route path="user" element={<UserMainTabKeepAlive />} />
                 <Route path="user/ride/select-location" element={<SelectLocation />} />
                 <Route path="user/ride/select-vehicle" element={<SelectVehicle />} />
                 <Route
@@ -815,7 +823,7 @@ function TaxiApp() {
                   element={<RideComplete />}
                 />
                 <Route path="user/ride/chat" element={<Chat />} />
-                <Route path="user/support" element={<Support />} />
+                <Route path="user/support" element={<UserMainTabKeepAlive />} />
                 <Route
                   path="user/ride/detail/:id"
                   element={<RideDetail />}
@@ -914,7 +922,7 @@ function TaxiApp() {
                   path="user/cab/spiritual-confirm"
                   element={<SpiritualTripConfirm />}
                 />
-                <Route path="user/bus" element={<BusHome />} />
+                <Route path="user/bus" element={<UserMainTabKeepAlive />} />
                 <Route path="user/bus/list" element={<BusList />} />
                 <Route path="user/bus/seats" element={<BusSeats />} />
                 <Route path="user/bus/details" element={<BusPreview />} />
@@ -922,8 +930,8 @@ function TaxiApp() {
                 <Route path="user/bus/confirm" element={<BusConfirm />} />
                 <Route path="user/tours" element={<ComingSoon />} />
 
-                <Route path="user/activity" element={<Activity />} />
-                <Route path="user/profile" element={<Profile />} />
+                <Route path="user/activity" element={<UserMainTabKeepAlive />} />
+                <Route path="user/profile" element={<UserMainTabKeepAlive />} />
                 <Route path="user/wallet" element={<Wallet />} />
                 <Route
                   path="user/notifications"

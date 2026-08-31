@@ -1,9 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, startTransition } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MapPin, ChevronDown } from 'lucide-react';
 import { getVerticalTheme } from '@/shared/constants/superAppVerticalTheme';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
-import { ensureFoodGuestSession } from '@/shared/utils/activeModule.js';
+import {
+  ensureFoodGuestSession,
+  prefetchFoodUser,
+  prefetchTaxiUser,
+  prefetchSiblingUserVertical,
+} from '@/shared/utils/activeModule.js';
 import { isUnifiedAuthenticated } from '@/shared/utils/moduleAuth.js';
 import { readSharedFoodLocation, getFoodStyleLocationParts, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
 
@@ -98,20 +103,20 @@ const taxiTheme = getVerticalTheme('taxi');
 
 const VERTICALS = [
   {
-    id: 'food',
-    name: 'Hello Parth Food',
-    path: '/food/user',
-    themeBg: foodTheme.themeBg,
-    activeTabBg: foodTheme.activeTabBg,
-    inactiveTabBg: foodTheme.inactiveTabBg,
-  },
-  {
     id: 'taxi',
     name: 'Hello Parth Taxi',
     path: '/taxi/user',
     themeBg: taxiTheme.themeBg,
     activeTabBg: taxiTheme.activeTabBg,
     inactiveTabBg: taxiTheme.inactiveTabBg,
+  },
+  {
+    id: 'food',
+    name: 'Hello Parth Food',
+    path: '/food/user',
+    themeBg: foodTheme.themeBg,
+    activeTabBg: foodTheme.activeTabBg,
+    inactiveTabBg: foodTheme.inactiveTabBg,
   },
 ];
 
@@ -130,8 +135,10 @@ export default function SuperAppHomeHeader({
   const reactLocation = useLocation();
   const locationPath = reactLocation.pathname;
 
-  let routeVertical = 'food';
-  if (locationPath.startsWith('/taxi/')) {
+  let routeVertical = 'taxi';
+  if (locationPath.startsWith('/food/')) {
+    routeVertical = 'food';
+  } else if (locationPath.startsWith('/taxi/')) {
     routeVertical = 'taxi';
   } else if (['food', 'taxi'].includes(activeVerticalProp)) {
     routeVertical = activeVerticalProp;
@@ -147,7 +154,10 @@ export default function SuperAppHomeHeader({
   const handleVerticalTabClick = useCallback((verticalId) => {
     if (verticalId === 'food') {
       ensureFoodGuestSession();
-      navigate('/food/user');
+      prefetchFoodUser();
+      startTransition(() => {
+        navigate('/food/user');
+      });
       return;
     }
     if (verticalId === 'taxi') {
@@ -158,10 +168,39 @@ export default function SuperAppHomeHeader({
         }));
         return;
       }
+      prefetchTaxiUser();
       syncThemeForPath('/taxi/user');
-      navigate('/taxi/user');
+      startTransition(() => {
+        navigate('/taxi/user');
+      });
     }
   }, [navigate]);
+
+  // Warm the sibling vertical after first paint so Food ↔ Taxi feels instant.
+  useEffect(() => {
+    let cancelled = false;
+    const warm = () => {
+      if (!cancelled) prefetchSiblingUserVertical(activeVertical);
+    };
+    let idleId;
+    if (typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(warm, { timeout: 1500 });
+    } else {
+      idleId = window.setTimeout(warm, 400);
+    }
+    return () => {
+      cancelled = true;
+      if (typeof window.cancelIdleCallback === 'function' && typeof idleId === 'number') {
+        try {
+          window.cancelIdleCallback(idleId);
+        } catch {
+          window.clearTimeout(idleId);
+        }
+      } else {
+        window.clearTimeout(idleId);
+      }
+    };
+  }, [activeVertical]);
 
   const [storedLocation, setStoredLocation] = useState(() => readHelloParthLocation());
 
@@ -222,8 +261,16 @@ export default function SuperAppHomeHeader({
               <button
                 type="button"
                 onClick={() => handleVerticalTabClick(vertical.id)}
+                onMouseEnter={() => {
+                  if (vertical.id === 'taxi') prefetchTaxiUser();
+                  if (vertical.id === 'food') prefetchFoodUser();
+                }}
+                onFocus={() => {
+                  if (vertical.id === 'taxi') prefetchTaxiUser();
+                  if (vertical.id === 'food') prefetchFoodUser();
+                }}
                 style={isActive ? { '--active-tab-bg': tabTheme.activeTab } : undefined}
-                className={`w-full min-h-[74px] flex flex-col items-center justify-center px-2 transition-all duration-300 rounded-t-[1.75rem] pt-2.5 pb-2.5 ${
+                className={`w-full min-h-[74px] flex flex-col items-center justify-center px-2 transition-all duration-200 rounded-t-[1.75rem] pt-2.5 pb-2.5 ${
                   isActive
                     ? `${vertical.activeTabBg} curvy-active-tab shadow-sm`
                     : `${inactiveTabClass}`

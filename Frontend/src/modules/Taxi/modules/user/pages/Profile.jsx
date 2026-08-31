@@ -73,7 +73,7 @@ const menuSections = [
   }
 ];
 
-const Profile = () => {
+const Profile = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [appearanceTheme, setAppearanceTheme] = useState(() => getFoodUserTheme());
@@ -475,7 +475,7 @@ const Profile = () => {
         isLoggingOut={isLoggingOut}
       />
 
-      <BottomNavbar />
+      {!embedded && <BottomNavbar />}
     </div>
   );
 };

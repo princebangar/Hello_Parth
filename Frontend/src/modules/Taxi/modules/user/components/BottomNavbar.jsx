@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { startTransition } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Clock, Map, User, BusFront } from 'lucide-react';
 import { useSettings } from '../../../shared/context/SettingsContext';
 
@@ -24,82 +23,49 @@ const BottomNavbar = () => {
         {navItems.map(({ icon: Icon, label, path }) => {
           const isActive =
             path === '/taxi/user'
-              ? pathname === path
+              ? pathname === path || pathname === `${path}/`
               : pathname === path || pathname.startsWith(`${path}/`);
 
           return (
             <button
               key={label}
               type="button"
-              onClick={() => navigate(path)}
+              onClick={() => {
+                if (isActive) return;
+                startTransition(() => {
+                  navigate(path);
+                });
+              }}
               className="flex-1 flex flex-col items-center justify-center py-1.5 relative z-10 outline-none tap-highlight-transparent group"
             >
               <div className="relative flex flex-col items-center">
-                {/* Active Sliding Background Pill */}
-                <AnimatePresence>
-                  {isActive && (
-                    <motion.div
-                      layoutId="active-pill"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 400,
-                        damping: 32,
-                        mass: 1
-                      }}
-                      className="absolute -inset-y-2 -inset-x-4 bg-slate-900 rounded-[20px] shadow-[0_8px_20px_rgba(15,23,42,0.25)]"
-                    />
-                  )}
-                </AnimatePresence>
+                <div
+                  className={`absolute -inset-y-2 -inset-x-4 rounded-[20px] transition-all duration-150 ${
+                    isActive
+                      ? 'bg-slate-900 shadow-[0_8px_20px_rgba(15,23,42,0.25)] opacity-100'
+                      : 'opacity-0'
+                  }`}
+                />
 
-                {/* Icon Container with Transition */}
-                <motion.div
-                  animate={{ 
-                    scale: isActive ? 1.15 : 1,
-                    y: isActive ? -1 : 0
-                  }}
-                  transition={{
-                    type: 'spring',
-                    stiffness: 400,
-                    damping: 30
-                  }}
-                  className="relative z-20"
+                <div
+                  className={`relative z-20 transition-transform duration-150 ${
+                    isActive ? 'scale-110 -translate-y-px' : 'scale-100'
+                  }`}
                 >
                   <Icon
                     size={21}
                     strokeWidth={isActive ? 2.5 : 2}
-                    className={`transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}
+                    className={`transition-colors duration-150 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}
                   />
-                </motion.div>
+                </div>
 
-                {/* Label with Transition */}
-                <motion.span 
-                  animate={{ 
-                    opacity: isActive ? 1 : 0.5,
-                    y: isActive ? 2 : 1,
-                    scale: isActive ? 1 : 0.95
-                  }}
-                  transition={{
-                    duration: 0.2
-                  }}
-                  className={`relative z-20 text-[10px] font-black uppercase tracking-[0.18em] font-['Outfit'] mt-1 transition-colors duration-300 ${
+                <span
+                  className={`relative z-20 text-[10px] font-black uppercase tracking-[0.18em] font-['Outfit'] mt-1 transition-colors duration-150 ${
                     isActive ? 'text-white' : 'text-slate-500'
                   }`}
                 >
                   {label}
-                </motion.span>
-                
-                {/* Subtle Bottom Glow for Active Tab */}
-                {isActive && (
-                  <motion.div
-                    layoutId="active-glow"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 400,
-                      damping: 32
-                    }}
-                    className="absolute -bottom-2 w-4 h-1 bg-white/20 rounded-full blur-[2px]"
-                  />
-                )}
+                </span>
               </div>
             </button>
           );

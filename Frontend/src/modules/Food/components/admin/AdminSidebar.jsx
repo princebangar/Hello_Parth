@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigationType, useNavigate } from "react-router-
 import {
   FOOD_ADMIN_HOME,
   TAXI_ADMIN_HOME,
+  prefetchFoodAdmin,
   prefetchTaxiAdmin,
 } from "@/shared/utils/activeModule.js"
 import {
@@ -219,10 +220,22 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
   }, [showTaxiTab])
 
   const switchAdminModule = (path) => {
-    if (path === TAXI_ADMIN_HOME) prefetchTaxiAdmin()
-    startTransition(() => {
-      navigate(path)
-    })
+    const go = () => {
+      startTransition(() => {
+        navigate(path)
+      })
+    }
+
+    // Wait for sibling chunks so the first Food ↔ Taxi switch has no blank flash.
+    if (path === TAXI_ADMIN_HOME) {
+      Promise.resolve(prefetchTaxiAdmin()).finally(go)
+      return
+    }
+    if (path === FOOD_ADMIN_HOME) {
+      Promise.resolve(prefetchFoodAdmin()).finally(go)
+      return
+    }
+    go()
   }
 
   useEffect(() => {
