@@ -1256,7 +1256,7 @@ function showForegroundNotification(payload = {}) {
           if (registration) {
             registration.showNotification(title, {
               body,
-              icon: "/assets/images/Hello Parth Logo.png",
+              icon: "/hello-parth-logo.png",
               image,
               tag: notificationKey || undefined,
               renotify: false,
@@ -1267,7 +1267,7 @@ function showForegroundNotification(payload = {}) {
           } else {
             new Notification(title, {
               body,
-              icon: "/assets/images/Hello Parth Logo.png",
+              icon: "/hello-parth-logo.png",
               image,
               tag: notificationKey || undefined,
               requireInteraction: true,
@@ -1276,7 +1276,7 @@ function showForegroundNotification(payload = {}) {
         }).catch(() => {
           new Notification(title, {
             body,
-            icon: "/assets/images/Hello Parth Logo.png",
+            icon: "/hello-parth-logo.png",
             image,
             tag: notificationKey || undefined,
           });
@@ -1284,7 +1284,7 @@ function showForegroundNotification(payload = {}) {
       } else {
         new Notification(title, {
           body,
-          icon: "/assets/images/Hello Parth Logo.png",
+          icon: "/hello-parth-logo.png",
           image,
           tag: notificationKey || undefined,
         });

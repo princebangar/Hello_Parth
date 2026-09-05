@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, X, Car } from 'lucide-react';
 import heroImg from '@/assets/landing/hero.png';
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { useSettings } from '../../../shared/context/SettingsContext';
 
 import mobilityBanner from '@/assets/images/mobility-banner-cartoony.png';
@@ -11,7 +12,7 @@ const AuthLayout = ({ children, title, subtitle }) => {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'Hello Parth';
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+  const appLogo = DEFAULT_BRAND_LOGO;
 
   const handleClose = () => {
     navigate('/user', { replace: true });
@@ -41,17 +42,11 @@ const AuthLayout = ({ children, title, subtitle }) => {
 
         <div className="relative z-10 w-full h-full flex flex-col justify-between mt-12">
           <div className="flex items-center gap-4 mb-16">
-            {appLogo ? (
-              <img
-                src={appLogo}
-                alt={`${appName} logo`}
-                className="w-12 h-12 rounded-xl object-contain bg-white shadow-lg p-1"
-              />
-            ) : (
-              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg">
-                <div className="w-6 h-6 bg-[#1A1A1A] rounded-md"></div>
-              </div>
-            )}
+            <img
+              src={appLogo}
+              alt={`${appName} logo`}
+              className="w-12 h-12 rounded-xl object-contain bg-white shadow-lg p-1"
+            />
             <div className="flex items-center gap-2">
               <span className="text-3xl font-black tracking-tight">{appName}</span>
               <span className="px-2.5 py-0.5 rounded-full bg-[#F38F24]/20 border border-[#F38F24]/40 text-[#F38F24] text-xs font-black uppercase tracking-widest flex items-center gap-1">
@@ -108,17 +103,11 @@ const AuthLayout = ({ children, title, subtitle }) => {
 
         {/* Mobile Header (Visible only on small screens) */}
         <div className="lg:hidden w-full flex flex-col items-center text-center mt-4 mb-6 z-20 px-6">
-            {appLogo ? (
-              <img
-                src={appLogo}
-                alt={`${appName} logo`}
-                className="w-16 h-16 rounded-2xl object-contain bg-white p-2 mb-3 shadow-xl"
-              />
-            ) : (
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-3 shadow-xl">
-                <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg"></div>
-              </div>
-            )}
+            <img
+              src={appLogo}
+              alt={`${appName} logo`}
+              className="w-16 h-16 rounded-2xl object-contain bg-white p-2 mb-3 shadow-xl"
+            />
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-black text-white tracking-tight">{appName}</h2>
               <span className="px-2.5 py-0.5 rounded-full bg-[#F38F24] text-white text-xs font-black uppercase tracking-widest flex items-center gap-1 shadow-md">

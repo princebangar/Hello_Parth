@@ -8,6 +8,7 @@ import {
   Mail,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo";
 import { useSettings } from "../../../../shared/context/SettingsContext";
 import {
   clearDriverRegistrationSession,
@@ -108,7 +109,7 @@ const RegistrationStatus = () => {
   const requestInFlightRef = useRef(false);
 
   const appName = settings.general?.app_name || "App";
-  const appLogo = settings.general?.logo || settings.customization?.logo;
+  const appLogo = DEFAULT_BRAND_LOGO;
   const routePrefix = location.pathname.startsWith("/taxi/owner")
     ? "/taxi/owner"
     : "/taxi/driver";
@@ -334,17 +335,11 @@ const RegistrationStatus = () => {
     >
       <div className="mx-auto flex w-full max-w-md min-h-[calc(100dvh-2rem)] flex-col justify-center py-2 sm:py-0">
         <div className="mb-5 flex justify-center">
-          {appLogo ? (
-            <img
-              src={appLogo}
-              alt={appName}
-              className="h-10 object-contain drop-shadow-sm"
-            />
-          ) : (
-            <div className="rounded-2xl bg-slate-950 px-5 py-2.5 text-lg font-black tracking-tighter text-white shadow-xl shadow-slate-950/20">
-              {appName}
-            </div>
-          )}
+          <img
+            src={appLogo}
+            alt={appName}
+            className="h-10 object-contain drop-shadow-sm"
+          />
         </div>
 
         <div className="w-full rounded-[20px] sm:rounded-[28px] border border-slate-200 bg-white p-5 sm:p-8 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">

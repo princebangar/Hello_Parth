@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
 import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/moduleAuth"
 import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo, CONSUMER_GUEST_HOME } from "@/shared/utils/activeModule.js"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
@@ -478,7 +479,7 @@ export default function UnifiedOTPFastLogin() {
             className="flex items-center gap-4 mb-16"
           >
             <div className="w-12 h-12 flex items-center justify-center bg-white rounded-xl shadow-lg">
-              <img src="/hello-parth-logo.png" alt="Hello Parth" className="w-8 h-8 object-contain" />
+              <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="w-8 h-8 object-contain" />
             </div>
             <h1 className="text-3xl font-black tracking-tight">Hello Parth</h1>
           </motion.div>
@@ -553,7 +554,7 @@ export default function UnifiedOTPFastLogin() {
             >
               {/* Circular Logo */}
               <img
-                src="/hello-parth-logo.png"
+                src={DEFAULT_BRAND_LOGO}
                 alt="Hello Parth"
                 className="w-[84px] h-[84px] rounded-full object-cover shadow-lg mb-6"
               />

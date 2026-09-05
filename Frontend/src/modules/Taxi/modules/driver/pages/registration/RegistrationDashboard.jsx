@@ -13,17 +13,17 @@ import {
     Clock,
     ShieldAlert,
     Stars,
-    Zap,
     ShieldCheck
 } from 'lucide-react';
 import RegistrationProgress from '../../../shared/components/RegistrationProgress';
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const RegistrationDashboard = () => {
     const navigate = useNavigate();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
-    const appLogo = settings.general?.logo || settings.customization?.logo;
+    const appLogo = DEFAULT_BRAND_LOGO;
 
     const steps = [
         { id: 'personal', title: 'Personal Information', sub: 'ID & Profile', icon: <User size={18} /> },
@@ -41,11 +41,7 @@ const RegistrationDashboard = () => {
                     animate={{ scale: 1, opacity: 1 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-taxi-text shadow-2xl overflow-hidden p-2"
                 >
-                    {appLogo ? (
-                        <img src={appLogo} alt={appName} className="w-full h-full object-contain" />
-                    ) : (
-                        <Zap size={24} className="text-slate-900" />
-                    )}
+                    <img src={appLogo} alt={appName} className="w-full h-full object-contain" />
                 </motion.div>
                 
                 <motion.div 

@@ -40,10 +40,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@food/components/ui/popover";
-import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png";
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo";
 import { adminAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
-import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings";
 import useAdminNotifications from "@food/hooks/useAdminNotifications";
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -59,43 +58,12 @@ export default function AdminNavbar({ onMenuClick }) {
   const [recentSearches, setRecentSearches] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [adminData, setAdminData] = useState(null);
-  const [businessSettings, setBusinessSettings] = useState(() => getCachedSettings() || null);
   const searchInputRef = useRef(null);
   const {
     items: adminNotifications,
     unreadCount: notificationCount,
     markAsRead,
   } = useAdminNotifications();
-
-  // Load business settings
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const cached = getCachedSettings();
-        if (cached) {
-          setBusinessSettings(cached);
-        } else {
-          const settings = await loadBusinessSettings();
-          if (settings) {
-            setBusinessSettings(settings);
-          }
-        }
-      } catch (error) {
-        debugError('Error loading settings:', error);
-      }
-    };
-    loadSettings();
-
-    // Listen for business settings updates
-    const handleSettingsUpdate = () => {
-      const settings = getCachedSettings();
-      if (settings) {
-        setBusinessSettings(settings);
-      }
-    };
-    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate);
-    return () => window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate);
-  }, []);
 
   // Load recent searches from localStorage
   useEffect(() => {
@@ -288,27 +256,8 @@ export default function AdminNavbar({ onMenuClick }) {
             </button>
             {/* Logo */}
             <div className="flex items-center gap-2">
-              <div className="w-24 h-12 rounded-lg bg-white flex items-center justify-center ring-neutral-200">
-                {businessSettings?.logo?.url ? (
-                  <img
-                    src={businessSettings.logo.url}
-                    alt={businessSettings.companyName || "Company"}
-                    className="w-24 h-10 object-contain"
-                    loading="lazy"
-                    onError={(e) => {
-                      // Fallback to default logo if company logo fails to load
-                      e.target.src = quickSpicyLogo;
-                    }}
-                  />
-                ) : (
-                  businessSettings?.companyName ? (
-                    <span className="text-sm font-semibold text-neutral-700 px-2 truncate">
-                      {businessSettings.companyName}
-                    </span>
-                  ) : (
-                    <img src={quickSpicyLogo} alt={businessSettings?.companyName || "Company"} className="w-24 h-10 object-contain" loading="lazy" />
-                  )
-                )}
+              <div className="w-28 h-12 rounded-lg bg-white flex items-center justify-center">
+                <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-10 w-auto max-w-[112px] object-contain" loading="lazy" />
               </div>
             </div>
           </div>

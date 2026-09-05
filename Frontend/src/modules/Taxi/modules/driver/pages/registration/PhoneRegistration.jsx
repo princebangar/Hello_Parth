@@ -10,6 +10,7 @@ import {
     sendDriverOtp,
 } from '../../services/registrationService';
 
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { RENTAL_ENABLED } from '../../../../shared/featureFlags';
 import loginBg from '../../../../assets/images/driver-login-bg.png';
@@ -231,19 +232,13 @@ const PhoneRegistration = () => {
                     className="space-y-4 mb-6 flex flex-col items-center text-center"
                 >
                     <div className="flex flex-col items-center gap-3">
-                        {settings.general?.logo || settings.customization?.logo ? (
-                            <div className="w-14 h-14 bg-white rounded-[1.25rem] flex items-center justify-center shadow-sm border border-slate-100 overflow-hidden">
-                                <img
-                                    src={settings.general?.logo || settings.customization?.logo}
-                                    alt={appName}
-                                    className="w-full h-full object-cover scale-110"
-                                />
-                            </div>
-                        ) : (
-                            <div className="rounded-xl bg-[#1A1A1A] px-4 py-2 text-sm font-black tracking-tight text-white shadow-sm">
-                                {appName}
-                            </div>
-                        )}
+                        <div className="w-14 h-14 bg-white rounded-[1.25rem] flex items-center justify-center shadow-sm border border-slate-100 overflow-hidden">
+                            <img
+                                src={DEFAULT_BRAND_LOGO}
+                                alt={appName}
+                                className="w-full h-full object-contain p-1"
+                            />
+                        </div>
                     </div>
 
                     <motion.section

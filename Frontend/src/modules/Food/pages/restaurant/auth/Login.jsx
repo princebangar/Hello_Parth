@@ -10,6 +10,7 @@ import {
 } from "@food/utils/auth"
 import { clearOnboardingFromLocalStorage, clearAllFilesFromDB, checkOnboardingStatus, isRestaurantOnboardingComplete } from "@/modules/Food/utils/onboardingUtils"
 import { collectFcmTokenFast, persistModuleFcmToken } from "@food/utils/firebaseMessaging"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -634,8 +635,8 @@ export default function RestaurantLogin() {
           {/* Logo & Header */}
           <div className="mb-5 text-center flex flex-col items-center">
             <img
-              src="/assets/images/Hello Parth Logo.png"
-              alt="Hello Parth Food"
+              src={DEFAULT_BRAND_LOGO}
+              alt="Hello Parth"
               className="h-28 -mb-3.5 object-contain drop-shadow-md"
             />
             <h2 className="text-[25px] font-extrabold text-[#B80B3D] dark:text-red-400 tracking-tight font-['Outfit']">

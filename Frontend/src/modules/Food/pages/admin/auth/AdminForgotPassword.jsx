@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@food/components/ui/button"
 import {
@@ -12,10 +12,9 @@ import {
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Mail, ArrowLeft, Shield } from "lucide-react"
-import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { adminAPI } from "@food/api"
 import { useCompanyName } from "@food/hooks/useCompanyName"
-import { loadBusinessSettings } from "@food/utils/businessSettings"
 
 export default function AdminForgotPassword() {
   const companyName = useCompanyName()
@@ -30,33 +29,7 @@ export default function AdminForgotPassword() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [resendTimer, setResendTimer] = useState(0)
-  const [logoUrl, setLogoUrl] = useState(quickSpicyLogo)
   const inputRefs = useRef(Array(6).fill(null).map(() => null))
-
-  // Fetch business settings logo on mount
-  useEffect(() => {
-    const fetchLogo = async () => {
-      try {
-        const settings = await loadBusinessSettings()
-        if (settings?.logo?.url) {
-          setLogoUrl(settings.logo.url)
-        }
-      } catch (error) {
-        // Silently fail
-      }
-    }
-    fetchLogo()
-
-    // Listen for business settings updates
-    const handleSettingsUpdate = async () => {
-      const settings = await loadBusinessSettings();
-      if (settings?.logo?.url) {
-        setLogoUrl(settings.logo.url);
-      }
-    };
-    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate);
-    return () => window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate);
-  }, [])
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault()
@@ -223,15 +196,10 @@ export default function AdminForgotPassword() {
             <div className="flex w-full items-center gap-4 sm:gap-5">
               <div className="flex h-14 w-28 shrink-0 items-center justify-center rounded-xl bg-gray-900/5 ring-1 ring-neutral-200">
                 <img
-                  src={logoUrl || quickSpicyLogo}
+                  src={DEFAULT_BRAND_LOGO}
                   alt={companyName}
                   className="h-10 w-24 object-contain"
                   loading="lazy"
-                  onError={(e) => {
-                    if (e.target.src !== quickSpicyLogo) {
-                      e.target.src = quickSpicyLogo
-                    }
-                  }}
                 />
               </div>
               <div className="flex flex-col gap-1">

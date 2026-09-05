@@ -15,7 +15,7 @@ import { useLocationSelector } from "./UserLayout"
 import { useProfile } from "@food/context/ProfileContext"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import { isModuleAuthenticated } from "@food/utils/auth"
-import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -139,7 +139,7 @@ export default function Navbar() {
                 {companyName}
               </span>
             ) : (
-              <img src={quickSpicyLogo} alt="Logo" className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain" />
+              <img src={DEFAULT_BRAND_LOGO} alt="Logo" className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain" />
             )}
           </Link>
 

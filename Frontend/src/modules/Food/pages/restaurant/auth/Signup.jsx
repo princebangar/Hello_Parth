@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Phone, User, AlertCircle, Loader2, UtensilsCrossed } from "lucide-react"
+import { Phone, User, AlertCircle, Loader2 } from "lucide-react"
 import { restaurantAPI } from "@food/api"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@food/components/ui/select"
 import loginBg from "@food/assets/loginbanner.png"
-import { useCompanyName } from "@food/hooks/useCompanyName"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 
 const countryCodes = [
   { code: "+91", country: "IN", flag: "🇮🇳" },
@@ -22,7 +22,6 @@ const countryCodes = [
 
 export default function RestaurantSignup() {
   const navigate = useNavigate()
-  const companyName = useCompanyName()
   const [formData, setFormData] = useState({
     phone: "",
     countryCode: "+91",
@@ -170,13 +169,12 @@ export default function RestaurantSignup() {
             className="flex items-center gap-3"
             style={{ animation: "fadeInDown 0.7s ease-out both" }}
           >
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[#B80B3D] to-[#66001D] flex items-center justify-center text-white shadow-lg">
-              <UtensilsCrossed className="h-6 w-6" />
-            </div>
+            <img
+              src={DEFAULT_BRAND_LOGO}
+              alt="Hello Parth"
+              className="h-12 w-auto max-w-[160px] object-contain"
+            />
             <div className="flex flex-col items-start">
-              <span className="text-2xl font-bold tracking-wide text-primary-orange">
-                {companyName}
-              </span>
               <span className="text-xs font-medium text-gray-500">
                 Restaurant Panel
               </span>

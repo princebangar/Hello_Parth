@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@food/components/ui/button"
 import {
@@ -12,10 +12,9 @@ import {
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Mail, User, Lock, Eye, EyeOff, ArrowLeft, Shield } from "lucide-react"
-import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { authAPI, adminAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
-import { loadBusinessSettings } from "@food/utils/businessSettings"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -36,35 +35,7 @@ export default function AdminSignup() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [resendTimer, setResendTimer] = useState(0)
-  const [logoUrl, setLogoUrl] = useState(quickSpicyLogo)
   const inputRefs = useRef(Array(6).fill(null).map(() => null))
-
-  // Fetch business settings logo on mount
-  useEffect(() => {
-    const fetchLogo = async () => {
-      try {
-        const settings = await loadBusinessSettings()
-        if (settings?.logo?.url) {
-          setLogoUrl(settings.logo.url)
-        }
-      } catch (error) {
-        // Silently fail and use default logo
-        debugWarn("Failed to load business settings logo:", error)
-      }
-    }
-    fetchLogo()
-
-    // Listen for business settings updates
-    const handleSettingsUpdate = async () => {
-      // Force reload settings from backend
-      const settings = await loadBusinessSettings();
-      if (settings?.logo?.url) {
-        setLogoUrl(settings.logo.url);
-      }
-    };
-    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate);
-    return () => window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate);
-  }, [])
 
   const handleFormSubmit = async (e) => {
     e.preventDefault()
@@ -247,16 +218,10 @@ export default function AdminSignup() {
             <div className="flex w-full items-center gap-4 sm:gap-5">
               <div className="flex h-14 w-28 shrink-0 items-center justify-center rounded-xl bg-gray-900/5 ring-1 ring-neutral-200">
                 <img
-                  src={logoUrl || quickSpicyLogo}
-                  alt="Logo"
+                  src={DEFAULT_BRAND_LOGO}
+                  alt="Hello Parth"
                   className="h-10 w-24 object-contain"
                   loading="lazy"
-                  onError={(e) => {
-                    // Fallback to default logo if business logo fails to load
-                    if (e.target.src !== quickSpicyLogo) {
-                      e.target.src = quickSpicyLogo
-                    }
-                  }}
                 />
               </div>
               <div className="flex flex-col gap-1">

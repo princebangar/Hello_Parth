@@ -185,7 +185,7 @@ const setLiveFavicon = (faviconUrl = '') => {
     liveFaviconObjectUrl = '';
   }
 
-  let resolvedHref = '/assets/images/Hello Parth Logo.png';
+  let resolvedHref = '/hello-parth-logo.png';
 
   if (faviconUrl) {
     if (String(faviconUrl).startsWith('data:')) {

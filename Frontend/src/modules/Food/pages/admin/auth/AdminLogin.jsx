@@ -5,6 +5,7 @@ import { setAuthData } from "@food/utils/auth";
 import { setUnifiedAdminSession } from "../../../../Taxi/modules/admin/services/adminSession";
 import { User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo";
 
 
 // Reusable Input Component (Inline)
@@ -231,8 +232,8 @@ export default function AdminLogin() {
           {/* Logo */}
           <div className="w-[160px] md:w-[220px] mb-4 select-none flex justify-center items-center md:items-start">
              <img
-              src="/assets/images/hello-parth-logo.png"
-              alt="Admin"
+              src={DEFAULT_BRAND_LOGO}
+              alt="Hello Parth"
               className="w-full object-contain"
             />
           </div>

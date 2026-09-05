@@ -184,7 +184,7 @@ export const SettingsProvider = ({ children }) => {
   useEffect(() => {
     document.title = normalizeAppDisplayName(settings.general?.app_name);
 
-    const favicon = settings.general?.favicon || settings.customization?.favicon || '/assets/images/Hello Parth Logo.png';
+    const favicon = settings.general?.favicon || settings.customization?.favicon || '/hello-parth-logo.png';
     const href = buildFaviconHref(favicon);
     const type = getFaviconType(favicon);
 

@@ -80,7 +80,7 @@ export const updateFavicon = (url) => {
   if (typeof document === 'undefined') return;
 
   // Admin favicon when present; otherwise default Hello Parth favicon
-  const href = (url && String(url).trim()) || '/assets/images/Hello Parth Logo.png';
+  const href = (url && String(url).trim()) || '/hello-parth-logo.png';
 
   // Remove existing favicons
   const existingFavicons = document.querySelectorAll("link[rel*='icon']");

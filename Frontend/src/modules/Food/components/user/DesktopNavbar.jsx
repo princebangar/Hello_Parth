@@ -10,7 +10,7 @@ import { useLocationSelector, useSearchOverlay } from "./UserLayout"
 import { useProfile } from "@food/context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
 import { AnimatePresence, motion } from "framer-motion"
-import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png"
+import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import api from "@food/api"
 import { isModuleAuthenticated } from "@food/utils/auth"
@@ -206,17 +206,17 @@ export default function DesktopNavbar({ showLogo = true }) {
                                 <Link to="/food/user" className="flex items-center justify-center flex-shrink-0">
                                     {logoUrl || companyName ? (
                                         <img
-                                            src={logoUrl || quickSpicyLogo}
+                                            src={logoUrl || DEFAULT_BRAND_LOGO}
                                             alt={companyName || "Company Logo"}
                                             className="h-10 w-auto md:h-14 lg:h-16 object-contain"
                                             onError={(e) => {
-                                                if (e.target.src !== quickSpicyLogo) {
-                                                    e.target.src = quickSpicyLogo
+                                                if (e.target.src !== DEFAULT_BRAND_LOGO) {
+                                                    e.target.src = DEFAULT_BRAND_LOGO
                                                 }
                                             }}
                                         />
                                     ) : (
-                                        <img src={quickSpicyLogo} alt={companyName || "Logo"} className="h-10 w-auto md:h-14 lg:h-16 object-contain" />
+                                        <img src={DEFAULT_BRAND_LOGO} alt={companyName || "Logo"} className="h-10 w-auto md:h-14 lg:h-16 object-contain" />
                                     )}
                                 </Link>
                             )}

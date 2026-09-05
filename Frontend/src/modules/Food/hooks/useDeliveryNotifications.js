@@ -578,7 +578,7 @@ export const useDeliveryNotifications = () => {
             requireInteraction: true,
             silent: false,
             vibrate: [200, 100, 200, 100, 300],
-            icon: '/assets/images/Hello Parth Logo.png',
+            icon: '/hello-parth-logo.png',
             data: notificationOptions.data,
           });
           return;
@@ -590,7 +590,7 @@ export const useDeliveryNotifications = () => {
         tag: notificationOptions.tag,
         requireInteraction: true,
         silent: false,
-        icon: '/assets/images/Hello Parth Logo.png',
+        icon: '/hello-parth-logo.png',
         data: notificationOptions.data,
       });
     } catch (error) {

@@ -4,6 +4,7 @@ import { ShieldCheck, Mail, Lock, ArrowRight, Loader2, AlertCircle, KeyRound, Ch
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminService } from '../../services/adminService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { setUnifiedAdminSession } from '../../services/adminSession';
 
 const AdminLogin = () => {
@@ -20,7 +21,7 @@ const AdminLogin = () => {
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
 
-  const appLogo = settings.general?.logo || settings.customization?.logo;
+  const appLogo = DEFAULT_BRAND_LOGO;
   const appName = settings.general?.app_name || 'App';
   const brandAccent = settings.customization?.admin_theme_color || '#F97316';
 
@@ -308,18 +309,12 @@ const AdminLogin = () => {
         )}
 
         <div className="flex flex-col items-center mb-3 md:mb-6 text-center">
-          {appLogo ? (
-            <img
-              src={appLogo}
-              alt={`${appName} Logo`}
-              className="w-36 sm:w-44 md:w-56 h-auto mb-2 md:mb-4 object-contain drop-shadow-2xl cursor-pointer hover:scale-105 transition-transform"
-              onClick={() => navigate('/taxi')}
-            />
-          ) : (
-            <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white mb-4 shadow-xl">
-               <ShieldCheck size={32} />
-            </div>
-          )}
+          <img
+            src={appLogo}
+            alt={`${appName} Logo`}
+            className="w-36 sm:w-44 md:w-56 h-auto mb-2 md:mb-4 object-contain drop-shadow-2xl cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/taxi')}
+          />
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-full border border-gray-100">
             <ShieldCheck size={16} className="text-primary" />
             <span className="text-gray-500 font-bold text-[11px] uppercase tracking-[2px]">{appName} Access Terminal</span>

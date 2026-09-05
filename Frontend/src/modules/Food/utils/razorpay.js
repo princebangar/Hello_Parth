@@ -117,7 +117,7 @@ export const initRazorpayPayment = async (options) => {
       order_id: options.order_id,
       name: options.name || 'Hello Parth Food',
       description: options.description || 'Order Payment',
-      image: options.image || '/assets/images/Hello Parth Logo.png',
+      image: options.image || '/hello-parth-logo.png',
       prefill: {
         name: options.prefill?.name || '',
         email: options.prefill?.email || '',

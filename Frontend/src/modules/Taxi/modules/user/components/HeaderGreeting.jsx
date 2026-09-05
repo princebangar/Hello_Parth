@@ -10,13 +10,14 @@ const fallingCoins = [
   { id: 3, left: '72%', delay: 1.2 },
 ];
 
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { useSettings } from '../../../shared/context/SettingsContext';
 
 const HeaderGreeting = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || DEFAULT_BRAND_LOGO;
   const appName = settings.general?.app_name || 'App';
   const [locationLabel, setLocationLabel] = useState(getSavedLocationLabel);
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';

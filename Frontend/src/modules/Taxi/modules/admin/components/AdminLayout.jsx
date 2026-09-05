@@ -55,11 +55,12 @@ import {
   Users,
   UtensilsCrossed,
   Wallet,
+  X,
   Zap,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import quickSpicyLogo from "@/shared/assets/hello-parth-logo.png";
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -105,6 +106,23 @@ const flattenSearchEntries = (items = [], parentLabels = []) =>
 
     return [];
   });
+
+const filterSidebarItemsBySearch = (items = [], query = '') => {
+  if (!query) return items;
+
+  return items.flatMap((item) => {
+    const labelMatch = String(item.label || '').toLowerCase().includes(query);
+
+    if (item.subItems) {
+      const filteredChildren = filterSidebarItemsBySearch(item.subItems, query);
+      if (labelMatch) return [item];
+      if (filteredChildren.length > 0) return [{ ...item, subItems: filteredChildren }];
+      return [];
+    }
+
+    return labelMatch ? [item] : [];
+  });
+};
 
 const readAdminProfile = () => {
   if (typeof window === 'undefined') {
@@ -595,6 +613,7 @@ const AdminLayout = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notificationTab, setNotificationTab] = useState('ride_requests');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
   const [rideRequestFeed, setRideRequestFeed] = useState({
     results: [],
     paginator: { current_page: 1, last_page: 1, total: 0 },
@@ -1053,6 +1072,18 @@ const AdminLayout = () => {
     }
   }, [location.pathname, sidebarSections]);
 
+  const visibleSidebarSections = useMemo(() => {
+    const query = sidebarSearchQuery.toLowerCase().trim();
+    if (!query) return sidebarSections;
+
+    return sidebarSections
+      .map((section) => ({
+        ...section,
+        items: filterSidebarItemsBySearch(section.items || [], query),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [sidebarSearchQuery, sidebarSections]);
+
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
   const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);
   const filteredSearchEntries = useMemo(() => {
@@ -1361,37 +1392,60 @@ const AdminLayout = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-200 font-sans text-gray-900">
+      <style>{`
+        .admin-sidebar-scroll::-webkit-scrollbar {
+          width: 2px;
+        }
+        .admin-sidebar-scroll::-webkit-scrollbar-track {
+          background: rgba(17, 24, 39, 0.4);
+        }
+        .admin-sidebar-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 10px;
+        }
+        .admin-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.35);
+        }
+        .admin-sidebar-scroll:hover::-webkit-scrollbar {
+          width: 6px;
+        }
+        .admin-sidebar-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.25) rgba(17, 24, 39, 0.4);
+        }
+      `}</style>
       <aside
         className={cn(
           "relative z-50 flex h-screen flex-col overflow-hidden transition-all duration-500 bg-neutral-950 border-r border-neutral-800/60",
-          isCollapsed ? 'w-20' : 'w-72',
+          isCollapsed ? 'w-20' : 'w-80',
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         <div className="flex h-full flex-col">
-          <div className="group/sidebar-head relative mb-4 flex h-24 items-center border-b border-white/5 px-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/5 bg-white/5 p-1 transition-all group-hover/sidebar-head:scale-105">
-                <img src={quickSpicyLogo} alt="Hello Parth" className="h-10 w-10 object-contain" />
-              </div>
+          <div className="shrink-0 px-3 py-3 border-b border-neutral-800/60 bg-neutral-900">
+            <div className="relative flex items-center mb-3 min-h-[80px]">
+              <img
+                src={DEFAULT_BRAND_LOGO}
+                alt="Hello Parth"
+                className={isCollapsed ? "h-14 w-14 object-contain" : "h-20 w-20 object-contain"}
+              />
               {!isCollapsed && (
-                <div className="flex flex-col">
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <h3 className="text-[15px] font-extrabold leading-tight text-white tracking-tight">
-                    Hello Parth Admin
+                    Hello Parth
                   </h3>
                   <div className="mt-1 flex items-center gap-1.5">
                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                     <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                      System Admin
+                      Taxi Admin
                     </span>
                   </div>
                 </div>
               )}
-            </div>
             <button
               type="button"
               onClick={() => setCollapsed((current) => !current)}
-              className="absolute -right-3 top-9 z-[60] hidden h-7 w-7 items-center justify-center rounded-full border border-neutral-800 bg-neutral-900 text-neutral-300 shadow-lg ring-4 ring-neutral-950 transition-all hover:bg-white hover:text-black hover:scale-110 active:scale-90 lg:flex group/collapse"
+                className="absolute -right-3 top-1/2 z-[60] hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-neutral-800 bg-neutral-900 text-neutral-300 shadow-lg ring-4 ring-neutral-950 transition-all hover:bg-white hover:text-black hover:scale-110 active:scale-90 lg:flex group/collapse"
             >
               {isCollapsed ? (
                 <ChevronRight size={12} strokeWidth={3.5} className="transition-transform group-hover/collapse:translate-x-0.5" />
@@ -1402,7 +1456,7 @@ const AdminLayout = () => {
           </div>
 
           {!isCollapsed && (
-            <div className="px-6 mb-3">
+            <div className="mb-3">
               <h2 className="text-sm font-semibold text-neutral-300 uppercase tracking-wider text-left">
                 Admin Panel
               </h2>
@@ -1411,8 +1465,7 @@ const AdminLayout = () => {
 
           {/* Module Switcher Tabs */}
           {!isCollapsed && (showFoodTab || showTaxiTab) && (
-            <div className="px-4 mb-4">
-              <div className="flex p-1 bg-neutral-900/60 backdrop-blur-sm rounded-xl border border-white/5 shadow-inner">
+              <div className="flex p-1 bg-neutral-800/40 backdrop-blur-sm rounded-xl mb-4 border border-white/5 shadow-inner">
                 {showFoodTab && (
                   <button
                     type="button"
@@ -1442,11 +1495,43 @@ const AdminLayout = () => {
                   </button>
                 )}
               </div>
-            </div>
           )}
 
-          <nav className="no-scrollbar mt-0 flex-1 space-y-8 overflow-y-auto px-4 pb-12 scroll-smooth">
-            {sidebarSections.map((section) => (
+            {!isCollapsed && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4 z-10" />
+                <input
+                  type="text"
+                  placeholder="Search Menu..."
+                  value={sidebarSearchQuery}
+                  onChange={(event) => setSidebarSearchQuery(event.target.value)}
+                  className={cn(
+                    "w-full pl-9 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/40 transition-all duration-200 text-left",
+                    sidebarSearchQuery ? "pr-9" : "pr-3"
+                  )}
+                />
+                {sidebarSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSidebarSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white transition-all z-10"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <nav className="admin-sidebar-scroll mt-0 flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-y-contain px-3 py-3 scroll-smooth">
+            {visibleSidebarSections.length === 0 && sidebarSearchQuery.trim() ? (
+              <div className="px-3 py-12 text-left">
+                <p className="text-neutral-300 text-sm font-medium">No menu items found</p>
+                <p className="text-neutral-500 text-sm mt-2">Try a different search term</p>
+              </div>
+            ) : (
+              visibleSidebarSections.map((section) => (
               <div key={section.title} className="space-y-1">
                 {!isCollapsed && (
                   <div className="px-4 mb-4 flex items-center gap-2">
@@ -1461,7 +1546,7 @@ const AdminLayout = () => {
                     <SidebarGroup
                       key={item.label}
                       {...item}
-                      forceOpen={mode === OWNER_MODE}
+                      forceOpen={mode === OWNER_MODE || Boolean(sidebarSearchQuery.trim())}
                       isCollapsed={isCollapsed}
                       pathname={location.pathname}
                       groupKey={`${section.title}:${item.label}`}
@@ -1481,7 +1566,8 @@ const AdminLayout = () => {
                   )
                 )}
               </div>
-            ))}
+              ))
+            )}
           </nav>
         </div>
       </aside>

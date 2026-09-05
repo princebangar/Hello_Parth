@@ -11,7 +11,7 @@ export const showNotificationToast = ({ title, message } = {}) => {
       <div className="flex-shrink-0">
         <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] flex items-center justify-center shadow-lg">
           <img
-            src="/assets/images/hello-parth-logo.png"
+            src="/hello-parth-logo.png"
             alt="Hello Parth Food"
             className="w-7 h-7 object-contain brightness-0 invert"
             onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
@@ -40,7 +40,7 @@ export const showHelloParthBrandedToast = ({ title, message, id = "helloparth-br
         <div className="flex-shrink-0">
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] flex items-center justify-center p-1.5 shadow-lg">
             <img
-              src="/assets/images/hello-parth-logo.png"
+              src="/hello-parth-logo.png"
               alt="Hello Parth Food"
               className="w-full h-full object-contain brightness-0 invert"
             />
