@@ -1,22 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { GoogleMap, HeatmapLayer } from '@react-google-maps/api';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Circle, GoogleMap } from '@react-google-maps/api';
 import { 
   ChevronRight, 
   Map as MapIcon, 
   RefreshCw, 
-  Eye, 
   Settings2, 
   ArrowLeft,
   Activity,
   Zap,
   Navigation,
-  Layers,
-  MousePointer2
+  MapPinOff
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../utils/googleMaps';
+import { useBaseGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../utils/googleMaps';
 import { adminService } from '../../services/adminService';
-import { motion } from 'framer-motion';
 
 const INDIA_CENTER = { lat: 22.7196, lng: 75.8577 };
 const MAP_CONTAINER_STYLE = { width: '100%', height: '400px' };
@@ -35,191 +32,393 @@ const mapOptions = {
   ]
 };
 
+const FIRE_OVERLAY_STYLE = {
+  fillColor: '#ef4444',
+  strokeColor: '#b91c1c',
+};
+
+const hasUsableCoordinates = (latitude, longitude) => {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+};
+
+const toHeatBucketKey = (latitude, longitude) =>
+  `${Number(latitude).toFixed(3)}:${Number(longitude).toFixed(3)}`;
+
+const extractCoordinates = (item, source) => {
+  let coords = null;
+  if (source === 'ride_requests' || source === 'trip_pickups') {
+    coords = item?.pickupLocation?.coordinates;
+  } else if (source === 'trip_drops') {
+    coords = item?.dropLocation?.coordinates;
+  } else if (source === 'active_drivers') {
+    coords = item?.location?.coordinates || item?.currentLocation?.coordinates;
+  } else if (source === 'sos_alerts') {
+    coords = item?.location?.coordinates || item?.pickupLocation?.coordinates;
+  }
+
+  const longitude = Number(Array.isArray(coords) ? coords[0] : null);
+  const latitude = Number(Array.isArray(coords) ? coords[1] : null);
+
+  if (!hasUsableCoordinates(latitude, longitude)) {
+    return null;
+  }
+  return { latitude, longitude };
+};
+
 const HeatMap = () => {
   const navigate = useNavigate();
-  const [zones, setZones] = useState([]);
+  const [dataPoints, setDataPoints] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastSync, setLastSync] = useState(null);
+  
+  // Settings State
+  const [heatSource, setHeatSource] = useState('ride_requests');
   const [opacity, setOpacity] = useState(0.7);
   const [radius, setRadius] = useState(40);
-  const [gradient, setGradient] = useState('Default');
+  
+  // Filters State
+  const [timeRange, setTimeRange] = useState('all');
+  const [serviceLocation, setServiceLocation] = useState('all');
+  const [zone, setZone] = useState('all');
+  const [vehicleType, setVehicleType] = useState('all');
 
-  const { isLoaded, loadError } = useAppGoogleMapsLoader();
+  // Options Data
+  const [serviceLocations, setServiceLocations] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
 
-  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
-  const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
+  const { isLoaded, loadError } = useBaseGoogleMapsLoader();
 
-  const fetchZones = async () => {
+  const inputClass = "w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors";
+  const labelClass = "block text-[11px] font-bold text-gray-500 mb-1";
+
+  useEffect(() => {
+    // Load filter options
+    const loadOptions = async () => {
+      try {
+        const [locRes, zoneRes, vTypeRes] = await Promise.all([
+          adminService.getServiceLocations().catch(() => ({ data: [] })),
+          adminService.getZones().catch(() => ({ data: [] })),
+          adminService.getVehicleTypes().catch(() => ({ data: { results: [] } }))
+        ]);
+        setServiceLocations(locRes.data?.results || locRes.data || []);
+        setZones(zoneRes.data?.results || zoneRes.data || []);
+        setVehicleTypes(vTypeRes.data?.results || vTypeRes.data || []);
+      } catch (err) {
+        console.error("Failed to load filter options", err);
+      }
+    };
+    loadOptions();
+  }, []);
+
+  const fetchHeatmapData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await adminService.getZones();
-      const results = response?.data?.results || response?.data || [];
-      setZones(results);
+      let results = [];
+      if (heatSource === 'ride_requests') {
+        const res = await adminService.getRideRequests({ page: 1, limit: 500, tab: 'all' });
+        results = res?.data?.results || res?.data || [];
+      } else if (heatSource === 'active_drivers') {
+        const res = await adminService.getDrivers({ page: 1, limit: 500, status: 'active' });
+        results = res?.data?.results || res?.data || [];
+      } else if (heatSource === 'trip_pickups' || heatSource === 'trip_drops') {
+        const res = await adminService.getTrips({ page: 1, limit: 500, tab: 'all' });
+        results = res?.data?.results || res?.data || [];
+      } else if (heatSource === 'sos_alerts') {
+        const res = await adminService.getSafetyAlerts({ page: 1, limit: 500 });
+        results = res?.data?.results || res?.data || [];
+      }
+      setDataPoints(Array.isArray(results) ? results : []);
+      setLastSync(new Date());
     } catch (error) {
       console.error('Failed to fetch heatmap data', error);
+      setDataPoints([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [heatSource]);
 
   useEffect(() => {
-    fetchZones();
-  }, []);
+    fetchHeatmapData();
+  }, [fetchHeatmapData]);
 
-  const heatmapData = useMemo(() => {
-    if (!zones.length || !isLoaded || typeof window === 'undefined' || !window.google?.maps?.LatLng) return [];
-    return zones.flatMap((zone) => {
-      const coord = zone.coordinates?.[0]?.[0] || [75.8577, 22.7196];
-      const lat = Number(coord[1]);
-      const lng = Number(coord[0]);
-      
-      try {
-        return Array.from({ length: 12 }).map(() => ({
-          location: new window.google.maps.LatLng(
-            lat + (Math.random() - 0.5) * 0.08,
-            lng + (Math.random() - 0.5) * 0.08
-          ),
-          weight: Math.random() * 10
-        }));
-      } catch (err) {
-        return [];
+  // Client-side filtering
+  const filteredData = useMemo(() => {
+    return dataPoints.filter((item) => {
+      // Time Filter
+      if (timeRange !== 'all') {
+        const itemDate = new Date(item.createdAt || item.date || item.updatedAt);
+        if (!isNaN(itemDate.getTime())) {
+          const now = new Date();
+          const diffHour = (now - itemDate) / (1000 * 60 * 60);
+          if (timeRange === 'last_hour' && diffHour > 1) return false;
+          if (timeRange === 'today' && itemDate.toDateString() !== now.toDateString()) return false;
+        }
       }
+
+      // We apply generic matching if fields exist
+      if (serviceLocation !== 'all' && item.serviceLocationId && item.serviceLocationId !== serviceLocation) {
+        return false;
+      }
+      if (zone !== 'all' && item.zoneId && item.zoneId !== zone) {
+        return false;
+      }
+      if (vehicleType !== 'all' && item.vehicleTypeId && item.vehicleTypeId !== vehicleType) {
+        return false;
+      }
+
+      return true;
     });
-  }, [zones, isLoaded]);
+  }, [dataPoints, timeRange, serviceLocation, zone, vehicleType]);
+
+  const requestOverlays = useMemo(() => {
+    const buckets = new Map();
+
+    filteredData.forEach((item) => {
+      const coords = extractCoordinates(item, heatSource);
+      if (!coords) return;
+
+      const key = toHeatBucketKey(coords.latitude, coords.longitude);
+      const current = buckets.get(key) || {
+        id: key,
+        center: { lat: coords.latitude, lng: coords.longitude },
+        count: 0,
+      };
+
+      current.count += 1;
+      buckets.set(key, current);
+    });
+
+    return [...buckets.values()];
+  }, [filteredData, heatSource]);
+
+  const mapCenter = useMemo(() => {
+    if (requestOverlays.length > 0) {
+      return requestOverlays[0].center;
+    }
+    return INDIA_CENTER;
+  }, [requestOverlays]);
+
+  const circleRadiusMeters = Math.max(250, radius * 140);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8 font-sans">
+    <div className="min-h-screen bg-slate-50/50 p-3 lg:p-4 mx-auto w-full max-w-[1600px] font-sans">
       
-      {/* 1. Header Block (Design System Compliant) */}
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
-          <span>Map</span>
-          <ChevronRight size={12} />
-          <span className="text-gray-700">Heat Map</span>
+      {/* 1. Header Block */}
+      <div className="mb-2 flex flex-col md:flex-row md:items-center justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 mb-1">
+            <span>Geofencing</span>
+            <ChevronRight size={14} className="text-slate-300" />
+            <span className="text-slate-600">Heat Map</span>
+          </div>
+          <h1 className="text-base text-slate-900 font-bold">Heat Map Overlay</h1>
         </div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Heat Map</h1>
-          <button 
-             onClick={() => navigate('/taxi/admin/dashboard')}
-             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <ArrowLeft size={16} /> Back
-          </button>
-        </div>
+        <button 
+           onClick={() => navigate('/taxi/admin/dashboard')}
+           className="inline-flex w-fit items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm border border-slate-200 transition hover:bg-slate-50"
+        >
+          <ArrowLeft size={16} /> Back to Dashboard
+        </button>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-3">
         
         {/* 2. Map Canvas Card */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-2">
-           <div className="rounded-lg overflow-hidden relative">
+        <div className="bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm relative">
+           <div className="rounded-xl overflow-hidden relative">
               {loadError ? (
-                 <div className="h-[400px] flex items-center justify-center bg-gray-50 text-rose-500 font-semibold">Map Error</div>
-              ) : HAS_VALID_GOOGLE_MAPS_KEY && isLoaded && typeof window !== 'undefined' && window.google?.maps?.visualization ? (
-                 <GoogleMap
-                    mapContainerStyle={MAP_CONTAINER_STYLE} center={INDIA_CENTER} zoom={11} options={mapOptions}
-                 >
-                    <HeatmapLayer data={heatmapData} options={{ opacity, radius }} />
-                 </GoogleMap>
+                 <div className="h-[400px] flex items-center justify-center bg-slate-50 text-red-500 font-semibold">Map Load Error</div>
+              ) : HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
+                 <>
+                   <GoogleMap
+                      mapContainerStyle={MAP_CONTAINER_STYLE} center={mapCenter} zoom={11} options={mapOptions}
+                   >
+                      {requestOverlays.map((overlay) => (
+                        <Circle
+                          key={overlay.id}
+                          center={overlay.center}
+                          radius={circleRadiusMeters * Math.max(1, Math.min(overlay.count, 6))}
+                          options={{
+                            fillColor: FIRE_OVERLAY_STYLE.fillColor,
+                            fillOpacity: Math.max(0.18, Math.min(opacity * 0.6, 0.82)),
+                            strokeColor: FIRE_OVERLAY_STYLE.strokeColor,
+                            strokeOpacity: Math.max(0.2, Math.min(opacity, 0.9)),
+                            strokeWeight: 2,
+                            clickable: false,
+                          }}
+                        />
+                      ))}
+                   </GoogleMap>
+                   {requestOverlays.length === 0 && !loading && (
+                     <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[2px] pointer-events-none">
+                       <div className="bg-white px-6 py-4 rounded-2xl shadow-lg border border-slate-100 flex flex-col items-center text-center max-w-sm">
+                         <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 mb-3">
+                           <MapPinOff size={24} />
+                         </div>
+                         <h3 className="text-base font-bold text-slate-900 mb-1">No heat activity found</h3>
+                         <p className="text-xs text-slate-500">There are no data points available for the selected source and filters in this region.</p>
+                       </div>
+                     </div>
+                   )}
+                 </>
               ) : (
-                <div className="h-[400px] flex flex-col items-center justify-center bg-gray-50 gap-4">
-                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm text-indigo-600"><MapIcon size={32} /></div>
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                     {!HAS_VALID_GOOGLE_MAPS_KEY ? "Map API Key Required" : "Loading Map & Heatmap Visualization..."}
-                   </p>
+                <div className="h-[400px] flex flex-col items-center justify-center bg-slate-50 gap-4">
+                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm text-yellow-500"><MapIcon size={32} /></div>
+                   <p className="text-[10px] font-black text-slate-400 tracking-[0.2em]">MAP API KEY REQUIRED</p>
                 </div>
               )}
               
               {/* Floating Action Badge */}
-              <div className="absolute top-6 right-6 flex items-center gap-2">
-                 <button onClick={fetchZones} className="w-10 h-10 bg-white rounded-lg shadow-xl flex items-center justify-center text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100">
-                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                 <button onClick={fetchHeatmapData} disabled={loading} className="w-10 h-10 bg-white rounded-xl shadow-md flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors border border-slate-200 disabled:opacity-50">
+                    <RefreshCw size={18} className={loading ? 'animate-spin text-yellow-500' : ''} />
                  </button>
               </div>
            </div>
         </div>
 
-        {/* 3. Visibility Controls (Section Pattern) */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-           <div className="px-8 py-6 border-b border-gray-100 flex items-center gap-4">
-              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
-                 <Eye size={20} />
-              </div>
-              <div>
-                 <h3 className="text-[13px] font-black text-gray-900 uppercase tracking-widest">Visibility Controls</h3>
-                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Adjust overlay intensity & radius</p>
+        {/* 3. Controls & Filters Section */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+           {/* Section Header */}
+           <div className="px-3 py-2.5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 shadow-sm">
+                   <Settings2 size={16} />
+                </div>
+                <div>
+                   <h3 className="text-xs font-black text-slate-900 tracking-tight">Data & Visibility</h3>
+                   <p className="text-[10px] text-slate-500 font-medium">Select source, filters & overlay</p>
+                </div>
               </div>
            </div>
            
-           <div className="p-8 space-y-10">
-              <div className="max-w-md">
-                 <label className={labelClass}>
-                    <Settings2 size={12} className="inline mr-1 text-indigo-500" />
-                    Heatmap Gradient Mode
-                 </label>
-                 <select value={gradient} onChange={e => setGradient(e.target.value)} className={inputClass}>
-                    <option>Default (Thermal)</option>
-                    <option>Spectral View</option>
-                    <option>Density Focus</option>
-                 </select>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-10 border-t border-gray-50 pt-10">
-                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                       <label className={labelClass}>Layer Opacity</label>
-                       <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{Math.round(opacity * 100)}%</span>
+           <div className="p-2">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                 
+                 {/* Filters Left Column */}
+                 <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div>
+                       <label className={labelClass}>Heat Source</label>
+                       <select
+                         value={heatSource}
+                         onChange={(e) => setHeatSource(e.target.value)}
+                         className={inputClass}
+                       >
+                         <option value="ride_requests">Ride Requests (Pickups)</option>
+                         <option value="active_drivers">Active Drivers</option>
+                         <option value="trip_pickups">Trip Pickups</option>
+                         <option value="trip_drops">Trip Drops</option>
+                         <option value="sos_alerts">SOS Alerts</option>
+                       </select>
                     </div>
-                    <input 
-                      type="range" min="0" max="1" step="0.01" value={opacity} 
-                      onChange={e => setOpacity(Number(e.target.value))}
-                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#00BFA5]"
-                    />
+
+                    <div>
+                       <label className={labelClass}>Time Range</label>
+                       <select
+                         value={timeRange}
+                         onChange={(e) => setTimeRange(e.target.value)}
+                         className={inputClass}
+                       >
+                         <option value="all">All Time</option>
+                         <option value="last_hour">Last 1 Hour</option>
+                         <option value="today">Today</option>
+                       </select>
+                    </div>
+
+                    <div>
+                       <label className={labelClass}>Service Location</label>
+                       <select
+                         value={serviceLocation}
+                         onChange={(e) => setServiceLocation(e.target.value)}
+                         className={inputClass}
+                       >
+                         <option value="all">All Locations</option>
+                         {serviceLocations.map(loc => (
+                           <option key={loc._id} value={loc._id}>{loc.name || loc.city}</option>
+                         ))}
+                       </select>
+                    </div>
+
+                    <div>
+                       <label className={labelClass}>Vehicle Type</label>
+                       <select
+                         value={vehicleType}
+                         onChange={(e) => setVehicleType(e.target.value)}
+                         className={inputClass}
+                       >
+                         <option value="all">All Vehicles</option>
+                         {vehicleTypes.map(vt => (
+                           <option key={vt._id} value={vt._id}>{vt.name}</option>
+                         ))}
+                       </select>
+                    </div>
                  </div>
 
-                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                       <label className={labelClass}>Gradient Radius</label>
-                       <span className="text-[10px] font-black text-[#00BFA5] bg-emerald-50 px-2 py-1 rounded font-mono">{radius}px</span>
+                 {/* Sliders Right Column */}
+                 <div className="lg:col-span-4 lg:border-l lg:border-slate-100 lg:pl-3 space-y-3 flex flex-col justify-center">
+                    <div className="space-y-1.5">
+                       <div className="flex items-center justify-between">
+                          <label className={labelClass + " !mb-0"}>Layer Opacity</label>
+                          <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{Math.round(opacity * 100)}%</span>
+                       </div>
+                       <input 
+                         type="range" min="0" max="1" step="0.01" value={opacity} 
+                         onChange={e => setOpacity(Number(e.target.value))}
+                         className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-800"
+                       />
                     </div>
-                    <input 
-                      type="range" min="1" max="100" step="1" value={radius} 
-                      onChange={e => setRadius(Number(e.target.value))}
-                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#00BFA5]"
-                    />
+
+                    <div className="space-y-1.5">
+                       <div className="flex items-center justify-between">
+                          <label className={labelClass + " !mb-0"}>Gradient Radius</label>
+                          <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded font-mono">{radius}px</span>
+                       </div>
+                       <input 
+                         type="range" min="1" max="100" step="1" value={radius} 
+                         onChange={e => setRadius(Number(e.target.value))}
+                         className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-800"
+                       />
+                    </div>
                  </div>
+
               </div>
            </div>
         </div>
 
-        {/* 4. Secondary Features (Sidebar Style Cards in Grid) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-           <div className="bg-white rounded-2xl border border-gray-200 p-6 flex items-center gap-5 shadow-sm group hover:border-indigo-100 transition-colors">
-              <div className="w-12 h-12 bg-gray-50 flex items-center justify-center rounded-xl text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
-                 <Navigation size={22} />
+        {/* 4. Dynamic KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+           <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center gap-3 shadow-sm hover:border-slate-300 transition-colors">
+              <div className="w-8 h-8 bg-slate-50 flex items-center justify-center rounded-md text-slate-400">
+                 <Navigation size={16} />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">Coverage</p>
-                 <p className="text-lg font-black text-gray-900 tracking-tight leading-none">{zones.length} Units</p>
+                 <p className="text-[9px] font-bold text-slate-400 tracking-wider mb-0.5">Coverage</p>
+                 <p className="text-base font-black text-slate-900 tracking-tight leading-none">{requestOverlays.length} Hotspots</p>
               </div>
            </div>
 
-           <div className="bg-white rounded-2xl border border-gray-200 p-6 flex items-center gap-5 shadow-sm group hover:border-emerald-100 transition-colors">
-              <div className="w-12 h-12 bg-gray-50 flex items-center justify-center rounded-xl text-gray-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
-                 <Activity size={22} />
+           <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center gap-3 shadow-sm hover:border-slate-300 transition-colors">
+              <div className="w-8 h-8 bg-slate-50 flex items-center justify-center rounded-md text-slate-400">
+                 <Activity size={16} />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">Live Traffic</p>
-                 <p className="text-lg font-black text-gray-900 tracking-tight leading-none">Active Feed</p>
+                 <p className="text-[9px] font-bold text-slate-400 tracking-wider mb-0.5">Live Data</p>
+                 <p className="text-base font-black text-slate-900 tracking-tight leading-none">{filteredData.length} Points</p>
               </div>
            </div>
 
-           <div className="bg-white rounded-2xl border border-gray-200 p-6 flex items-center gap-5 shadow-sm group hover:border-amber-100 transition-colors">
-              <div className="w-12 h-12 bg-gray-50 flex items-center justify-center rounded-xl text-gray-400 group-hover:bg-amber-50 group-hover:text-amber-600 transition-all">
-                 <Zap size={22} />
+           <div className="bg-white rounded-lg border border-slate-200 p-3 flex items-center gap-3 shadow-sm hover:border-slate-300 transition-colors">
+              <div className="w-8 h-8 bg-slate-50 flex items-center justify-center rounded-md text-slate-400">
+                 <Zap size={16} className={loading ? "text-yellow-500 animate-pulse" : ""} />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">Sync State</p>
-                 <p className="text-lg font-black text-emerald-600 tracking-tight leading-none">Synchronized</p>
+                 <p className="text-[9px] font-bold text-slate-400 tracking-wider mb-0.5">Sync State</p>
+                 <p className="text-[11px] font-black text-slate-900 tracking-tight leading-tight">
+                   {loading ? 'Syncing...' : lastSync ? `Synced ${lastSync.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Pending'}
+                 </p>
               </div>
            </div>
         </div>

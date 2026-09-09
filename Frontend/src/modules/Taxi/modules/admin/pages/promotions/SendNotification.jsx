@@ -15,13 +15,12 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 const Motion = motion;
 const LIST_PATH = '/admin/promotions/send-notification';
 const CREATE_PATH = '/admin/promotions/send-notification/create';
 const inputClass =
-  'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
+  'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-[#FFC400] focus:ring-1 focus:ring-[#FFC400] outline-none transition-colors disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
 const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5';
 
 const createInitialFormData = () => ({
@@ -45,7 +44,7 @@ const HeaderBlock = ({ isCreateRoute, onBack }) => (
       <span className="text-gray-700">{isCreateRoute ? 'Create Push Notification' : 'Push Notifications'}</span>
     </div>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <h1 className="text-xl font-semibold text-gray-900">{isCreateRoute ? 'Create Push Notification' : 'Push Notifications'}</h1>
+      <h1 className="text-xl text-gray-900 font-bold">{isCreateRoute ? 'Create Push Notification' : 'Push Notifications'}</h1>
       {isCreateRoute ? (
         <button
           type="button"
@@ -62,11 +61,11 @@ const HeaderBlock = ({ isCreateRoute, onBack }) => (
 const SectionCard = ({ icon: Icon, title, description, children }) => (
   <div className="bg-white rounded-xl border border-gray-200 p-6">
     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+      <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center text-yellow-500">
         <Icon size={18} />
       </div>
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-sm text-gray-900 font-bold">{title}</h3>
         <p className="text-xs text-gray-400">{description}</p>
       </div>
     </div>
@@ -192,12 +191,13 @@ const SendNotification = () => {
     setSaving(true);
     try {
       let imageData = '';
-      if (formData.image instanceof File) {
-        const uploadResult = await uploadService.uploadImageFile(formData.image, 'promotions/notifications');
-        imageData = uploadResult?.secureUrl || uploadResult?.url || '';
-        if (!imageData) {
-          throw new Error('Notification image upload failed');
-        }
+      if (formData.image) {
+        imageData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(formData.image);
+        });
       }
 
       const payload = {
@@ -273,7 +273,7 @@ const SendNotification = () => {
                   <button
                     type="button"
                     onClick={() => navigate(CREATE_PATH)}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-white bg-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold !text-[#0B1220] !bg-[#FFC400] border-none rounded-lg hover:brightness-95 transition-colors"
                   >
                     <Plus size={16} /> Create Push Notification
                   </button>
@@ -358,7 +358,7 @@ const SendNotification = () => {
                         <tr key={item._id || item.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-50 text-yellow-500">
                                 <Bell size={16} />
                               </span>
                               <span className="text-sm font-semibold text-gray-800">{item.push_title}</span>
@@ -487,7 +487,7 @@ const SendNotification = () => {
                       ) : (
                         <label className="flex cursor-pointer flex-col items-center justify-center gap-3 py-8 text-center">
                           <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
-                          <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-white border border-gray-200 text-indigo-600">
+                          <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-white border border-gray-200 text-yellow-500">
                             <ImageIcon size={20} />
                           </span>
                           <div>
@@ -507,7 +507,7 @@ const SendNotification = () => {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                  className="w-full py-3 !bg-[#FFC400] !text-[#0B1220] rounded-lg text-sm font-bold hover:brightness-95 border-none transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
                   {saving ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
                   Send Notification
@@ -522,7 +522,7 @@ const SendNotification = () => {
               </div>
 
               <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">How It Works</h3>
+                <h3 className="text-sm text-gray-900 mb-2 font-bold">How It Works</h3>
                 <p className="text-xs leading-5 text-gray-500">
                   Service location, send-to audience, push title, message, aur optional notification banner ke saath admin se direct push fire hota hai.
                 </p>

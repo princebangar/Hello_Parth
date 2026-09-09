@@ -23,7 +23,7 @@ const REASONS = [
 ];
 
 const CONSEQUENCES = [
-  'Your driver account will be removed from the database',
+  'Your driver account will be marked inactive with a soft delete',
   'You will be logged out on this device',
   'You cannot accept rides with this account after deletion',
   'Completed ride history may still keep trip records for receipts and reports',
@@ -118,9 +118,9 @@ const DriverDeleteAccount = () => {
 
     try {
       await verifyDriverLoginOtp({ phone: driverPhone, otp });
-      await deleteCurrentDriverAccount();
+      await deleteCurrentDriverAccount(reason);
       clearDriverAuthState();
-      setSuccess('Your driver account has been deleted.');
+      setSuccess('Your driver account was soft deleted and you have been logged out.');
       setShowConfirm(false);
       window.setTimeout(() => {
         navigate(`${routePrefix}/login`, { replace: true });
@@ -176,7 +176,7 @@ const DriverDeleteAccount = () => {
             </div>
             <div>
               <p className="text-[14px] font-black text-red-700 leading-tight">Delete driver account</p>
-              <p className="text-[11px] font-bold text-red-400">This removes your driver record</p>
+              <p className="text-[11px] font-bold text-red-400">This will soft delete and log you out</p>
             </div>
           </div>
           <ul className="space-y-2">
@@ -232,8 +232,8 @@ const DriverDeleteAccount = () => {
                 <AlertTriangle size={30} className="text-red-500" strokeWidth={2} />
               </div>
               <h3 className="text-[18px] font-black text-slate-900 mb-2">Delete this account?</h3>
-              <p className="text-[13px] font-bold text-slate-500 mb-1 leading-relaxed">Your driver account will be removed from the database.</p>
-              <p className="text-[12px] font-bold text-red-400 mb-5">Verify OTP first. This action cannot be undone from the app.</p>
+              <p className="text-[13px] font-bold text-slate-500 mb-1 leading-relaxed">Your driver account will be marked inactive instead of being permanently removed.</p>
+              <p className="text-[12px] font-bold text-red-400 mb-5">Verify OTP first. We will then log you out on this device.</p>
               {otpSent ? (
                 <div className="mb-5 text-left">
                   <label className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 ml-1">OTP sent to +91 {driverPhone}</label>

@@ -115,16 +115,16 @@ const WalletPayment = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      <div className="mb-6">
+    <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
+      <div className="mb-4">
         <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-400">
           <span>Wallet</span>
           <ChevronRight size={12} />
-          <span className="text-gray-700">Wallet Payment</span>
+          <span className="text-gray-700 font-medium">Wallet Payment</span>
         </div>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Wallet Payment</h1>
+            <h1 className="text-lg text-gray-900 font-bold">Wallet Payment</h1>
             <p className="mt-1 text-sm text-gray-500">
               Manage and adjust balances for Users, Drivers, and Fleet Owners
             </p>
@@ -140,7 +140,7 @@ const WalletPayment = () => {
                 <Search size={18} />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">Select Account</h2>
+                <h2 className="text-sm text-gray-900 font-bold">Select Account</h2>
                 <p className="text-xs text-gray-400">
                   Choose role and search account before wallet adjustment
                 </p>
@@ -294,7 +294,7 @@ const WalletPayment = () => {
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Current Balance
                   </p>
-                  <h3 className="mt-2 text-3xl font-semibold text-gray-900">
+                  <h3 className="mt-2 text-3xl text-gray-900 font-bold">
                     INR{' '}
                     {Number(balance || 0).toLocaleString('en-IN', {
                       minimumFractionDigits: 2,
@@ -321,7 +321,7 @@ const WalletPayment = () => {
 
           <div className="min-h-[420px] rounded-xl border border-gray-200 bg-white p-6">
             <div className="mb-5 flex items-center justify-between border-b border-gray-100 pb-4">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+              <h2 className="flex items-center gap-2 text-sm text-gray-900 font-bold">
                 <Clock size={16} className="text-gray-400" /> Transaction History
               </h2>
               {loadingHistory && <Loader2 className="animate-spin text-indigo-500" size={16} />}
@@ -332,7 +332,7 @@ const WalletPayment = () => {
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-50 text-gray-300">
                   <Search size={26} />
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900">No Account Selected</h3>
+                <h3 className="text-sm text-gray-900 font-bold">No Account Selected</h3>
                 <p className="mt-1 max-w-xs text-xs text-gray-500">
                   Select a role and search an account to view wallet transactions.
                 </p>
@@ -342,7 +342,7 @@ const WalletPayment = () => {
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-50 text-gray-300">
                   <History size={26} />
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900">No Transactions Found</h3>
+                <h3 className="text-sm text-gray-900 font-bold">No Transactions Found</h3>
                 <p className="mt-1 text-xs text-gray-500">This account has no wallet entries yet.</p>
               </div>
             ) : (
@@ -363,7 +363,7 @@ const WalletPayment = () => {
                         {tx.type === 'credit' ? <ArrowUpRight size={18} /> : <ArrowDownLeft size={18} />}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="truncate text-sm font-medium text-gray-900">
+                        <h4 className="truncate text-sm text-gray-900 font-bold">
                           {tx.description || 'Wallet adjustment'}
                         </h4>
                         <p className="mt-1 text-xs text-gray-500">

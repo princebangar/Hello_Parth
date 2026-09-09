@@ -473,6 +473,48 @@ const rentalBookingRequestSchema = new mongoose.Schema(
       ref: 'TaxiServiceStore',
       default: [],
     },
+    commissionSnapshot: {
+      serviceStoreId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'TaxiServiceStore',
+        default: null,
+      },
+      serviceStoreName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      ownerName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      serviceStoreCommissionType: {
+        type: String,
+        enum: ['percentage', 'fixed'],
+        default: 'percentage',
+      },
+      serviceStoreCommissionValue: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      ownerCommissionType: {
+        type: String,
+        enum: ['percentage', 'fixed'],
+        default: 'percentage',
+      },
+      ownerCommissionValue: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      serviceTaxPercentage: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+    },
     assignedStaffId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TaxiServiceCenterStaff',

@@ -15,9 +15,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
+import { API_BASE_URL } from '../../../shared/api/runtimeConfig';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { isMobileOrWebView, openExternalCheckout } from '../../../shared/utils/externalNavigation';
+import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
 import { getLocalDriverToken } from '../services/registrationService';
+
+const PHONEPE_DRIVER_WALLET_FLOW_KEY = 'driver-wallet-topup';
 
 const emptyWallet = {
     balance: 0,
@@ -49,7 +54,6 @@ const transactionLabel = (type = '') => {
         commission_deduction: 'Cash ride commission',
         top_up: 'Wallet top-up',
         adjustment: 'Wallet adjustment',
-        ride_tip: 'Tip from rider',
     };
 
     return labels[type] || String(type || 'Wallet transaction').replace(/_/g, ' ');
@@ -90,12 +94,6 @@ const transactionHint = (tx = {}) => {
 
     if (tx.type === 'ride_earning') {
         return `${payment === 'online' ? 'Online' : 'Ride'} payout after admin commission`;
-    }
-
-    if (tx.type === 'ride_tip') {
-        const mode = String(tx.metadata?.paymentMode || '').toLowerCase();
-        const tipAmt = tx.metadata?.tipAmount;
-        return `${mode === 'online' ? 'Online' : 'Cash'} tip${tipAmt ? ` of ${money(tipAmt)}` : ''} from rider`;
     }
 
     if (tx.type === 'adjustment' && source === 'user_wallet_transfer') {
@@ -143,24 +141,9 @@ const WALLET_FILTERS = [
     { id: 'all', label: 'All' },
     { id: 'ride_earning', label: 'Online rides' },
     { id: 'commission_deduction', label: 'Cash commission' },
-    { id: 'ride_tip', label: 'Tips' },
     { id: 'top_up', label: 'Top-ups' },
     { id: 'adjustment', label: 'Adjustments' },
 ];
-
-const getDriverAuthConfig = () => {
-    const token = getLocalDriverToken();
-
-    if (!token) {
-        throw new Error('Driver session expired. Please login again.');
-    }
-
-    return {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    };
-};
 
 const StatPill = ({ label, value, tone = 'dark' }) => {
     const toneClass = tone === 'good' ? 'text-emerald-700 bg-emerald-50' : tone === 'warn' ? 'text-amber-700 bg-amber-50' : 'text-slate-700 bg-slate-100';
@@ -181,6 +164,22 @@ const isOwnerManagedDriverProfile = (driver = {}) =>
         || driver?.fleetId
         || driver?.owner?._id,
     );
+
+const withDriverAuthorization = (config = {}) => {
+    const token = getLocalDriverToken();
+
+    if (!token) {
+        return config;
+    }
+
+    return {
+        ...config,
+        headers: {
+            ...(config.headers || {}),
+            Authorization: `Bearer ${token}`,
+        },
+    };
+};
 
 const DriverWallet = () => {
     const navigate = useNavigate();
@@ -213,7 +212,15 @@ const DriverWallet = () => {
         setError('');
 
         try {
-            const authConfig = getDriverAuthConfig();
+            const token = getLocalDriverToken();
+            if (!token) {
+                setLoading(false);
+                setRefreshing(false);
+                navigate('/taxi/driver/login', { replace: true });
+                return;
+            }
+
+            const authConfig = withDriverAuthorization();
             const [walletResponse, profileResponse] = await Promise.all([
                 api.get('/drivers/wallet', authConfig),
                 api.get('/drivers/me', authConfig).catch(() => null),
@@ -234,12 +241,13 @@ const DriverWallet = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [navigate]);
 
     useEffect(() => {
         loadWallet({ quiet: true });
 
-        const socket = socketService.connect({ role: 'driver' });
+        const token = getLocalDriverToken();
+        const socket = token ? socketService.connect({ role: 'driver' }) : null;
         const onWalletUpdated = (payload) => {
             if (payload?.wallet) setWallet(payload.wallet);
             if (payload?.transaction) {
@@ -267,7 +275,7 @@ const DriverWallet = () => {
         const minimumTransferAmount = toNumber(wallet.minimumTransferAmount, toNumber(settings.minimum_wallet_amount_for_transfer, 0));
         const walletEnabled = wallet.isWalletEnabled ?? isEnabled(settings.show_wallet_feature_for_driver, true);
         const transferEnabled = wallet.isTransferEnabled ?? isEnabled(settings.enable_wallet_transfer_driver, true);
-        const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders > 0;
+        const canReceiveOrders = walletEnabled && !wallet.isBlocked && availableForOrders >= 0;
 
         return {
             minimumBalance,
@@ -292,16 +300,13 @@ const DriverWallet = () => {
         const cashRideCommission = transactions
             .filter((tx) => tx.type === 'commission_deduction')
             .reduce((sum, tx) => sum + Math.abs(Number(tx.amount || 0)), 0);
-        const tipEarnings = transactions
-            .filter((tx) => tx.type === 'ride_tip')
-            .reduce((sum, tx) => sum + Math.max(Number(tx.amount || 0), 0), 0);
         const totalAppEarnings = transactions
-            .filter((tx) => ['ride_earning', 'adjustment', 'ride_tip'].includes(tx.type))
+            .filter((tx) => ['ride_earning', 'adjustment'].includes(tx.type))
             .reduce((sum, tx) => {
                 const amount = Number(tx.amount || 0);
                 const source = String(tx.metadata?.source || tx.metadata?.category || '').toLowerCase();
 
-                if (tx.type === 'ride_earning' || tx.type === 'ride_tip') {
+                if (tx.type === 'ride_earning') {
                     return sum + Math.max(amount, 0);
                 }
 
@@ -312,7 +317,6 @@ const DriverWallet = () => {
             totalAppEarnings,
             onlineRideEarnings,
             cashRideCommission,
-            tipEarnings,
         };
     }, [transactions]);
 
@@ -333,70 +337,6 @@ const DriverWallet = () => {
     const supportsWalletTopUp = activePaymentGateway?.supportsWalletTopUp === true;
     const walletTopUpMode = activePaymentGateway?.walletTopUpMode || '';
     const canTopUpWallet = supportsWalletTopUp && ['razorpay_checkout', 'phonepe_redirect'].includes(walletTopUpMode);
-
-    useEffect(() => {
-        const merchantTransactionId = new URLSearchParams(window.location.search).get('phonepe_txn');
-        if (!merchantTransactionId || walletTopUpMode !== 'phonepe_redirect') {
-            return;
-        }
-
-        let cancelled = false;
-
-        const clearPhonePeQuery = () => {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('phonepe_txn');
-            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-        };
-
-        const syncPhonePeTopup = async () => {
-            setError('');
-            setLoading(true);
-
-            try {
-                const response = await api.get(
-                    `/drivers/wallet/top-up/phonepe/status/${merchantTransactionId}`,
-                    getDriverAuthConfig(),
-                );
-                if (cancelled) return;
-
-                const data = response?.data || response || {};
-                if (data.status === 'paid') {
-                    if (data.wallet) setWallet(data.wallet);
-                    if (data.transaction) {
-                        setTransactions((previous) => [
-                            data.transaction,
-                            ...previous.filter((item) => item._id !== data.transaction._id),
-                        ].slice(0, 50));
-                    }
-                    setTopUpSuccess(true);
-                    setShowTopUp(false);
-                    setTopUpAmount('500');
-                    window.setTimeout(() => {
-                        if (!cancelled) setTopUpSuccess(false);
-                    }, 1800);
-                } else if (data.status === 'pending') {
-                    setError('PhonePe payment is still pending. Please refresh in a few seconds.');
-                } else if (data.status === 'failed') {
-                    setError(response?.message || 'PhonePe payment was not completed.');
-                }
-            } catch (requestError) {
-                if (!cancelled) {
-                    setError(requestError?.message || 'Could not verify PhonePe payment.');
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                    clearPhonePeQuery();
-                }
-            }
-        };
-
-        syncPhonePeTopup();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [walletTopUpMode]);
 
     const loadRazorpayScript = useCallback(() =>
         new Promise((resolve) => {
@@ -446,14 +386,22 @@ const DriverWallet = () => {
             if (walletTopUpMode === 'phonepe_redirect') {
                 const sessionResponse = await api.post('/drivers/wallet/top-up/phonepe/order', {
                     amount,
-                }, getDriverAuthConfig());
+                }, withDriverAuthorization());
                 const session = sessionResponse?.data || sessionResponse || {};
 
                 if (!session?.checkoutUrl) {
                     throw new Error('Could not initiate PhonePe payment. Please try again.');
                 }
 
-                window.location.assign(session.checkoutUrl);
+                rememberPendingPhonePeRedirect(PHONEPE_DRIVER_WALLET_FLOW_KEY, {
+                    merchantTransactionId: session.merchantTransactionId,
+                    checkoutUrl: session.checkoutUrl,
+                });
+                const opened = await openExternalCheckout(session.checkoutUrl);
+                if (!opened) {
+                    throw new Error('PhonePe checkout could not open outside the app WebView. Please update the app bridge or open this payment flow in your browser.');
+                }
+                setProcessingTopUp(false);
                 return;
             }
 
@@ -465,30 +413,117 @@ const DriverWallet = () => {
             // 1. Create order on backend
             const orderResponse = await api.post('/drivers/wallet/top-up/razorpay/order', {
                 amount,
-            }, getDriverAuthConfig());
+            }, withDriverAuthorization());
             const orderData = orderResponse?.data || orderResponse;
 
-            if (!orderData?.orderId || !orderData?.keyId) {
+            if (!orderData?.orderId && !orderData?.checkoutUrl) {
                 throw new Error('Could not initiate payment. Please try again.');
             }
 
+            if (orderData?.checkoutUrl) {
+                const opened = await openExternalCheckout(orderData.checkoutUrl);
+                if (!opened) {
+                    throw new Error('Razorpay checkout could not open outside the app WebView. Please update the app bridge or open this payment flow in your browser.');
+                }
+                setProcessingTopUp(false);
+                return;
+            }
+
+            let driverInfo = {};
+            try {
+                driverInfo = JSON.parse(localStorage.getItem('driverInfo') || '{}');
+            } catch {
+                driverInfo = {};
+            }
+
             // 2. Open Razorpay checkout
+            const driverPhone = driverInfo?.phone || driverInfo?.mobile || '';
+            const cleanedPhoneDigits = String(driverPhone).replace(/\D/g, '');
+            const finalPhoneDigits = (cleanedPhoneDigits.length === 12 && cleanedPhoneDigits.startsWith('91')) ? cleanedPhoneDigits.slice(2) : cleanedPhoneDigits;
+            const prefillContact = finalPhoneDigits.length === 10 ? `+91${finalPhoneDigits}` : '';
+
+            // In Flutter WebView, UPI app intents (Google Pay, PhonePe, Paytm)
+            // cannot be launched from Razorpay's inline modal because WebViews
+            // block intent:// and upi:// deep-link URLs. This causes UPI payment
+            // options to be hidden entirely from the checkout UI.
+            //
+            // The fix: detect WebView and switch to redirect mode (callback_url +
+            // redirect: true). Razorpay then does a full-page redirect flow where
+            // UPI intents work properly. After payment, Razorpay POSTs to our
+            // backend callback endpoint which verifies the payment and redirects
+            // the user back to the /razorpay/status frontend page.
+            if (isMobileOrWebView()) {
+                const callbackUrl = orderData.callbackUrl
+                    || `${API_BASE_URL}/drivers/wallet/top-up/razorpay/callback`;
+
+                if (callbackUrl.startsWith('http://')) {
+                    console.warn('[Razorpay] Warning: Using cleartext HTTP callback URL on mobile/WebView. This will fail with ERR_CLEARTEXT_NOT_PERMITTED on Android unless cleartext traffic is explicitly permitted.');
+                }
+
+                // Initialize the Razorpay JS SDK with redirect mode (callback_url + redirect: true).
+                // Using redirect mode for all mobile devices guarantees native UPI app intent launching
+                // across all mobile browsers and WebView containers alike.
+                const rzp = new window.Razorpay({
+                    key: orderData.keyId,
+                    amount: orderData.amount,
+                    currency: orderData.currency || 'INR',
+                    name: appName,
+                    description: 'Wallet Topup',
+                    order_id: orderData.orderId,
+                    callback_url: callbackUrl,
+                    redirect: true,
+                    prefill: {
+                        name: driverInfo?.name || driverInfo?.full_name || '',
+                        email: driverInfo?.email || '',
+                        contact: prefillContact,
+                    },
+                    modal: {
+                        ondismiss: () => {
+                            setProcessingTopUp(false);
+                        },
+                    },
+                    theme: {
+                        color: '#E85D04',
+                    },
+                });
+
+                rzp.on('payment.failed', (event) => {
+                    const message = event?.error?.description || event?.error?.reason || 'Payment failed';
+                    setError(message);
+                    setProcessingTopUp(false);
+                });
+                rzp.open();
+                return;
+            }
+
+            // Regular browser flow — use handler function for inline verification
             const options = {
                 key: orderData.keyId,
                 amount: orderData.amount,
                 currency: orderData.currency || 'INR',
                 name: appName,
-                description: 'Wallet Top-up',
+                description: 'Wallet Topup',
                 order_id: orderData.orderId,
+                prefill: {
+                    name: driverInfo?.name || driverInfo?.full_name || '',
+                    email: driverInfo?.email || '',
+                    contact: prefillContact,
+                },
+                modal: {
+                    ondismiss: () => {
+                        setProcessingTopUp(false);
+                    },
+                },
+                theme: {
+                    color: '#E85D04',
+                },
                 handler: async (response) => {
                     try {
-                        setProcessingTopUp(true);
-                        // 3. Verify payment on backend
                         const verifyResponse = await api.post('/drivers/wallet/top-up/razorpay/verify', {
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_signature: response.razorpay_signature,
-                        }, getDriverAuthConfig());
+                        }, withDriverAuthorization());
 
                         const result = verifyResponse?.data || verifyResponse;
                         if (result?.wallet) {
@@ -506,28 +541,143 @@ const DriverWallet = () => {
                             setTopUpSuccess(false);
                             setShowTopUp(false);
                             setTopUpAmount('500');
-                        }, 2000);
+                        }, 1400);
                     } catch (verifyError) {
-                        setError(verifyError?.response?.data?.message || 'Payment verification failed.');
+                        setError(verifyError?.message || 'Payment verification failed');
                     } finally {
                         setProcessingTopUp(false);
                     }
+                },
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', (event) => {
+                const message = event?.error?.description || event?.error?.reason || 'Payment failed';
+                setError(message);
+                setProcessingTopUp(false);
+            });
+            rzp.open();
+        } catch (requestError) {
+            setError(requestError?.response?.data?.message || requestError?.message || 'Top-up request failed.');
+            setProcessingTopUp(false);
+        }
+    };
+
+    const handleUserStyleTopUp = async () => {
+        const amount = Number(topUpAmount);
+
+        if (!rules.walletEnabled) {
+            setError('Wallet is disabled by admin.');
+            return;
+        }
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setError('Enter a valid top-up amount.');
+            return;
+        }
+
+        if (rules.minimumTopUp > 0 && amount < rules.minimumTopUp) {
+            setError(`Minimum top-up amount is Rs ${rules.minimumTopUp}.`);
+            return;
+        }
+
+        setProcessingTopUp(true);
+        setError('');
+
+        try {
+            if (!activePaymentGateway) {
+                throw new Error('No payment gateway is enabled by admin right now.');
+            }
+
+            if (!supportsWalletTopUp || walletTopUpMode !== 'razorpay_checkout') {
+                throw new Error(`${walletTopUpGatewayLabel} is enabled by admin, but this test flow needs Razorpay wallet top-up.`);
+            }
+
+            const scriptLoaded = await loadRazorpayScript();
+            if (!scriptLoaded) {
+                throw new Error('Razorpay SDK failed to load');
+            }
+
+            const orderResponse = await api.post('/drivers/wallet/top-up/razorpay/order', {
+                amount,
+            }, withDriverAuthorization());
+            const orderData = orderResponse?.data || orderResponse || {};
+
+            if (!orderData?.orderId || !orderData?.keyId) {
+                throw new Error('Unable to start payment');
+            }
+
+            let driverInfo = {};
+            try {
+                driverInfo = JSON.parse(localStorage.getItem('driverInfo') || '{}');
+            } catch {
+                driverInfo = {};
+            }
+
+            const driverPhone = driverInfo?.phone || driverInfo?.mobile || '';
+            const cleanedPhoneDigits = String(driverPhone).replace(/\D/g, '');
+            const finalPhoneDigits = (cleanedPhoneDigits.length === 12 && cleanedPhoneDigits.startsWith('91')) ? cleanedPhoneDigits.slice(2) : cleanedPhoneDigits;
+            const prefillContact = finalPhoneDigits.length === 10 ? `+91${finalPhoneDigits}` : '';
+
+            const rzp = new window.Razorpay({
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency || 'INR',
+                name: appName,
+                description: 'Wallet Topup',
+                order_id: orderData.orderId,
+                prefill: {
+                    name: driverInfo?.name || driverInfo?.full_name || '',
+                    email: driverInfo?.email || '',
+                    contact: prefillContact,
                 },
                 modal: {
                     ondismiss: () => {
                         setProcessingTopUp(false);
                     },
                 },
-                theme: {
-                    color: '#0F172A',
-                },
-            };
+                handler: async (response) => {
+                    try {
+                        const verifyResponse = await api.post('/drivers/wallet/top-up/razorpay/verify', {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                        }, withDriverAuthorization());
 
-            const rzp = new window.Razorpay(options);
-            rzp.on('payment.failed', (response) => {
-                setError(response.error?.description || 'Payment failed.');
+                        const result = verifyResponse?.data || verifyResponse || {};
+                        if (result?.wallet) {
+                            setWallet(result.wallet);
+                        }
+                        if (result?.transaction) {
+                            setTransactions((previous) => [
+                                result.transaction,
+                                ...previous.filter((item) => item._id !== result.transaction._id),
+                            ].slice(0, 50));
+                        }
+
+                        setTopUpSuccess(true);
+                        setTimeout(() => {
+                            setTopUpSuccess(false);
+                            setShowTopUp(false);
+                            setTopUpAmount('500');
+                        }, 1400);
+                    } catch (verifyError) {
+                        setError(verifyError?.message || 'Payment verification failed');
+                    } finally {
+                        setProcessingTopUp(false);
+                    }
+                },
+                theme: {
+                    color: '#E85D04',
+                },
+            });
+
+            rzp.on('payment.failed', (event) => {
+                const message = event?.error?.description || event?.error?.reason || 'Payment failed';
+                setError(message);
                 setProcessingTopUp(false);
             });
+
             rzp.open();
         } catch (requestError) {
             setError(requestError?.response?.data?.message || requestError?.message || 'Top-up request failed.');
@@ -565,7 +715,7 @@ const DriverWallet = () => {
             const response = await api.post('/drivers/wallet/withdrawals', {
                 amount,
                 payment_method: 'bank_transfer',
-            }, getDriverAuthConfig());
+            }, withDriverAuthorization());
             const payload = response?.data || response || {};
 
             if (payload?.request) {
@@ -673,7 +823,7 @@ const DriverWallet = () => {
                                 </div>
                                 <div className="rounded-2xl bg-white/10 p-3">
                                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Available cash limit</p>
-                                    <p className={`mt-1 text-lg font-black ${rules.availableForOrders > 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                    <p className={`mt-1 text-lg font-black ${rules.availableForOrders >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
                                         {money(rules.availableForOrders)}
                                     </p>
                                 </div>
@@ -711,6 +861,14 @@ const DriverWallet = () => {
                                     Withdraw <ArrowDownLeft size={17} />
                                 </button>
                             </div>
+                            <button
+                                type="button"
+                                onClick={handleUserStyleTopUp}
+                                disabled={processingTopUp || !rules.walletEnabled || walletTopUpMode !== 'razorpay_checkout'}
+                                className="mt-3 flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 text-sm font-black uppercase tracking-[0.08em] text-emerald-800 shadow-sm disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                            >
+                                {processingTopUp ? <RefreshCw className="animate-spin" size={17} /> : 'Add money test'} <ArrowUpRight size={17} />
+                            </button>
                         </section>
 
                         {recentWithdrawalRequests.length > 0 && (
@@ -779,9 +937,6 @@ const DriverWallet = () => {
                                 <StatPill label="Online earnings" value={money(walletSummary.onlineRideEarnings)} tone="good" />
                                 <StatPill label="Cash commission" value={money(walletSummary.cashRideCommission)} tone="warn" />
                             </div>
-                            {walletSummary.tipEarnings > 0 && (
-                                <StatPill label="Tips received" value={money(walletSummary.tipEarnings)} tone="good" />
-                            )}
                         </section>
 
                         <section className="space-y-3">
@@ -917,6 +1072,14 @@ const DriverWallet = () => {
                                         className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#101521] text-sm font-black uppercase tracking-widest text-white disabled:bg-slate-200 disabled:text-slate-400"
                                     >
                                         {processingTopUp ? <RefreshCw className="animate-spin" size={18} /> : 'Add money'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleUserStyleTopUp}
+                                        disabled={processingTopUp || !rules.walletEnabled || walletTopUpMode !== 'razorpay_checkout'}
+                                        className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 text-sm font-black uppercase tracking-widest text-emerald-800 disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                                    >
+                                        {processingTopUp ? <RefreshCw className="animate-spin" size={18} /> : 'Add money test'}
                                     </button>
                                 </div>
                             )}

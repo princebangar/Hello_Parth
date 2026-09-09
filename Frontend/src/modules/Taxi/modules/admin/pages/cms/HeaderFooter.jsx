@@ -51,7 +51,7 @@ const HeaderFooter = () => {
            <span className="text-gray-700 font-medium">Index</span>
         </div>
         <div className="flex items-center justify-between">
-           <h1 className="text-xl font-semibold text-gray-900 tracking-tight italic decoration-indigo-200">Index</h1>
+           <h1 className="text-xl text-gray-900 tracking-tight italic decoration-indigo-200 font-bold">Index</h1>
         </div>
       </div>
 
@@ -64,7 +64,7 @@ const HeaderFooter = () => {
                  <Layout size={18} />
               </div>
               <div>
-                 <h3 className="text-sm font-semibold text-gray-900 tracking-tight">Landingsite Color Settings</h3>
+                 <h3 className="text-sm text-gray-900 tracking-tight font-bold">Landingsite Color Settings</h3>
                  <p className="text-xs text-gray-400 font-medium italic italic underline-offset-4">Configure the primary branding colors for your landing page header and footer</p>
               </div>
            </div>
@@ -122,7 +122,7 @@ const HeaderFooter = () => {
                  <Globe size={18} />
               </div>
               <div>
-                 <h3 className="text-sm font-semibold text-gray-900 tracking-tight">Header-Footer Page Registry</h3>
+                 <h3 className="text-sm text-gray-900 tracking-tight font-bold">Header-Footer Page Registry</h3>
                  <p className="text-xs text-gray-400 font-medium italic italic decoration-indigo-200 underline-offset-4">Manage navigational static pages throughout your landing site</p>
               </div>
               <button className="ml-auto flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-sm transition-all">

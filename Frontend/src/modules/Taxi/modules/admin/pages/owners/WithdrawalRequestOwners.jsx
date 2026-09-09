@@ -87,13 +87,13 @@ const WithdrawalRequestOwners = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
-      <div className="p-6 lg:p-8">
+      <div className="px-4 py-2 lg:px-6 lg:py-2">
         <AdminPageHeader module="Owner Wallet" page="Withdrawal Requests" title="Withdrawal Requests" />
 
-        <div className="mt-6">
-        <div className="relative rounded border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-3 px-5 py-10 text-sm font-semibold text-slate-400">
-            <span>show</span>
+        <div className="mt-4">
+        <div className="relative rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 text-sm font-semibold text-slate-500">
+            <span>Show</span>
             <div className="relative">
               <select
                 value={itemsPerPage}
@@ -111,7 +111,7 @@ const WithdrawalRequestOwners = () => {
                 className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-700"
               />
             </div>
-            <span>entries</span>
+            <span>Entries</span>
           </div>
 
           <div className="px-5">
@@ -138,10 +138,10 @@ const WithdrawalRequestOwners = () => {
                     </tr>
                   ) : pagedRequests.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="border-b border-gray-200 px-3 py-12 text-center">
-                        <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-700">
-                          <FileSearch size={92} strokeWidth={1.7} className="mb-2 text-indigo-950" />
-                          <p className="text-xl font-medium">No Data Found</p>
+                      <td colSpan="5" className="border-b border-gray-200 px-3 py-16 text-center">
+                        <div className="flex flex-col items-center justify-center text-slate-500">
+                          <FileSearch size={48} strokeWidth={1.5} className="mb-3 text-yellow-500 opacity-80" />
+                          <p className="text-sm font-semibold">No withdrawal requests found</p>
                         </div>
                       </td>
                     </tr>
@@ -151,27 +151,27 @@ const WithdrawalRequestOwners = () => {
                       const status = item.status || 'requested';
 
                       return (
-                        <tr key={item._id || ownerId} className="bg-white transition-colors hover:bg-gray-50">
-                          <td className="px-3 py-5 text-sm text-gray-950">
+                        <tr key={item._id || ownerId} className="bg-white transition-colors hover:bg-gray-50 border-b border-gray-100">
+                          <td className="px-3 py-4 text-sm text-gray-950">
                             {formatDate(item.createdAt || item.last_request_at)}
                           </td>
-                          <td className="px-3 py-5 text-sm text-gray-950">{getOwnerName(item)}</td>
-                          <td className="px-3 py-5 text-sm text-gray-950">
+                          <td className="px-3 py-4 text-sm text-gray-950">{getOwnerName(item)}</td>
+                          <td className="px-3 py-4 text-sm text-gray-950">
                             {formatAmount(item.amount || item.pending_amount, item.requested_currency || 'INR')}
                           </td>
-                          <td className="px-3 py-5 text-sm">
+                          <td className="px-3 py-4 text-sm">
                             <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClass(status)}`}>
                               {status}
                             </span>
                           </td>
-                          <td className="px-3 py-5">
+                          <td className="px-3 py-4">
                             <button
                               type="button"
-                              onClick={() => navigate(`/taxi/admin/owners/wallet/withdrawals/${ownerId}`)}
-                              className="inline-flex h-9 w-10 items-center justify-center rounded bg-teal-50 text-teal-500 transition-colors hover:bg-teal-100"
+                              onClick={() => navigate(`/admin/owners/wallet/withdrawals/${ownerId}`)}
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-yellow-50 text-yellow-600 transition-colors hover:bg-yellow-100"
                               title="View withdrawal request"
                             >
-                              <Eye size={17} />
+                              <Eye size={16} />
                             </button>
                           </td>
                         </tr>
@@ -183,15 +183,9 @@ const WithdrawalRequestOwners = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="absolute -right-1 top-[66%] flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-teal-500 text-white shadow-xl transition-colors hover:bg-teal-600"
-          >
-            <Menu size={24} />
-          </button>
         </div>
 
-        <div className="mt-8 flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between pb-6">
           <p className="text-sm font-medium text-slate-400">
             Showing {showingFrom} to {showingTo} of {totalEntries} entries
           </p>
@@ -206,7 +200,7 @@ const WithdrawalRequestOwners = () => {
             </button>
             <button
               type="button"
-              className="rounded bg-indigo-950 px-4 py-2 text-sm font-semibold text-white"
+              className="rounded bg-yellow-400 px-4 py-2 text-sm font-bold text-black"
             >
               {safePage}
             </button>

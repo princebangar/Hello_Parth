@@ -34,6 +34,10 @@ import McvIcon from "../../../../assets/icons/mcv.png";
 import LuxuryIcon from "../../../../assets/icons/Luxury.png";
 import PremiumIcon from "../../../../assets/icons/Premium.png";
 import SuvIcon from "../../../../assets/icons/SUV.png";
+import ScootyIcon from "../../../../assets/icons/scooty.png";
+import HatchbackIcon from "../../../../assets/icons/Hatchback.png";
+import BusIcon from "../../../../assets/icons/bus.png";
+import MiniBusIcon from "../../../../assets/icons/mini_bus.png";
 import MapBackground from "../../../../assets/map_image.png";
 
 const inputClass =
@@ -52,6 +56,11 @@ const iconMap = {
   Luxary: LuxuryIcon,
   premium: PremiumIcon,
   suv: SuvIcon,
+  scooty: ScootyIcon,
+  car_5_seater: HatchbackIcon,
+  car_7_seater: SuvIcon,
+  bus: BusIcon,
+  mini_bus: MiniBusIcon,
 };
 
 const ICON_TYPE_ALIASES = {
@@ -67,6 +76,11 @@ const ICON_TYPE_ALIASES = {
   mcv: "MCV",
   luxary: "Luxary",
   luxury: "Luxary",
+  scooty: "scooty",
+  "car 5 seater": "car_5_seater",
+  "car 7 seater": "car_7_seater",
+  bus: "bus",
+  "mini bus": "mini_bus",
 };
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -105,6 +119,14 @@ const formatDispatchType = (value = "") => {
   if (normalized === "pooling") return "Pooling";
   return "Normal";
 };
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const getDocumentSideLabel = (field = {}) => {
   if (field.side === "front") return "Front";
@@ -231,8 +253,9 @@ const AddVehicle = () => {
           throw new Error(`${field.label || "Document"} currently supports image files only.`);
         }
 
-        const uploadResult = await uploadService.uploadImageFile(
-          selectedFile,
+        const dataUrl = await fileToDataUrl(selectedFile);
+        const uploadResult = await uploadService.uploadImage(
+          dataUrl,
           "fleet-vehicle-documents",
         );
         const uploadedUrl = uploadResult?.url || uploadResult?.secureUrl || "";

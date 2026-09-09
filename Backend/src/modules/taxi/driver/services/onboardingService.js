@@ -2,36 +2,50 @@ import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { normalizePoint, toPoint } from '../../../../utils/geo.js';
-import { extractAssetUrl } from '../../../../services/storage.service.js';
-import {
-  normalizeOtpPhone,
-  getOtpTtlMs,
-  resolveOtpForPhone,
-  sendOtpSms,
-} from '../../../../core/otp/otp.service.js';
+import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
 import { Driver } from '../models/Driver.js';
 import { DriverRegistrationSession } from '../models/DriverRegistrationSession.js';
 import { Owner } from '../../admin/models/Owner.js';
+import { ServiceStore } from '../../admin/models/ServiceStore.js';
+import { ServiceCenterStaff } from '../../admin/models/ServiceCenterStaff.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
+import { BusService } from '../../admin/models/BusService.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import {
+  createBusService,
   listDriverDocumentUploadFields,
   listDriverNeededDocuments,
   listDriverVehicleFieldTemplates,
   listOwnerDocumentUploadFields,
   listOwnerNeededDocuments,
 } from '../../admin/services/adminService.js';
+import {
+  findActiveEmployeeByCode,
+  normalizeEmployeeCode,
+} from '../../admin/services/employeeAttributionService.js';
 import { hashPassword, signAccessToken } from './authService.js';
+import {
+  findPreferredDriverPortalAccountByPhone,
+  startDriverLoginOtp,
+} from './loginOtpService.js';
 import { findZoneByPickup } from './locationService.js';
+import { sendOtpSms } from '../../services/smsService.js';
+import {
+  verifyDrivingLicenseWithRecharge,
+  verifyRcWithRecharge,
+} from '../../services/rechargeVerificationService.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
+import { BusDriver } from '../models/BusDriver.js';
 import { applyDriverWalletAdjustment } from './walletService.js';
 
-const OTP_TTL_MS = getOtpTtlMs;
+const OTP_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/;
+const VEHICLE_NUMBER_PATTERNS = [
+  /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
+];
 const ALLOWED_SERVICE_CATEGORIES = ['taxi', 'outstation', 'delivery', 'pooling'];
 
 const VEHICLE_TYPE_MAP = {
@@ -50,7 +64,27 @@ const normalizePhone = (phone) => {
   return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
 };
 
-const normalizeRole = (role) => (String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver');
+const SPECIAL_SIGNUP_ROLES = ['bus_driver', 'service_center', 'service_center_staff'];
+const normalizeRole = (role) => {
+  const normalized = String(role || 'driver').trim().toLowerCase();
+  if (normalized === 'owner') return 'owner';
+  if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') return 'bus_driver';
+  if (normalized === 'service_center' || normalized === 'service-center' || normalized === 'servicecenter') return 'service_center';
+  if (
+    normalized === 'service_center_staff' ||
+    normalized === 'service-center-staff' ||
+    normalized === 'servicecenterstaff' ||
+    normalized === 'center_staff'
+  ) {
+    return 'service_center_staff';
+  }
+  return 'driver';
+};
+const hasExplicitSignupRole = (role) =>
+  Boolean(role) &&
+  ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'].includes(
+    normalizeRole(role),
+  );
 const normalizeServiceCategories = (value, fallback = 'taxi') => {
   const rawValues = Array.isArray(value)
     ? value
@@ -95,6 +129,79 @@ const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
   return String(fallback || 'taxi').trim().toLowerCase() || 'taxi';
 };
 const normalizeReferralCode = (value = '') => String(value || '').trim().toUpperCase();
+const buildOnboardingRcVerificationRequestId = (session) =>
+  `RC-${String(session?.registrationId || '').replace(/[^A-Za-z0-9]/g, '').slice(-8) || 'ONBOARD'}-${Date.now()}`;
+const buildOnboardingLicenseVerificationRequestId = (session) =>
+  `DL-${String(session?.registrationId || '').replace(/[^A-Za-z0-9]/g, '').slice(-8) || 'ONBOARD'}-${Date.now()}`;
+
+const resolveRechargeVerificationState = (providerResponse = {}, fallbackMessage = '') => {
+  const normalizedStatus = String(providerResponse?.status ?? '').trim().toLowerCase();
+  const message = String(
+    providerResponse?.cardData?.response?.message ||
+    providerResponse?.cardData?.message ||
+    providerResponse?.msg ||
+    providerResponse?.message ||
+    fallbackMessage ||
+    '',
+  ).trim();
+  const lowerMessage = message.toLowerCase();
+  const explicitPending =
+    ['pending', 'processing', 'queued', 'in_progress', 'in progress'].includes(normalizedStatus) ||
+    lowerMessage.includes('pending') ||
+    lowerMessage.includes('processing') ||
+    lowerMessage.includes('try after sometime') ||
+    lowerMessage.includes('please try after sometime');
+  const succeeded = normalizedStatus === '1' || normalizedStatus === 'success' || normalizedStatus === 'verified' || Number(providerResponse?.status || 0) === 1;
+
+  return {
+    succeeded,
+    status: succeeded ? 'verified' : explicitPending ? 'pending' : 'failed',
+    message,
+  };
+};
+
+const parseRcManufacturingYear = (value = '') => {
+  const normalized = String(value || '').trim();
+  const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
+  return yearMatch ? yearMatch[0] : '';
+};
+
+const normalizeRcVerificationResult = (result = {}, rcNumber = '') => ({
+  make: String(result?.vehicle_manufacturer_name || '').trim(),
+  model: String(result?.model || '').trim(),
+  year: parseRcManufacturingYear(result?.vehicle_manufacturing_month_year),
+  number: String(result?.reg_no || rcNumber || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase(),
+  color: String(result?.vehicle_colour || '').trim(),
+  fuelType: String(result?.type || '').trim(),
+  seatCapacity: String(result?.vehicle_seat_capacity || '').trim(),
+  ownerName: String(result?.owner_name || '').trim(),
+  status: String(result?.status || '').trim(),
+  registrationDate: String(result?.reg_date || '').trim(),
+  insuranceUpto: String(result?.vehicle_insurance_upto || '').trim(),
+  fitnessUpto: String(result?.fitness_upto || result?.vehicle_fitness_upto || '').trim(),
+  permitNumber: String(result?.permit_no || result?.permit_number || '').trim(),
+  permitValidUpto: String(result?.permit_valid_upto || result?.permit_upto || '').trim(),
+  pucNumber: String(
+    result?.vehicle_pucc_number ||
+    result?.pucc_number ||
+    result?.pucc_no ||
+    result?.puc_number ||
+    result?.puc_no ||
+    '',
+  ).trim(),
+  pucValidUpto: String(
+    result?.vehicle_pucc_upto ||
+    result?.pucc_upto ||
+    result?.puc_valid_upto ||
+    result?.puc_upto ||
+    '',
+  ).trim(),
+  financer: String(result?.financer || result?.financer_name || '').trim(),
+  engineNumber: String(result?.engine_no || '').trim(),
+  chassisNumber: String(result?.chasi_no || result?.chassis_no || '').trim(),
+  manufacturingMonthYear: String(result?.vehicle_manufacturing_month_year || '').trim(),
+});
+
 const generateDriverReferralCode = (driver) => {
   const idPart = String(driver?._id || '')
     .slice(-6)
@@ -216,15 +323,29 @@ const matchesDocumentRole = (accountType, role) => {
 };
 
 const matchesVehicleFieldRole = (accountType, role) => {
-  const normalizedAccountType = String(accountType || 'individual').trim().toLowerCase();
+  const rawAccountType = String(accountType || '').trim().toLowerCase();
+  const normalizedAccountType = rawAccountType || 'individual';
   const normalizedRole = normalizeRole(role);
+
+  if (normalizedRole === 'owner') {
+    if (!rawAccountType) {
+      return false;
+    }
+
+    return [
+      'fleet_drivers',
+      'fleet drivers',
+      'owner',
+      'owners',
+      'fleet_owner',
+      'fleet_owners',
+      'fleet owner',
+      'fleet owners',
+    ].includes(normalizedAccountType);
+  }
 
   if (normalizedAccountType === 'both') {
     return true;
-  }
-
-  if (normalizedRole === 'owner') {
-    return normalizedAccountType === 'fleet_drivers';
   }
 
   return normalizedAccountType === 'individual';
@@ -245,7 +366,34 @@ const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const resolveDriverOnboardingOtpForPhone = (phone) => resolveOtpForPhone(phone);
+const getStaticDriverOtpConfig = () => ({
+  phone: normalizePhone(env.sms?.staticOtpPhone || ''),
+  otp: String(env.sms?.staticOtpCode || '').trim(),
+});
+const resolveDriverOnboardingOtpForPhone = (phone) => {
+  const normalizedPhone = normalizePhone(phone);
+  const staticOtpConfig = getStaticDriverOtpConfig();
+  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
+
+  if (defaultOtpEnabled && staticOtpConfig.otp) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  return {
+    otp: generateOtp(),
+    isStatic: false,
+  };
+};
 
 const getVehicleType = (vehicleTypeId, registerFor = '') => {
   const type = VEHICLE_TYPE_MAP[String(vehicleTypeId || registerFor || '').trim().toLowerCase()];
@@ -302,6 +450,32 @@ const getValidatedServiceLocationCoordinates = (serviceLocation = {}) => {
   }
 };
 
+const isSpecialSignupRole = (role = '') => SPECIAL_SIGNUP_ROLES.includes(normalizeRole(role));
+
+const serializeSignupBusServiceOption = (busService = {}) => ({
+  id: busService._id,
+  operatorName: busService.operatorName || '',
+  busName: busService.busName || '',
+  serviceNumber: busService.serviceNumber || '',
+  routeName: busService.route?.routeName || '',
+  originCity: busService.route?.originCity || '',
+  destinationCity: busService.route?.destinationCity || '',
+  status: busService.status || 'draft',
+});
+
+const serializeSignupServiceCenterOption = (center = {}) => ({
+  id: center._id,
+  name: center.name || '',
+  address: center.address || '',
+  ownerName: center.owner_name || '',
+  ownerPhone: center.owner_phone || '',
+  serviceLocationId: center.service_location_id?._id || center.service_location_id || null,
+  serviceLocationName:
+    center.service_location_id?.service_location_name ||
+    center.service_location_id?.name ||
+    '',
+});
+
 const normalizeStoredDocument = (value) => {
   if (!value) {
     return null;
@@ -351,9 +525,11 @@ const publicSessionPayload = (session, debugOtp = null) => ({
   registrationId: session.registrationId,
   phone: session.phone,
   role: session.role,
+  roleConfirmed: session.roleConfirmed !== false,
   status: session.status,
   otpVerified: Boolean(session.otpVerifiedAt),
   documentsUploaded: Object.keys(session.documents || {}).filter((key) => Boolean(session.documents?.[key])),
+  employeeCode: session.employeeCode || '',
   debugOtp,
 });
 
@@ -404,59 +580,147 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     return null;
   }
 
-  // Already uploaded via multipart (food-style) — persist metadata only.
-  if (typeof value === 'object' && (value.secureUrl || value.url || value.previewUrl)) {
-    const url = extractAssetUrl(value.secureUrl || value.url || value.previewUrl);
-    if (url && !String(url).startsWith('data:')) {
-      return normalizeStoredDocument({
-        ...value,
-        secureUrl: url,
-        previewUrl: url,
-        uploaded: true,
-      });
-    }
+  if (typeof value === 'object' && value.secureUrl) {
+    return normalizeStoredDocument(value);
   }
 
-  if (typeof value === 'string' && value && !value.startsWith('data:')) {
-    return normalizeStoredDocument({
-      key: documentKey,
-      secureUrl: value,
-      previewUrl: value,
-      uploaded: true,
-    });
+  const dataUrl = typeof value === 'string' ? value : value.dataUrl;
+  const originalFilename = typeof value === 'object'
+    ? value.fileName || value.originalFilename || documentKey
+    : documentKey;
+  const identifyNumber = typeof value === 'object'
+    ? String(
+      value.identifyNumber ||
+      value.identify_number ||
+      value.documentNumber ||
+      value.document_number ||
+      '',
+    ).trim()
+    : '';
+  const expiryDate = typeof value === 'object'
+    ? String(value.expiryDate || value.expiry_date || value.expiry || value.expiresAt || '').trim()
+    : '';
+  const birthDate = typeof value === 'object'
+    ? String(value.birthDate || value.birth_date || '').trim()
+    : '';
+  const requestNumber = typeof value === 'object'
+    ? String(value.requestNumber || value.request_no || '').trim()
+    : '';
+  const ifsc = typeof value === 'object'
+    ? String(value.ifsc || value.ifscCode || value.ifsc_code || '').trim().toUpperCase()
+    : '';
+  const accountHolderName = typeof value === 'object'
+    ? String(
+      value.accountHolderName ||
+      value.account_holder_name ||
+      value.beneficiaryName ||
+      value.benificiary_name ||
+      '',
+    ).trim()
+    : '';
+
+  if (!dataUrl) {
+    throw new ApiError(400, `${documentKey} must contain an image data URL`);
   }
 
-  throw new ApiError(
-    400,
-    `${documentKey} must be uploaded as a file first (multipart). Send the returned secureUrl.`,
-  );
+  const safeSuffix = String(originalFilename)
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9-_]/g, '');
+
+  const uploaded = await uploadDataUrlToCloudinary({
+    dataUrl,
+    folder: `${documentKey}/driver-documents`,
+    publicIdPrefix: `driver-${documentKey}`,
+    publicIdSuffix: safeSuffix,
+  });
+
+  return {
+    key: documentKey,
+    fileName: originalFilename,
+    uploaded: true,
+    uploadedAt: new Date().toISOString(),
+    previewUrl: uploaded.secureUrl,
+    secureUrl: uploaded.secureUrl,
+    publicId: uploaded.publicId,
+    resourceType: uploaded.resourceType,
+    format: uploaded.format,
+    bytes: uploaded.bytes,
+    width: uploaded.width,
+    height: uploaded.height,
+    identifyNumber,
+    identify_number: identifyNumber,
+    documentNumber: identifyNumber,
+    document_number: identifyNumber,
+    expiryDate,
+    expiry_date: expiryDate,
+    birthDate,
+    birth_date: birthDate,
+    requestNumber,
+    request_no: requestNumber,
+    ifsc,
+    ifscCode: ifsc,
+    ifsc_code: ifsc,
+    accountHolderName,
+    account_holder_name: accountHolderName,
+    beneficiaryName: accountHolderName,
+    benificiary_name: accountHolderName,
+    cloudinary: uploaded,
+  };
 };
 
-export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
+export const startDriverOnboarding = async ({ phone, role }) => {
   const normalizedPhone = normalizePhone(phone);
 
   if (!normalizedPhone || normalizedPhone.length !== 10) {
     throw new ApiError(400, 'A valid 10-digit mobile number is required');
   }
 
+  const roleProvided = hasExplicitSignupRole(role);
   const normalizedRole = normalizeRole(role);
+  const preferredExistingAccount = roleProvided
+    ? null
+    : await findPreferredDriverPortalAccountByPhone(normalizedPhone);
+  let roleSpecificExistingAccount = null;
 
-  // Driver and owner are separate accounts — only block when the same role already exists.
-  if (normalizedRole === 'owner') {
-    const existingOwner = await Owner.findOne({
-      $or: [
-        { mobile: normalizedPhone },
-        { phone: normalizedPhone },
-      ],
+  if (roleProvided) {
+    if (normalizedRole === 'owner') {
+      roleSpecificExistingAccount = await Owner.findOne({
+        $or: [{ mobile: normalizedPhone }, { phone: normalizedPhone }],
+      }).lean();
+    } else if (normalizedRole === 'bus_driver') {
+      roleSpecificExistingAccount = await BusDriver.findOne({ phone: normalizedPhone }).lean();
+    } else if (normalizedRole === 'service_center') {
+      roleSpecificExistingAccount = await ServiceStore.findOne({ owner_phone: normalizedPhone }).lean();
+    } else if (normalizedRole === 'service_center_staff') {
+      roleSpecificExistingAccount = await ServiceCenterStaff.findOne({ phone: normalizedPhone }).lean();
+    } else {
+      roleSpecificExistingAccount = await Driver.findOne({ phone: normalizedPhone }).lean();
+    }
+  }
+
+  const hasExistingAccount = roleProvided
+    ? Boolean(roleSpecificExistingAccount)
+    : Boolean(preferredExistingAccount);
+
+  if (hasExistingAccount) {
+    const loginResult = await startDriverLoginOtp({
+      phone: normalizedPhone,
+      role: preferredExistingAccount?.role || normalizedRole,
     });
-    if (existingOwner) {
-      throw new ApiError(409, 'Phone number is already registered as an owner');
-    }
-  } else {
-    const existingDriver = await Driver.findOne({ phone: normalizedPhone });
-    if (existingDriver) {
-      throw new ApiError(409, 'Phone number is already registered as a driver');
-    }
+
+    return {
+      ...loginResult,
+      loginMode: true,
+      existingAccount: true,
+      detectedRole: preferredExistingAccount?.role || normalizedRole,
+      session: {
+        ...(loginResult.session || {}),
+        role: preferredExistingAccount?.role || normalizedRole,
+        loginMode: true,
+        existingAccount: true,
+        availableRoles: loginResult.availableRoles || [],
+      },
+    };
   }
 
   const { otp, isStatic } = resolveDriverOnboardingOtpForPhone(normalizedPhone);
@@ -469,9 +733,10 @@ export const startDriverOnboarding = async ({ phone, role = 'driver' }) => {
       registrationId,
       phone: normalizedPhone,
       role: normalizedRole,
+      roleConfirmed: roleProvided,
       status: 'otp_sent',
       otpHash: hashOtp(otp),
-      otpExpiresAt: new Date(now + OTP_TTL_MS()),
+      otpExpiresAt: new Date(now + OTP_TTL_MS),
       otpVerifiedAt: null,
       expiresAt: new Date(now + SESSION_TTL_MS),
     },
@@ -525,12 +790,207 @@ export const verifyDriverOtp = async ({ registrationId, phone, otp }) => {
   };
 };
 
+export const setDriverOnboardingRole = async ({ registrationId, phone, role }) => {
+  const session = await getSession(registrationId, phone);
+
+  if (!session.otpVerifiedAt) {
+    throw new ApiError(400, 'Verify OTP before selecting a role');
+  }
+
+  const normalizedRole = normalizeRole(role);
+  session.role = normalizedRole;
+  session.roleConfirmed = true;
+  await session.save();
+
+  return {
+    message: 'Signup role selected successfully',
+    session: publicSessionPayload(session),
+  };
+};
+
+export const getDriverOnboardingSignupOptions = async () => {
+  const [serviceLocations, serviceCenters, busServices] = await Promise.all([
+    ServiceLocation.find({ active: { $ne: false } })
+      .select('name service_location_name address country latitude longitude location')
+      .sort({ service_location_name: 1, name: 1 })
+      .lean(),
+    ServiceStore.find({
+      active: { $ne: false },
+      approve: true,
+    })
+      .populate('service_location_id', 'name service_location_name')
+      .sort({ name: 1 })
+      .lean(),
+    BusService.find({
+      status: { $in: ['active', 'paused'] },
+    })
+      .select('operatorName busName serviceNumber route status')
+      .sort({ operatorName: 1, busName: 1 })
+      .lean(),
+  ]);
+
+  return {
+    serviceLocations: (Array.isArray(serviceLocations) ? serviceLocations : []).map((item) => ({
+      _id: item._id,
+      id: item._id,
+      name: item.service_location_name || item.name || '',
+      service_location_name: item.service_location_name || item.name || '',
+      address: item.address || '',
+      country: item.country || '',
+      latitude: item.latitude ?? item.location?.coordinates?.[1] ?? null,
+      longitude: item.longitude ?? item.location?.coordinates?.[0] ?? null,
+      location: item.location || null,
+    })),
+    serviceCenters: (Array.isArray(serviceCenters) ? serviceCenters : []).map(serializeSignupServiceCenterOption),
+    busServices: (Array.isArray(busServices) ? busServices : []).map(serializeSignupBusServiceOption),
+  };
+};
+
+export const saveDriverRoleDetails = async ({ registrationId, phone, roleDetails = {} }) => {
+  const session = await getSession(registrationId, phone);
+  const normalizedRole = normalizeRole(session.role);
+
+  if (!session.personal?.fullName) {
+    throw new ApiError(400, 'Save personal details before continuing');
+  }
+
+  if (!isSpecialSignupRole(normalizedRole)) {
+    throw new ApiError(400, 'This role does not use the self-signup details form');
+  }
+
+  if (normalizedRole === 'service_center') {
+    const centerName = String(roleDetails.centerName || roleDetails.name || '').trim();
+    const address = String(roleDetails.address || '').trim();
+    const serviceLocationId = String(roleDetails.serviceLocationId || '').trim();
+
+    if (!centerName) {
+      throw new ApiError(400, 'Service center name is required');
+    }
+
+    if (!address) {
+      throw new ApiError(400, 'Service center address is required');
+    }
+
+    if (!serviceLocationId || !/^[a-f\d]{24}$/i.test(serviceLocationId)) {
+      throw new ApiError(400, 'Select a valid service location');
+    }
+
+    const serviceLocation = await ServiceLocation.findById(serviceLocationId).lean();
+    if (!serviceLocation) {
+      throw new ApiError(404, 'Service location not found');
+    }
+
+    session.roleDetails = {
+      centerName,
+      address,
+      serviceLocationId,
+      serviceLocationName: serviceLocation.service_location_name || serviceLocation.name || '',
+    };
+  }
+
+  if (normalizedRole === 'service_center_staff') {
+    const serviceCenterId = String(roleDetails.serviceCenterId || '').trim();
+    if (!serviceCenterId || !/^[a-f\d]{24}$/i.test(serviceCenterId)) {
+      throw new ApiError(400, 'Select a valid service center');
+    }
+
+    const serviceCenter = await ServiceStore.findOne({
+      _id: serviceCenterId,
+      active: { $ne: false },
+      approve: true,
+    }).lean();
+
+    if (!serviceCenter) {
+      throw new ApiError(404, 'Service center not found');
+    }
+
+    session.roleDetails = {
+      serviceCenterId,
+      serviceCenterName: serviceCenter.name || '',
+      serviceCenterAddress: serviceCenter.address || '',
+    };
+  }
+
+  if (normalizedRole === 'bus_driver') {
+    const busServiceId = String(roleDetails.busServiceId || '').trim();
+    const requestNote = String(roleDetails.requestNote || '').trim().slice(0, 300);
+    const createNewBus = roleDetails.createNewBus === true;
+    const busDraft = roleDetails.busDraft && typeof roleDetails.busDraft === 'object' ? roleDetails.busDraft : null;
+    const draftBusDetails = {
+      operatorName: String(busDraft?.operatorName || roleDetails.operatorName || '').trim(),
+      busName: String(busDraft?.busName || roleDetails.busName || '').trim(),
+      serviceNumber: String(busDraft?.serviceNumber || roleDetails.serviceNumber || '').trim(),
+      originCity: String(busDraft?.route?.originCity || roleDetails.originCity || '').trim(),
+      destinationCity: String(busDraft?.route?.destinationCity || roleDetails.destinationCity || '').trim(),
+    };
+
+    if (createNewBus) {
+      if (!draftBusDetails.operatorName) {
+        throw new ApiError(400, 'Operator name is required');
+      }
+      if (!draftBusDetails.busName) {
+        throw new ApiError(400, 'Bus name is required');
+      }
+      if (!draftBusDetails.originCity) {
+        throw new ApiError(400, 'Origin city is required');
+      }
+      if (!draftBusDetails.destinationCity) {
+        throw new ApiError(400, 'Destination city is required');
+      }
+
+      session.roleDetails = {
+        createNewBus: true,
+        requestNote,
+        busDraft,
+        ...draftBusDetails,
+        busServiceSnapshot: {
+          operatorName: draftBusDetails.operatorName,
+          busName: draftBusDetails.busName,
+          serviceNumber: draftBusDetails.serviceNumber,
+          originCity: draftBusDetails.originCity,
+          destinationCity: draftBusDetails.destinationCity,
+          routeName: `${draftBusDetails.originCity} to ${draftBusDetails.destinationCity}`,
+        },
+      };
+    } else {
+      if (!busServiceId || !/^[a-f\d]{24}$/i.test(busServiceId)) {
+        throw new ApiError(400, 'Select a valid bus service');
+      }
+
+      const busService = await BusService.findById(busServiceId).lean();
+      if (!busService) {
+        throw new ApiError(404, 'Bus service not found');
+      }
+
+      session.roleDetails = {
+        createNewBus: false,
+        busServiceId,
+        requestNote,
+        busServiceSnapshot: serializeSignupBusServiceOption(busService),
+      };
+    }
+  }
+
+  session.status = 'role_details_saved';
+  await session.save();
+
+  return {
+    message: 'Signup details saved successfully',
+    roleDetails: session.roleDetails,
+    session: publicSessionPayload(session),
+  };
+};
+
 export const saveDriverPersonalDetails = async ({ registrationId, phone, fullName, email, gender, password }) => {
   const session = await getSession(registrationId, phone);
   const isOwner = String(session.role || '').toLowerCase() === 'owner';
 
   if (!session.otpVerifiedAt) {
     throw new ApiError(400, 'Verify OTP before continuing');
+  }
+
+  if (session.roleConfirmed === false) {
+    throw new ApiError(400, 'Select your signup role before continuing');
   }
 
   if (!fullName || !email || !gender) {
@@ -572,10 +1032,11 @@ export const saveDriverPersonalDetails = async ({ registrationId, phone, fullNam
   };
 };
 
-export const saveDriverReferral = async ({ registrationId, phone, referralCode = '' }) => {
+export const saveDriverReferral = async ({ registrationId, phone, referralCode = '', employeeCode = '' }) => {
   const session = await getSession(registrationId, phone);
 
   const normalizedReferralCode = normalizeReferralCode(referralCode);
+  const normalizedEmployeeCode = normalizeEmployeeCode(employeeCode);
 
   if (normalizedReferralCode) {
     const referrer = await findDriverByReferralCode(normalizedReferralCode);
@@ -584,12 +1045,21 @@ export const saveDriverReferral = async ({ registrationId, phone, referralCode =
     }
   }
 
+  if (normalizedEmployeeCode) {
+    const employee = await findActiveEmployeeByCode(normalizedEmployeeCode);
+    if (!employee?._id) {
+      throw new ApiError(400, 'Invalid employee code');
+    }
+  }
+
   session.referralCode = normalizedReferralCode;
+  session.employeeCode = normalizedEmployeeCode;
   await session.save();
 
   return {
     message: 'Referral code saved',
     referralCode: session.referralCode,
+    employeeCode: session.employeeCode,
     session: publicSessionPayload(session),
   };
 };
@@ -603,6 +1073,7 @@ export const saveDriverVehicle = async ({
   locationName,
   serviceLocation,
   vehicleTypeId,
+  rcNumber,
   make,
   model,
   year,
@@ -630,28 +1101,10 @@ export const saveDriverVehicle = async ({
     throw new ApiError(400, 'A valid service location is required');
   }
 
-  const hasValue = (value) =>
-    Array.isArray(value) ? value.length > 0 : Boolean(String(value || '').trim());
-
-  // Heal role drift: owner UI submits company profile with empty vehicle fields,
-  // but DB session may still be "driver" (local role/path out of sync with OTP start).
-  const hasCompanyProfile =
-    hasValue(companyName) &&
-    hasValue(companyAddress) &&
-    hasValue(city) &&
-    hasValue(postalCode) &&
-    hasValue(taxNumber);
-  const hasVehicleIdentity =
-    hasValue(vehicleTypeId) || hasValue(make) || hasValue(number) || hasValue(model) || hasValue(color);
-
-  let isOwner = String(session.role || '').toLowerCase() === 'owner';
-  if (!isOwner && hasCompanyProfile && !hasVehicleIdentity) {
-    session.role = 'owner';
-    isOwner = true;
-  }
-
+  const isOwner = String(session.role || '').toLowerCase() === 'owner';
   const requiredFieldMap = await getRequiredVehicleFieldMap(session.role);
   const normalizedYear = String(year || '').trim();
+  const normalizedRcNumber = String(rcNumber || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const normalizedNumber = String(number || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const normalizedPostalCode = String(postalCode || '').replace(/\D/g, '');
   const normalizedCustomFields = Object.entries(customFields || {}).reduce((acc, [key, value]) => {
@@ -668,6 +1121,8 @@ export const saveDriverVehicle = async ({
     acc[normalizedKey] = String(value || '').trim();
     return acc;
   }, {});
+  const hasValue = (value) =>
+    Array.isArray(value) ? value.length > 0 : Boolean(String(value || '').trim());
   const requireField = (fieldKey, value, fallbackMessage) => {
     const config = requiredFieldMap[fieldKey];
     if (config?.is_required && !hasValue(value)) {
@@ -693,6 +1148,9 @@ export const saveDriverVehicle = async ({
 
     requireField('serviceCategories', normalizedServiceCategories, 'Service category');
     requireField('vehicleTypeId', vehicleTypeId, 'Vehicle type');
+    if (!normalizedRcNumber) {
+      throw new ApiError(400, 'RC number is required');
+    }
     requireField('make', make, 'Brand / Make');
     requireField('model', model, 'Model');
     requireField('year', normalizedYear, 'Year');
@@ -703,8 +1161,8 @@ export const saveDriverVehicle = async ({
       throw new ApiError(400, `Vehicle year must be between 1980 and ${currentYear}`);
     }
 
-    if (normalizedNumber && !VEHICLE_NUMBER_REGEX.test(normalizedNumber)) {
-      throw new ApiError(400, 'Vehicle number must be in this format: PP09KK1234');
+    if (normalizedNumber && !VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(normalizedNumber))) {
+      throw new ApiError(400, 'Vehicle number must be in a valid format, for example DL1AB2345, DL1ABCD1234, or MH12AB1234');
     }
   }
 
@@ -758,6 +1216,7 @@ export const saveDriverVehicle = async ({
         }
       : null,
     vehicleTypeId: String(vehicleTypeId || '').trim(),
+    rcNumber: normalizedRcNumber,
     make: String(make || '').trim(),
     model: String(model || '').trim(),
     year: normalizedYear,
@@ -790,7 +1249,12 @@ export const saveDriverDocuments = async ({ registrationId, phone, documents = {
     const uploadedDocument = await uploadRegistrationDocument(documentKey, value);
 
     if (uploadedDocument) {
-      updatedDocuments[documentKey] = uploadedDocument;
+      const existingDocument = session.documents?.[documentKey];
+      updatedDocuments[documentKey] = normalizeStoredDocument({
+        ...(typeof existingDocument === 'object' && existingDocument ? existingDocument : {}),
+        ...uploadedDocument,
+        key: documentKey,
+      });
       uploadedDocumentKeys.push(documentKey);
     }
   }
@@ -830,6 +1294,232 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
 
   if (!session.personal?.fullName || !session.personal?.passwordHash) {
     throw new ApiError(400, 'Personal details are incomplete');
+  }
+
+  const normalizedRole = normalizeRole(session.role);
+  const submittedAt = new Date();
+
+  if (isSpecialSignupRole(normalizedRole)) {
+    if (!session.roleDetails || Object.keys(session.roleDetails || {}).length === 0) {
+      throw new ApiError(400, 'Signup details are incomplete');
+    }
+
+    if (normalizedRole === 'service_center') {
+      const serviceLocation = await ServiceLocation.findById(session.roleDetails.serviceLocationId).lean();
+      if (!serviceLocation) {
+        throw new ApiError(404, 'Service location not found');
+      }
+
+      const coordinates = getValidatedServiceLocationCoordinates(serviceLocation);
+      if (!coordinates) {
+        throw new ApiError(400, 'Service location coordinates are not configured');
+      }
+
+      const existingCenter = await ServiceStore.findOne({ owner_phone: session.phone }).lean();
+      if (existingCenter) {
+        throw new ApiError(409, 'Service center already exists with this phone number');
+      }
+
+      const zone = await findZoneByPickup(coordinates);
+      if (!zone?._id) {
+        throw new ApiError(400, 'No service zone is configured for the selected location');
+      }
+
+      const center = await ServiceStore.create({
+        name: session.roleDetails.centerName,
+        zone_id: zone._id,
+        service_location_id: serviceLocation._id,
+        address: session.roleDetails.address,
+        owner_name: session.personal.fullName,
+        owner_phone: session.phone,
+        latitude: coordinates[1],
+        longitude: coordinates[0],
+        location: toPoint(coordinates, 'location'),
+        status: 'active',
+        active: true,
+        approve: false,
+        signupSource: 'self_signup',
+        onboarding: {
+          registrationId: session.registrationId,
+          role: normalizedRole,
+          verifiedAt: session.otpVerifiedAt,
+          submittedAt,
+          personal: {
+            fullName: session.personal.fullName,
+            email: session.personal.email,
+            gender: session.personal.gender,
+          },
+          roleDetails: session.roleDetails,
+        },
+      });
+
+      session.finalEntityId = center._id;
+      session.finalEntityRole = normalizedRole;
+      session.status = 'completed';
+      session.completedAt = submittedAt;
+      await session.save();
+      await DriverRegistrationSession.deleteOne({ _id: session._id });
+
+      return {
+        message: 'Service center signup submitted successfully',
+        serviceCenter: {
+          id: center._id,
+          name: center.name || '',
+          phone: center.owner_phone || '',
+          approve: center.approve,
+          status: center.status,
+        },
+        token: signAccessToken({ sub: String(center._id), role: 'service_center' }),
+        session: publicSessionPayload(session),
+      };
+    }
+
+    if (normalizedRole === 'service_center_staff') {
+      const existingStaff = await ServiceCenterStaff.findOne({ phone: session.phone }).lean();
+      if (existingStaff) {
+        throw new ApiError(409, 'Service staff already exists with this phone number');
+      }
+
+      const serviceCenter = await ServiceStore.findOne({
+        _id: session.roleDetails.serviceCenterId,
+        active: { $ne: false },
+        approve: true,
+      }).lean();
+
+      if (!serviceCenter) {
+        throw new ApiError(404, 'Selected service center is not available');
+      }
+
+      const staff = await ServiceCenterStaff.create({
+        serviceCenterId: serviceCenter._id,
+        name: session.personal.fullName,
+        phone: session.phone,
+        active: true,
+        status: 'active',
+        approve: false,
+        signupSource: 'self_signup',
+        onboarding: {
+          registrationId: session.registrationId,
+          role: normalizedRole,
+          verifiedAt: session.otpVerifiedAt,
+          submittedAt,
+          personal: {
+            fullName: session.personal.fullName,
+            email: session.personal.email,
+            gender: session.personal.gender,
+          },
+          roleDetails: session.roleDetails,
+        },
+      });
+
+      session.finalEntityId = staff._id;
+      session.finalEntityRole = normalizedRole;
+      session.status = 'completed';
+      session.completedAt = submittedAt;
+      await session.save();
+      await DriverRegistrationSession.deleteOne({ _id: session._id });
+
+      return {
+        message: 'Service staff signup submitted successfully',
+        serviceStaff: {
+          id: staff._id,
+          name: staff.name || '',
+          phone: staff.phone || '',
+          approve: staff.approve,
+          status: staff.status,
+        },
+        token: signAccessToken({ sub: String(staff._id), role: 'service_center_staff' }),
+        session: publicSessionPayload(session),
+      };
+    }
+
+    if (normalizedRole === 'bus_driver') {
+      const existingBusDriver = await BusDriver.findOne({ phone: session.phone }).lean();
+      if (existingBusDriver) {
+        throw new ApiError(409, 'Bus driver already exists with this phone number');
+      }
+
+      let busService = null;
+      if (session.roleDetails?.createNewBus === true) {
+        const signupBusDraft =
+          session.roleDetails?.busDraft && typeof session.roleDetails.busDraft === 'object'
+            ? session.roleDetails.busDraft
+            : {
+                operatorName: session.roleDetails.operatorName,
+                busName: session.roleDetails.busName,
+                serviceNumber: session.roleDetails.serviceNumber,
+                status: 'draft',
+                route: {
+                  routeName:
+                    `${String(session.roleDetails.originCity || '').trim()} to ${String(session.roleDetails.destinationCity || '').trim()}`,
+                  originCity: session.roleDetails.originCity,
+                  destinationCity: session.roleDetails.destinationCity,
+                  stops: [],
+                },
+              };
+
+        busService = await createBusService({
+          ...signupBusDraft,
+          status: signupBusDraft.status || 'draft',
+        });
+      } else {
+        busService = await BusService.findById(session.roleDetails.busServiceId).lean();
+      }
+
+      if (!busService) {
+        throw new ApiError(404, 'Selected bus service is no longer available');
+      }
+
+      const busDriver = await BusDriver.create({
+        name: session.personal.fullName,
+        phone: session.phone,
+        email: session.personal.email,
+        approve: false,
+        active: true,
+        status: 'pending',
+        assignedBusServiceId: busService._id,
+        operatorName: busService.operatorName || '',
+        busName: busService.busName || '',
+        serviceNumber: busService.serviceNumber || '',
+        registrationNumber: busService.registrationNumber || '',
+        routeName: busService.route?.routeName || '',
+        originCity: busService.route?.originCity || '',
+        destinationCity: busService.route?.destinationCity || '',
+        signupSource: 'self_signup',
+        onboarding: {
+          registrationId: session.registrationId,
+          role: normalizedRole,
+          verifiedAt: session.otpVerifiedAt,
+          submittedAt,
+          personal: {
+            fullName: session.personal.fullName,
+            email: session.personal.email,
+            gender: session.personal.gender,
+          },
+          roleDetails: session.roleDetails,
+        },
+      });
+
+      session.finalEntityId = busDriver._id;
+      session.finalEntityRole = normalizedRole;
+      session.status = 'completed';
+      session.completedAt = submittedAt;
+      await session.save();
+      await DriverRegistrationSession.deleteOne({ _id: session._id });
+
+      return {
+        message: 'Bus driver signup submitted successfully',
+        busDriver: {
+          id: busDriver._id,
+          name: busDriver.name || '',
+          phone: busDriver.phone || '',
+          approve: busDriver.approve,
+          status: busDriver.status,
+        },
+        token: signAccessToken({ sub: String(busDriver._id), role: 'bus_driver' }),
+        session: publicSessionPayload(session),
+      };
+    }
   }
 
   if (!session.vehicle?.locationName) {
@@ -912,8 +1602,6 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   const vehicleType = selectedVehicle
     ? getGenericVehicleTypeFromCatalog(selectedVehicle)
     : getVehicleType(session.vehicle.vehicleTypeId, session.vehicle.registerFor);
-  const submittedAt = new Date();
-
   if (isOwnerRegistration) {
     const normalizedEmail = String(session.personal.email || '').trim().toLowerCase();
     const normalizedMobile = String(session.phone || '').trim();
@@ -989,12 +1677,20 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   }
 
   const normalizedReferralCode = normalizeReferralCode(session.referralCode);
+  const normalizedEmployeeCode = normalizeEmployeeCode(session.employeeCode);
   const referrer = normalizedReferralCode
     ? await findDriverByReferralCode(normalizedReferralCode)
+    : null;
+  const employee = normalizedEmployeeCode
+    ? await findActiveEmployeeByCode(normalizedEmployeeCode)
     : null;
 
   if (normalizedReferralCode && !referrer?._id) {
     throw new ApiError(400, 'Invalid referral code');
+  }
+
+  if (normalizedEmployeeCode && !employee?._id) {
+    throw new ApiError(400, 'Invalid employee code');
   }
 
   const driver = await Driver.create({
@@ -1018,6 +1714,8 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     vehicleColor: session.vehicle.color,
     city: session.vehicle.city || session.vehicle.locationName,
     referredBy: referrer?._id || null,
+    acquiredByEmployeeId: employee?._id || null,
+    acquiredByEmployeeCode: employee?.employeeCode || '',
     approve: false,
     status: 'pending',
     zoneId: zone?._id || null,
@@ -1039,6 +1737,7 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         locationId: session.vehicle.locationId,
         locationName: session.vehicle.locationName,
         vehicleTypeId: session.vehicle.vehicleTypeId,
+        rcNumber: session.vehicle.rcNumber,
         make: session.vehicle.make,
         model: session.vehicle.model,
         year: session.vehicle.year,
@@ -1081,8 +1780,193 @@ export const getDriverOnboardingSession = async ({ registrationId, phone }) => {
     session: publicSessionPayload(session),
     personal: session.personal,
     referralCode: session.referralCode,
+    employeeCode: session.employeeCode || '',
     vehicle: session.vehicle,
     documents: session.documents,
+    roleDetails: session.roleDetails,
     completedAt: session.completedAt,
+  };
+};
+
+export const verifyDriverVehicleRc = async ({
+  registrationId,
+  phone,
+  rcNumber,
+}) => {
+  const session = await getSession(registrationId, phone);
+
+  if (!session.personal?.fullName) {
+    throw new ApiError(400, 'Save personal details before RC verification');
+  }
+
+  const normalizedRcNumber = String(rcNumber || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+  if (!normalizedRcNumber) {
+    throw new ApiError(400, 'RC number is required');
+  }
+
+  if (!VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(normalizedRcNumber))) {
+    throw new ApiError(400, 'RC number must be in a valid format, for example DL1AB2345 or MH12AB1234');
+  }
+
+  const providerResponse = await verifyRcWithRecharge({
+    rcNumber: normalizedRcNumber,
+    partnerRequestId: buildOnboardingRcVerificationRequestId(session),
+  });
+
+  const cardData = providerResponse?.cardData || {};
+  const result = cardData?.result || providerResponse?.result || providerResponse?.data || {};
+  const verificationSucceeded =
+    Number(providerResponse?.status || 0) === 1
+    || String(providerResponse?.status || '').trim() === '1';
+
+  if (!verificationSucceeded) {
+    throw new ApiError(
+      400,
+      String(providerResponse?.msg || providerResponse?.message || 'RC verification failed'),
+    );
+  }
+
+  const vehicle = normalizeRcVerificationResult(result, normalizedRcNumber);
+
+  return {
+    message: String(providerResponse?.msg || 'RC verified successfully').trim(),
+    rcNumber: normalizedRcNumber,
+    vehicle,
+    verification: providerResponse,
+  };
+};
+
+export const verifyDriverOnboardingLicenseDocument = async ({
+  registrationId,
+  phone,
+  documentKey,
+  licenseNumber,
+  birthDate,
+  requestNumber,
+}) => {
+  const session = await getSession(registrationId, phone);
+
+  if (!session.personal?.fullName) {
+    throw new ApiError(400, 'Save personal details before DL verification');
+  }
+
+  const normalizedDocumentKey = String(documentKey || '').trim();
+  if (!normalizedDocumentKey) {
+    throw new ApiError(400, 'Document key is required');
+  }
+
+  const existingDocument = session.documents?.[normalizedDocumentKey] || {};
+  const normalizedLicenseNumber = String(
+    licenseNumber ||
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    '',
+  ).trim().toUpperCase();
+  const normalizedBirthDate = String(
+    birthDate ||
+    existingDocument.birthDate ||
+    existingDocument.birth_date ||
+    '',
+  ).trim();
+
+  if (!normalizedLicenseNumber) {
+    throw new ApiError(400, 'Driving license number is required before verification');
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedBirthDate) && !/^\d{2}\/\d{2}\/\d{4}$/.test(normalizedBirthDate)) {
+    throw new ApiError(400, 'Birth date must use YYYY-MM-DD or DD/MM/YYYY format before verification');
+  }
+
+  const providerResponse = await verifyDrivingLicenseWithRecharge({
+    licenseNumber: normalizedLicenseNumber,
+    birthDate: normalizedBirthDate,
+    partnerRequestId: buildOnboardingLicenseVerificationRequestId(session),
+    requestNumber: String(
+      requestNumber ||
+      existingDocument.requestNumber ||
+      existingDocument.request_no ||
+      '',
+    ).trim(),
+  });
+
+  const result = providerResponse?.cardData?.result || {};
+  const licenseDetails = result?.details_of_driving_licence || {};
+  const nonTransportValidity = result?.dl_validity?.non_transport || {};
+  const badgeDetails = Array.isArray(result?.badge_details) ? result.badge_details : [];
+  const firstBadge = badgeDetails[0] || {};
+  const verification = resolveRechargeVerificationState(
+    providerResponse,
+    String(licenseDetails?.status || '').trim(),
+  );
+  const verificationMessage = verification.message;
+
+  const updatedDocument = {
+    ...(typeof existingDocument === 'object' ? existingDocument : {}),
+    key: normalizedDocumentKey,
+    identifyNumber: normalizedLicenseNumber,
+    identify_number: normalizedLicenseNumber,
+    documentNumber: normalizedLicenseNumber,
+    document_number: normalizedLicenseNumber,
+    birthDate: normalizedBirthDate,
+    birth_date: normalizedBirthDate,
+    requestNumber: String(
+      providerResponse?.partnerreqid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.orderid ||
+      requestNumber ||
+      existingDocument.requestNumber ||
+      existingDocument.request_no ||
+      '',
+    ).trim(),
+    request_no: String(
+      providerResponse?.partnerreqid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.orderid ||
+      requestNumber ||
+      existingDocument.requestNumber ||
+      existingDocument.request_no ||
+      '',
+    ).trim(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
+    verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.partnerreqid ||
+      providerResponse?.cardData?.request_id ||
+      '',
+    ).trim(),
+    verifiedName: String(licenseDetails?.name || '').trim(),
+    verifiedDob: String(result?.dob || normalizedBirthDate).trim(),
+    dlStatus: String(licenseDetails?.status || '').trim(),
+    issuingRtoName: '',
+    relativeName: String(licenseDetails?.father_or_husband_name || '').trim(),
+    dlNumber: String(result?.dl_number || normalizedLicenseNumber).trim(),
+    nonTransportValidFrom: String(nonTransportValidity?.from || '').trim(),
+    nonTransportValidTo: String(nonTransportValidity?.to || '').trim(),
+    transportValidFrom: String(result?.dl_validity?.transport?.from || '').trim(),
+    transportValidTo: String(result?.dl_validity?.transport?.to || '').trim(),
+    badgeNumber: String(firstBadge?.badge_no || '').trim(),
+    badgeIssueDate: String(firstBadge?.badge_issue_date || '').trim(),
+    classOfVehicle: Array.isArray(firstBadge?.class_of_vehicle) ? firstBadge.class_of_vehicle : [],
+    verificationResponse: providerResponse,
+  };
+
+  session.documents = {
+    ...(session.documents || {}),
+    [normalizedDocumentKey]: updatedDocument,
+  };
+
+  session.markModified('documents');
+  await session.save();
+
+  return {
+    message: verificationMessage || 'Driving license verified successfully',
+    document: updatedDocument,
+    documents: session.documents || {},
+    verification: providerResponse,
   };
 };

@@ -106,6 +106,17 @@ export const createDefaultAppSettings = () => ({
       active: true,
       mobile_menu_icon: '/outstation_service_icon.png',
     },
+    {
+      _id: objectId(),
+      name: 'Bus',
+      transport_type: 'taxi',
+      service_type: 'bus',
+      order_by: 8,
+      short_description: 'Bus services',
+      description: 'Book bus tickets online.',
+      active: true,
+      mobile_menu_icon: '/bus_service_icon.png',
+    },
   ],
   onboarding_screens: [
     {

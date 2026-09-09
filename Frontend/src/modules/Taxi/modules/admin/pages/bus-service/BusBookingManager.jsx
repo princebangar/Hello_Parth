@@ -21,8 +21,8 @@ const statusTone = {
 };
 
 const seatTone = {
-  available: 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700',
-  selected: 'border-indigo-600 bg-indigo-600 text-white shadow-lg',
+  available: 'border-slate-200 bg-white text-slate-600 hover:border-yellow-400 hover:text-yellow-700',
+  selected: 'border-black bg-black text-yellow-400 shadow-lg',
   blocked: 'border-slate-200 bg-slate-200 text-slate-500 cursor-not-allowed',
   booked: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300',
 };
@@ -399,39 +399,39 @@ const BusBookingManager = () => {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-3xl bg-slate-900 p-8 text-white shadow-xl shadow-slate-200">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-4">
+      <section className="rounded-[1.5rem] bg-white border border-slate-200 p-4 lg:p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-yellow-50 border border-yellow-200 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-yellow-600">
               <Ticket size={14} />
               Bus Booking Control
             </div>
-            <h1 className="text-3xl font-black tracking-tight">Manage Bus Bookings Setwise</h1>
-            <p className="mt-4 text-sm font-medium leading-relaxed text-slate-400">
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Manage Bus Booking Service</h1>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
               Pick a bus, click seats to book them with passenger info, and unbook occupied seats directly from the admin panel.
             </p>
           </div>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/5 px-5 py-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Selected Bus</p>
-            <p className="mt-2 text-lg font-black text-white">{selectedBus?.busName || 'Choose a bus'}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-300">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Selected Bus</p>
+            <p className="mt-1 text-lg font-black text-slate-900">{selectedBus?.busName || 'Choose a bus'}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">
               {selectedBus?.route?.originCity || 'Origin'} to {selectedBus?.route?.destinationCity || 'Destination'}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-5">
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm xl:col-span-2">
+      <section className="grid gap-3 xl:grid-cols-5">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
           <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Bus</label>
           <select
             value={filters.busServiceId}
             onChange={(event) =>
               setFilters((current) => ({ ...current, busServiceId: event.target.value, scheduleId: '' }))
             }
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none"
           >
             <option value="">Select bus</option>
             {buses.map((bus) => (
@@ -442,7 +442,7 @@ const BusBookingManager = () => {
           </select>
         </div>
 
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Travel Date</label>
           <input
             type="date"
@@ -452,16 +452,16 @@ const BusBookingManager = () => {
               setFilters((current) => ({ ...current, travelDate: nextDate }));
               setMonth(getMonthValue(nextDate));
             }}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none"
           />
         </div>
 
-            <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+            <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Schedule</label>
           <select
             value={filters.scheduleId}
             onChange={(event) => setFilters((current) => ({ ...current, scheduleId: event.target.value }))}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none"
           >
             <option value="">Select schedule</option>
             {schedules.map((schedule) => (
@@ -472,12 +472,12 @@ const BusBookingManager = () => {
           </select>
         </div>
 
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Status</label>
           <select
             value={filters.status}
             onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none"
           >
             <option value="all">All bookings</option>
             <option value="confirmed">Confirmed</option>
@@ -489,11 +489,11 @@ const BusBookingManager = () => {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-4">
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+      <section className="grid gap-3 lg:grid-cols-4">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-              <Ticket size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <Ticket size={16} />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Bookings</p>
@@ -501,10 +501,10 @@ const BusBookingManager = () => {
             </div>
           </div>
         </div>
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-              <Users size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <Users size={16} />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Booked Seats</p>
@@ -512,10 +512,10 @@ const BusBookingManager = () => {
             </div>
           </div>
         </div>
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-              <CalendarDays size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <CalendarDays size={16} />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Selected Date</p>
@@ -523,10 +523,10 @@ const BusBookingManager = () => {
             </div>
           </div>
         </div>
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-              <IndianRupee size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+              <IndianRupee size={16} />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Revenue</p>
@@ -538,8 +538,8 @@ const BusBookingManager = () => {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
-        <div className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Calendar View</p>
@@ -549,7 +549,7 @@ const BusBookingManager = () => {
               type="month"
               value={month}
               onChange={(event) => setMonth(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none"
             />
           </div>
 
@@ -562,7 +562,7 @@ const BusBookingManager = () => {
           <div className="grid grid-cols-7 gap-3">
             {calendarLoading
               ? Array.from({ length: 35 }, (_, index) => (
-                  <div key={`loading-${index}`} className="h-28 rounded-[24px] bg-slate-100 animate-pulse" />
+                  <div key={`loading-${index}`} className="h-20 rounded-[1.25rem] bg-slate-100 animate-pulse" />
                 ))
               : calendarCells.map((cell) =>
                   cell.isCurrentMonth ? (
@@ -570,10 +570,10 @@ const BusBookingManager = () => {
                       key={cell.id}
                       type="button"
                       onClick={() => setFilters((current) => ({ ...current, travelDate: cell.date }))}
-                      className={`h-28 rounded-[24px] border p-3 text-left transition-all ${
+                      className={`h-20 rounded-[1.25rem] border p-2 text-left transition-all ${
                         filters.travelDate === cell.date
-                          ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                          : 'border-slate-100 bg-slate-50/70 text-slate-900 hover:border-slate-200'
+                          ? 'border-black bg-black text-yellow-400 shadow-lg'
+                          : 'border-slate-200 bg-slate-50/70 text-slate-900 hover:border-slate-300'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -589,14 +589,14 @@ const BusBookingManager = () => {
                       </div>
                     </button>
                   ) : (
-                    <div key={cell.id} className="h-28 rounded-[24px] border border-dashed border-slate-100 bg-white/70" />
+                    <div key={cell.id} className="h-20 rounded-[1.25rem] border border-dashed border-slate-100 bg-white/70" />
                   ),
                 )}
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+        <div className="space-y-4">
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Seat Snapshot</p>
@@ -618,8 +618,13 @@ const BusBookingManager = () => {
                   <div key={`seat-loading-${index}`} className="h-16 rounded-2xl bg-slate-100 animate-pulse" />
                 ))}
               </div>
+            ) : (!filters.busServiceId || !filters.scheduleId) ? (
+              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
+                <p className="text-sm font-black text-slate-900">Select a bus and schedule to view seats.</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Pick a schedule from the filters above.</p>
+              </div>
             ) : seatLayout.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
+              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
                 <p className="text-sm font-black text-slate-900">No seat map found</p>
                 <p className="mt-1 text-xs font-semibold text-slate-500">Select a bus to inspect live occupancy.</p>
               </div>
@@ -671,7 +676,7 @@ const BusBookingManager = () => {
             )}
           </div>
 
-          <div className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
               {activeSeat?.liveStatus === 'booked' ? 'Unbook Seat' : activeSeat?.liveStatus === 'blocked' ? 'Unblock Seat' : 'Book Seats'}
             </p>
@@ -710,7 +715,7 @@ const BusBookingManager = () => {
                   type="button"
                   disabled={actionLoading}
                   onClick={() => handleUnblockSeat(activeSeat)}
-                  className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-2xl bg-black px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionLoading ? 'Updating Seat...' : `Unblock ${activeSeat.seatLabel}`}
                 </button>
@@ -733,31 +738,31 @@ const BusBookingManager = () => {
                     value={bookingForm.name}
                     onChange={(event) => setBookingForm((current) => ({ ...current, name: event.target.value }))}
                     placeholder="Passenger name"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none"
                   />
                   <input
                     value={bookingForm.phone}
                     onChange={(event) => setBookingForm((current) => ({ ...current, phone: event.target.value }))}
                     placeholder="Passenger phone"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none"
                   />
                   <input
                     value={bookingForm.email}
                     onChange={(event) => setBookingForm((current) => ({ ...current, email: event.target.value }))}
                     placeholder="Passenger email"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none"
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       value={bookingForm.age}
                       onChange={(event) => setBookingForm((current) => ({ ...current, age: event.target.value }))}
                       placeholder="Age"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none"
                     />
                     <select
                       value={bookingForm.gender}
                       onChange={(event) => setBookingForm((current) => ({ ...current, gender: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none"
                     >
                       <option value="male">Male</option>
                       <option value="female">Female</option>
@@ -768,7 +773,7 @@ const BusBookingManager = () => {
                     value={bookingForm.notes}
                     onChange={(event) => setBookingForm((current) => ({ ...current, notes: event.target.value }))}
                     placeholder="Admin note"
-                    className="min-h-[88px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none"
+                    className="min-h-[88px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none"
                   />
                 </div>
 
@@ -776,7 +781,7 @@ const BusBookingManager = () => {
                   type="button"
                   disabled={actionLoading || selectedSeatIds.length === 0}
                   onClick={handleCreateBooking}
-                  className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-2xl bg-black px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionLoading ? 'Booking...' : `Book ${selectedSeatIds.length || ''} Seat${selectedSeatIds.length === 1 ? '' : 's'}`}
                 </button>
@@ -784,7 +789,7 @@ const BusBookingManager = () => {
             )}
           </div>
 
-          <div className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Date Summary</p>
             <div className="mt-5 space-y-3">
               {[
@@ -792,7 +797,7 @@ const BusBookingManager = () => {
                 ['Pending', summary.pendingBookings || 0, 'text-amber-700 bg-amber-50'],
                 ['Cancelled', summary.cancelledBookings || 0, 'text-rose-700 bg-rose-50'],
               ].map(([label, value, tone]) => (
-                <div key={label} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                <div key={label} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
                   <span className="text-sm font-black text-slate-900">{label}</span>
                   <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide ${tone}`}>
                     {value}
@@ -804,7 +809,7 @@ const BusBookingManager = () => {
         </div>
       </section>
 
-      <section className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+      <section className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Booking Register</p>
@@ -836,7 +841,7 @@ const BusBookingManager = () => {
         ) : (
           <div className="space-y-3">
             {bookings.map((booking) => (
-              <div key={booking.id} className="rounded-[26px] border border-slate-100 bg-slate-50/60 p-5">
+              <div key={booking.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-3">
@@ -850,7 +855,7 @@ const BusBookingManager = () => {
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-2xl bg-white px-4 py-3">
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Passenger</p>
                         <p className="mt-1 text-sm font-black text-slate-900">
                           {booking.passenger?.name || booking.user?.name || 'Unknown'}
@@ -860,7 +865,7 @@ const BusBookingManager = () => {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl bg-white px-4 py-3">
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Route</p>
                         <p className="mt-1 text-sm font-black text-slate-900">
                           {booking.routeSnapshot?.originCity || 'Origin'} to {booking.routeSnapshot?.destinationCity || 'Destination'}
@@ -870,7 +875,7 @@ const BusBookingManager = () => {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl bg-white px-4 py-3">
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Schedule & Seats</p>
                         <p className="mt-1 text-sm font-black text-slate-900">{getScheduleMeta(booking.scheduleId, booking.routeSnapshot).label}</p>
                         <p className="mt-1 text-[11px] font-semibold text-slate-500">
@@ -881,7 +886,7 @@ const BusBookingManager = () => {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl bg-white px-4 py-3">
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fare</p>
                         <p className="mt-1 text-sm font-black text-slate-900">
                           {formatCurrency(booking.amount, booking.currency)}
@@ -893,7 +898,7 @@ const BusBookingManager = () => {
                     </div>
                   </div>
 
-                  <div className="w-full max-w-xs rounded-[24px] border border-slate-100 bg-white p-4">
+                  <div className="w-full max-w-xs rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center gap-2 text-slate-500">
                       <MapPin size={15} />
                       <p className="text-[10px] font-black uppercase tracking-[0.2em]">Booking Snapshot</p>

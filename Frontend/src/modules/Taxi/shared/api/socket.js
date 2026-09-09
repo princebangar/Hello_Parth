@@ -1,13 +1,33 @@
 import { io } from 'socket.io-client';
 import { BACKEND_ORIGIN } from './runtimeConfig';
 
-const resolveTaxiSocketOrigin = () => {
-  const envUrl = String(import.meta.env.VITE_SOCKET_URL || '').trim();
-  if (envUrl && envUrl.startsWith('http')) return envUrl;
-  if (BACKEND_ORIGIN && BACKEND_ORIGIN.startsWith('http')) return BACKEND_ORIGIN;
-  return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
+const SOCKET_ORIGIN = import.meta.env.VITE_SOCKET_URL || BACKEND_ORIGIN;
+
+const isLocalLikeHostname = (hostname = '') => {
+  const value = String(hostname || '').trim().toLowerCase();
+  return value === 'localhost' || value === '127.0.0.1' || value === '::1';
 };
-const SOCKET_ORIGIN = resolveTaxiSocketOrigin();
+
+const shouldPreferWebsocketFirst = () => {
+  try {
+    const socketUrl = new URL(
+      SOCKET_ORIGIN,
+      typeof window !== 'undefined' ? window.location.origin : undefined,
+    );
+
+    if (isLocalLikeHostname(socketUrl.hostname)) {
+      return true;
+    }
+  } catch {
+    // Fall back to current window detection below.
+  }
+
+  if (typeof window !== 'undefined' && isLocalLikeHostname(window.location.hostname)) {
+    return true;
+  }
+
+  return false;
+};
 
 const decodeBase64Url = (value) => {
   const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
@@ -27,7 +47,14 @@ const getTokenPayload = (token) => {
       return null;
     }
 
-    return JSON.parse(atob(decodeBase64Url(payload)));
+    const decoded = JSON.parse(atob(decodeBase64Url(payload)));
+    if (decoded && typeof decoded.exp === 'number') {
+      const isExpired = Date.now() / 1000 >= decoded.exp;
+      if (isExpired) {
+        return null;
+      }
+    }
+    return decoded;
   } catch {
     return null;
   }
@@ -41,6 +68,15 @@ const getSessionItem = (key) => {
   }
 };
 
+const DRIVER_PORTAL_ROLES = new Set([
+  'driver',
+  'owner',
+  'pooling_driver',
+  'bus_driver',
+  'service_center',
+  'service_center_staff',
+]);
+
 const getStoredTokenByRole = (role) => {
   const normalizedRole = String(role || '').toLowerCase();
   const entries = (
@@ -48,29 +84,24 @@ const getStoredTokenByRole = (role) => {
       ? [
           getSessionItem('driverToken'),
           getSessionItem('token'),
+          localStorage.getItem('driverToken'),
+          localStorage.getItem('token'),
         ]
-      : normalizedRole === 'user'
-        ? [
-            localStorage.getItem('userToken'),
-            localStorage.getItem('user_accessToken'),
-            localStorage.getItem('token'),
-          ]
-        : [
-            localStorage.getItem(`${role}Token`),
-            localStorage.getItem('token'),
-          ]
+      : [
+          localStorage.getItem(`${role}Token`),
+          localStorage.getItem('token'),
+        ]
   ).filter(Boolean);
 
-  // Prefer role-matched JWT; allow blank-role food tokens for user sockets.
-  const roleMatched = entries.find((token) => {
+  return entries.find((token) => {
     const tokenRole = String(getTokenPayload(token)?.role || '').toLowerCase();
-    if (normalizedRole === 'user') {
-      return tokenRole === 'user' || tokenRole === '';
-    }
-    return tokenRole === normalizedRole;
-  });
 
-  return roleMatched || null;
+    if ((normalizedRole === 'driver' || normalizedRole === 'owner') && DRIVER_PORTAL_ROLES.has(tokenRole)) {
+      return true;
+    }
+
+    return tokenRole === normalizedRole;
+  }) || null;
 };
 
 const resolveTokenForRole = (role) => {
@@ -121,8 +152,8 @@ class SocketService {
   connect(options = {}) {
     const token = options.token || resolveTokenForRole(options.role);
 
-    // Guest / public browse: realtime is optional until login.
     if (!token) {
+      console.warn('[socket] missing token for role', options.role || 'unknown');
       return null;
     }
 
@@ -150,13 +181,14 @@ class SocketService {
     }
 
     this.currentToken = token;
+    const preferWebsocketFirst = shouldPreferWebsocketFirst();
     this.socket = io(SOCKET_ORIGIN, {
       auth: { token },
-      // Start with polling and upgrade when possible so reverse proxies that
-      // don't immediately pass WebSocket upgrades can still complete the
-      // Socket.IO handshake in production.
-      transports: ['polling', 'websocket'],
+      // Prefer WebSocket first everywhere so realtime-heavy ride flows do not
+      // pay the polling handshake cost on every connection.
+      transports: preferWebsocketFirst ? ['websocket', 'polling'] : ['websocket', 'polling'],
       upgrade: true,
+      rememberUpgrade: true,
       withCredentials: true,
       reconnection: true,
       reconnectionDelay: 750,

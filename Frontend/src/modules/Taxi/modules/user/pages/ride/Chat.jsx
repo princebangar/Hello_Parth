@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Send, Phone, Smile, Loader2 } from 'lucide-react';
-import SupportChatPanel from '../../../shared/components/SupportChatPanel';
+import UserSupportChatPanel from '../../../shared/components/UserSupportChatPanel';
 import { socketService } from '../../../../shared/api/socket';
 import { getCurrentRide } from '../../services/currentRideService';
 
@@ -190,7 +190,7 @@ const Chat = () => {
 
   if (isAdminChat && hasLiveToken) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] max-w-lg mx-auto flex flex-col font-sans relative overflow-hidden p-4">
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] w-full lg:max-w-3xl mx-auto flex flex-col font-sans relative overflow-hidden p-4 lg:min-h-[85vh] lg:my-6 lg:rounded-3xl lg:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] lg:border lg:border-white/50">
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center">
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
@@ -202,7 +202,7 @@ const Chat = () => {
             </h1>
           </div>
         </div>
-        <SupportChatPanel
+        <UserSupportChatPanel
           mode="participant"
           title={chatRole === 'driver' ? 'Driver Support' : 'User Support'}
           subtitle="Connected to the support desk"
@@ -233,7 +233,7 @@ const Chat = () => {
   const avatarName = encodeURIComponent(otherName);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] max-w-lg mx-auto flex flex-col font-sans relative overflow-hidden">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] w-full lg:max-w-3xl mx-auto flex flex-col font-sans relative overflow-hidden lg:min-h-[85vh] lg:my-6 lg:rounded-3xl lg:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] lg:border lg:border-white/50">
       <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-orange-100/50 blur-3xl pointer-events-none" />
 
       <motion.header initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white/90 backdrop-blur-md px-4 py-3.5 flex items-center gap-3 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)] sticky top-0 z-20">

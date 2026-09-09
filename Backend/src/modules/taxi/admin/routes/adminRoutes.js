@@ -1,14 +1,22 @@
 import { Router } from 'express';
-import { upload } from '../../../../middleware/upload.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
+import {
+  loginRateLimit,
+  otpSendRateLimit,
+  otpVerifyRateLimit,
+} from '../../middlewares/rateLimitMiddleware.js';
 import {
   approveOwner,
   approveOwnerSignupFromDriver,
+  approveBusDriverSignup,
+  approveServiceCenterStaffSignup,
+  approveServiceStoreSignup,
   createAirport,
   createAdminAccount,
   createAdminBusBooking,
   createBusService,
   createAppModule,
+  createEmployee,
   createGoodsType,
   createDriver,
   createDriverNeededDocument,
@@ -24,6 +32,7 @@ import {
   createPoolingRoute,
   createServiceLocation,
   createServiceStore,
+  createServiceStoreStaff,
   createRentalVehicleType,
   createSetPrice,
   createSubscriptionPlan,
@@ -67,12 +76,17 @@ import {
   getAdminBusBookings,
   getAdminEarnings,
   getAirports,
+  getPendingBusDriverSignups,
+  getPendingServiceCenterStaffSignups,
+  getPendingServiceStoreSignups,
   getBusServices,
   getAppModules,
   getCancelChart,
   getCountries,
   getDashboardData,
   getDeliveries,
+  getEmployee,
+  getEmployees,
   getDriver,
   getDriverNeededDocument,
   getDriverNeededDocuments,
@@ -98,6 +112,7 @@ import {
   getLanguages,
   getMailSettings,
   getMapSettings,
+  getRechargeApiSettings,
   getNearbyServiceLocations,
   getNotificationChannels,
   getOngoingRides,
@@ -123,6 +138,7 @@ import {
   getReferralSettings,
   updateReferralSettings,
   getReferralDashboard,
+  getSetPriceById,
   getSetPrices,
   getServiceLocations,
   getServiceStores,
@@ -145,13 +161,18 @@ import {
   getRideRequests,
   rejectUserDeletionRequest,
   rejectDriverDeletionRequest,
+  rejectBusDriverSignup,
+  rejectServiceCenterStaffSignup,
+  rejectServiceStoreSignup,
   getUserRequests,
   getUserWalletHistory,
   getVehiclePreferenceOptions,
   getVehicleTypeCatalog,
+  getVehicleTypeById,
   getVehicleTypes,
   getWithdrawals,
   getZones,
+  loginAdmin,
   resetPassword,
   verifyResetOtp,
   toggleChannelMail,
@@ -167,6 +188,7 @@ import {
   updateAdminAccount,
   updateBusService,
   updateDriver,
+  updateEmployee,
   updateDriverNeededDocument,
   updateDriverPassword,
   updateFirebaseSettings,
@@ -177,6 +199,7 @@ import {
   updateLanguageStatus,
   updateMailSettings,
   updateMapSettings,
+  updateRechargeApiSettings,
   updateOwner,
   updateOwnerBooking,
   updateOwnerNeededDocument,
@@ -196,6 +219,8 @@ import {
   updateUser,
   updateVehicleType,
   updateZone,
+  generateRechargeApiToken,
+  runRechargeApiTest,
   createVehicleType,
   createFleetVehicle,
   cancelAdminBusBookingSeats,
@@ -206,13 +231,13 @@ import {
   getAdmins,
   getTransportTypes,
   deleteFleetVehicle,
-  getTaxiCancellationAnalytics,
 } from '../controllers/adminController.js';
 import {
   getPoolingVehicles,
   createPoolingVehicle,
   updatePoolingVehicle,
   deletePoolingVehicle,
+  approvePoolingVehicle,
   getPoolingBookings,
   updatePoolingBookingStatus,
   uploadImage,
@@ -224,14 +249,14 @@ export const adminRouter = Router();
 
 adminRouter.get('/admin', getAdminStatus);
 adminRouter.get('/admin/status', getAdminStatus);
-adminRouter.post('/admin/forgot-password', forgotPassword);
-adminRouter.post('/admin/verify-reset-otp', verifyResetOtp);
-adminRouter.post('/admin/reset-password', resetPassword);
+adminRouter.post('/admin/login', loginRateLimit, loginAdmin);
+adminRouter.post('/admin/forgot-password', otpSendRateLimit, forgotPassword);
+adminRouter.post('/admin/verify-reset-otp', otpVerifyRateLimit, verifyResetOtp);
+adminRouter.post('/admin/reset-password', otpVerifyRateLimit, resetPassword);
+
+// Public route for app branding/settings
 adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
-adminRouter.get('/admin/countries', getCountries);
-adminRouter.get('/admin/service-locations', getServiceLocations);
-adminRouter.get('/admin/service-locations/nearby', getNearbyServiceLocations);
-adminRouter.get('/admin/notification-channels', getNotificationChannels);
+
 adminRouter.use('/admin', authenticate(['admin']));
 
 adminRouter.get('/admin/permissions', getAdminPermissions);
@@ -241,6 +266,8 @@ adminRouter.patch('/admin/admin-management/admins/:id', updateAdminAccount);
 adminRouter.delete('/admin/admin-management/admins/:id', deleteAdminAccount);
 
 adminRouter.get('/admin/users', getUsers);
+adminRouter.get('/admin/employees', getEmployees);
+adminRouter.post('/admin/employees', createEmployee);
 adminRouter.post('/admin/users/bulk-import', bulkImportUsers);
 adminRouter.post('/admin/users', createUser);
 adminRouter.get('/admin/users/deleted', getDeletedUsers);
@@ -250,6 +277,8 @@ adminRouter.get('/admin/users/delete-requests', getUserDeletionRequests);
 adminRouter.patch('/admin/users/delete-requests/:id/approve', approveUserDeletionRequest);
 adminRouter.patch('/admin/users/delete-requests/:id/reject', rejectUserDeletionRequest);
 adminRouter.get('/admin/users/:id', getUser);
+adminRouter.get('/admin/employees/:id', getEmployee);
+adminRouter.patch('/admin/employees/:id', updateEmployee);
 adminRouter.patch('/admin/users/:id', updateUser);
 adminRouter.delete('/admin/users/:id', deleteUser);
 adminRouter.get('/admin/users/:id/subscriptions', getUserSubscriptions);
@@ -296,20 +325,32 @@ adminRouter.get('/admin/user-subscriptions/plans/list', getCustomerSubscriptionP
 adminRouter.post('/admin/user-subscriptions/plans/create', createCustomerSubscriptionPlan);
 
 adminRouter.get('/countries', getCountries);
+adminRouter.get('/admin/countries', getCountries);
+adminRouter.get('/admin/service-locations', getServiceLocations);
+adminRouter.get('/admin/service-locations/nearby', getNearbyServiceLocations);
 adminRouter.post('/admin/service-locations', createServiceLocation);
 adminRouter.patch('/admin/service-locations/:id', updateServiceLocation);
 adminRouter.delete('/admin/service-locations/:id', deleteServiceLocation);
 adminRouter.get('/admin/service-stores', getServiceStores);
+adminRouter.get('/admin/service-stores/pending', getPendingServiceStoreSignups);
+adminRouter.get('/admin/service-stores/pending-staff', getPendingServiceCenterStaffSignups);
 adminRouter.post('/admin/service-stores', createServiceStore);
 adminRouter.patch('/admin/service-stores/:id', updateServiceStore);
+adminRouter.post('/admin/service-stores/:id/staff', createServiceStoreStaff);
+adminRouter.patch('/admin/service-stores/:id/approve', approveServiceStoreSignup);
+adminRouter.patch('/admin/service-stores/:id/reject', rejectServiceStoreSignup);
+adminRouter.patch('/admin/service-stores/staff/:id/approve', approveServiceCenterStaffSignup);
+adminRouter.patch('/admin/service-stores/staff/:id/reject', rejectServiceCenterStaffSignup);
 adminRouter.delete('/admin/service-stores/:id', deleteServiceStore);
 adminRouter.get('/common/ride_modules', getRideModules);
 adminRouter.get('/admin/types/vehicle-types/list', getVehicleTypes);
 adminRouter.get('/admin/types/vehicle-types', getVehicleTypeCatalog);
+adminRouter.get('/admin/types/vehicle-types/:id', getVehicleTypeById);
 adminRouter.post('/admin/types/vehicle-types', createVehicleType);
 adminRouter.patch('/admin/types/vehicle-types/:id', updateVehicleType);
 adminRouter.delete('/admin/types/vehicle-types/:id', deleteVehicleType);
 adminRouter.get('/admin/types/set-prices', getSetPrices);
+adminRouter.get('/admin/types/set-prices/:id', getSetPriceById);
 adminRouter.post('/admin/types/set-prices', createSetPrice);
 adminRouter.patch('/admin/types/set-prices/:id', updateSetPrice);
 adminRouter.delete('/admin/types/set-prices/:id', deleteSetPrice);
@@ -318,8 +359,11 @@ adminRouter.post('/admin/airports', createAirport);
 adminRouter.patch('/admin/airports/:id', updateAirport);
 adminRouter.delete('/admin/airports/:id', deleteAirport);
 adminRouter.get('/admin/bus-services', getBusServices);
+adminRouter.get('/admin/bus-services/pending-drivers', getPendingBusDriverSignups);
 adminRouter.post('/admin/bus-services', createBusService);
 adminRouter.patch('/admin/bus-services/:id', updateBusService);
+adminRouter.patch('/admin/bus-services/pending-drivers/:id/approve', approveBusDriverSignup);
+adminRouter.patch('/admin/bus-services/pending-drivers/:id/reject', rejectBusDriverSignup);
 adminRouter.delete('/admin/bus-services/:id', deleteBusService);
 adminRouter.get('/admin/bus-bookings', getAdminBusBookings);
 adminRouter.get('/admin/bus-bookings/calendar', getAdminBusBookingCalendar);
@@ -336,13 +380,14 @@ adminRouter.delete('/admin/pooling-routes/:id', deletePoolingRoute);
 
 adminRouter.get('/admin/pooling-vehicles', getPoolingVehicles);
 adminRouter.post('/admin/pooling-vehicles', createPoolingVehicle);
+adminRouter.patch('/admin/pooling-vehicles/:id/approve', approvePoolingVehicle);
 adminRouter.patch('/admin/pooling-vehicles/:id', updatePoolingVehicle);
 adminRouter.delete('/admin/pooling-vehicles/:id', deletePoolingVehicle);
 
 adminRouter.get('/admin/pooling-bookings', getPoolingBookings);
 adminRouter.patch('/admin/pooling-bookings/:id/status', updatePoolingBookingStatus);
 
-adminRouter.post('/admin/upload-image', upload.single('image'), uploadImage);
+adminRouter.post('/admin/upload-image', uploadImage);
 adminRouter.get('/admin/rental-booking-requests', getRentalBookingRequests);
 adminRouter.get('/admin/rental-tracking', getRentalTrackingDashboard);
 adminRouter.patch('/admin/rental-booking-requests/:id', updateRentalBookingRequest);
@@ -397,7 +442,6 @@ adminRouter.get('/admin/dashboard/admin-earnings', getAdminEarnings);
 adminRouter.get('/admin/dashboard/overall-earnings', getOverallEarnings);
 adminRouter.get('/admin/dashboard/today-earnings', getTodayEarnings);
 adminRouter.get('/admin/dashboard/cancel-chart', getCancelChart);
-adminRouter.get('/admin/cancellation-analytics', getTaxiCancellationAnalytics);
 adminRouter.get('/admin/safety/alerts', authenticate(['admin']), listSafetyAlerts);
 adminRouter.patch('/admin/safety/alerts/:id/resolve', authenticate(['admin']), resolveSafetyAlert);
 adminRouter.get('/admin/ongoing-rides', getOngoingRides);
@@ -432,6 +476,7 @@ adminRouter.post('/admin/common/app-modules', createAppModule);
 adminRouter.patch('/admin/common/app-modules/:id', updateAppModule);
 adminRouter.delete('/admin/common/app-modules/:id', deleteAppModule);
 
+adminRouter.get('/admin/notification-channels', getNotificationChannels);
 adminRouter.patch('/admin/notification-channels/:id/push', toggleChannelPush);
 adminRouter.patch('/admin/notification-channels/:id/mail', toggleChannelMail);
 
@@ -452,7 +497,12 @@ adminRouter.get('/admin/integration-settings/map', getMapSettings);
 adminRouter.patch('/admin/integration-settings/map', updateMapSettings);
 adminRouter.get('/admin/integration-settings/mail', getMailSettings);
 adminRouter.patch('/admin/integration-settings/mail', updateMailSettings);
+adminRouter.get('/admin/integration-settings/recharge-api', getRechargeApiSettings);
+adminRouter.patch('/admin/integration-settings/recharge-api', updateRechargeApiSettings);
+adminRouter.post('/admin/integration-settings/recharge-api/generate-token', generateRechargeApiToken);
+adminRouter.post('/admin/integration-settings/recharge-api/test', runRechargeApiTest);
 
+adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
 adminRouter.patch('/admin/general-settings/:category', updateGeneralSettingsCategory);
 
 adminRouter.get('/on-boarding', getUserOnboarding);

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
-import { authenticateOrResolveUser } from '../../middlewares/authMiddleware.js';
+import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
   createDelivery,
   getDelivery,
@@ -10,7 +10,7 @@ import {
 
 export const deliveryRouter = Router();
 
-deliveryRouter.post('/', authenticateOrResolveUser(['user']), asyncHandler(createDelivery));
-deliveryRouter.get('/', authenticateOrResolveUser(['user']), asyncHandler(listMyDeliveries));
-deliveryRouter.get('/active/me', authenticateOrResolveUser(['user', 'driver']), asyncHandler(getMyActiveDelivery));
-deliveryRouter.get('/:deliveryId', authenticateOrResolveUser(['user', 'driver']), asyncHandler(getDelivery));
+deliveryRouter.post('/', authenticate(['user']), asyncHandler(createDelivery));
+deliveryRouter.get('/', authenticate(['user']), asyncHandler(listMyDeliveries));
+deliveryRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getMyActiveDelivery));
+deliveryRouter.get('/:deliveryId', authenticate(['user', 'driver']), asyncHandler(getDelivery));

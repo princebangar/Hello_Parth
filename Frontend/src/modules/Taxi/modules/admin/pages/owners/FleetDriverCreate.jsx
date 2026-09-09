@@ -3,13 +3,12 @@ import { ChevronRight, Loader2, Menu, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { adminService } from '../../services/adminService';
-import { uploadService } from '../../../../shared/services/uploadService';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
 const inputClass =
-  'h-[46px] w-full rounded border border-gray-300 bg-white px-4 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500';
+  'h-9 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400';
 
-const labelClass = 'mb-2 block text-sm font-semibold text-gray-950';
+const labelClass = 'mb-1 block text-xs font-bold text-gray-950';
 
 const initialFormData = {
   service_location_id: '',
@@ -91,28 +90,14 @@ const FleetDriverCreate = () => {
     }));
   };
 
-  const handleProfileChange = async (event) => {
+  const handleProfileChange = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setProfileName(file.name);
-    const localPreview = URL.createObjectURL(file);
-    setField('profile_picture', localPreview);
-
-    try {
-      const uploadResult = await uploadService.uploadImageFile(file, 'fleet-drivers');
-      const url = uploadResult?.secureUrl || uploadResult?.url || '';
-      if (!url) throw new Error('Profile image upload failed');
-      URL.revokeObjectURL(localPreview);
-      setField('profile_picture', url);
-    } catch (error) {
-      URL.revokeObjectURL(localPreview);
-      setField('profile_picture', '');
-      setProfileName('');
-      alert(error?.message || 'Failed to upload profile image');
-    } finally {
-      event.target.value = '';
-    }
+    const reader = new FileReader();
+    reader.onloadend = () => setField('profile_picture', reader.result);
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (event) => {
@@ -169,18 +154,18 @@ const FleetDriverCreate = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
-      <div className="px-5 pt-3">
+      <div className="px-4 py-2 lg:px-6 lg:py-2">
         <AdminPageHeader
           module="Fleet Management"
           page="Fleet Drivers"
           title="Create Fleet Driver"
-          backto="/taxi/admin/fleet/drivers"
+          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' fleet/drivers"
         />
       </div>
 
-      <div className="relative px-5">
-        <form onSubmit={handleSubmit} className="rounded border border-gray-200 bg-white px-4 py-7 shadow-sm md:px-5">
-          <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+      <div className="relative px-4 pb-6 lg:px-6">
+        <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white px-5 py-5 shadow-sm">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
             <div>
               <label className={labelClass}>
                 Select Area <span className="text-red-500">*</span>
@@ -326,20 +311,20 @@ const FleetDriverCreate = () => {
             </div>
           </div>
 
-          <div className="mt-6 max-w-md">
+          <div className="mt-4 max-w-sm">
             <label className={labelClass}>Profile</label>
-            <label className="flex h-40 cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-gray-300 bg-white text-sm font-semibold text-slate-400 transition-colors hover:border-teal-400 hover:text-teal-500">
-              <Upload size={26} className="mb-2" />
+            <label className="flex h-24 cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-gray-300 bg-gray-50 text-xs font-semibold text-slate-400 transition-colors hover:border-yellow-400 hover:text-yellow-500">
+              <Upload size={20} className="mb-1" />
               <span>{profileName || 'Upload Profile'}</span>
               <input type="file" accept="image/*" onChange={handleProfileChange} className="hidden" />
             </label>
           </div>
 
-          <div className="mt-7 flex justify-end">
+          <div className="mt-5 flex justify-end">
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex h-11 items-center justify-center rounded bg-indigo-600 px-8 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex h-10 items-center justify-center rounded bg-yellow-400 px-8 text-sm font-bold text-black transition-colors hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-70 shadow-sm"
             >
               {submitting ? (
                 <span className="inline-flex items-center gap-2">
@@ -353,13 +338,6 @@ const FleetDriverCreate = () => {
           </div>
 
         </form>
-
-        <button
-          type="button"
-          className="absolute right-2 top-48 flex h-14 w-14 items-center justify-center rounded-full bg-teal-500 text-white shadow-xl transition-colors hover:bg-teal-600"
-        >
-          <Menu size={24} />
-        </button>
       </div>
     </div>
   );

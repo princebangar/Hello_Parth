@@ -1,24 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react';
-import { GoogleMap, MarkerF, OverlayView, PolylineF } from '@react-google-maps/api';
+import { ArrowLeft, X, Banknote, CreditCard, ChevronDown, Clock3, LoaderCircle, Eye, TicketPercent, CheckCircle2 } from 'lucide-react';
+import { GoogleMap, OverlayView, PolylineF } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
-import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
-import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { computeDrivingRoute, sumComputedRouteLegs } from '../../../../shared/utils/googleRoutes';
 import { userService } from '../../services/userService';
-import { getLocalUserToken } from '../../services/authService';
-import { fetchActiveRideZones, resolveServiceLocationIdFromCoords } from '../../services/rideZoneUtils';
 import { useSettings } from '../../../../shared/context/SettingsContext';
-
-const resolveAssetUrl = (value = '') => {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  if (/^(https?:|data:image\/|blob:)/i.test(raw)) return raw;
-  if (/^\/(1_Bike|2_Auto|4_Taxi|ehcv|hcv|LCV|mcv|truck|Luxury|Premium|SUV|assets)/i.test(raw)) return raw;
-  if (raw.startsWith('/')) return `${BACKEND_ORIGIN}${raw}`;
-  return `${BACKEND_ORIGIN}/${raw.replace(/^\/+/, '')}`;
-};
 import BikeIcon from '../../../../assets/icons/bike.png';
 import AutoIcon from '../../../../assets/icons/auto.png';
 import CarIcon from '../../../../assets/icons/car.png';
@@ -30,6 +19,10 @@ import LcvIcon from '../../../../assets/icons/LCV.png';
 import McvIcon from '../../../../assets/icons/mcv.png';
 import HcvIcon from '../../../../assets/icons/hcv.png';
 import EhcvIcon from '../../../../assets/icons/ehcv.png';
+import ScootyIcon from '../../../../assets/icons/scooty.png';
+import HatchbackIcon from '../../../../assets/icons/Hatchback.png';
+import BusIcon from '../../../../assets/icons/bus.png';
+import MiniBusIcon from '../../../../assets/icons/mini_bus.png';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const SELECT_VEHICLE_MAP_OPTIONS = {
@@ -58,6 +51,28 @@ const getOverlayCenterOffset = (width = 56, height = 56) => ({
   x: -(width / 2),
   y: -(height / 2),
 });
+
+const CircleLocationMarker = ({ position, title, color, strokeColor = '#ffffff', size = 14 }) => (
+  <OverlayView
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={() => ({
+      x: -(size / 2),
+      y: -(size / 2),
+    })}
+  >
+    <div
+      title={title}
+      className="pointer-events-none rounded-full shadow-[0_3px_10px_rgba(15,23,42,0.25)]"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        border: `2px solid ${strokeColor}`,
+      }}
+    />
+  </OverlayView>
+);
 
 const getMarkerDimensionsForZoom = (zoom) => {
   const normalizedZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 13;
@@ -138,6 +153,7 @@ const AnimatedVehicleMarker = React.memo(({ driver, iconUrl, isMapInteracting = 
             draggable={false}
             className="object-contain drop-shadow-[0_6px_8px_rgba(15,23,42,0.34)] will-change-transform"
             style={{ width: markerDimensions.icon, height: markerDimensions.icon }}
+            onError={(e) => { e.target.onerror = null; e.target.src = CarIcon; }}
           />
         </motion.div>
       </div>
@@ -166,12 +182,27 @@ const buildFallbackRoute = (origin, destination) => {
   ];
 };
 
-const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError, bottomSheetHeight }) => {
+const getRouteCacheKey = (origin, destination, waypoints = []) => {
+  const serializePoint = (point) =>
+    point
+      ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}`
+      : '';
+
+  const serializeWaypoint = (waypoint) => String(waypoint?.location || '').trim().toLowerCase();
+  return [
+    serializePoint(origin),
+    serializePoint(destination),
+    ...waypoints.map(serializeWaypoint),
+  ].join('|');
+};
+
+const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], drivers, selectedVehicle, isLoaded, loadError }) => {
   const mapRef = useRef(null);
   const [routePath, setRoutePath] = useState([]);
   const [routeError, setRouteError] = useState('');
   const [isMapInteracting, setIsMapInteracting] = useState(false);
   const [mapZoom, setMapZoom] = useState(13);
+  const routeCacheRef = useRef(new Map());
   const waypointRequests = useMemo(
     () =>
       (Array.isArray(stops) ? stops : [])
@@ -182,92 +213,56 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
   );
 
   useEffect(() => {
-    if (!isLoaded || !dropPosition || !window.google?.maps?.DirectionsService) {
+    if (!isLoaded || !dropPosition || !window.google?.maps?.importLibrary) {
       setRoutePath([]);
       setRouteError('');
       return;
     }
 
-    let active = true;
-    const directionsService = new window.google.maps.DirectionsService();
+    const routeCacheKey = getRouteCacheKey(center, dropPosition, waypointRequests);
+    const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute.routePath);
+      setRouteError(cachedRoute.routeError);
+      return;
+    }
 
-    directionsService.route(
-      {
+    let active = true;
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: center,
         destination: dropPosition,
-        waypoints: waypointRequests,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+        intermediates: waypointRequests,
+      });
 
-        if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-          setRoutePath(
-            result.routes[0].overview_path.map((point) => ({
-              lat: point.lat(),
-              lng: point.lng(),
-            })),
-          );
-          setRouteError('');
-          return;
-        }
+      if (!active) {
+        return;
+      }
 
-        setRoutePath(buildFallbackRoute(center, dropPosition));
-        setRouteError(status || 'Directions unavailable');
-      },
-    );
+      if (result.status === 'OK' && result.path.length) {
+        routeCacheRef.current.set(routeCacheKey, {
+          routePath: result.path,
+          routeError: '',
+        });
+        setRoutePath(result.path);
+        setRouteError('');
+        return;
+      }
+
+      const fallbackRoute = buildFallbackRoute(center, dropPosition);
+      const nextRouteError = result.status || 'Directions unavailable';
+      routeCacheRef.current.set(routeCacheKey, {
+        routePath: fallbackRoute,
+        routeError: nextRouteError,
+      });
+      setRoutePath(fallbackRoute);
+      setRouteError(nextRouteError);
+    })();
 
     return () => {
       active = false;
     };
   }, [center, dropPosition, isLoaded, waypointRequests]);
-
-  const fitMapBounds = useCallback(() => {
-    const map = mapRef.current;
-    if (!map || !window.google?.maps?.LatLngBounds) return;
-
-    const bounds = new window.google.maps.LatLngBounds();
-    let hasPoints = false;
-
-    if (center?.lat && center?.lng && Number.isFinite(Number(center.lat)) && Number.isFinite(Number(center.lng))) {
-      bounds.extend(new window.google.maps.LatLng(Number(center.lat), Number(center.lng)));
-      hasPoints = true;
-    }
-
-    if (dropPosition?.lat && dropPosition?.lng && Number.isFinite(Number(dropPosition.lat)) && Number.isFinite(Number(dropPosition.lng))) {
-      bounds.extend(new window.google.maps.LatLng(Number(dropPosition.lat), Number(dropPosition.lng)));
-      hasPoints = true;
-    }
-
-    if (Array.isArray(routePath) && routePath.length > 0) {
-      routePath.forEach((pt) => {
-        if (pt?.lat && pt?.lng && Number.isFinite(Number(pt.lat)) && Number.isFinite(Number(pt.lng))) {
-          bounds.extend(new window.google.maps.LatLng(Number(pt.lat), Number(pt.lng)));
-        }
-      });
-    }
-
-    if (hasPoints) {
-      const computedSheetHeight = bottomSheetHeight || Math.round(window.innerHeight * 0.65);
-      map.fitBounds(bounds, {
-        top: 90,
-        bottom: Math.round(computedSheetHeight + 20),
-        left: 48,
-        right: 48,
-      });
-    }
-  }, [center, dropPosition, routePath, bottomSheetHeight]);
-
-  useEffect(() => {
-    if (!isLoaded || isMapInteracting) return;
-    const timer = setTimeout(() => {
-      fitMapBounds();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [fitMapBounds, isLoaded, isMapInteracting]);
 
   if (!HAS_VALID_GOOGLE_MAPS_KEY) {
     return (
@@ -312,9 +307,6 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
         onLoad={(map) => {
           mapRef.current = map;
           setMapZoom(map.getZoom?.() || 13);
-          setTimeout(() => {
-            fitMapBounds();
-          }, 100);
         }}
         onUnmount={() => {
           mapRef.current = null;
@@ -326,30 +318,20 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
         }}
         onIdle={() => setIsMapInteracting(false)}
       >
-        <MarkerF
+        <CircleLocationMarker
           position={center}
           title="Pickup"
-          icon={{
-            path: window.google.maps.SymbolPath.CIRCLE,
-            fillColor: '#f8e001',
-            fillOpacity: 1,
-            strokeColor: '#111827',
-            strokeWeight: 2,
-            scale: 8,
-          }}
+          color="#f8e001"
+          strokeColor="#111827"
+          size={16}
         />
         {dropPosition && (
-          <MarkerF
+          <CircleLocationMarker
             position={dropPosition}
             title="Drop"
-            icon={{
-              path: window.google.maps.SymbolPath.CIRCLE,
-              fillColor: '#fb923c',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-              scale: 7,
-            }}
+            color="#fb923c"
+            strokeColor="#ffffff"
+            size={14}
           />
         )}
         {routePath.length > 1 && (
@@ -458,21 +440,32 @@ const getTypeLabel = (type) => type?.name || type?.vehicle_type || type?.label |
 const getIconValue = (type) => String(type?.icon_types || type?.vehicleIconType || type?.name || '').toLowerCase();
 
 const getVehicleMapIcon = (type) => {
-  const customIcon = String(
-    type?.map_icon ||
-    type?.mapIcon ||
-    type?.icon ||
-    type?.image ||
-    type?.vehicleIconUrl ||
-    type?.preview_image ||
-    type?.previewImage ||
-    ''
-  ).trim();
+  const customIcon = String(type?.map_icon || type?.icon || type?.vehicleIconUrl || '').trim();
   if (customIcon) {
-    return resolveAssetUrl(customIcon);
+    return customIcon;
   }
 
   const value = getIconValue(type);
+
+  if (value.includes('scooty')) {
+    return '/scooty.png';
+  }
+
+  if (value.includes('car_5_seater')) {
+    return '/Hatchback.png';
+  }
+
+  if (value.includes('car_7_seater')) {
+    return '/SUV.png';
+  }
+
+  if (value.includes('mini_bus') || value.includes('minibus')) {
+    return '/mini_bus.png';
+  }
+
+  if (value.includes('bus')) {
+    return '/bus.png';
+  }
 
   if (value.includes('bike')) {
     return '/1_Bike.png';
@@ -518,21 +511,18 @@ const getVehicleMapIcon = (type) => {
 };
 
 const getVehiclePreviewImage = (type) => {
-  const previewImage = String(
-    type?.image ||
-    type?.preview_image ||
-    type?.previewImage ||
-    type?.map_icon ||
-    type?.icon ||
-    type?.vehicleIconUrl ||
-    ''
-  ).trim();
+  const previewImage = String(type?.image || type?.preview_image || type?.previewImage || '').trim();
   if (previewImage) {
-    return resolveAssetUrl(previewImage);
+    return previewImage;
   }
 
   const value = getIconValue(type);
 
+  if (value.includes('scooty')) return ScootyIcon;
+  if (value.includes('car_5_seater')) return HatchbackIcon;
+  if (value.includes('car_7_seater')) return SuvIcon;
+  if (value.includes('mini_bus') || value.includes('minibus')) return MiniBusIcon;
+  if (value.includes('bus')) return BusIcon;
   if (value.includes('bike')) return BikeIcon;
   if (value.includes('auto')) return AutoIcon;
   if (value.includes('ehc')) return EhcvIcon;
@@ -549,6 +539,26 @@ const getVehiclePreviewImage = (type) => {
 
 const getCapacity = (type) => {
   const value = getIconValue(type);
+
+  if (value.includes('scooty')) {
+    return 1;
+  }
+
+  if (value.includes('bus') && !value.includes('mini')) {
+    return 40;
+  }
+
+  if (value.includes('mini_bus') || value.includes('minibus')) {
+    return 15;
+  }
+
+  if (value.includes('car_7_seater')) {
+    return 7;
+  }
+
+  if (value.includes('car_5_seater')) {
+    return 5;
+  }
 
   if (value.includes('bike')) {
     return 1;
@@ -629,7 +639,82 @@ const getSetPriceRows = (response) => {
   });
 };
 
+const getSetPricePaginationMeta = (response) => {
+  const data = unwrap(response);
+  return {
+    currentPage: Number(data?.current_page || data?.paginator?.current_page || 1) || 1,
+    lastPage: Number(data?.last_page || data?.paginator?.last_page || 1) || 1,
+  };
+};
+
 const normalizeId = (value) => String(value?._id || value?.id || value || '').trim();
+
+const getZoneServiceLocationId = (zone) => normalizeId(
+  zone?.service_location_id?._id
+  || zone?.service_location_id?.id
+  || zone?.service_location_id
+  || zone?.service_location?._id
+  || zone?.service_location?.id
+  || zone?.service_location
+  || '',
+);
+
+const getZoneId = (zone) => normalizeId(zone?._id || zone?.id || '');
+
+const isZoneActive = (zone) => zone?.active !== false && Number(zone?.status ?? 1) !== 0 && String(zone?.status || '').toLowerCase() !== 'inactive';
+
+const toZonePoint = (point) => {
+  if (Array.isArray(point) && point.length >= 2) {
+    const [lng, lat] = point;
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      return { lat: Number(lat), lng: Number(lng) };
+    }
+  }
+
+  if (point && typeof point === 'object') {
+    const lat = Number(point.lat ?? point.latitude);
+    const lng = Number(point.lng ?? point.longitude ?? point.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  return null;
+};
+
+const normalizeZonePath = (zone) => {
+  const source = Array.isArray(zone?.coordinates?.[0]) && Array.isArray(zone?.coordinates?.[0]?.[0])
+    ? zone.coordinates[0]
+    : zone?.coordinates;
+
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source.map(toZonePoint).filter(Boolean);
+};
+
+const isPointInPolygon = (point, polygon) => {
+  if (!point || polygon.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lng;
+    const yj = polygon[j].lat;
+    const intersects = ((yi > point.lat) !== (yj > point.lat))
+      && (point.lng < ((xj - xi) * (point.lat - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+};
 
 const toFiniteNumber = (value, fallback = 0) => {
   const numeric = Number(value);
@@ -643,11 +728,16 @@ const getRuleServiceLocationId = (rule) => normalizeId(
   || rule?.zone?.service_location?._id
   || rule?.zone?.service_location?.id
   || rule?.zone?.service_location_id
-  || rule?.zone_id?._id
+  || '',
+);
+
+const getRuleZoneId = (rule) => normalizeId(
+  rule?.zone_id?._id
   || rule?.zone_id?.id
   || rule?.zone_id
   || rule?.zone?._id
   || rule?.zone?.id
+  || rule?.zone
   || '',
 );
 
@@ -673,25 +763,40 @@ const matchesTransportType = (rule, transportType) => {
     || normalizedRuleTransport === 'both';
 };
 
-const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId, transportType, vehicleName }) => {
+const findBestPricingRule = ({ rules, vehicleTypeId, zoneId, serviceLocationId, transportType }) => {
   const normalizedVehicleTypeId = normalizeId(vehicleTypeId);
+  const normalizedZoneId = normalizeId(zoneId);
   const normalizedServiceLocationId = normalizeId(serviceLocationId);
   const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
-  const normalizedName = String(vehicleName || '').trim().toLowerCase();
 
-  const candidates = sortPricingRules((Array.isArray(rules) ? rules : []).filter((rule) => {
-    const ruleVehicleId = normalizeId(rule?.vehicle_type?._id || rule?.vehicle_type?.id || rule?.vehicle_type || rule?.type_id);
-    const ruleVehicleName = String(rule?.vehicle_type?.name || rule?.vehicle_type?.vehicle_type || rule?.name || '').trim().toLowerCase();
-    const matchesVehicle = (normalizedVehicleTypeId && ruleVehicleId === normalizedVehicleTypeId) || (normalizedName && ruleVehicleName && ruleVehicleName === normalizedName);
+  const candidates = sortPricingRules(rules.filter((rule) => {
+    const matchesVehicle = normalizeId(rule?.vehicle_type?._id || rule?.vehicle_type || rule?.type_id) === normalizedVehicleTypeId;
     return matchesVehicle && isActiveRidePricingRule(rule) && matchesTransportType(rule, normalizedTransportType);
   }));
 
   if (!candidates.length) {
-    const genericCandidates = sortPricingRules((Array.isArray(rules) ? rules : []).filter((rule) => isActiveRidePricingRule(rule)));
-    return genericCandidates[0] || null;
+    return null;
   }
 
   const exactTransportMatch = (rule) => String(rule?.transport_type || 'taxi').trim().toLowerCase() === normalizedTransportType;
+  const exactZone = candidates.find((rule) => (
+    normalizedZoneId
+    && getRuleZoneId(rule) === normalizedZoneId
+    && exactTransportMatch(rule)
+  ));
+
+  if (exactZone) {
+    return exactZone;
+  }
+
+  const exactZoneAnyTransport = candidates.find((rule) => (
+    normalizedZoneId && getRuleZoneId(rule) === normalizedZoneId
+  ));
+
+  if (exactZoneAnyTransport) {
+    return exactZoneAnyTransport;
+  }
+
   const exactServiceLocation = candidates.find((rule) => (
     normalizedServiceLocationId
     && getRuleServiceLocationId(rule) === normalizedServiceLocationId
@@ -702,15 +807,39 @@ const findBestPricingRule = ({ rules, vehicleTypeId, serviceLocationId, transpor
     return exactServiceLocation;
   }
 
-  return candidates[0];
+  const exactServiceLocationAnyTransport = candidates.find((rule) => (
+    normalizedServiceLocationId && getRuleServiceLocationId(rule) === normalizedServiceLocationId
+  ));
+
+  if (exactServiceLocationAnyTransport) {
+    return exactServiceLocationAnyTransport;
+  }
+
+  const genericTransportMatch = candidates.find((rule) => (
+    !getRuleServiceLocationId(rule) && !getRuleZoneId(rule) && exactTransportMatch(rule)
+  ));
+
+  if (genericTransportMatch) {
+    return genericTransportMatch;
+  }
+
+  const genericBoth = candidates.find((rule) => !getRuleServiceLocationId(rule) && !getRuleZoneId(rule));
+  if (genericBoth) {
+    return genericBoth;
+  }
+
+  // Never borrow another zone's location-scoped price for this ride.
+  if (normalizedServiceLocationId) {
+    return null;
+  }
+
+  return candidates[0] || null;
 };
 
 const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, durationMinutes }) => {
   const fallbackFare = getFallbackVehicleEstimate(vehicle?.raw || vehicle);
 
   if (!pricingRule) {
-    const rawPrice = Number(vehicle?.raw?.price || vehicle?.raw?.base_price || vehicle?.raw?.base_fare || 0);
-    if (rawPrice > 0) return rawPrice;
     return fallbackFare;
   }
 
@@ -726,12 +855,12 @@ const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, duration
     ? basePrice
     : basePrice + (extraDistanceKm * pricePerDistance) + (Math.max(0, Number(durationMinutes || 0)) * timePrice);
 
-  const total = subtotal + (subtotal * serviceTax) / 100;
-  const rideSurgeAmount = pricingRule.zone_id?.ride_surge_enabled
-    ? toFiniteNumber(pricingRule.ride_surge_amount, 0)
-    : 0;
+  if (subtotal <= 0) {
+    return fallbackFare;
+  }
 
-  return Math.max(basePrice > 0 ? basePrice : fallbackFare, Math.round(total + rideSurgeAmount));
+  const total = subtotal + (subtotal * serviceTax) / 100;
+  return Math.max(0, Math.round(total));
 };
 
 const getDropTime = (minutesAway = 0) => {
@@ -805,48 +934,27 @@ const alignBidAmountToStep = ({ baseFare, amount, stepAmount, direction = 'up' }
   return Math.max(0, safeBaseFare + (Math.sign(delta) * normalizedSteps * safeStepAmount));
 };
 
-const getVehicleBidBounds = (vehicle, bidRideSettings = {}) => {
+const getBidFareBounds = (vehicle, stepCount) => {
   const baseFare = Math.max(0, Math.round(Number(vehicle?.price) || 0));
-  if (!baseFare || !vehicle?.supportsBidding) {
-    return { min: baseFare, max: baseFare, stepAmount: 10, lowPct: 10, highPct: 20 };
-  }
-
-  const stepAmount = toConfiguredPositiveInteger(
-    bidRideSettings?.bidding_amount_increase_or_decrease,
-    Number(vehicle?.bidStepAmount || 10),
+  const maxSteps = Math.max(0, Number(vehicle?.maxBidSteps) || 0);
+  const safeStepCount = Math.min(
+    maxSteps,
+    Math.max(0, Number.isFinite(Number(stepCount)) ? Number(stepCount) : maxSteps),
   );
+  const stepAmount = Math.max(0, Math.round(Number(vehicle?.bidStepAmount) || 0));
 
-  const bidLowPercentage = clampPercentage(bidRideSettings?.user_bidding_low_percentage, 10);
-  const bidHighPercentage = clampPercentage(bidRideSettings?.user_bidding_high_percentage, 20);
-  const lowPct = Math.min(bidLowPercentage, bidHighPercentage);
-  const highPct = Math.max(bidLowPercentage, bidHighPercentage);
-
-  const min = alignBidAmountToStep({
-    baseFare,
-    amount: baseFare * (1 + (lowPct / 100)),
-    stepAmount,
-    direction: 'up',
-  });
-
-  const max = alignBidAmountToStep({
-    baseFare,
-    amount: baseFare * (1 + (highPct / 100)),
-    stepAmount,
-    direction: 'up',
-  });
-
-  return { min, max, stepAmount, lowPct, highPct };
+  return {
+    min: baseFare,
+    max: baseFare + (safeStepCount * stepAmount),
+  };
 };
 
-const formatVehicleFare = (vehicle, bidRideSettings = {}, currentBookingTab = 'instant') => {
-  if (currentBookingTab === 'instant' || !vehicle?.supportsBidding) {
+const formatVehicleFare = (vehicle, stepCount) => {
+  if (!vehicle?.supportsBidding) {
     return formatCurrency(vehicle?.price);
   }
 
-  const { min, max } = getVehicleBidBounds(vehicle, bidRideSettings);
-  if (min === max) {
-    return formatCurrency(min);
-  }
+  const { min, max } = getBidFareBounds(vehicle, stepCount);
   return `${formatCurrency(min)}-${formatCurrency(max)}`;
 };
 
@@ -862,7 +970,7 @@ const formatDateTimeInputValue = (date) => {
 };
 
 const getMinScheduledDateTime = () => {
-  const next = new Date(Date.now() + 15 * 60 * 1000);
+  const next = new Date(Date.now() + 60 * 60 * 1000);
   return formatDateTimeInputValue(next);
 };
 
@@ -890,23 +998,9 @@ const formatScheduledDisplay = (value) => {
   });
 };
 
-const formatDateTimeDisplay = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  return `${day}-${month}-${year} ${hours}:${minutes}`;
-};
-
 const formatAvailabilityLine = (availability) => {
   if (!availability?.totalDrivers) {
-    return 'Fastest pickup & drop available';
+    return 'Not available right now';
   }
 
   const etaMinutes = availability.closestDriverEtaMinutes || 1;
@@ -943,6 +1037,21 @@ const getAvailabilityBadge = (availability) => {
   return null;
 };
 
+const getNormalizedCategory = (type) => {
+  const cat = String(type?.category || '').trim().toLowerCase();
+  if (cat) {
+    if (cat.includes('car')) return 'car';
+    if (cat.includes('bike') || cat.includes('scooty')) return 'bike';
+    if (cat.includes('auto')) return 'auto';
+    return cat;
+  }
+
+  const icon = String(type?.icon_types || '').trim().toLowerCase();
+  if (icon.includes('bike') || icon.includes('scooty')) return 'bike';
+  if (icon.includes('auto')) return 'auto';
+  return 'car';
+};
+
 const normalizeVehicleType = (type, index) => {
   const id = String(type?._id || type?.id || type?.name || index);
   const dispatchType = String(type?.dispatch_type || 'normal').trim().toLowerCase();
@@ -952,6 +1061,7 @@ const normalizeVehicleType = (type, index) => {
     vehicleTypeId: type?._id || type?.id || '',
     transportType: String(type?.transport_type || 'taxi').trim().toLowerCase() || 'taxi',
     iconType: type?.icon_types || 'car',
+    category: getNormalizedCategory(type),
     icon: getVehiclePreviewImage(type),
     vehicleIconUrl: getVehicleMapIcon(type),
     name: getTypeLabel(type),
@@ -968,11 +1078,35 @@ const normalizeVehicleType = (type, index) => {
   };
 };
 
+const createHistorySafeVehicle = (vehicle) => {
+  if (!vehicle) {
+    return null;
+  }
+
+  return {
+    id: vehicle.id,
+    vehicleTypeId: vehicle.vehicleTypeId,
+    transportType: vehicle.transportType,
+    iconType: vehicle.iconType,
+    icon: vehicle.icon,
+    vehicleIconUrl: vehicle.vehicleIconUrl,
+    name: vehicle.name,
+    capacity: vehicle.capacity,
+    badge: vehicle.badge,
+    badgeColor: vehicle.badgeColor,
+    sublabel: vehicle.sublabel,
+    price: vehicle.price,
+    dispatchType: vehicle.dispatchType,
+    supportsBidding: vehicle.supportsBidding,
+    bidStepAmount: vehicle.bidStepAmount,
+    maxBidSteps: vehicle.maxBidSteps,
+  };
+};
+
 const ScrollIndicator = ({ show }) => (
   <AnimatePresence>
     {show && (
       <motion.div
-        key="scroll-indicator"
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
@@ -988,16 +1122,15 @@ const ScrollIndicator = ({ show }) => (
 
 const SelectVehicle = () => {
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const queryVehicleType = searchParams.get('vehicleType') || '';
+  const localVehicleType = typeof window !== 'undefined' ? (window.localStorage.getItem('selectedVehicleType') || '') : '';
   const routeState = location.state || {};
   const [vehicles, setVehicles] = useState([]);
   const [availabilityByVehicleId, setAvailabilityByVehicleId] = useState({});
   const [selected, setSelected] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showRideModeModal, setShowRideModeModal] = useState(false);
-  const [tempScheduledAt, setTempScheduledAt] = useState('');
-  const [localScheduleError, setLocalScheduleError] = useState('');
-  const [bookingTab, setBookingTab] = useState('instant');
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [showBidModal, setShowBidModal] = useState(false);
   const [previewVehicleId, setPreviewVehicleId] = useState('');
@@ -1031,36 +1164,22 @@ const SelectVehicle = () => {
       };
     }
 
-    return { distanceMeters: 0, durationMinutes: 0 };
+    const fallbackDistanceMeters = calculateDistanceMeters(
+      routeState?.pickupCoords || [75.9048, 22.7039],
+      routeState?.dropCoords || [75.8937, 22.7533],
+    );
+
+    return {
+      distanceMeters: fallbackDistanceMeters,
+      durationMinutes: estimateDurationMinutes(fallbackDistanceMeters),
+    };
   });
+  const routeMetricsCacheRef = useRef(new Map());
   const [isResolvingTripMetrics, setIsResolvingTripMetrics] = useState(true);
   const [showScrollArrow, setShowScrollArrow] = useState(false);
   const scrollRef = React.useRef(null);
-  const bottomSheetRef = useRef(null);
-  const [bottomSheetHeight, setBottomSheetHeight] = useState(480);
-
-  useEffect(() => {
-    const updateSheetHeight = () => {
-      if (bottomSheetRef.current) {
-        const measured = bottomSheetRef.current.getBoundingClientRect().height;
-        if (measured > 0) {
-          setBottomSheetHeight(measured);
-        }
-      }
-    };
-
-    updateSheetHeight();
-    const observer = new ResizeObserver(updateSheetHeight);
-    if (bottomSheetRef.current) {
-      observer.observe(bottomSheetRef.current);
-    }
-    window.addEventListener('resize', updateSheetHeight);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateSheetHeight);
-    };
-  }, []);
   const availabilityHistoryRef = useRef({});
+  const selectedVehicleIdRef = useRef('');
   const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
   const { settings } = useSettings();
@@ -1072,111 +1191,102 @@ const SelectVehicle = () => {
     () => (Array.isArray(routeState.stops) ? routeState.stops : []),
     [routeState.stops],
   );
-  const serviceLocationId = routeState.service_location_id || routeState.serviceLocationId || '';
-  const [resolvedServiceLocationId, setResolvedServiceLocationId] = useState('');
-  const [isResolvingServiceLocationId, setIsResolvingServiceLocationId] = useState(false);
-  const effectiveServiceLocationId = serviceLocationId || resolvedServiceLocationId;
+  const routeServiceLocationId = routeState.service_location_id || routeState.serviceLocationId || '';
+  const routeZoneId = routeState.zone_id || routeState.zoneId || '';
+  const hasCompleteRouteZoneContext = Boolean(routeServiceLocationId && routeZoneId);
+  const [resolvedServiceLocationId, setResolvedServiceLocationId] = useState(routeServiceLocationId);
+  const [resolvedZoneId, setResolvedZoneId] = useState(routeZoneId);
+  const [isResolvingServiceLocation, setIsResolvingServiceLocation] = useState(!hasCompleteRouteZoneContext);
+  const [hasLoadedAvailability, setHasLoadedAvailability] = useState(false);
+  const serviceLocationId = hasCompleteRouteZoneContext
+    ? (resolvedServiceLocationId || routeServiceLocationId || '')
+    : resolvedServiceLocationId;
+  const zoneId = hasCompleteRouteZoneContext
+    ? (resolvedZoneId || routeZoneId || '')
+    : resolvedZoneId;
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const pickupPosition = useMemo(() => toLatLng(pickupCoords), [pickupCoords]);
   const dropPosition = useMemo(() => toLatLng(dropCoords, null), [dropCoords]);
-  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useAppGoogleMapsLoader();
+  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useBaseGoogleMapsLoader();
   const minScheduledAt = useMemo(() => getMinScheduledDateTime(), []);
   const maxScheduledAt = useMemo(() => getMaxScheduledDateTime(), []);
 
-  const openSchedulePicker = () => {
-    const currentMin = getMinScheduledDateTime();
-    if (!scheduledAt || scheduledAt < currentMin) {
-      setScheduledAt(currentMin);
-      setTempScheduledAt(currentMin);
-    } else {
-      setTempScheduledAt(scheduledAt);
-    }
-    setLocalScheduleError('');
-    setShowRideModeModal(true);
-  };
-
-  const isConfirmDisabled = useMemo(() => {
-    const val = tempScheduledAt || scheduledAt;
-    if (!val) return true;
-    const parsedSchedule = new Date(val);
-    if (Number.isNaN(parsedSchedule.getTime())) return true;
-    
-    const nextMin = new Date(Date.now() + 15 * 60 * 1000);
-    const minVal = formatDateTimeInputValue(nextMin);
-    
-    const nextMax = new Date();
-    nextMax.setDate(nextMax.getDate() + 7);
-    const maxVal = formatDateTimeInputValue(nextMax);
-    
-    return val < minVal || val > maxVal;
-  }, [tempScheduledAt, scheduledAt]);
-
   useEffect(() => {
-    const val = tempScheduledAt || scheduledAt;
-    if (!val) {
-      setLocalScheduleError('');
+    if (hasCompleteRouteZoneContext) {
+      setResolvedServiceLocationId(routeServiceLocationId);
+      setResolvedZoneId(routeZoneId);
+      setIsResolvingServiceLocation(false);
       return;
     }
-    
-    const parsedSchedule = new Date(val);
-    if (Number.isNaN(parsedSchedule.getTime())) {
-      setLocalScheduleError('Choose a valid schedule date and time.');
-      return;
-    }
-    
-    const nextMin = new Date(Date.now() + 15 * 60 * 1000);
-    const minVal = formatDateTimeInputValue(nextMin);
-    
-    const nextMax = new Date();
-    nextMax.setDate(nextMax.getDate() + 7);
-    const maxVal = formatDateTimeInputValue(nextMax);
-    
-    if (val < minVal) {
-      setLocalScheduleError('Schedule time cannot be earlier than now.');
-    } else if (val > maxVal) {
-      setLocalScheduleError('Advance booking is available for up to 7 days only.');
-    } else {
-      setLocalScheduleError('');
-    }
-  }, [tempScheduledAt, scheduledAt]);
+
+    setResolvedServiceLocationId('');
+    setResolvedZoneId('');
+    setIsResolvingServiceLocation(true);
+  }, [hasCompleteRouteZoneContext, routeServiceLocationId, routeZoneId]);
 
   useEffect(() => {
     let active = true;
 
-    const resolvePickupServiceLocation = async () => {
-      if (serviceLocationId) {
-        setResolvedServiceLocationId('');
-        setIsResolvingServiceLocationId(false);
+    const resolveServiceLocationFromPickup = async () => {
+      if (hasCompleteRouteZoneContext) {
+        if (active) {
+          setIsResolvingServiceLocation(false);
+        }
         return;
       }
 
-      setIsResolvingServiceLocationId(true);
+      if (!Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
+        if (active) {
+          setIsResolvingServiceLocation(false);
+        }
+        return;
+      }
+
+      if (active) {
+        setIsResolvingServiceLocation(true);
+      }
 
       try {
-        const zones = await fetchActiveRideZones(api);
+        const response = await api.get('/users/zones');
         if (!active) {
           return;
         }
 
-        const nextServiceLocationId = resolveServiceLocationIdFromCoords(pickupCoords, zones);
-        setResolvedServiceLocationId(nextServiceLocationId);
+        const payload = unwrap(response);
+        const zones = payload?.results || payload?.zones || payload?.paginator?.data || (Array.isArray(payload) ? payload : []);
+        const pickupPoint = { lat: Number(pickupCoords[1]), lng: Number(pickupCoords[0]) };
+        const matchedZone = [...(Array.isArray(zones) ? zones : [])]
+          .filter((zone) => isZoneActive(zone))
+          .map((zone) => ({ zone, path: normalizeZonePath(zone) }))
+          .filter(({ path }) => isPointInPolygon(pickupPoint, path))
+          .sort((left, right) => {
+            const leftUpdatedAt = new Date(left.zone?.updatedAt || left.zone?.createdAt || 0).getTime();
+            const rightUpdatedAt = new Date(right.zone?.updatedAt || right.zone?.createdAt || 0).getTime();
+            return rightUpdatedAt - leftUpdatedAt;
+          })[0]?.zone;
+
+        const nextZoneId = getZoneId(matchedZone);
+        const nextServiceLocationId = getZoneServiceLocationId(matchedZone);
+        setResolvedZoneId(nextZoneId || '');
+        setResolvedServiceLocationId(nextServiceLocationId || '');
       } catch {
         if (active) {
           setResolvedServiceLocationId('');
+          setResolvedZoneId('');
         }
       } finally {
         if (active) {
-          setIsResolvingServiceLocationId(false);
+          setIsResolvingServiceLocation(false);
         }
       }
     };
 
-    resolvePickupServiceLocation();
+    resolveServiceLocationFromPickup();
 
     return () => {
       active = false;
     };
-  }, [pickupCoords, serviceLocationId]);
+  }, [hasCompleteRouteZoneContext, pickupCoords]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -1204,34 +1314,46 @@ const SelectVehicle = () => {
     let active = true;
 
     const loadVehicleTypes = async () => {
-      if (!effectiveServiceLocationId) return;
-
       setIsLoadingVehicles(true);
       setVehicleLoadError('');
 
       try {
-        const response = await api.get('/users/vehicle-types', {
-          params: { service_location_id: effectiveServiceLocationId }
-        });
+        const response = await api.get('/users/vehicle-types');
 
         if (!active) {
           return;
         }
 
-        const nextVehicles = getVehicleTypes(response)
+        const categoryFilter = String(queryVehicleType || routeState?.selectedCategory || localVehicleType || '').trim().toLowerCase();
+        let nextVehicles = getVehicleTypes(response)
           .filter((type) => {
             const isActive = type.active !== false && Number(type.status ?? 1) !== 0;
             const transportType = String(type.transport_type || 'taxi').toLowerCase();
-            console.log('Vehicle:', type.name, 'transport:', transportType, 'isActive:', isActive, 'active:', type.active, 'status:', type.status);
             return isActive && (transportType === 'taxi' || transportType === 'both');
           })
           .map(normalizeVehicleType);
 
+        if (categoryFilter) {
+          nextVehicles = nextVehicles.filter((v) => {
+            const vCat = v.category;
+            if (categoryFilter === 'cab' && vCat === 'car') return true;
+            if (categoryFilter === 'car' && vCat === 'cab') return true;
+            return vCat === categoryFilter;
+          });
+        }
+
+        console.log('--- TEMPORARY DEBUG LOG ---');
+        console.log('selectedVehicleType in select vehicle page:', categoryFilter);
+        console.log('nextVehicles length:', nextVehicles.length);
+
+        const preselectedVehicle = nextVehicles[0] || null;
+
         setVehicles(nextVehicles);
-        setSelected((current) => current || nextVehicles[0]?.id || '');
-      } catch (error) {
+        setSelected((current) => current || preselectedVehicle?.id || nextVehicles[0]?.id || '');
+      } catch (err) {
+        console.error('[SelectVehicle] Failed to load vehicles:', err);
         if (active) {
-          setVehicleLoadError(error.message || 'Could not load vehicle types.');
+          setVehicleLoadError('Failed to load available vehicles for this area.');
         }
       } finally {
         if (active) {
@@ -1245,24 +1367,54 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, [effectiveServiceLocationId]);
+  }, [isResolvingServiceLocation, queryVehicleType, routeState?.selectedCategory, localVehicleType, resolvedZoneId, resolvedServiceLocationId, routeState.transportType, routeState.transport_type, routeState.serviceType, hasCompleteRouteZoneContext]);
 
   useEffect(() => {
     let active = true;
 
     const loadPricingRules = async () => {
+      if (isResolvingServiceLocation) {
+        return;
+      }
+
       setIsLoadingPricingRules(true);
 
       try {
-        const response = await api.get('/admin/types/set-prices', {
-          params: { scope: 'ride' },
-        });
+        const aggregatedRules = [];
+        let page = 1;
+        let lastPage = 1;
+        const pricingTransportType = resolveRideTransportType(
+          routeState.transport_type,
+          routeState.transportType,
+          'taxi',
+        );
+
+        do {
+          const response = await api.get('/users/set-prices', {
+            params: {
+              scope: 'ride',
+              page,
+              limit: 100,
+              ...(zoneId ? { zone_id: zoneId } : {}),
+              ...(pricingTransportType ? { transport_type: pricingTransportType } : {}),
+            },
+          });
+
+          if (!active) {
+            return;
+          }
+
+          aggregatedRules.push(...getSetPriceRows(response));
+          const pagination = getSetPricePaginationMeta(response);
+          lastPage = pagination.lastPage;
+          page += 1;
+        } while (page <= lastPage);
 
         if (!active) {
           return;
         }
 
-        setPricingRules(getSetPriceRows(response));
+        setPricingRules(aggregatedRules);
       } catch {
         if (active) {
           setPricingRules([]);
@@ -1279,7 +1431,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isResolvingServiceLocation, routeState.transportType, routeState.transport_type, zoneId]);
 
   useEffect(() => {
     const fallbackDistanceMeters = calculateDistanceMeters(pickupCoords, dropCoords);
@@ -1303,79 +1455,65 @@ const SelectVehicle = () => {
       return;
     }
 
-    if (!isMapLoaded || !window.google?.maps?.DirectionsService) {
+    if (!isMapLoaded || !window.google?.maps?.importLibrary) {
       setIsResolvingTripMetrics(true);
+      return;
+    }
+
+    const waypointRequests = stops
+      .map((stop) => String(stop || '').trim())
+      .filter(Boolean)
+      .map((stop) => ({ location: stop, stopover: true }));
+    const routeCacheKey = getRouteCacheKey(pickupPosition, dropPosition, waypointRequests);
+    const cachedMetrics = routeMetricsCacheRef.current.get(routeCacheKey);
+    if (cachedMetrics) {
+      setIsResolvingTripMetrics(false);
+      setTripMetrics(cachedMetrics);
       return;
     }
 
     let active = true;
     setIsResolvingTripMetrics(true);
-    const directionsService = new window.google.maps.DirectionsService();
-
-    directionsService.route(
-      {
+    void (async () => {
+      const result = await computeDrivingRoute({
         origin: pickupPosition,
         destination: dropPosition,
-        waypoints: stops
-          .map((stop) => String(stop || '').trim())
-          .filter(Boolean)
-          .map((stop) => ({ location: stop, stopover: true })),
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        provideRouteAlternatives: false,
-      },
-      (result, status) => {
-        if (!active) {
-          return;
-        }
+        intermediates: waypointRequests,
+      });
 
-        const leg = result?.routes?.[0]?.legs?.[0];
-        const distanceMeters = toFiniteNumber(leg?.distance?.value, fallbackDistanceMeters);
-        const durationMinutes = Math.max(
-          1,
-          Math.round(toFiniteNumber(leg?.duration?.value, fallbackDurationMinutes * 60) / 60),
-        );
+      if (!active) {
+        return;
+      }
 
-        if (status === 'OK' && leg) {
-          setIsResolvingTripMetrics(false);
-          setTripMetrics({ distanceMeters, durationMinutes });
-          return;
-        }
+      const totals = sumComputedRouteLegs(result.legs);
+      const distanceMeters = toFiniteNumber(totals.distanceMeters, fallbackDistanceMeters);
+      const durationMinutes = Math.max(
+        1,
+        Math.round(toFiniteNumber(totals.durationSeconds, fallbackDurationMinutes * 60) / 60),
+      );
 
+      if (result.status === 'OK' && result.legs.length) {
+        routeMetricsCacheRef.current.set(routeCacheKey, { distanceMeters, durationMinutes });
         setIsResolvingTripMetrics(false);
-        setTripMetrics({
-          distanceMeters: fallbackDistanceMeters,
-          durationMinutes: fallbackDurationMinutes,
-        });
-      },
-    );
+        setTripMetrics({ distanceMeters, durationMinutes });
+        return;
+      }
+
+      routeMetricsCacheRef.current.set(routeCacheKey, {
+        distanceMeters: fallbackDistanceMeters,
+        durationMinutes: fallbackDurationMinutes,
+      });
+      setIsResolvingTripMetrics(false);
+      setTripMetrics({
+        distanceMeters: fallbackDistanceMeters,
+        durationMinutes: fallbackDurationMinutes,
+      });
+    })();
 
     return () => {
       active = false;
     };
   }, [dropCoords, dropPosition, isMapLoaded, mapLoadError, pickupCoords, pickupPosition, stops]);
-
-  const [pendingCancellationFee, setPendingCancellationFee] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    const fetchPendingDues = async () => {
-      const token = getLocalUserToken();
-      if (!token) {
-        if (active) setPendingCancellationFee(0);
-        return;
-      }
-      try {
-        const response = await api.get('/rides/pending-cancellation-dues');
-        if (!active) return;
-        const totalDue = Number(response?.data?.data?.totalDueAmount || response?.data?.totalDueAmount || response?.totalDueAmount || 0);
-        setPendingCancellationFee(Math.round(totalDue));
-      } catch (_err) {
-        if (active) setPendingCancellationFee(0);
-      }
-    };
-    fetchPendingDues();
-    return () => { active = false; };
-  }, []);
 
   const pricedVehicles = useMemo(
     () =>
@@ -1383,27 +1521,34 @@ const SelectVehicle = () => {
         const pricingRule = findBestPricingRule({
           rules: pricingRules,
           vehicleTypeId: vehicle.vehicleTypeId,
-          serviceLocationId: effectiveServiceLocationId,
-          transportType: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
-          vehicleName: vehicle.name,
+          zoneId,
+          serviceLocationId,
+          transportType: resolveRideTransportType(
+            routeState.transport_type,
+            routeState.transportType,
+            vehicle.transportType,
+          ),
         });
 
-        const baseCalculatedPrice = calculateEstimatedFare({
+        const calculatedPrice = calculateEstimatedFare({
           vehicle,
           pricingRule,
           distanceMeters: tripMetrics.distanceMeters,
           durationMinutes: tripMetrics.durationMinutes,
         });
 
+        // Dynamically scale max bidding steps to a realistic 15% of the actual calculated price
+        const stepAmount = Number(vehicle.bidStepAmount || 10);
+        const dynamicMaxBidSteps = Math.max(2, Math.round((calculatedPrice * 0.15) / stepAmount));
+
         return {
           ...vehicle,
           pricingRule,
-          basePrice: baseCalculatedPrice,
-          previousCancellationFee: Math.round(pendingCancellationFee),
-          price: Math.round(baseCalculatedPrice + pendingCancellationFee),
+          price: calculatedPrice,
+          maxBidSteps: dynamicMaxBidSteps,
         };
       }),
-    [pricingRules, effectiveServiceLocationId, tripMetrics.distanceMeters, tripMetrics.durationMinutes, vehicles, pendingCancellationFee],
+    [pricingRules, serviceLocationId, tripMetrics.distanceMeters, tripMetrics.durationMinutes, vehicles, zoneId],
   );
 
   const isFarePending = isResolvingTripMetrics || isLoadingPricingRules;
@@ -1411,52 +1556,48 @@ const SelectVehicle = () => {
   const hasAvailabilityResults = Object.keys(availabilityByVehicleId).length > 0;
 
   const displayedVehicles = useMemo(() => {
-    let baseList = [];
+    if (!hasLoadedAvailability) {
+      return [];
+    }
+
     if (!hasAvailabilityResults) {
-      baseList = pricedVehicles;
-    } else {
-      const rankedVehicles = pricedVehicles
-        .map((vehicle, index) => ({
-          vehicle,
-          index,
-          availability: availabilityByVehicleId[vehicle.id] || DEFAULT_AVAILABILITY,
-        }))
-        .sort((a, b) => {
-          const aAvailable = a.availability.totalDrivers > 0;
-          const bAvailable = b.availability.totalDrivers > 0;
-
-          if (aAvailable !== bAvailable) {
-            return aAvailable ? -1 : 1;
-          }
-
-          if (aAvailable && bAvailable) {
-            const driverDelta = (b.availability.totalDrivers || 0) - (a.availability.totalDrivers || 0);
-            if (driverDelta !== 0) return driverDelta;
-
-            const etaDelta = (a.availability.closestDriverEtaMinutes || Number.POSITIVE_INFINITY)
-              - (b.availability.closestDriverEtaMinutes || Number.POSITIVE_INFINITY);
-            if (etaDelta !== 0) return etaDelta;
-          }
-
-          return a.index - b.index;
-        })
-        .map(({ vehicle, availability }) => ({
-          vehicle,
-          availability,
-        }));
-
-      baseList = rankedVehicles.map(({ vehicle }) => vehicle);
+      return pricedVehicles;
     }
 
-    if (bookingTab === 'bid') {
-      return baseList.filter((vehicle) => vehicle.supportsBidding);
-    } else {
-      return baseList.filter((vehicle) => !vehicle.supportsBidding || vehicle.dispatchType === 'both' || vehicle.dispatchType === 'normal');
-    }
-  }, [availabilityByVehicleId, hasAvailabilityResults, pricedVehicles, bookingTab]);
+    const rankedVehicles = pricedVehicles
+      .map((vehicle, index) => ({
+        ...vehicle,
+        originalIndex: index,
+        availability: availabilityByVehicleId[vehicle.id] || DEFAULT_AVAILABILITY,
+      }))
+      .sort((a, b) => {
+        const aAvailable = (a.availability.totalDrivers || 0) > 0;
+        const bAvailable = (b.availability.totalDrivers || 0) > 0;
 
-  const effectiveSelectedId = selected || displayedVehicles[0]?.id || '';
-  const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === effectiveSelectedId) || pricedVehicles[0] || null, [pricedVehicles, effectiveSelectedId]);
+        if (aAvailable !== bAvailable) {
+          return aAvailable ? -1 : 1;
+        }
+
+        if (aAvailable && bAvailable) {
+          const driverDelta = (b.availability.totalDrivers || 0) - (a.availability.totalDrivers || 0);
+          if (driverDelta !== 0) return driverDelta;
+
+          const etaDelta = (a.availability.closestDriverEtaMinutes || Number.POSITIVE_INFINITY)
+            - (b.availability.closestDriverEtaMinutes || Number.POSITIVE_INFINITY);
+          if (etaDelta !== 0) return etaDelta;
+        }
+
+        return a.originalIndex - b.originalIndex;
+      })
+      .map(({ originalIndex, availability, ...vehicle }) => vehicle);
+
+    console.log('--- TEMPORARY DEBUG LOG ---');
+    console.log('Final displayed vehicles:', rankedVehicles.map(v => v.name));
+
+    return rankedVehicles;
+  }, [availabilityByVehicleId, hasAvailabilityResults, hasLoadedAvailability, pricedVehicles]);
+
+  const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const previewVehicle = useMemo(
     () => pricedVehicles.find((vehicle) => vehicle.id === previewVehicleId) || null,
     [previewVehicleId, pricedVehicles],
@@ -1469,19 +1610,19 @@ const SelectVehicle = () => {
     ),
     [routeState.transportType, routeState.transport_type, selectedVehicle?.transportType],
   );
-  const appliedPromoDiscount = Math.round(Math.max(0, Number(appliedPromo?.breakdown?.discount_amount || 0)));
-  const discountedSelectedFare = Math.round(Math.max(
+  const appliedPromoDiscount = Math.max(0, Number(appliedPromo?.breakdown?.discount_amount || 0));
+  const discountedSelectedFare = Math.max(
     0,
     Number(appliedPromo?.breakdown?.fare_after_discount ?? selectedVehicle?.price ?? 0),
-  ));
+  );
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
-  const canProceed = Boolean(selectedVehicle) && !isFarePending && (rideMode === 'schedule' || Boolean(selectedAvailability.totalDrivers));
+  const canProceed = Boolean(selectedVehicle) && !isFarePending;
   const hasBookableVehicles = useMemo(
-    () => displayedVehicles.some((vehicle) => (availabilityByVehicleId[vehicle.id]?.totalDrivers || 0) > 0),
-    [availabilityByVehicleId, displayedVehicles],
+    () => displayedVehicles.length > 0,
+    [displayedVehicles],
   );
-  const shouldUseDriverBidding = bookingTab === 'bid' || Boolean(
+  const shouldUseDriverBidding = Boolean(
     routeState.intercity ||
     routeState.serviceType === 'intercity' ||
     routeState.transport_type === 'intercity' ||
@@ -1515,7 +1656,7 @@ const SelectVehicle = () => {
       })
     : Number(selectedVehicle?.price || 0);
   const selectedBidSteps = shouldUseDriverBidding
-    ? Math.max(3, Math.round((selectedBidCeilingMaxFare - selectedBidFloorFare) / selectedBidStepAmount))
+    ? Math.max(0, Math.round((selectedBidCeilingMaxFare - selectedBidFloorFare) / selectedBidStepAmount))
     : Number(selectedVehicle?.maxBidSteps || 5);
   const selectedBidIncrement = (selectedVehicle?.supportsBidding ? bidStepCount : 0) * selectedBidStepAmount;
   const selectedBidCeiling = shouldUseDriverBidding
@@ -1552,13 +1693,7 @@ const SelectVehicle = () => {
   const applyPromoCode = async (rawCode) => {
     const code = String(rawCode || '').trim().toUpperCase();
 
-    if (isResolvingServiceLocationId) {
-      setPromoError('Resolving pickup zone. Please try again in a moment.');
-      setPromoFeedback('');
-      return false;
-    }
-
-    if (!effectiveServiceLocationId) {
+    if (!serviceLocationId) {
       setPromoError('Pickup zone is missing for this ride.');
       setPromoFeedback('');
       return false;
@@ -1584,7 +1719,7 @@ const SelectVehicle = () => {
       const response = await userService.validatePromo({
         code,
         fare: Number(selectedVehicle.price || 0),
-        service_location_id: effectiveServiceLocationId,
+        service_location_id: serviceLocationId,
         transport_type: resolvedTransportType,
       });
       const payload = unwrap(response);
@@ -1612,7 +1747,7 @@ const SelectVehicle = () => {
     let active = true;
 
     const loadPromos = async () => {
-      if (!effectiveServiceLocationId) {
+      if (!serviceLocationId) {
         if (active) {
           setAvailablePromos([]);
           clearAppliedPromo('');
@@ -1624,7 +1759,7 @@ const SelectVehicle = () => {
 
       try {
         const response = await userService.getAvailablePromos({
-          service_location_id: effectiveServiceLocationId,
+          service_location_id: serviceLocationId,
           transport_type: resolvedTransportType,
           limit: 20,
         });
@@ -1658,7 +1793,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, [resolvedTransportType, effectiveServiceLocationId]);
+  }, [resolvedTransportType, serviceLocationId]);
 
   useEffect(() => {
     if (!appliedPromo?.promo?.code || !selectedVehicle) {
@@ -1672,7 +1807,7 @@ const SelectVehicle = () => {
         const response = await userService.validatePromo({
           code: appliedPromo.promo.code,
           fare: Number(selectedVehicle.price || 0),
-          service_location_id: effectiveServiceLocationId,
+          service_location_id: serviceLocationId,
           transport_type: resolvedTransportType,
         });
         const payload = unwrap(response);
@@ -1699,7 +1834,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, [appliedPromo?.promo?.code, resolvedTransportType, selectedVehicle?.price, effectiveServiceLocationId]);
+  }, [appliedPromo?.promo?.code, resolvedTransportType, selectedVehicle?.price, serviceLocationId]);
 
   useEffect(() => {
     const timer = setTimeout(handleScroll, 200);
@@ -1711,26 +1846,29 @@ const SelectVehicle = () => {
   }, [selected]);
 
   useEffect(() => {
+    selectedVehicleIdRef.current = selected;
+  }, [selected]);
+
+  useEffect(() => {
     if (!hasAvailabilityResults || !displayedVehicles.length) {
       return;
     }
 
-    const currentAvailability = selected ? (availabilityByVehicleId[selected] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
-    const firstAvailable = displayedVehicles.find((vehicle) => (availabilityByVehicleId[vehicle.id]?.totalDrivers || 0) > 0);
+    const firstAvailable = displayedVehicles.find((vehicle) => (availabilityByVehicleId[vehicle.id]?.totalDrivers || 0) > 0) || displayedVehicles[0];
 
-    if (firstAvailable && (!selected || currentAvailability.totalDrivers <= 0)) {
+    if (!selected && firstAvailable) {
       setSelected(firstAvailable.id);
-      return;
-    }
-
-    if (!firstAvailable && rideMode !== 'schedule' && selected && currentAvailability.totalDrivers <= 0) {
-      setSelected('');
     }
   }, [availabilityByVehicleId, displayedVehicles, hasAvailabilityResults, rideMode, selected]);
 
   useEffect(() => {
     let active = true;
     let intervalId;
+
+    if (isResolvingServiceLocation) {
+      setHasLoadedAvailability(false);
+      return undefined;
+    }
 
     const fetchVehicleAvailabilities = async (vehicleSubset, { replace = false, silent = false } = {}) => {
       const fetchableVehicles = (Array.isArray(vehicleSubset) ? vehicleSubset : []).filter((vehicle) => vehicle?.vehicleTypeId);
@@ -1739,6 +1877,9 @@ const SelectVehicle = () => {
         if (replace) {
           availabilityHistoryRef.current = {};
           setAvailabilityByVehicleId({});
+        }
+        if (active) {
+          setHasLoadedAvailability(true);
         }
         return;
       }
@@ -1757,7 +1898,7 @@ const SelectVehicle = () => {
                 vehicleIconType: vehicle.iconType,
                 lng: pickupCoords[0],
                 lat: pickupCoords[1],
-                service_location_id: effectiveServiceLocationId,
+                service_location_id: serviceLocationId,
                 transport_type: vehicle.transportType || routeState.transport_type || routeState.transportType || 'taxi',
               },
             });
@@ -1794,8 +1935,11 @@ const SelectVehicle = () => {
           setDriverLoadError(error.message || 'Could not load online drivers.');
         }
       } finally {
-        if (active && !silent) {
-          setIsLoadingDrivers(false);
+        if (active) {
+          if (!silent) {
+            setIsLoadingDrivers(false);
+          }
+          setHasLoadedAvailability(true);
         }
       }
     };
@@ -1803,9 +1947,11 @@ const SelectVehicle = () => {
     if (!vehicles.length) {
       availabilityHistoryRef.current = {};
       setAvailabilityByVehicleId({});
+      setHasLoadedAvailability(false);
       return undefined;
     }
 
+    setHasLoadedAvailability(false);
     fetchVehicleAvailabilities(vehicles, { replace: true });
 
     const pollSelectedVehicle = () => {
@@ -1814,7 +1960,7 @@ const SelectVehicle = () => {
       }
 
       const activeVehicle =
-        vehicles.find((vehicle) => vehicle.id === selected)
+        vehicles.find((vehicle) => vehicle.id === selectedVehicleIdRef.current)
         || vehicles.find((vehicle) => vehicle.vehicleTypeId);
 
       if (!activeVehicle) {
@@ -1839,7 +1985,12 @@ const SelectVehicle = () => {
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [effectiveServiceLocationId, pickupCoords, routeState.transportType, routeState.transport_type, selected, vehicles]);
+  }, [isResolvingServiceLocation, pickupCoords, routeState.transportType, routeState.transport_type, serviceLocationId, vehicles]);
+
+  const isInitialVehicleResultsLoading =
+    isLoadingVehicles ||
+    isResolvingServiceLocation ||
+    (vehicles.length > 0 && !hasLoadedAvailability && !driverLoadError);
 
   const openPicker = (inputRef) => {
     if (typeof inputRef.current?.showPicker === 'function') {
@@ -1859,7 +2010,9 @@ const SelectVehicle = () => {
         pickupCoords,
         dropCoords,
         stops,
-        service_location_id: effectiveServiceLocationId,
+        service_location_id: serviceLocationId,
+        zone_id: zoneId,
+        selectedCategory: routeState.selectedCategory, // Forward category filter
       },
     });
   };
@@ -1872,6 +2025,7 @@ const SelectVehicle = () => {
     setShowBidModal(false);
     const baseFare = Number(selectedVehicle.price || 0);
     const finalFare = appliedPromo?.breakdown?.fare_after_discount ?? baseFare;
+    const historySafeVehicle = createHistorySafeVehicle(selectedVehicle);
 
     navigate(`${routePrefix}/ride/searching`, {
       state: {
@@ -1880,20 +2034,21 @@ const SelectVehicle = () => {
         pickupCoords,
         dropCoords,
         stops,
-        service_location_id: effectiveServiceLocationId,
+        zone_id: zoneId,
+        service_location_id: serviceLocationId,
         transport_type: resolvedTransportType,
-        vehicle: selectedVehicle,
-        vehicleTypeId: selectedVehicle.vehicleTypeId,
-        vehicleIconType: selectedVehicle.iconType,
-        vehicleIconUrl: selectedVehicle.vehicleIconUrl || selectedVehicle.icon,
+        vehicle: historySafeVehicle,
+        vehicleTypeId: historySafeVehicle?.vehicleTypeId || '',
+        vehicleIconType: historySafeVehicle?.iconType || '',
+        vehicleIconUrl: historySafeVehicle?.vehicleIconUrl || historySafeVehicle?.icon || '',
         paymentMethod,
         fare: finalFare,
         baseFare,
         promo_code: appliedPromo?.promo?.code || '',
         promo: appliedPromo?.promo || null,
         promoBreakdown: appliedPromo?.breakdown || null,
-        bookingMode: (bookingTab === 'bid' && selectedVehicle.supportsBidding) ? 'bidding' : 'normal',
-        pricingNegotiationMode: (bookingTab === 'bid' && selectedVehicle.supportsBidding)
+        bookingMode: selectedVehicle.supportsBidding ? 'bidding' : 'normal',
+        pricingNegotiationMode: selectedVehicle.supportsBidding
           ? shouldUseDriverBidding
             ? 'driver_bid'
             : 'user_increment_only'
@@ -1901,8 +2056,8 @@ const SelectVehicle = () => {
         bidStepAmount: selectedBidStepAmount,
         bidFloorFare: selectedBidFloorFare,
         bidCeilingMaxFare: selectedBidCeilingMaxFare,
-        userMaxBidFare: (bookingTab === 'bid' && selectedVehicle.supportsBidding && shouldUseDriverBidding) ? selectedBidCeiling : finalFare,
-        bidIncrement: (bookingTab === 'bid' && selectedVehicle.supportsBidding && shouldUseDriverBidding) ? selectedBidIncrement : 0,
+        userMaxBidFare: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidCeiling : finalFare,
+        bidIncrement: selectedVehicle.supportsBidding && shouldUseDriverBidding ? selectedBidIncrement : 0,
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
         rideMode,
@@ -1915,13 +2070,6 @@ const SelectVehicle = () => {
 
   const handleBook = () => {
     if (!selectedVehicle) {
-      return;
-    }
-
-    const token = getLocalUserToken();
-    if (!token) {
-      localStorage.setItem('hello_parth_active_module', 'taxi');
-      navigate('/login', { state: { from: location.pathname } });
       return;
     }
 
@@ -1951,7 +2099,7 @@ const SelectVehicle = () => {
 
     setScheduleError('');
 
-    if (bookingTab === 'bid' && selectedVehicle.supportsBidding && shouldUseDriverBidding) {
+    if (selectedVehicle.supportsBidding && shouldUseDriverBidding) {
       setShowBidModal(true);
       return;
     }
@@ -1960,8 +2108,10 @@ const SelectVehicle = () => {
   };
 
   return (
-    <div className="h-[100dvh] bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">
-      <div className="absolute inset-0 w-full bg-gray-200">
+    <div className="h-[100dvh] bg-slate-50 w-full lg:max-w-7xl mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden lg:grid lg:grid-cols-12 lg:bg-white lg:shadow-xl">
+      
+      {/* MAP BACKGROUND (Mobile) / RIGHT COLUMN (Desktop) */}
+      <div className="absolute inset-0 w-full bg-gray-200 lg:relative lg:col-span-7 lg:col-start-6 lg:h-full lg:rounded-r-3xl lg:overflow-hidden lg:z-0">
         <VehicleMapPreview
           center={pickupPosition}
           dropPosition={dropPosition}
@@ -1970,10 +2120,9 @@ const SelectVehicle = () => {
           selectedVehicle={selectedVehicle}
           isLoaded={isMapLoaded}
           loadError={mapLoadError}
-          bottomSheetHeight={bottomSheetHeight}
         />
 
-        <div className="absolute top-6 left-4 right-4 z-20 flex items-center gap-2.5">
+        <div className="absolute top-6 left-4 right-4 z-20 flex items-center gap-2.5 lg:hidden">
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate(-1)}
@@ -1982,13 +2131,42 @@ const SelectVehicle = () => {
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
           </motion.button>
         </div>
-
       </div>
 
-      <div ref={bottomSheetRef} className="absolute bottom-0 left-0 right-0 z-40 flex h-[72dvh] max-h-[72dvh] flex-col overflow-hidden rounded-t-[26px] bg-white shadow-[0_-12px_44px_rgba(15,23,42,0.16)]">
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2.5 mb-2 shrink-0" />
+      {/* BOTTOM SHEET (Mobile) / LEFT COLUMN (Desktop) */}
+      <div className="absolute bottom-0 left-0 right-0 z-40 flex max-h-[69dvh] min-h-[360px] min-w-0 flex-col overflow-hidden rounded-t-[26px] bg-white shadow-[0_-12px_44px_rgba(15,23,42,0.16)] lg:relative lg:col-span-5 lg:col-start-1 lg:row-start-1 lg:h-full lg:max-h-none lg:rounded-none lg:shadow-none lg:border-r lg:border-slate-200 lg:z-10">
+        
+        {/* Desktop Header */}
+        <div className="hidden lg:flex items-center gap-3 px-4 pt-6 pb-2 border-b border-slate-100">
+          <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors">
+            <ArrowLeft size={22} className="text-slate-900" strokeWidth={3} />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-tight">Ride</p>
+            <h1 className="text-[20px] font-bold text-slate-900 tracking-tight leading-none">Select Vehicle</h1>
+          </div>
+        </div>
+
+        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2.5 mb-2 shrink-0 lg:hidden" />
 
         <div className="shrink-0 border-b border-slate-100 px-4 pb-3">
+          {routeState.selectedCategory && (() => {
+            const cat = String(routeState.selectedCategory).toLowerCase();
+            const bgClass = cat === 'bike' 
+              ? 'bg-orange-50 border-orange-100 text-orange-600' 
+              : cat === 'auto' 
+                ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
+                : 'bg-blue-50 border-blue-100 text-blue-600';
+            return (
+              <div className={`mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider select-none ${bgClass}`}>
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${cat === 'bike' ? 'bg-orange-400' : cat === 'auto' ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${cat === 'bike' ? 'bg-orange-500' : cat === 'auto' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                </span>
+                <span>Category: {routeState.selectedCategory}</span>
+              </div>
+            );
+          })()}
           <div className="flex items-end gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex gap-3">
@@ -2006,15 +2184,25 @@ const SelectVehicle = () => {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-medium text-slate-700">{drop}</p>
+                      {tripMetrics.distanceMeters > 0 && (
+                        <div className="mt-1.5 flex items-center gap-2 select-none">
+                          <span className="inline-flex items-center bg-[#eff6ff] border border-[#dbeafe] px-2 py-0.5 rounded-lg text-[10px] font-bold text-blue-600">
+                            {(tripMetrics.distanceMeters / 1000).toFixed(1)} km
+                          </span>
+                          <span className="inline-flex items-center bg-[#f0fdf4] border border-[#dcfce7] px-2 py-0.5 rounded-lg text-[10px] font-bold text-emerald-600">
+                            {tripMetrics.durationMinutes} mins
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <span className="shrink-0 text-[11px] font-semibold text-slate-400">Edit</span>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-400 mt-0.5">Edit</span>
                   </button>
                 </div>
               </div>
             </div>
             <button
               type="button"
-              onClick={openSchedulePicker}
+              onClick={() => openPicker(scheduledAtInputRef)}
               className={`flex w-[42px] shrink-0 flex-col items-center justify-center rounded-[12px] border px-1 py-2 text-[10px] font-medium ${
                 rideMode === 'schedule'
                   ? 'border-slate-900 bg-slate-900 text-white'
@@ -2027,101 +2215,48 @@ const SelectVehicle = () => {
           </div>
         </div>
 
-        {/* Instant vs Bid Booking Tabs */}
-        <div className="shrink-0 px-4 pt-3 pb-1 border-b border-slate-100 bg-white">
-          <div className="grid grid-cols-2 rounded-[14px] bg-[#F4F6F8] p-1">
-            <button
-              type="button"
-              onClick={() => {
-                setBookingTab('instant');
-                const instantVehicles = pricedVehicles.filter(v => !v.supportsBidding || v.dispatchType === 'both' || v.dispatchType === 'normal');
-                if (instantVehicles.length > 0 && !instantVehicles.some(v => v.id === selected)) {
-                  setSelected(instantVehicles[0].id);
-                }
-              }}
-              className={`py-2 text-[13px] font-extrabold rounded-[10px] transition-all duration-200 ${
-                bookingTab === 'instant'
-                  ? 'bg-white text-[#1A2B3D] shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Instant Booking
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setBookingTab('bid');
-                const bidVehicles = pricedVehicles.filter(v => v.supportsBidding);
-                if (bidVehicles.length > 0 && !bidVehicles.some(v => v.id === selected)) {
-                  setSelected(bidVehicles[0].id);
-                }
-              }}
-              className={`py-2 text-[13px] font-extrabold rounded-[10px] transition-all duration-200 ${
-                bookingTab === 'bid'
-                  ? 'bg-white text-[#1A2B3D] shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Bid Booking
-            </button>
-          </div>
-        </div>
-
-        <div className="relative flex-1 min-h-0 overflow-hidden">
+        <div className="relative min-h-0 flex-1 flex flex-col overflow-hidden">
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className="h-full w-full overflow-y-auto px-3 pt-3 pb-4 space-y-2.5"
+            className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pt-3 pb-2 space-y-2.5 touch-pan-y"
           >
-            {isLoadingVehicles && (
+            {isInitialVehicleResultsLoading && (
               <div className="min-h-[180px] flex flex-col items-center justify-center gap-3 text-slate-400">
                 <LoaderCircle size={26} className="animate-spin" />
                 <p className="text-[11px] font-bold uppercase tracking-widest">Finding available rides</p>
               </div>
             )}
 
-            {!isLoadingVehicles && vehicleLoadError && (
+            {!isInitialVehicleResultsLoading && vehicleLoadError && (
               <div className="rounded-[18px] border border-red-50 bg-white px-4 py-5 text-center">
                 <p className="text-[12px] font-black text-red-500">{vehicleLoadError}</p>
                 <p className="mt-1 text-[10px] font-bold text-slate-400">Please try again later.</p>
               </div>
             )}
 
-            {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.length === 0 && (
+            {!isInitialVehicleResultsLoading && !vehicleLoadError && displayedVehicles.length === 0 && (
               <div className="rounded-[18px] border border-slate-100 bg-white px-4 py-5 text-center">
                 <p className="text-[13px] font-bold text-slate-900">No vehicles available</p>
                 <p className="mt-1 text-[11px] font-bold text-slate-400">Try changing your location or method.</p>
               </div>
             )}
 
-            {pendingCancellationFee > 0 && (
-              <div className="mb-3 rounded-[16px] border border-amber-200 bg-amber-50/90 p-3 shadow-sm flex items-center justify-between text-slate-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-700 shrink-0">
-                    <AlertTriangle size={16} strokeWidth={2.5} />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-black text-amber-900 leading-tight">Previous Cancellation Charge (+Rs {Math.round(pendingCancellationFee)}) Added</p>
-                    <p className="text-[10px] font-semibold text-amber-700">This fee is added to your ride fare by admin policy.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!isLoadingVehicles && !vehicleLoadError && displayedVehicles.map((v, i) => {
-              const isSelected = effectiveSelectedId === v.id;
+            {!isInitialVehicleResultsLoading && !vehicleLoadError && displayedVehicles.map((v, i) => {
+              const isSelected = selected === v.id;
               const availability = availabilityByVehicleId[v.id] || DEFAULT_AVAILABILITY;
               const isUnavailable = !availability.totalDrivers;
-              const canSelectVehicle = !isUnavailable || rideMode === 'schedule';
+              const canSelectVehicle = true;
               const compactEta = Math.max(
                 1,
                 availability.closestDriverEtaMinutes || tripMetrics.durationMinutes || 1,
               );
               const fareLabel = isFarePending
                 ? '...'
-                : formatVehicleFare(v, bidRideSettings, bookingTab);
-
-              const vehicleBidBounds = getVehicleBidBounds(v, bidRideSettings);
+                : formatVehicleFare(v);
+              const sublabel = isUnavailable && rideMode !== 'schedule' 
+                ? `No nearby ${v.name.toLowerCase()} drivers` 
+                : v.sublabel;
 
               return (
                 <motion.div
@@ -2129,11 +2264,11 @@ const SelectVehicle = () => {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: i * 0.04, ease: [0.23, 1, 0.32, 1] }}
-                  className={`overflow-hidden rounded-[18px] border-2 transition-all duration-200 ${
+                  className={`overflow-hidden rounded-[18px] border transition-all ${
                     isSelected
-                      ? 'border-slate-900 bg-slate-100/80 shadow-[0_6px_20px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/10'
-                      : 'border-slate-200/60 bg-white hover:border-slate-300'
-                  } ${!canSelectVehicle ? 'blur-[1.5px] grayscale opacity-70 pointer-events-none' : ''}`}
+                      ? 'border-slate-200 bg-slate-50 shadow-[0_6px_16px_rgba(15,23,42,0.08)]'
+                      : 'border-transparent bg-white'
+                  }`}
                 >
                   <div
                     role={canSelectVehicle ? 'button' : undefined}
@@ -2154,12 +2289,12 @@ const SelectVehicle = () => {
                       }
                     }}
                     className={`flex items-center gap-3 px-3 py-3 text-left ${
-                      canSelectVehicle ? 'cursor-pointer' : 'cursor-default'
+                      canSelectVehicle ? 'cursor-pointer' : 'cursor-default opacity-55'
                     }`}
                   >
                     <div className="flex w-[52px] shrink-0 flex-col items-center">
                       <div className="flex h-9 w-full items-center justify-center">
-                        <img src={v.icon} alt={v.name} className="h-8 w-12 object-contain" draggable={false} />
+                        <img src={v.icon} alt={v.name} className="h-8 w-12 object-contain" draggable={false} onError={(e) => { e.target.onerror = null; e.target.src = CarIcon; }} />
                       </div>
                       <span className="mt-1 text-[10px] font-medium text-slate-500">{compactEta} min</span>
                     </div>
@@ -2167,27 +2302,15 @@ const SelectVehicle = () => {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="block truncate text-[14px] font-bold leading-tight text-slate-900">
-                              {v.name}
-                            </span>
-                            {isSelected && (
-                              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white shadow-xs">
-                                ✓
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
-                            {v.sublabel}
+                          <span className="block truncate text-[14px] font-semibold leading-tight text-slate-900">
+                            {v.name}
+                          </span>
+                          <p className={`mt-0.5 truncate text-[11px] font-medium ${isUnavailable && rideMode !== 'schedule' ? 'text-rose-500' : 'text-slate-400'}`}>
+                            {sublabel}
                           </p>
-                          {v.previousCancellationFee > 0 && (
-                            <p className="mt-0.5 text-[10px] font-bold text-amber-700">
-                              Fare Rs {Math.round(v.basePrice)} + Prev Fee Rs {Math.round(v.previousCancellationFee)}
-                            </p>
-                          )}
                         </div>
                         <div className="shrink-0 text-right">
-                          <span className={`block text-[20px] font-semibold leading-none ${isUnavailable && rideMode !== 'schedule' ? 'text-slate-300' : 'text-slate-900'}`}>
+                          <span className="block text-[20px] font-semibold leading-none text-slate-900">
                             {fareLabel}
                           </span>
                           {isSelected && (
@@ -2274,22 +2397,10 @@ const SelectVehicle = () => {
             </button>
             <button
               type="button"
-              onClick={openSchedulePicker}
-              className="flex items-center justify-center gap-1 px-3 py-2.5 text-[11px] font-medium text-slate-700 min-w-0"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-medium text-slate-700"
             >
-              {rideMode === 'schedule' ? (
-                <>
-                  <Calendar size={13} strokeWidth={2.3} className="text-blue-600 flex-shrink-0" />
-                  <span className="text-blue-700 font-semibold truncate">
-                    {formatDateTimeDisplay(scheduledAt)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[10px] text-slate-600 flex-shrink-0">•</span>
-                  <span className="truncate">Schedule ride</span>
-                </>
-              )}
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[10px] text-slate-600">•</span>
+              <span>Myself</span>
             </button>
           </div>
 
@@ -2330,7 +2441,7 @@ const SelectVehicle = () => {
             onClick={handleBook}
             className={`mt-3 flex w-full items-center justify-center rounded-[8px] px-4 py-3.5 text-[16px] font-medium transition ${
               canProceed
-                ? 'bg-[#1f1f1f] text-white'
+                ? 'bg-[#1f1f1f] !text-white'
                 : 'bg-slate-200 text-slate-400'
             }`}
           >
@@ -2384,7 +2495,7 @@ const SelectVehicle = () => {
                   </p>
                 </div>
                 <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-slate-50">
-                  <img src={previewVehicle.icon} alt={previewVehicle.name} className="h-12 w-14 object-contain" draggable={false} />
+                  <img src={previewVehicle.icon} alt={previewVehicle.name} className="h-12 w-14 object-contain" draggable={false} onError={(e) => { e.target.onerror = null; e.target.src = CarIcon; }} />
                 </div>
               </div>
 
@@ -2392,7 +2503,7 @@ const SelectVehicle = () => {
                 <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Estimated fare</p>
                   <p className="mt-1 text-[17px] font-extrabold text-slate-900">
-                    {isFarePending ? 'Calculating...' : formatVehicleFare(previewVehicle, bookingTab === 'bid' ? bidStepCount : undefined, bookingTab)}
+                    {isFarePending ? 'Calculating...' : formatVehicleFare(previewVehicle)}
                   </p>
                 </div>
                 <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
@@ -2472,45 +2583,19 @@ const SelectVehicle = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setBidStepCount((prev) => Math.max(0, prev - 1))}
-                    disabled={bidStepCount <= 0}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-xl font-extrabold text-slate-800 shadow-xs hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    -
-                  </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={selectedBidSteps}
+                  step={1}
+                  value={Math.min(bidStepCount, selectedBidSteps)}
+                  onChange={(event) => setBidStepCount(Number(event.target.value || 0))}
+                  className="mt-4 h-2 w-full cursor-pointer accent-orange-500"
+                />
 
-                  <div className="relative flex-1">
-                    <input
-                      type="range"
-                      min={0}
-                      max={selectedBidSteps}
-                      step={1}
-                      value={Math.min(bidStepCount, selectedBidSteps)}
-                      onChange={(event) => setBidStepCount(Number(event.target.value || 0))}
-                      className="h-3 w-full cursor-pointer accent-orange-500 rounded-lg bg-slate-200"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setBidStepCount((prev) => Math.min(selectedBidSteps, prev + 1))}
-                    disabled={bidStepCount >= selectedBidSteps}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-xl font-extrabold text-slate-800 shadow-xs hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    +
-                  </button>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between text-[11px] font-extrabold text-slate-700">
-                  <span>Min Bid (Floor): {formatCurrency(selectedBidFloorFare)}</span>
-                  <span>Max Bid (Ceiling): {formatCurrency(selectedBidCeilingMaxFare)}</span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-slate-500 border-t border-orange-200/50 pt-2">
-                  <span>Admin Step: +{formatCurrency(selectedBidStepAmount)}</span>
-                  <span>Admin Policy Range: {normalizedBidLowPercentage}%–{normalizedBidHighPercentage}%</span>
+                <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                  <span>Floor {formatCurrency(selectedBidFloorFare)}</span>
+                  <span>Ceiling {formatCurrency(selectedBidCeilingMaxFare)}</span>
                 </div>
               </div>
 
@@ -2694,97 +2779,6 @@ const SelectVehicle = () => {
                     )}
                   </motion.button>
                 ))}
-              </div>
-            </motion.div>
-          </React.Fragment>
-        )}
-        {showRideModeModal && (
-          <React.Fragment key="ride-mode-modal">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowRideModeModal(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-              className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-[32px] px-6 pt-4 pb-8 z-[101] font-['Plus_Jakarta_Sans']"
-            >
-              {/* Drag indicator */}
-              <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6" />
-
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#8C9BA5] mb-1">
-                SCHEDULE RIDE
-              </p>
-              <h3 className="text-[22px] font-black text-[#1A2B3D] tracking-tight mb-6">
-                When do you want to leave?
-              </h3>
-
-              <p className="text-[12px] font-bold text-[#8C9BA5] mb-2">
-                Select Date & Time
-              </p>
-
-              {/* Date & Time selection input box */}
-              <div className="relative flex items-center justify-between rounded-[16px] border-2 border-slate-100 bg-[#F4F6F8] px-4 py-4 mb-8">
-                <span className="text-[16px] font-extrabold text-[#1A2B3D]">
-                  {formatDateTimeDisplay(tempScheduledAt || scheduledAt) || 'Select date & time'}
-                </span>
-                <Calendar size={18} className="text-[#1A2B3D]" />
-                <input
-                  type="datetime-local"
-                  value={tempScheduledAt || scheduledAt || ''}
-                  min={minScheduledAt}
-                  max={maxScheduledAt}
-                  onChange={(e) => {
-                    setTempScheduledAt(e.target.value);
-                    setLocalScheduleError('');
-                  }}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-              </div>
-
-              {localScheduleError && (
-                <p className="text-[12px] font-semibold text-rose-500 mb-4 -mt-4 px-1">
-                  {localScheduleError}
-                </p>
-              )}
-
-              {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-3.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRideMode('now');
-                    setScheduledAt('');
-                    setTempScheduledAt('');
-                    setLocalScheduleError('');
-                    setShowRideModeModal(false);
-                  }}
-                  className="w-full py-3.5 rounded-[16px] bg-[#F4F6F8] text-[#1A2B3D] font-extrabold text-[14px] hover:bg-slate-200 transition-colors"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  disabled={isConfirmDisabled}
-                  onClick={() => {
-                    const valueToConfirm = tempScheduledAt || scheduledAt;
-                    setScheduledAt(valueToConfirm);
-                    setRideMode('schedule');
-                    setShowRideModeModal(false);
-                  }}
-                  className={`w-full py-3.5 rounded-[16px] font-extrabold text-[14px] transition-colors ${
-                    isConfirmDisabled
-                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                      : 'bg-[#00A86B] text-white hover:bg-[#00915c]'
-                  }`}
-                >
-                  Confirm Schedule
-                </button>
               </div>
             </motion.div>
           </React.Fragment>

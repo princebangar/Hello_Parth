@@ -4,8 +4,23 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2 } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { userAuthService } from '../../services/authService';
+import { buildBusRouteState, toPlainData } from './busNavigationState';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
+
+const getDisplayRoute = (bus, fallbackFromCity = '', fallbackToCity = '') => ({
+  fromCity: bus?.route?.originCity || bus?.fromCity || fallbackFromCity,
+  toCity: bus?.route?.destinationCity || bus?.toCity || fallbackToCity,
+});
+
+const resolveSeatPrice = (bus, seat) => {
+  const variantPricing = bus?.variantPricing || {};
+  const defaultPrice = Number(bus?.price || 0);
+  const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
+  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+
+  return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
+};
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -36,12 +51,16 @@ const formatTravelDate = (dateStr) => {
   }
 };
 
+const CURRENCY_SYMBOL = '\u20B9';
+const formatMoney = (value) => Number(value || 0).toLocaleString('en-IN');
+
 const BusDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
   const state = location.state || {};
-  const { bus, fromCity, toCity, date, selectedSeats, totalFare } = state;
+  const { bus, fromCity, toCity, date, selectedSeats } = state;
+  const displayRoute = getDisplayRoute(bus, fromCity, toCity);
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('Male');
@@ -52,6 +71,28 @@ const BusDetails = () => {
   const [travellerMode, setTravellerMode] = useState('self');
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileData, setProfileData] = useState(null);
+  const [liveBus, setLiveBus] = useState(null);
+  const pricingBus = liveBus || bus;
+  const pricedSelectedSeats = useMemo(
+    () => selectedSeats.map((seat) => ({
+      ...seat,
+      price: resolveSeatPrice(pricingBus, seat),
+    })),
+    [pricingBus, selectedSeats],
+  );
+  const seatSubtotal = useMemo(
+    () => pricedSelectedSeats.reduce((sum, seat) => sum + Number(seat?.price || 0), 0),
+    [pricedSelectedSeats],
+  );
+  const serviceTaxPercentage = Math.max(0, Number(pricingBus?.serviceTaxPercentage || 0));
+  const serviceTaxAmount = useMemo(
+    () => Math.round((((seatSubtotal * serviceTaxPercentage) / 100) + Number.EPSILON) * 100) / 100,
+    [seatSubtotal, serviceTaxPercentage],
+  );
+  const payableAmount = useMemo(
+    () => Math.round(((seatSubtotal + serviceTaxAmount) + Number.EPSILON) * 100) / 100,
+    [seatSubtotal, serviceTaxAmount],
+  );
 
   const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
 
@@ -66,7 +107,7 @@ const BusDetails = () => {
       }
     })();
 
-    const applyProfile = (profile = {}) => {
+    const applyProfile = (profile = {}, mode = travellerMode) => {
       if (!active) {
         return;
       }
@@ -79,14 +120,14 @@ const BusDetails = () => {
 
       setProfileData(nextProfile);
 
-      if (travellerMode === 'self') {
+      if (mode === 'self') {
         setName(nextProfile.name || '');
         setEmail(nextProfile.email || '');
         setPhone(nextProfile.phone || '');
       }
     };
 
-    applyProfile(storedProfile);
+    applyProfile(storedProfile, travellerMode);
 
     const loadProfile = async () => {
       try {
@@ -102,9 +143,9 @@ const BusDetails = () => {
           ...storedProfile,
           ...user,
         }));
-        applyProfile(normalizedUser);
+        applyProfile(normalizedUser, travellerMode);
       } catch {
-        applyProfile(storedProfile);
+        applyProfile(storedProfile, travellerMode);
       } finally {
         if (active) {
           setProfileLoading(false);
@@ -117,7 +158,50 @@ const BusDetails = () => {
     return () => {
       active = false;
     };
-  }, [travellerMode]);
+  }, []);
+
+  useEffect(() => {
+    if (travellerMode === 'self' && profileData) {
+      setName(profileData.name || '');
+      setEmail(profileData.email || '');
+      setPhone(profileData.phone || '');
+    }
+  }, [travellerMode, profileData]);
+
+  useEffect(() => {
+    if (!bus?.busServiceId || !bus?.scheduleId || !date) {
+      return undefined;
+    }
+
+    let active = true;
+
+    const loadLiveBus = async () => {
+      try {
+        const response = await userBusService.getSeatLayout({
+          busServiceId: bus.busServiceId,
+          scheduleId: bus.scheduleId,
+          date,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        const nextBus = toPlainData(response?.data?.bus || response?.bus || null);
+        if (nextBus) {
+          setLiveBus(nextBus);
+        }
+      } catch {
+        // Keep rendering with the routed bus snapshot if refresh fails.
+      }
+    };
+
+    loadLiveBus();
+
+    return () => {
+      active = false;
+    };
+  }, [bus?.busServiceId, bus?.scheduleId, date]);
 
   const applySelfProfile = () => {
     setTravellerMode('self');
@@ -178,7 +262,7 @@ const BusDetails = () => {
         amount: order.amount,
         currency: order.currency || 'INR',
         name: bus.operator || 'Bus Booking',
-        description: `${fromCity} to ${toCity}`,
+        description: `${displayRoute.fromCity} to ${displayRoute.toCity}`,
         order_id: order.orderId,
         prefill: {
           name,
@@ -196,15 +280,15 @@ const BusDetails = () => {
         handler: async (response) => {
           try {
             const verifyResponse = await userBusService.verifyBookingPayment(response);
-            const booking = unwrapPayload(verifyResponse);
+            const booking = toPlainData(unwrapPayload(verifyResponse));
             navigate(`${routePrefix}/bus/confirm`, {
               replace: true,
-              state: {
+              state: buildBusRouteState({
                 booking,
-                fromCity,
-                toCity,
+                fromCity: displayRoute.fromCity,
+                toCity: displayRoute.toCity,
                 date,
-              },
+              }),
             });
           } catch (verifyError) {
             setError(verifyError?.message || 'Payment verification failed');
@@ -239,23 +323,24 @@ const BusDetails = () => {
           <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-900 truncate">Passenger Details</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-              {selectedSeats.length} Seat(s) • {fromCity} to {toCity}
+              {selectedSeats.length} Seat(s) • {displayRoute.fromCity} to {displayRoute.toCity}
             </p>
           </div>
         </div>
       </div>
 
       <div className="px-5 pt-6 space-y-6">
-        <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl shadow-slate-200">
-          <div className="flex justify-between items-start">
+        <div className="overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_58%,#334155_100%)] p-6 text-white shadow-xl shadow-slate-200">
+          <div className="flex justify-between items-start gap-4">
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {bus.departure}</p>
+              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {bus.departure}</p>
               <h3 className="text-xl font-bold leading-tight">{bus.operator}</h3>
-              <p className="text-sm font-medium text-slate-400 mt-1">{bus.type}</p>
+              <p className="text-sm font-medium text-slate-300 mt-1">{bus.type}</p>
+              <p className="mt-3 text-xs font-semibold text-slate-300">{displayRoute.fromCity} to {displayRoute.toCity}</p>
             </div>
-            <div className="text-right">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seats</p>
-              <p className="text-base font-bold">{selectedSeats.map((seat) => seat.label || seat.id).join(', ')}</p>
+            <div className="rounded-2xl bg-white/10 px-4 py-3 text-right backdrop-blur-sm">
+              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">Seats</p>
+              <p className="text-base font-bold text-white">{selectedSeats.map((seat) => seat.label || seat.id).join(', ')}</p>
             </div>
           </div>
         </div>
@@ -408,14 +493,32 @@ const BusDetails = () => {
       </div>
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30">
-        <div className="flex items-center justify-between mb-4 px-1">
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payable Amount</p>
-            <p className="text-2xl font-bold text-slate-900">₹{Number(totalFare || 0)}</p>
+        <div className="mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fare Summary</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">{selectedSeats.length} seat{selectedSeats.length > 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1">
+              <Check size={12} className="text-emerald-600" strokeWidth={3} />
+              <p className="text-[10px] font-bold text-emerald-700">Calculated live</p>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1 rounded-full">
-            <Check size={12} className="text-emerald-600" strokeWidth={3} />
-            <p className="text-[10px] font-bold text-emerald-700">Taxes included</p>
+          <div className="space-y-2.5 text-sm">
+            <div className="flex items-center justify-between text-slate-600">
+              <span className="font-semibold">Seat subtotal</span>
+              <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(seatSubtotal)}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600">
+              <span className="font-semibold">Service tax ({serviceTaxPercentage}%)</span>
+              <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(serviceTaxAmount)}</span>
+            </div>
+            <div className="border-t border-dashed border-slate-200 pt-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Payable Amount</span>
+                <span className="text-2xl font-black text-slate-900">{CURRENCY_SYMBOL}{formatMoney(payableAmount)}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -425,7 +528,7 @@ const BusDetails = () => {
           disabled={isPaying}
           className="w-full bg-slate-900 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-70 transition-all"
         >
-          {isPaying ? <Loader2 size={20} className="animate-spin" /> : 'Pay Now'}
+          {isPaying ? <Loader2 size={20} className="animate-spin" /> : `Pay ${CURRENCY_SYMBOL}${formatMoney(payableAmount)}`}
           {!isPaying && <ChevronRight size={18} />}
         </motion.button>
       </div>

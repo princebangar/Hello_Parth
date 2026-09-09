@@ -43,13 +43,6 @@ const promoCodeSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
-    audience_type: {
-      type: String,
-      enum: ['all', 'specific_user', 'new_users'],
-      default: 'all',
-      trim: true,
-      index: true,
-    },
     transport_type: {
       type: String,
       enum: ['taxi', 'delivery', 'pooling', 'bus', 'self_drive', 'all'],

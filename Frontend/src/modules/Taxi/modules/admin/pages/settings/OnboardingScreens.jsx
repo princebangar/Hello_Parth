@@ -165,7 +165,7 @@ const OnboardingScreens = () => {
           <span className="text-gray-700">Onboarding Flow</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Landing & Onboarding</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Landing & Onboarding</h1>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -306,7 +306,7 @@ const OnboardingScreens = () => {
           <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">{editingId ? 'Edit Onboarding Screen' : 'Add Onboarding Screen'}</h2>
+                <h2 className="text-lg text-slate-900 font-bold">{editingId ? 'Edit Onboarding Screen' : 'Add Onboarding Screen'}</h2>
                 <p className="text-sm text-slate-500">Manage the landing content shown before app sign-in.</p>
               </div>
               <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50">

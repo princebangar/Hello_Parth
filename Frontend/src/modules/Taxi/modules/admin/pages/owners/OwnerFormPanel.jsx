@@ -42,11 +42,11 @@ const OwnerFormPanel = ({
         <div className="mt-6">
           <div className={adminCardClass}>
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-          <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+          <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center text-yellow-600">
             <User size={18} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Basic Information</h3>
+            <h3 className="text-sm text-gray-900 font-bold">Basic Information</h3>
             <p className="text-xs text-gray-400">Register an owner account for fleet operations.</p>
           </div>
         </div>
@@ -85,7 +85,7 @@ const OwnerFormPanel = ({
                 <label className={adminLabelClass}>
                   Mobile <span className="text-red-500">*</span>
                 </label>
-                <div className="flex h-[42px] overflow-hidden rounded-lg border border-gray-200 bg-white transition-colors focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500">
+                <div className="flex h-[42px] overflow-hidden rounded-lg border border-gray-200 bg-white transition-colors focus-within:border-yellow-400 focus-within:ring-1 focus-within:ring-yellow-400">
                   <div className="flex items-center gap-3 border-r border-gray-200 bg-gray-50 px-4 text-sm text-gray-900">
                     <img src="https://flagcdn.com/w20/in.png" alt="IN" className="h-4 w-6 rounded-sm object-cover" />
                     <span>+91</span>
@@ -191,7 +191,7 @@ const OwnerFormPanel = ({
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex items-center gap-3 rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-3 rounded-lg bg-yellow-400 px-6 py-3 text-sm font-bold text-black transition-colors hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? (
                 <>

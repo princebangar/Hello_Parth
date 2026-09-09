@@ -22,15 +22,15 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
 
-const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
+const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors";
 const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
-const selectClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%2364748B%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:18px] bg-[right_12px_center] bg-no-repeat";
+const selectClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%2364748B%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:18px] bg-[right_12px_center] bg-no-repeat";
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
     type="button"
     onClick={(e) => { e.stopPropagation(); onToggle(); }}
-    className={`w-12 h-6.5 rounded-full transition-colors relative flex items-center px-1 ${active ? 'bg-[#10B981]' : 'bg-gray-300'}`}
+    className={`w-12 h-6.5 rounded-full transition-colors relative flex items-center px-1 ${active ? 'bg-yellow-400' : 'bg-gray-300'}`}
   >
     <div className={`w-4.5 h-4.5 rounded-full bg-white shadow-sm transition-transform ${active ? 'translate-x-5.5' : 'translate-x-0'}`} />
   </button>
@@ -211,10 +211,10 @@ const AppModules = ({ mode: propMode }) => {
 
   if (isList) {
     return (
-      <div className="min-h-screen bg-[#F3F4F9] animate-in fade-in duration-500 font-sans flex flex-col">
+      <div className="min-h-screen bg-gray-50 animate-in fade-in duration-500 font-sans flex flex-col">
         {/* Header matches Image 1 */}
         <div className="bg-white border-b border-gray-100 px-8 py-5 flex items-center justify-between shrink-0">
-          <h1 className="text-[14px] font-black text-slate-800 uppercase tracking-tight">APP MODULES</h1>
+          <h1 className="text-lg font-bold text-slate-900">App Modules</h1>
           <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
             <span>App Modules</span>
             <ChevronRight size={12} className="opacity-30" />
@@ -234,7 +234,7 @@ const AppModules = ({ mode: propMode }) => {
                   <span>show</span>
                   <select 
                     value={entriesPerPage} onChange={(e) => setEntriesPerPage(Number(e.target.value))}
-                    className="bg-white border border-gray-300 rounded-md px-2 py-1 text-slate-700 outline-none focus:border-indigo-500"
+                    className="bg-white border border-gray-300 rounded-md px-2 py-1 text-slate-700 outline-none focus:border-yellow-400"
                   >
                     <option value={10}>10</option>
                     <option value={20}>20</option>
@@ -250,19 +250,19 @@ const AppModules = ({ mode: propMode }) => {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search modules"
-                      className="h-10 w-52 rounded-full border border-gray-200 bg-white pl-9 pr-4 text-[13px] font-medium text-slate-700 outline-none transition-colors focus:border-indigo-500"
+                      className="h-10 w-52 rounded-full border border-gray-200 bg-white pl-9 pr-4 text-[13px] font-medium text-slate-700 outline-none transition-colors focus:border-yellow-400"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsFilterOpen((current) => !current)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#EF6C4D] text-white rounded-lg text-[13px] font-bold shadow-md hover:bg-[#D95B3D] transition-colors"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-slate-700 hover:bg-gray-50 rounded-lg text-[13px] font-bold shadow-md hover:bg-gray-50 transition-colors"
                   >
                     <Filter size={16} /> {isFilterOpen ? 'Hide Filters' : 'Filters'}
                   </button>
                   <button 
                     onClick={() => navigate("create")}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#3B488C] text-white rounded-lg text-[13px] font-bold shadow-md hover:bg-[#2D3870] transition-colors"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-yellow-400 text-black rounded-lg text-[13px] font-bold shadow-md hover:bg-yellow-500 transition-colors"
                   >
                     <Plus size={18} /> Add App Modules
                   </button>
@@ -278,7 +278,7 @@ const AppModules = ({ mode: propMode }) => {
                     className="overflow-hidden border-t border-gray-100"
                   >
                     <div className="flex items-center justify-between px-8 pt-5">
-                      <div className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
+                      <div className="text-sm font-semibold text-gray-500">
                         Filter Sub Module List
                       </div>
                       <button
@@ -303,6 +303,7 @@ const AppModules = ({ mode: propMode }) => {
                           <option value="rental">Rental</option>
                           <option value="bid">Bid</option>
                           <option value="pooling">Pooling</option>
+                          <option value="bus">Bus</option>
                         </select>
                       </div>
 
@@ -354,7 +355,7 @@ const AppModules = ({ mode: propMode }) => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="bg-[#E9E9E9]">
+                      <tr className="bg-gray-50 border-y border-gray-200">
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Name</th>
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Module Service</th>
                         <th className="px-6 py-4 text-[13px] font-bold text-slate-700">Transport Type</th>
@@ -367,14 +368,14 @@ const AppModules = ({ mode: propMode }) => {
                       {loading ? (
                         <tr>
                           <td colSpan="6" className="py-24 text-center">
-                            <Loader2 className="animate-spin text-indigo-600 mx-auto" size={32} />
+                            <Loader2 className="animate-spin text-yellow-600 mx-auto" size={32} />
                           </td>
                         </tr>
                       ) : paginatedModules.length > 0 ? (
                         paginatedModules.map(m => (
                           <tr key={m._id || m.id} className="hover:bg-gray-50/50 transition-colors group border-b border-gray-50 last:border-0">
                             <td className="px-6 py-5">
-                              <span className="text-[14px] font-bold text-slate-700">{m.name}</span>
+                              <span className="text-[14px] font-bold text-slate-700 capitalize">{(m.name || '').toLowerCase()}</span>
                             </td>
                             <td className="px-6 py-5">
                               <span className="text-[14px] font-medium text-slate-600 capitalize">{m.service_type || 'Normal'}</span>
@@ -451,12 +452,12 @@ const AppModules = ({ mode: propMode }) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F4F9] animate-in fade-in duration-500 font-sans flex flex-col">
+    <div className="min-h-screen bg-gray-50 animate-in fade-in duration-500 font-sans flex flex-col">
       {/* Header matches Image 2 */}
       <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shrink-0 shadow-sm relative z-10">
-        <h1 className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{isEdit ? 'EDIT' : 'CREATE'}</h1>
+        <h1 className="text-lg font-bold text-slate-900">{isEdit ? 'Edit' : 'Create'}</h1>
         <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400">
-          <span className="hover:text-indigo-600 cursor-pointer" onClick={() => navigate("/admin/pricing/app-modules")}>App Modules</span>
+          <span className="hover:text-yellow-600 cursor-pointer" onClick={() => navigate("/taxi/admin/pricing/app-modules")}>App Modules</span>
           <ChevronRight size={12} className="opacity-50" />
           <span className="text-gray-700">{isEdit ? 'Edit' : 'Create'}</span>
         </div>
@@ -482,6 +483,7 @@ const AppModules = ({ mode: propMode }) => {
                 <option value="rental">Rental</option>
                 <option value="bid">Bid</option>
                 <option value="pooling">Pooling</option>
+                <option value="bus">Bus</option>
               </select>
             </div>
 
@@ -489,11 +491,9 @@ const AppModules = ({ mode: propMode }) => {
               <label className={labelClass}>Transport Type *</label>
               <select name="transport_type" value={formData.transport_type} onChange={handleInputChange} className={selectClass}>
                 <option value="">Choose Transport Type</option>
-                {transportTypes
-                  .filter((t) => String(t?.name || t?.value || t?.id || '').toLowerCase() !== 'pooling')
-                  .map((t) => (
-                    <option key={t.id || t._id} value={t.name}>{t.display_name || t.name}</option>
-                  ))}
+                {transportTypes.map(t => (
+                  <option key={t.id || t._id} value={t.name}>{t.display_name || t.name}</option>
+                ))}
               </select>
             </div>
 
@@ -541,12 +541,12 @@ const AppModules = ({ mode: propMode }) => {
               { (imagePreview || formData.mobile_menu_icon) ? (
                   <div className="relative w-full h-full p-8 flex items-center justify-center">
                     <img src={imagePreview || formData.mobile_menu_icon} className="max-w-full max-h-full object-contain" alt="Preview" />
-                    {imageUploading && <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-sm"><Loader2 className="animate-spin text-indigo-600" /></div>}
+                    {imageUploading && <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-sm"><Loader2 className="animate-spin text-yellow-600" /></div>}
                   </div>
               ) : (
                 <div className="text-center">
                    <div className="text-gray-400 mb-3 font-semibold group-hover:text-indigo-500 transition-colors">Upload Image</div>
-                   <div className="w-10 h-10 border border-gray-200 rounded-lg flex items-center justify-center mx-auto text-gray-300 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-all">
+                   <div className="w-10 h-10 border border-gray-200 rounded-lg flex items-center justify-center mx-auto text-gray-300 group-hover:bg-indigo-50 group-hover:text-yellow-600 group-hover:border-indigo-100 transition-all">
                       <ImageIcon size={20} />
                    </div>
                 </div>
@@ -564,7 +564,7 @@ const AppModules = ({ mode: propMode }) => {
              </button>
              <button 
                 onClick={handleSubmit} disabled={submitting || imageUploading}
-                className="px-8 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 active:scale-95 flex items-center gap-2"
+                className="px-8 py-2.5 bg-yellow-400 text-white rounded-lg text-sm font-semibold hover:bg-yellow-500 transition-all shadow-md shadow-indigo-100 active:scale-95 flex items-center gap-2"
              >
                 {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 {isEdit ? 'Update Module' : 'Push to Production'}

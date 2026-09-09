@@ -37,8 +37,8 @@ import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const inputClass =
-  'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
-const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider';
+  'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors';
+const labelClass = 'block text-xs font-semibold text-gray-700 mb-1.5';
 
 const ToolbarButton = ({ children, onClick, title, active = false }) => (
   <button
@@ -50,7 +50,7 @@ const ToolbarButton = ({ children, onClick, title, active = false }) => (
     }}
     className={`h-8 min-w-8 px-1.5 rounded flex items-center justify-center transition-colors border ${
       active 
-        ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+        ? 'bg-yellow-50 border-yellow-200 text-yellow-600' 
         : 'border-transparent text-gray-600 hover:bg-gray-100'
     }`}
   >
@@ -143,17 +143,17 @@ const HtmlEditor = ({ label, value, onChange, plainText = false, appName = 'App'
         .custom-html-editor table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
         .custom-html-editor td { border: 1px solid #e5e7eb; padding: 0.5rem; }
       `}</style>
-      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{label} *</label>
+      <label className="text-xs font-bold text-gray-700">{label} *</label>
       {plainText ? (
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className={`${inputClass} min-h-[100px] resize-none text-xs font-medium`}
+          className={`${inputClass} min-h-[80px] resize-none text-xs font-medium`}
           placeholder={`Enter ${label.toLowerCase()}...`}
         />
       ) : (
         <div className={`rounded-xl border bg-white overflow-hidden transition-all shadow-sm ${
-          isFocused ? 'border-indigo-400 ring-1 ring-indigo-400/20' : 'border-gray-200'
+          isFocused ? 'border-yellow-400 ring-1 ring-yellow-400/20' : 'border-gray-200'
         }`}>
           <div className="flex flex-wrap items-center gap-0.5 border-b border-gray-100 p-1.5 bg-gray-50/50">
             <ToolbarButton title="Undo" onClick={() => runCommand('undo')}>
@@ -174,7 +174,7 @@ const HtmlEditor = ({ label, value, onChange, plainText = false, appName = 'App'
                   setActiveHeading(val);
                   runCommand('formatBlock', val === 'P' ? '<p>' : val);
                 }}
-                className="h-8 pl-2 pr-6 bg-transparent text-xs font-bold text-gray-600 outline-none hover:bg-gray-100 rounded appearance-none cursor-pointer border-none uppercase tracking-tight"
+                className="h-8 pl-2 pr-6 bg-transparent text-xs font-bold text-gray-600 outline-none hover:bg-gray-100 rounded appearance-none cursor-pointer border-none"
               >
                 {headings.map(h => (
                   <option key={h.value} value={h.value}>{h.label}</option>
@@ -274,10 +274,10 @@ const HtmlEditor = ({ label, value, onChange, plainText = false, appName = 'App'
             }}
             onKeyUp={updateActiveStates}
             onClick={updateActiveStates}
-            className="min-h-[180px] px-8 py-3 text-xs text-gray-700 outline-none prose prose-xs max-w-none leading-relaxed overflow-y-auto bg-white custom-html-editor font-medium"
+            className="min-h-[120px] px-4 py-2 text-xs text-gray-700 outline-none prose prose-xs max-w-none leading-relaxed overflow-y-auto bg-white custom-html-editor font-medium"
           />
           <div className="px-3 py-1 border-t border-gray-50 flex justify-end">
-            <span className="text-[9px] text-gray-300 font-bold uppercase tracking-tighter">Powered by {appName}</span>
+            <span className="text-[9px] text-gray-300 font-bold">Powered by {appName}</span>
           </div>
         </div>
       )}
@@ -286,75 +286,75 @@ const HtmlEditor = ({ label, value, onChange, plainText = false, appName = 'App'
 };
 
 const PreviewCard = ({ title, code, bannerText, blocks }) => (
-  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-    <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-100">
-      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-        <Smartphone size={18} />
+  <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+      <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center text-yellow-600">
+        <Smartphone size={16} />
       </div>
       <div>
-        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-tight">{title}</h3>
+        <h3 className="text-sm font-bold text-gray-900">{title}</h3>
         <p className="text-[11px] text-gray-400 font-medium">Live mobile preview for the selected language.</p>
       </div>
     </div>
 
-    <div className="mx-auto w-[255px] rounded-[32px] border-[6px] border-gray-900 bg-white shadow-2xl overflow-hidden relative">
+    <div className="mx-auto w-[230px] rounded-[28px] border-[6px] border-gray-900 bg-white shadow-xl overflow-hidden relative">
       {/* Notch */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-gray-900 rounded-b-xl z-20" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-4 bg-gray-900 rounded-b-xl z-20" />
       
-      <div className="px-5 pt-8 pb-4 flex items-center justify-between border-b border-gray-100">
-        <span className="text-[14px] font-bold text-gray-900">Referrals</span>
+      <div className="px-4 pt-6 pb-3 flex items-center justify-between border-b border-gray-100">
+        <span className="text-[13px] font-bold text-gray-900">Referrals</span>
         <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Live</span>
       </div>
 
-      <div className="bg-indigo-600 text-white px-5 py-6 flex items-center justify-between">
+      <div className="bg-yellow-400 text-black px-4 py-5 flex items-center justify-between">
         <div className="space-y-1">
-          <p className="text-[18px] font-black leading-tight uppercase tracking-tight">{bannerText || 'Refer and Earn'}</p>
-          <p className="text-[10px] text-indigo-100 font-medium">Share your code & get rewards</p>
+          <p className="text-[16px] font-black leading-tight">{bannerText || 'Refer and Earn'}</p>
+          <p className="text-[10px] text-yellow-900 font-medium">Share your code & get rewards</p>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm">
-          <Type size={18} />
+        <div className="w-8 h-8 rounded-xl bg-black/5 flex items-center justify-center backdrop-blur-sm">
+          <Type size={16} />
         </div>
       </div>
 
-      <div className="px-4 py-5 border-b border-gray-100 bg-gray-50/30">
+      <div className="px-4 py-4 border-b border-gray-100 bg-gray-50/30">
         <div className="grid grid-cols-[1fr_auto] gap-2">
-          <div className="rounded-xl border border-dashed border-indigo-200 bg-white px-3 py-3 text-center">
-            <p className="text-[14px] font-black text-gray-900 tracking-wider">{code}</p>
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mt-0.5">Your code</p>
+          <div className="rounded-xl border border-dashed border-yellow-300 bg-white px-3 py-2 text-center">
+            <p className="text-[13px] font-black text-gray-900 tracking-wider">{code}</p>
+            <p className="text-[9px] font-bold text-gray-400 mt-0.5">Your code</p>
           </div>
           <button
             type="button"
-            className="rounded-xl bg-indigo-600 text-white px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm shadow-indigo-200"
+            className="rounded-xl bg-yellow-400 text-black px-4 text-xs font-bold flex items-center gap-2 shadow-sm shadow-yellow-200"
           >
             <Copy size={12} />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <button type="button" className="rounded-xl bg-gray-900 text-white py-2.5 text-[10px] font-bold uppercase tracking-widest">
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <button type="button" className="rounded-xl bg-gray-900 text-white py-2 text-[10px] font-bold">
             Refer
           </button>
-          <button type="button" className="rounded-xl bg-white border border-gray-200 text-gray-500 py-2.5 text-[10px] font-bold uppercase tracking-widest">
+          <button type="button" className="rounded-xl bg-white border border-gray-200 text-gray-500 py-2 text-[10px] font-bold">
             History
           </button>
         </div>
       </div>
 
-      <div className="px-5 py-5 space-y-4 min-h-[280px] max-h-[350px] overflow-y-auto no-scrollbar">
-        <h4 className="text-[12px] font-black text-gray-900 uppercase tracking-widest border-b border-gray-50 pb-2">How it works?</h4>
+      <div className="px-4 py-4 space-y-4 min-h-[200px] max-h-[250px] overflow-y-auto no-scrollbar">
+        <h4 className="text-[11px] font-black text-gray-900 border-b border-gray-50 pb-2">How it works?</h4>
         {blocks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 opacity-20">
-            <Languages size={32} />
-            <p className="text-[10px] font-bold uppercase tracking-widest mt-2">No content</p>
+          <div className="flex flex-col items-center justify-center py-8 opacity-20">
+            <Languages size={24} />
+            <p className="text-[10px] font-bold mt-2">No content</p>
           </div>
         ) : (
           blocks.map((block) => (
             <div key={block.key} className="space-y-1">
-              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">
+              <p className="text-[9px] font-black text-yellow-600">
                 {block.label}
               </p>
               <div
-                className="text-[11px] text-gray-600 font-medium leading-relaxed prose prose-sm max-w-none custom-html-editor"
+                className="text-[10px] text-gray-600 font-medium leading-relaxed prose prose-sm max-w-none custom-html-editor"
                 dangerouslySetInnerHTML={{ __html: block.html }}
               />
             </div>
@@ -362,10 +362,10 @@ const PreviewCard = ({ title, code, bannerText, blocks }) => (
         )}
       </div>
 
-      <div className="px-4 pb-6 pt-2 bg-white">
+      <div className="px-4 pb-5 pt-2 bg-white">
         <button
           type="button"
-          className="w-full rounded-2xl bg-rose-500 text-white py-3.5 text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-rose-200"
+          className="w-full rounded-xl bg-black text-white py-3 text-xs font-black shadow-md shadow-gray-200"
         >
           Refer now
         </button>
@@ -476,9 +476,9 @@ const ReferralTranslation = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#FFFDF5] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="animate-spin text-indigo-600" size={32} />
+          <Loader2 className="animate-spin text-yellow-500" size={32} />
           <span className="text-sm text-gray-500 font-medium">Loading translations...</span>
         </div>
       </div>
@@ -486,45 +486,37 @@ const ReferralTranslation = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      {/* HEADER BLOCK */}
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
-          <span>Referral Management</span>
-          <ChevronRight size={12} />
-          <span className="text-gray-700">Referral Translation</span>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900 uppercase tracking-tight">Referral Translation</h1>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <ArrowLeft size={16} /> Back
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2 bg-indigo-900 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-indigo-800 transition-colors shadow-sm disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Save Changes
-            </button>
-          </div>
+    <div className="min-h-screen bg-[#FFFDF5] p-4 lg:p-6">
+      {/* HEADER ACTION BUTTONS */}
+      <div className="mb-4 flex justify-end">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <ArrowLeft size={16} /> Back
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2 bg-yellow-400 text-black text-sm font-bold rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            Save Changes
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <PreviewCard
           title="User App Preview"
-          code="HELLOPARTHUSER"
+          code="RYDONUSER"
           bannerText={selectedRecord.user_referral?.banner_text}
           blocks={userPreviewBlocks}
         />
         <PreviewCard
           title="Driver App Preview"
-          code="HELLOPARTHDRV"
+          code="RYDONDRV"
           bannerText={selectedRecord.driver_referral?.banner_text}
           blocks={driverPreviewBlocks}
         />
@@ -540,22 +532,22 @@ const ReferralTranslation = () => {
                 setSelectedLanguageCode(lang.language_code);
                 setShowSuccess(false);
               }}
-              className={`px-6 py-4 text-xs font-bold uppercase tracking-widest transition-all relative whitespace-nowrap ${
+              className={`px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
                 selectedLanguageCode === lang.language_code
-                  ? 'text-indigo-600'
+                  ? 'text-yellow-600'
                   : 'text-gray-400 hover:text-gray-600'
               }`}
             >
               {lang.language_name || lang.language_code.toUpperCase()}
               {selectedLanguageCode === lang.language_code && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-yellow-400 rounded-full" />
               )}
             </button>
           ))}
         </div>
 
-        <div className="p-8">
-          <div className="space-y-12">
+        <div className="p-4 lg:p-6">
+          <div className="space-y-8">
             {error && (
               <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 animate-in fade-in">
                 <AlertCircle size={18} />
@@ -568,23 +560,23 @@ const ReferralTranslation = () => {
                 <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
                   <CheckCircle2 size={12} />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-tight">Translations updated successfully</span>
+                <span className="text-sm font-bold">Translations updated successfully</span>
               </div>
             )}
 
             {/* USER REFERRAL SECTION */}
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div className="flex items-center gap-3 pb-2 border-b border-gray-50">
-                <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center text-yellow-600">
                   <Smartphone size={20} />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-gray-900 uppercase tracking-tight">User Referral Content <span className="text-rose-500">*</span></h2>
-                  <p className="text-[11px] text-gray-400 font-medium">Translate referral instructions for your customers.</p>
+                  <h2 className="text-sm font-bold text-gray-900">User Referral Content <span className="text-rose-500">*</span></h2>
+                  <p className="text-[11px] text-gray-500 font-medium">Translate referral instructions for your customers.</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {USER_REFERRAL_TRANSLATION_FIELDS.map((field) => (
                   <HtmlEditor
                     key={field.key}
@@ -599,18 +591,18 @@ const ReferralTranslation = () => {
             </div>
 
             {/* DRIVER REFERRAL SECTION */}
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div className="flex items-center gap-3 pb-2 border-b border-gray-50">
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center text-yellow-600">
                   <Type size={20} />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Driver Referral Content <span className="text-rose-500">*</span></h2>
-                  <p className="text-[11px] text-gray-400 font-medium">Translate referral instructions for your service providers.</p>
+                  <h2 className="text-sm font-bold text-gray-900">Driver Referral Content <span className="text-rose-500">*</span></h2>
+                  <p className="text-[11px] text-gray-500 font-medium">Translate referral instructions for your service providers.</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {DRIVER_REFERRAL_TRANSLATION_FIELDS.map((field) => (
                   <HtmlEditor
                     key={field.key}

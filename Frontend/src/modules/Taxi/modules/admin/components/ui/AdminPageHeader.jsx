@@ -19,7 +19,7 @@ const AdminPageHeader = ({
         <span className="text-gray-700">{page || title}</span>
       </div>
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-gray-900">{title || page}</h1>
+        <h1 className="text-xl text-gray-900 font-bold">{title || page}</h1>
         <div className="flex items-center gap-2">
           {right}
           {backTo ? (

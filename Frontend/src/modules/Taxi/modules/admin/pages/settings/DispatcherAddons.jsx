@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   ChevronRight,
@@ -21,10 +22,11 @@ const DispatcherAddons = () => {
       // Simulate verification
       await new Promise(r => setTimeout(r, 1500));
       toast.error('Invalid purchase code. Please check and try again.');
-    } catch (err) {
+    } catch (_error) {
       toast.error('Verification failed');
     } finally {
       setSubmitting(false);
+
     }
   };
 

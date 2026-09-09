@@ -1,5 +1,4 @@
 import api from '../../../shared/api/axiosInstance';
-import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 
 const decodeBase64Url = (value) => {
   const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
@@ -19,40 +18,51 @@ const getTokenPayload = (token) => {
       return null;
     }
 
-    return JSON.parse(atob(decodeBase64Url(payload)));
+    const decoded = JSON.parse(atob(decodeBase64Url(payload)));
+    if (decoded && typeof decoded.exp === 'number') {
+      const isExpired = Date.now() / 1000 >= decoded.exp;
+      if (isExpired) {
+        return null;
+      }
+    }
+    return decoded;
   } catch {
     return null;
   }
 };
 
-const readLocalUserToken = () => {
-  const candidates = [
-    localStorage.getItem('userToken'),
-    localStorage.getItem('user_accessToken'),
-    localStorage.getItem('token'),
-  ].filter(Boolean);
-
-  if (!candidates.length) return '';
-
-  const userRoleToken = candidates.find((token) => {
-    const role = String(getTokenPayload(token)?.role || '').toLowerCase();
-    return role === 'user' || role === '';
-  });
-
-  return userRoleToken || candidates[0] || '';
+const isUserRole = (role) => {
+  const normalized = String(role || '').trim().toLowerCase();
+  return !normalized || normalized === 'user';
 };
+
+const readLocalUserToken = () =>
+  [
+    localStorage.getItem('userToken'),
+    localStorage.getItem('token'),
+    localStorage.getItem('user_accessToken'),
+  ].filter(Boolean).find((token) => isUserRole(getTokenPayload(token)?.role)) || '';
 
 export const getLocalUserToken = readLocalUserToken;
 
 export const clearLocalUserSession = () => {
-  const token = readLocalUserToken();
-  const fallbackToken = localStorage.getItem('token');
-
   localStorage.removeItem('userToken');
   localStorage.removeItem('userInfo');
+  localStorage.removeItem('user_accessToken');
+  localStorage.removeItem('user_refreshToken');
+  localStorage.removeItem('user');
 
-  if (token && fallbackToken === token) {
-    localStorage.removeItem('token');
+  const fallbackToken = localStorage.getItem('token');
+  if (fallbackToken) {
+    try {
+      const payload = fallbackToken.split('.')[1];
+      const decoded = payload ? JSON.parse(atob(decodeBase64Url(payload))) : null;
+      if (isUserRole(decoded?.role)) {
+        localStorage.removeItem('token');
+      }
+    } catch {
+      localStorage.removeItem('token');
+    }
   }
 
   if (String(localStorage.getItem('role') || '').toLowerCase() === 'user') {
@@ -84,22 +94,9 @@ export const userAuthService = {
   signup: (payload) => api.post('/users/signup', payload),
   login: (payload) => api.post('/users/login', payload),
   startOtp: (phone) => api.post('/users/auth/send-otp', { phone }),
-  verifyOtp: (phone, otp, token = null, platform = null) =>
-    api.post('/users/auth/verify-otp', {
-      phone,
-      otp,
-      ...(token ? { token } : {}),
-      ...(platform ? { platform } : {}),
-    }),
+  verifyOtp: (phone, otp) => api.post('/users/auth/verify-otp', { phone, otp }),
   verifyOtpLogin: (phone) => api.post('/users/otp-login', { phone }),
-  uploadProfileImage: (file, options = {}) => {
-    const formData = new FormData();
-    formData.append('file', file, file?.name || 'profile.jpg');
-    if (options.replaceUrl) {
-      formData.append('replaceUrl', options.replaceUrl);
-    }
-    return api.post('/users/profile-image', formData);
-  },
+  uploadProfileImage: (dataUrl) => api.post('/users/profile-image', { dataUrl }),
   updateCurrentUser: (payload) => api.patch('/users/me', payload, withUserAuth()),
   getCurrentUser: () => api.get('/users/me', withUserAuth()),
   getSubscriptionPlans: () => api.get('/users/subscriptions/plans', withUserAuth()),
@@ -118,18 +115,7 @@ export const userAuthService = {
   getNotifications: () => api.get('/users/notifications', withUserAuth()),
   deleteNotification: (id) => api.delete(`/users/notifications/${id}`, withUserAuth()),
   clearAllNotifications: () => api.delete('/users/notifications', withUserAuth()),
-  saveFcmToken: (token, platform) => {
-    const normalizedPlatform = String(platform || 'web').trim().toLowerCase();
-    const endpoint =
-      normalizedPlatform === 'mobile' || normalizedPlatform === 'android' || normalizedPlatform === 'ios'
-        ? `${BACKEND_ORIGIN}/api/v1/fcm-tokens/mobile/save`
-        : `${BACKEND_ORIGIN}/api/v1/fcm-tokens/save`;
-    const payload =
-      endpoint.endsWith('/mobile/save')
-        ? { token }
-        : { token, platform: 'web' };
-    return api.post(endpoint, payload, withUserAuth());
-  },
+  saveFcmToken: (token, platform) => api.post('/users/fcm-token', { token, platform }, withUserAuth()),
   getRideBids: (rideId) => api.get(`/rides/${rideId}/bids`, withUserAuth()),
   acceptRideBid: (rideId, bidId) => api.post(`/rides/${rideId}/bids/${bidId}/accept`, {}, withUserAuth()),
   increaseRideBidCeiling: (rideId, incrementSteps = 1) =>

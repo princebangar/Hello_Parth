@@ -5,16 +5,19 @@ import { ServiceCenterStaff } from '../admin/models/ServiceCenterStaff.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
+import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 import { User } from '../user/models/User.js';
 import { verifyAccessToken } from '../services/tokenService.js';
-import { serializeAdminContext, resolveAdminModule } from '../../../core/admin/adminHierarchy.service.js';
+import {
+  normalizeAdminPermissions,
+  normalizeAdminType,
+} from '../admin/services/adminAccessService.js';
 
 const roleModelMap = {
   admin: Admin,
   'super-admin': Admin,
-  USER: User,
-  user: User,
   driver: Driver,
+  pooling_driver: PoolingVehicle,
   bus_driver: BusDriver,
   owner: Owner,
   service_center: ServiceStore,
@@ -30,33 +33,16 @@ const normalizeRole = (role = '') => {
   return value;
 };
 
-const attachResolvedAuth = (req, payload) => {
+/** Food core JWTs use `userId`; taxi-native JWTs use `sub`. Accept both. */
+const resolveSubjectId = (payload = {}) =>
+  String(payload.sub || payload.userId || payload.id || '').trim();
+
+const attachResolvedAuth = (req, payload, subjectId) => {
   req.auth = {
-    sub: payload.sub,
+    sub: subjectId,
     role: normalizeRole(payload.role),
     originalRole: payload.role,
   };
-};
-
-const resolveOpenUserIdentity = async (req) => {
-  const explicitUserId =
-    req.headers['x-user-id'] ||
-    req.body?.userId ||
-    req.query?.userId ||
-    req.params?.userId ||
-    null;
-
-  const query = explicitUserId ? { _id: explicitUserId } : {};
-  const user = await User.findOne(query).sort({ createdAt: 1 });
-
-  if (!user) {
-    throw new ApiError(404, 'No user account is available for open user access');
-  }
-
-  attachResolvedAuth(req, {
-    sub: String(user._id),
-    role: 'user',
-  });
 };
 
 export const authenticate = (allowedRoles = [], options = {}) => async (req, _res, next) => {
@@ -73,20 +59,20 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
 
     const normalizedRole = normalizeRole(payload.role);
     const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+    const subjectId = resolveSubjectId(payload);
 
     if (normalizedAllowedRoles.length > 0 && !normalizedAllowedRoles.includes(normalizedRole)) {
       throw new ApiError(403, 'Insufficient permissions for this resource');
     }
 
     const Model = roleModelMap[payload.role] || roleModelMap[normalizedRole];
-    const subjectId = payload.sub || payload.userId || payload.id || null;
 
     if (!Model) {
       throw new ApiError(401, 'Unsupported auth role');
     }
 
     if (!subjectId) {
-      throw new ApiError(401, 'Authorization token is invalid');
+      throw new ApiError(401, 'Invalid authorization token');
     }
 
     const entity = await Model.findById(subjectId);
@@ -122,6 +108,7 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
 
     if (
       normalizedRole === 'bus_driver' &&
+      !allowPending &&
       (entity.active === false ||
         entity.approve === false ||
         ['pending', 'blocked'].includes(String(entity.status || '').toLowerCase()))
@@ -130,29 +117,60 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
     }
 
     if (
+      normalizedRole === 'pooling_driver' &&
+      !allowPending &&
+      (entity.approve === false || String(entity.status || '').toLowerCase() === 'pending')
+    ) {
+      throw new ApiError(403, 'Pooling driver account is pending approval');
+    }
+
+    if (
+      normalizedRole === 'pooling_driver' &&
+      (entity.poolingEnabled === false ||
+        ['inactive', 'maintenance'].includes(String(entity.status || '').toLowerCase()))
+    ) {
+      throw new ApiError(403, 'Pooling driver account is inactive');
+    }
+
+    if (
       normalizedRole === 'service_center' &&
-      (entity.active === false || String(entity.status || '').toLowerCase() === 'inactive')
+      !allowPending &&
+      (entity.active === false ||
+        entity.approve === false ||
+        String(entity.status || '').toLowerCase() === 'inactive')
     ) {
       throw new ApiError(403, 'Service center account is inactive');
     }
 
     if (
       normalizedRole === 'service_center_staff' &&
-      (entity.active === false || String(entity.status || '').toLowerCase() === 'inactive')
+      !allowPending &&
+      (entity.active === false ||
+        entity.approve === false ||
+        String(entity.status || '').toLowerCase() === 'inactive')
     ) {
       throw new ApiError(403, 'Service center staff account is inactive');
     }
 
-    attachResolvedAuth(req, { ...payload, sub: String(subjectId) });
+    attachResolvedAuth(req, payload, subjectId);
     req.auth.entity = entity;
 
     if (normalizedRole === 'admin') {
-      const adminContext = serializeAdminContext(entity);
       req.auth.admin = {
-        ...adminContext,
+        id: String(entity._id),
+        email: entity.email || '',
+        name: entity.name || '',
         role: entity.role || '',
-        adminLevel: adminContext.adminLevel,
-        module: adminContext.module || resolveAdminModule(entity),
+        admin_type: normalizeAdminType(entity.admin_type || entity.role),
+        permissions: normalizeAdminPermissions(entity.permissions || []),
+        service_location_ids: Array.isArray(entity.service_location_ids)
+          ? entity.service_location_ids.map((item) => String(item))
+          : [],
+        zone_ids: Array.isArray(entity.zone_ids)
+          ? entity.zone_ids.map((item) => String(item))
+          : [],
+        active: entity.active !== false,
+        status: entity.status || 'active',
       };
 
       if (req.auth.admin.active === false || String(req.auth.admin.status).toLowerCase() === 'inactive') {
@@ -160,32 +178,6 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
       }
     }
 
-    next();
-  } catch (error) {
-    if (error?.name === 'TokenExpiredError') {
-      return next(new ApiError(401, 'Authorization token has expired'));
-    }
-    if (error?.name === 'JsonWebTokenError' || error?.name === 'NotBeforeError') {
-      return next(new ApiError(401, 'Authorization token is invalid'));
-    }
-    next(error);
-  }
-};
-
-export const authenticateOrResolveUser = (allowedRoles = ['user']) => async (req, res, next) => {
-  const authorization = req.headers.authorization || '';
-  const [, token] = authorization.split(' ');
-
-  if (token) {
-    return authenticate(allowedRoles)(req, res, next);
-  }
-
-  try {
-    if (!allowedRoles.includes('user')) {
-      throw new ApiError(401, 'Authorization token is required');
-    }
-
-    await resolveOpenUserIdentity(req);
     next();
   } catch (error) {
     next(error);

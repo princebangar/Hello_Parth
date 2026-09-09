@@ -1,440 +1,353 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Phone, ChevronRight, ShieldCheck, Briefcase, UserRound, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Briefcase, CheckCircle2, ChevronRight, Smartphone } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    clearDriverRegistrationSession,
-    getStoredDriverRegistrationSession,
-    saveDriverRegistrationSession,
-    sendDriverLoginOtp,
-    sendDriverOtp,
+  buildDriverOnboardingSessionSnapshot,
+  clearDriverRegistrationSession,
+  getDriverOnboardingResumeStep,
+  getDriverOnboardingSession,
+  getStoredDriverRegistrationSession,
+  saveDriverRegistrationSession,
+  sendDriverOtp,
 } from '../../services/registrationService';
-
-import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { useSettings } from '../../../../shared/context/SettingsContext';
-import { RENTAL_ENABLED } from '../../../../shared/featureFlags';
-import loginBg from '../../../../assets/images/driver-login-bg.png';
+import taxiBg from '../../../../assets/images/light-taxi-bg.png';
+
+const getErrorMessage = (err) => String(
+  err?.message ||
+  err?.error ||
+  err?.response?.data?.message ||
+  '',
+).trim();
 
 const PhoneRegistration = () => {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const { settings } = useSettings();
-    const storedSession = getStoredDriverRegistrationSession();
-    const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-    const sharedReferralCode = String(
-        searchParams.get('ref') ||
-        searchParams.get('referral') ||
-        searchParams.get('code') ||
-        storedSession.referralCode ||
-        '',
-    ).trim().toUpperCase();
-    const [phone, setPhone] = useState(() => {
-        const fromState = String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10);
-        if (fromState) return fromState;
-        if (import.meta.env.VITE_USE_DEFAULT_TEST_PHONE === 'true') {
-            return String(import.meta.env.VITE_DEFAULT_TEST_PHONE || '').replace(/\D/g, '').slice(0, 10);
-        }
-        return '';
-    });
-    const [role, setRole] = useState(() => {
-        const normalizePortalRole = (value) => {
-            const normalized = String(value || '').toLowerCase();
-            if (normalized === 'owner') return 'owner';
-            if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') return 'bus_driver';
-            if (normalized === 'service_center' || normalized === 'service-center' || normalized === 'servicecenter') return 'service_center';
-            if (normalized === 'service_center_staff' || normalized === 'service-center-staff' || normalized === 'servicecenterstaff') return 'service_center_staff';
-            return 'driver';
-        };
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { settings } = useSettings();
+  const appName = settings.general?.app_name || 'Appzeto 24 Trawler';
+  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
+  const storedSession = getStoredDriverRegistrationSession();
+  const isOwnerPortal = location.pathname.startsWith('/taxi/owner');
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const sharedReferralCode = String(
+    searchParams.get('ref') ||
+    searchParams.get('referral') ||
+    searchParams.get('code') ||
+    storedSession.referralCode ||
+    '',
+  ).trim().toUpperCase();
+  const sharedEmployeeCode = String(
+    searchParams.get('emp') ||
+    searchParams.get('employee') ||
+    storedSession.employeeCode ||
+    '',
+  ).trim().toUpperCase();
+  const storedOnboardingPhone = String(storedSession.phone || '').replace(/\D/g, '').slice(-10);
+  const storedRegistrationId = String(storedSession.registrationId || '').trim();
+  const storedSessionResumeKey = JSON.stringify({
+    phone: storedOnboardingPhone,
+    registrationId: storedRegistrationId,
+    otpVerified: Boolean(storedSession.otpVerified),
+    status: storedSession.status || '',
+    role: storedSession.role || '',
+    roleConfirmed: storedSession.roleConfirmed !== false,
+    fullName: storedSession.fullName || '',
+    email: storedSession.email || '',
+    gender: storedSession.gender || '',
+    locationId: storedSession.locationId || '',
+    vehicleTypeId: storedSession.vehicleTypeId || '',
+  });
 
-        if (location.pathname.startsWith('/taxi/owner')) {
-            return 'owner';
-        }
+  const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
+  const [agreed, setAgreed] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-        const stateRole = String(location.state?.role || '').toLowerCase();
-        if (stateRole) {
-            const normalized = normalizePortalRole(stateRole);
-            if (!RENTAL_ENABLED && (normalized === 'service_center' || normalized === 'service_center_staff')) {
-                return 'driver';
-            }
-            return normalized;
-        }
+  const routePrefix = isOwnerPortal ? '/taxi/owner' : '/taxi/driver';
+  const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
+  const entryPath = `${routePrefix}/login`;
+  const HeaderIcon = isOwnerPortal ? Briefcase : Smartphone;
+  const portalLabel = isOwnerPortal ? 'Owner' : 'Driver';
 
-        if (sharedReferralCode && location.pathname.startsWith('/taxi/driver')) {
-            return 'driver';
-        }
+  useEffect(() => {
+    let active = true;
 
-        const savedRole = String(storedSession.role || '').toLowerCase();
-        const normalizedSaved = normalizePortalRole(savedRole);
-        if (!RENTAL_ENABLED && (normalizedSaved === 'service_center' || normalizedSaved === 'service_center_staff')) {
-            return 'driver';
-        }
-        return normalizedSaved;
-    });
-    const [agreed, setAgreed] = useState(true);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const phoneCardRef = useRef(null);
-    const phoneInputRef = useRef(null);
-    const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
-    const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
-    const appName = settings.general?.app_name || 'App';
+    const resumeOnboardingIfPossible = async () => {
+      if (isLoginPage) {
+        return;
+      }
 
-    const roleOptions = isLoginPage
-        ? [
-            { id: 'driver', label: 'Driver', Icon: UserRound },
-            { id: 'owner', label: 'Owner', Icon: Briefcase },
-            { id: 'bus_driver', label: 'Bus', Icon: ShieldCheck },
-            ...(RENTAL_ENABLED
-              ? [
-                  { id: 'service_center', label: 'Center', Icon: Building2 },
-                  { id: 'service_center_staff', label: 'Staff', Icon: UserRound },
-                ]
-              : []),
-        ]
-        : [
-            { id: 'driver', label: 'Driver', Icon: UserRound },
-            { id: 'owner', label: 'Owner', Icon: Briefcase },
-        ];
+      if (!storedOnboardingPhone || !storedRegistrationId) {
+        return;
+      }
 
-    const modeConfig = useMemo(() => {
-        const isOwner = role === 'owner';
-        const isBusDriver = role === 'bus_driver';
-        const isServiceCenter = role === 'service_center';
-        const isServiceCenterStaff = role === 'service_center_staff';
-
-        return {
-            badge: isOwner ? 'Enterprise' : isBusDriver ? 'Transit' : isServiceCenter ? 'Operations' : isServiceCenterStaff ? 'Team' : 'Captain',
-            title: isLoginPage
-                ? `${isOwner ? 'Owner' : isBusDriver ? 'Bus Driver' : isServiceCenter ? 'Service Center' : isServiceCenterStaff ? 'Service Staff' : 'Driver'} Login`
-                : `Join ${appName}`,
-            subtitle: isLoginPage
-                ? `Enter your number to access account.`
-                : `Start your journey as a ${isOwner ? 'owner' : isBusDriver ? 'captain' : isServiceCenter ? 'operator' : isServiceCenterStaff ? 'staff' : 'driver'}.`,
-            highlight: isOwner ? 'Manage fleet, payouts & drivers.' : isBusDriver ? 'Manage your coach, schedules and seat desk.' : isServiceCenter ? 'Manage your center profile, staff and rental vehicle catalog.' : isServiceCenterStaff ? 'Handle assigned bookings and work queues for your center.' : 'Go online, get trips & earn daily.',
-            accentColor: isOwner ? '#1C2833' : isBusDriver ? '#0f3d3e' : isServiceCenter ? '#14342b' : isServiceCenterStaff ? '#1e3a5f' : '#4F46E5',
-            Icon: isOwner ? Briefcase : isBusDriver ? ShieldCheck : isServiceCenter ? Building2 : isServiceCenterStaff ? ShieldCheck : UserRound,
-        };
-    }, [appName, isLoginPage, role]);
-
-    useEffect(() => {
-        saveDriverRegistrationSession({
-            ...storedSession,
-            role,
-            phone,
-            loginMode: isLoginPage,
-            referralCode: sharedReferralCode,
+      if (storedSession.otpVerified) {
+        const nextStep = getDriverOnboardingResumeStep(storedSession);
+        navigate(`${routePrefix}/${nextStep}`, {
+          replace: true,
+          state: storedSession,
         });
-    }, [isLoginPage, role, phone, sharedReferralCode]);
+        return;
+      }
 
-    useEffect(() => {
-        const scrollPhoneIntoView = () => {
-            phoneCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        };
+      try {
+        const response = await getDriverOnboardingSession({
+          registrationId: storedRegistrationId,
+          phone: storedOnboardingPhone,
+        });
 
-        const focusTimer = window.setTimeout(() => {
-            scrollPhoneIntoView();
-            phoneInputRef.current?.focus();
-        }, 180);
-
-        const viewport = window.visualViewport;
-        viewport?.addEventListener('resize', scrollPhoneIntoView);
-
-        return () => {
-            window.clearTimeout(focusTimer);
-            viewport?.removeEventListener('resize', scrollPhoneIntoView);
-        };
-    }, []);
-
-    const handleSendOTP = async () => {
-        if (loading) return;
-        
-        if (phone.length !== 10) {
-            setError('Please enter a valid 10-digit mobile number');
-            return;
+        if (!active) {
+          return;
         }
 
-        if (!agreed) {
-            setError('Please accept the terms before continuing');
-            return;
+        const payload = response?.data?.data || response?.data || response;
+        const nextSession = saveDriverRegistrationSession(
+          buildDriverOnboardingSessionSnapshot(payload, storedSession),
+        );
+
+        if (nextSession.otpVerified) {
+          const nextStep = getDriverOnboardingResumeStep(nextSession);
+          navigate(`${routePrefix}/${nextStep}`, {
+            replace: true,
+            state: nextSession,
+          });
+          return;
         }
 
-        setLoading(true);
-        setError('');
-
-        try {
-            clearDriverRegistrationSession();
-            const response = isLoginPage
-                ? await sendDriverLoginOtp({ phone, role })
-                : await sendDriverOtp({ phone, role });
-            const sessionData = response?.data?.session || response?.session || {};
-            const nextState = saveDriverRegistrationSession({
-                phone,
-                role,
-                registrationId: sessionData.registrationId || '',
-                debugOtp: sessionData.debugOtp || '',
-                loginMode: isLoginPage,
-                referralCode: sharedReferralCode,
-            });
-
-            navigate(`${routePrefix}/otp-verify`, {
-                state: nextState,
-            });
-        } catch (err) {
-            const backendMessage = String(
-                err?.message ||
-                err?.error ||
-                err?.data?.error ||
-                err?.data?.message ||
-                '',
-            ).trim();
-            if (backendMessage) {
-                setError(backendMessage);
-            } else {
-                setError('Unable to send OTP right now');
-            }
-        } finally {
-            setLoading(false);
+        navigate(`${routePrefix}/otp-verify`, {
+          replace: true,
+          state: nextSession,
+        });
+      } catch {
+        if (!active) {
+          return;
         }
+
+        navigate(`${routePrefix}/otp-verify`, {
+          replace: true,
+          state: storedSession,
+        });
+      }
     };
 
-    const containerVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: {
-            opacity: 1,
-            y: 0,
-            transition: {
-                duration: 0.6,
-                ease: [0.22, 1, 0.36, 1],
-                staggerChildren: 0.1
-            }
-        }
-    };
+    resumeOnboardingIfPossible();
 
-    const itemVariants = {
-        hidden: { opacity: 0, y: 10 },
-        visible: { opacity: 1, y: 0 }
+    return () => {
+      active = false;
     };
+  }, [isLoginPage, navigate, routePrefix, storedOnboardingPhone, storedRegistrationId, storedSession, storedSessionResumeKey]);
 
-    return (
-        <div
-            className="min-h-[100dvh] relative bg-slate-50 select-none overflow-x-hidden font-sans"
+  const handleSendOTP = async () => {
+    if (phone.length !== 10) {
+      setError('Please enter 10 digits');
+      return;
+    }
+
+    if (!agreed) {
+      setError('Accept terms to continue');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      clearDriverRegistrationSession();
+
+      const response = await sendDriverOtp(
+        isOwnerPortal
+          ? { phone, role: 'owner' }
+          : { phone },
+      );
+
+      const payload = response?.data?.data || response?.data || response;
+      const sessionData = payload?.session || {};
+      const loginMode = Boolean(payload?.loginMode || sessionData?.loginMode);
+      const existingAccount = Boolean(payload?.existingAccount || sessionData?.existingAccount);
+      const detectedRole = String(payload?.detectedRole || sessionData?.role || '').trim().toLowerCase();
+      const availableRoles = payload?.availableRoles || sessionData?.availableRoles || [];
+      console.log('[PhoneRegistration] payload:', payload);
+      console.log('[PhoneRegistration] availableRoles:', availableRoles);
+      console.log('[PhoneRegistration] loginMode:', loginMode);
+      const nextState = saveDriverRegistrationSession({
+        phone,
+        role: sessionData.role || (isOwnerPortal ? 'owner' : ''),
+        roleConfirmed: sessionData.roleConfirmed ?? isOwnerPortal,
+        needsRoleSelection: !isOwnerPortal && sessionData.roleConfirmed === false,
+        registrationId: sessionData.registrationId || '',
+        debugOtp: sessionData.debugOtp || '',
+        loginMode,
+        existingAccount,
+        detectedRole,
+        poolingOnboarding: false,
+        entryPath,
+        referralCode: sharedReferralCode,
+        employeeCode: sharedEmployeeCode,
+        status: sessionData.status || '',
+        availableRoles,
+      });
+
+      navigate(`${routePrefix}/otp-verify`, { state: nextState });
+    } catch (requestError) {
+      setError(getErrorMessage(requestError) || 'Try again in a moment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen relative bg-[#F8FAFC] select-none overflow-x-hidden font-['Outfit']">
+      <div className="fixed inset-0 z-0">
+        <motion.img
+          initial={{ scale: 1.05, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          src={taxiBg}
+          alt=""
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white" />
+      </div>
+
+      <main className="relative z-10 mx-auto max-w-sm px-6 flex flex-col min-h-screen pt-10 pb-32">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 space-y-8"
         >
-            <div className="fixed inset-0 z-0 bg-slate-50">
-                <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-white via-white/80 to-transparent pointer-events-none" />
-                <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#F38F24]/5 rounded-full blur-[80px] pointer-events-none" />
+          <header className="text-center space-y-4">
+            <div className="flex flex-col items-center gap-3">
+              {appLogo ? (
+                <img
+                  src={appLogo}
+                  alt={`${appName} logo`}
+                  className="h-14 w-14 rounded-2xl object-cover bg-white p-1.5 shadow-xl shadow-slate-200/70 border border-white"
+                />
+              ) : (
+                <div className="rounded-2xl bg-slate-900 px-4 py-2 text-base font-black tracking-tight text-white shadow-xl shadow-slate-900/10">
+                  {appName}
+                </div>
+              )}
+              <div className="space-y-1">
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">
+                  {appName}
+                </p>
+              </div>
             </div>
 
-            <main className="relative z-10 mx-auto max-w-sm px-6 pt-8 pb-20 flex flex-col min-h-[100dvh] justify-center">
-                <motion.header
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-4 mb-6 flex flex-col items-center text-center"
-                >
-                    <div className="flex flex-col items-center gap-3">
-                        <div className="w-14 h-14 bg-white rounded-[1.25rem] flex items-center justify-center shadow-sm border border-slate-100 overflow-hidden">
-                            <img
-                                src={DEFAULT_BRAND_LOGO}
-                                alt={appName}
-                                className="w-full h-full object-contain p-1"
-                            />
-                        </div>
-                    </div>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
+              {isLoginPage ? 'Hello!' : 'Welcome'}
+            </h1>
 
-                    <motion.section
-                        variants={itemVariants}
-                        className="space-y-2 flex flex-col items-center"
-                    >
-                        <div className="flex items-center gap-2.5">
-                            <div
-                                className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#F38F24]/10 text-[#F38F24] shadow-sm border border-[#F38F24]/20"
-                            >
-                                <modeConfig.Icon size={16} strokeWidth={2.5} />
-                            </div>
-                            <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#F38F24]">
-                                {modeConfig.badge}
-                            </span>
-                        </div>
-                        <h1 className="font-sans text-[32px] font-black leading-tight tracking-tight text-slate-900 mt-1">
-                            {modeConfig.title.split(' ')[0]} <span className="text-[#F38F24]">{modeConfig.title.split(' ').slice(1).join(' ')}</span>
-                        </h1>
-                        <p className="text-[13px] leading-relaxed text-slate-500 font-medium max-w-[28ch]">
-                            {modeConfig.subtitle}
-                        </p>
-                    </motion.section>
-                </motion.header>
+            {!isOwnerPortal && (
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                Driver, owner, pooling, bus, and service center logins all start here
+              </p>
+            )}
+          </header>
 
-                <motion.div
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-5 relative z-20"
-                >
-                    <motion.div
-                        variants={itemVariants}
-                        className="flex items-center gap-1.5 mb-6 bg-[#F38F24]/5 p-1.5 rounded-[1rem] overflow-x-auto scroll-smooth w-full border border-[#F38F24]/10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
-                    >
-                        {roleOptions.map((option) => {
-                            const active = role === option.id;
-                            return (
-                                <motion.button
-                                    key={option.id}
-                                    layout
-                                    whileTap={{ scale: 0.97 }}
-                                    onClick={() => setRole(option.id)}
-                                    className={`flex-1 min-w-max flex items-center justify-center gap-2 py-2 px-3 rounded-xl transition-all whitespace-nowrap ${active
-                                            ? 'bg-white text-[#F38F24] shadow-sm border border-[#F38F24]/20'
-                                            : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                >
-                                    <option.Icon size={14} strokeWidth={active ? 2.5 : 2} className={active ? 'text-[#F38F24]' : ''} />
-                                    <span className="text-[11px] font-bold uppercase tracking-wide">{option.label}</span>
-                                </motion.button>
-                            );
-                        })}
-                    </motion.div>
-
-                    <motion.section
-                        variants={itemVariants}
-                        ref={phoneCardRef}
-                        className="w-full relative bg-white p-5 rounded-[1.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100"
-                        style={{ scrollMarginTop: '20vh' }}
-                    >
-                        <div className="space-y-6 w-full">
-                            <div className="space-y-3">
-                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">
-                                    Mobile Number
-                                </label>
-                                <div className={`flex items-center gap-0 bg-slate-50 border ${error ? 'border-red-300 ring-4 ring-red-50' : 'border-slate-200'} rounded-[1rem] focus-within:border-[#F38F24] focus-within:bg-white focus-within:ring-4 focus-within:ring-[#F38F24]/10 transition-all overflow-hidden h-14`}>
-                                    <div className="px-4 border-r border-slate-200 bg-transparent text-slate-900 font-bold text-lg h-full flex items-center">
-                                        +91
-                                    </div>
-                                    <input
-                                        ref={phoneInputRef}
-                                        type="tel"
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
-                                        autoFocus
-                                        maxLength={10}
-                                        value={phone}
-                                        onChange={(e) => {
-                                            const val = e.target.value.replace(/\D/g, '');
-                                            setPhone(val);
-                                            if (error) setError('');
-                                        }}
-                                        onFocus={() => phoneCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                                        placeholder="00000 00000"
-                                        className="flex-1 bg-transparent border-0 outline-none ring-0 placeholder:text-slate-300 text-lg font-bold tracking-widest px-4 text-slate-900 h-full w-full"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-2.5 px-1 items-start mt-1">
-                                <div className="relative flex items-center shrink-0 mt-0.5">
-                                    <input
-                                        type="checkbox"
-                                        id="terms"
-                                        checked={agreed}
-                                        onChange={() => setAgreed(!agreed)}
-                                        className="peer h-[16px] w-[16px] cursor-pointer appearance-none rounded-[4px] border-[1.5px] border-slate-300 bg-white transition-all checked:bg-[#F38F24] checked:border-[#F38F24]"
-                                    />
-                                    <CheckCircle2 className="pointer-events-none absolute inset-0 m-auto h-3 w-3 text-white opacity-0 transition-opacity peer-checked:opacity-100" strokeWidth={3} />
-                                </div>
-                                <label htmlFor="terms" className="text-[11px] font-medium text-slate-500 leading-relaxed cursor-pointer select-none">
-                                    I agree to the{' '}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            saveDriverRegistrationSession({
-                                                ...storedSession,
-                                                role,
-                                            });
-                                            navigate('/terms', { state: { role, returnTo: location.pathname } });
-                                        }}
-                                        className="text-[#F38F24] font-bold hover:text-orange-600"
-                                    >
-                                        Terms
-                                    </button>
-                                    {' '}and{' '}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            saveDriverRegistrationSession({
-                                                ...storedSession,
-                                                role,
-                                            });
-                                            navigate('/privacy', { state: { role, returnTo: location.pathname } });
-                                        }}
-                                        className="text-[#F38F24] font-bold hover:text-orange-600"
-                                    >
-                                        Privacy Policy
-                                    </button>.
-                                </label>
-                            </div>
-
-                            <AnimatePresence>
-                                {error && (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: 'auto' }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        className="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-[11px] font-medium text-red-600 flex items-center gap-2"
-                                    >
-                                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                                        {error}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    </motion.section>
-
-                    <motion.div variants={itemVariants} className="space-y-4 pt-2">
-                        <div className="flex items-center justify-center gap-2 py-1 w-full flex-wrap mx-auto px-2 text-slate-500 text-center">
-                            <Sparkles size={12} className="text-[#F38F24] shrink-0" />
-                            <span className="text-[9px] font-bold tracking-widest uppercase text-slate-400 leading-tight">{modeConfig.highlight}</span>
-                        </div>
-
-                        <motion.button
-                            variants={itemVariants}
-                            whileHover={{ y: -1 }}
-                            onClick={() => navigate(isLoginPage ? `${routePrefix}/reg-phone` : `${routePrefix}/login`)}
-                            className="w-full text-[12px] font-medium text-slate-500 transition-all pb-4"
-                        >
-                            {isLoginPage ? (
-                                <>Don't have an account? <span className="text-[#F38F24] font-bold hover:text-orange-600">Join Now</span></>
-                            ) : (
-                                <>Already a captain? <span className="text-[#F38F24] font-bold hover:text-orange-600">Sign in</span></>
-                            )}
-                        </motion.button>
-                    </motion.div>
-                </motion.div>
-
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-xl border-t border-slate-100 z-50">
-                    <div className="mx-auto max-w-sm">
-                        <motion.button
-                            whileHover={{ scale: 1.01 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={handleSendOTP}
-                            disabled={loading || !agreed || phone.length !== 10}
-                            className={`group flex h-12 w-full items-center justify-center gap-2 rounded-[0.85rem] text-[14px] font-bold transition-all relative overflow-hidden ${agreed && phone.length === 10
-                                    ? 'bg-[#1A1A1A] text-white shadow-[0_4px_14px_rgba(26,26,26,0.15)] active:bg-black'
-                                    : 'bg-slate-100 text-slate-400'
-                                }`}
-                        >
-                            {loading ? (
-                                <div className="h-5 w-5 border-[2.5px] border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <>
-                                    <span className="relative z-10 uppercase tracking-[0.1em]">Send OTP Code</span>
-                                    <ChevronRight size={18} strokeWidth={3} className="relative z-10 group-hover:translate-x-1 transition-transform" />
-                                </>
-                            )}
-                        </motion.button>
-                    </div>
+          <motion.div
+            layout
+            className="bg-white rounded-[40px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-slate-50 space-y-8"
+          >
+            <div className="space-y-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
+                {portalLabel} Mobile Number
+              </p>
+              <div className={`flex items-center gap-4 p-5 rounded-2xl transition-all border-2 ${error ? 'border-rose-100 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-amber-400 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-amber-100/50'}`}>
+                <div className="flex items-center gap-2 pr-4 border-r border-slate-200">
+                  <span className="text-slate-400 text-sm font-black">+91</span>
                 </div>
-            </main>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value.replace(/\D/g, ''));
+                    if (error) setError('');
+                  }}
+                  placeholder="Phone Number"
+                  className="flex-1 bg-transparent border-none p-0 text-xl font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-300"
+                />
+                {phone.length === 10 && (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                    <CheckCircle2 size={20} className="text-emerald-500" />
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-4 items-start px-1">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={agreed}
+                onChange={() => setAgreed(!agreed)}
+                className="h-6 w-6 rounded-lg border-2 border-slate-100 bg-slate-50 text-amber-500 focus:ring-amber-500 transition-all cursor-pointer"
+              />
+              <label htmlFor="terms" className="text-sm font-medium text-slate-400 leading-snug cursor-pointer select-none">
+                I accept the <button type="button" onClick={() => navigate(`${routePrefix}/terms`)} className="text-amber-500 font-bold hover:underline">Terms</button> & <button type="button" onClick={() => navigate(`${routePrefix}/privacy`)} className="text-amber-500 font-bold hover:underline">Privacy</button>
+              </label>
+            </div>
+
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="text-rose-500 text-xs font-bold text-center bg-rose-50 p-3 rounded-xl"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <p className="text-center text-xs font-medium leading-5 text-slate-400">
+              Existing numbers continue through login OTP. New numbers start a fresh registration automatically.
+            </p>
+          </motion.div>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => navigate(`${routePrefix}/support`)}
+              className="text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors"
+            >
+              Need help? <span className="text-amber-500">Contact Support</span>
+            </button>
+          </div>
+        </motion.div>
+
+        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
+          <div className="mx-auto max-w-sm">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleSendOTP}
+              disabled={loading || !agreed || phone.length !== 10}
+              className={`group flex h-18 w-full items-center justify-center gap-3 rounded-[24px] text-lg font-black transition-all ${agreed && phone.length === 10
+                  ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/20'
+                  : 'bg-slate-100 text-slate-300 pointer-events-none'
+                }`}
+            >
+              {loading ? (
+                <div className="h-6 w-6 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span className="uppercase tracking-widest">Continue</span>
+                  <ChevronRight size={24} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </motion.button>
+          </div>
         </div>
-    );
+      </main>
+    </div>
+  );
 };
 
 export default PhoneRegistration;

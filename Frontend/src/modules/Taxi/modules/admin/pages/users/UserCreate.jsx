@@ -27,8 +27,7 @@ const initialFormData = {
   profileImage: '',
 };
 
-const inputClass =
-  'admin-user-field w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
+const inputClass = 'admin-user-field w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors';
 const labelClass = 'block text-xs font-semibold text-black mb-1.5';
 
 const UserCreate = () => {
@@ -120,7 +119,7 @@ const UserCreate = () => {
         </div>
 
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Add User</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Add User</h1>
           <button
             type="button"
             onClick={() => navigate('/taxi/admin/users')}
@@ -131,15 +130,15 @@ const UserCreate = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center text-gray-900 border border-yellow-100">
                 <User size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">User Details</h3>
+                <h3 className="text-sm text-gray-900 font-bold">User Details</h3>
                 <p className="text-xs text-gray-400">Customer identity and login information</p>
               </div>
             </div>
@@ -248,30 +247,30 @@ const UserCreate = () => {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <div className="w-9 h-9 rounded-lg bg-yellow-50 flex items-center justify-center text-gray-900 border border-yellow-100">
                 <ImagePlus size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Profile Picture</h3>
+                <h3 className="text-sm text-gray-900 font-bold">Profile Picture</h3>
                 <p className="text-xs text-gray-400">Optional user photo</p>
               </div>
             </div>
 
             <label className="group relative block cursor-pointer">
-              <div className="flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 transition-colors group-hover:border-indigo-500 group-hover:bg-indigo-50">
+              <div className="flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 transition-colors group-hover:border-yellow-400 group-hover:bg-yellow-50">
                 {imagePreview || formData.profileImage ? (
                   <img src={imagePreview || formData.profileImage} alt="Profile preview" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex flex-col items-center text-gray-400">
                     <ImagePlus size={34} strokeWidth={1.5} className="mb-3" />
-                    <p className="text-xs font-semibold">Upload image</p>
+                    <p className="text-xs font-bold">Upload image</p>
                   </div>
                 )}
                 {imageUploading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-                    <Loader2 className="animate-spin text-indigo-600" size={28} />
+                    <Loader2 className="animate-spin text-yellow-500" size={28} />
                   </div>
                 )}
               </div>
@@ -283,11 +282,11 @@ const UserCreate = () => {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3 shadow-sm">
             <button
               type="submit"
               disabled={isSubmitting || imageUploading || success}
-              className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-black text-white rounded-lg text-sm font-bold hover:bg-gray-900 transition-colors disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm"
             >
               {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : success ? <CheckCircle2 size={16} /> : <Save size={16} />}
               {success ? 'User Created' : isSubmitting ? 'Saving...' : 'Create User'}
@@ -296,7 +295,7 @@ const UserCreate = () => {
             <button
               type="button"
               onClick={() => navigate('/taxi/admin/users')}
-              className="w-full py-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
+              className="w-full py-3 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-sm font-bold hover:bg-gray-100 transition-colors"
             >
               Cancel
             </button>

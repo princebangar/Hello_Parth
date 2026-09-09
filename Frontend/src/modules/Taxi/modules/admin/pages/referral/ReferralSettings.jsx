@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Settings,
-  User,
-  Truck,
-  Gift,
-  ShieldCheck,
-  Save,
+import React, { useState, useEffect } from 'react';
+import { 
+  Settings, 
+  User, 
+  Truck, 
+  Gift, 
+  ShieldCheck, 
+  Save, 
   Info,
   ChevronRight,
   Loader2,
-  CheckCircle2,
+  CheckCircle2
 } from 'lucide-react';
-import { getUnifiedAdminToken } from '../../services/adminSession';
 
 const FormSection = ({ title, subTitle, icon: Icon, children }) => (
   <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -64,14 +63,14 @@ const ReferralSettings = () => {
   const [userSettings, setUserSettings] = useState({});
   const [driverSettings, setDriverSettings] = useState({});
 
-  const token = getUnifiedAdminToken() || '';
+  const token = localStorage.getItem('adminToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
 
   useEffect(() => {
     const fetchAllSettings = async () => {
       try {
         const [uRes, dRes] = await Promise.all([
-          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/admin/referral/settings/user', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/admin/referral/settings/driver', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referral/settings/user', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referral/settings/driver', { headers: { 'Authorization': `Bearer ${token}` } }),
         ]);
 
         const uData = await uRes.json();
@@ -97,7 +96,7 @@ const ReferralSettings = () => {
     if (type === 'driver') { url = 'driver'; body = driverSettings; }
 
     try {
-      const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/referral/settings/${url}`, {
+      const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/referral/settings/${url}`, {
         method: 'PATCH',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -254,5 +253,4 @@ const ReferralSettings = () => {
 };
 
 export default ReferralSettings;
-
 

@@ -19,7 +19,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
@@ -182,6 +181,14 @@ const normalizePricing = (items = DEFAULT_PRICING) =>
     active: item.active !== false,
   }));
 
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 const normalizeMediaValue = (value) => {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -189,13 +196,6 @@ const normalizeMediaValue = (value) => {
     return value.url || value.image || value.src || value.path || '';
   }
   return '';
-};
-
-const uploadImageFileToUrl = async (file, folder = 'rental-vehicles') => {
-  const uploadResult = await uploadService.uploadImageFile(file, folder);
-  const url = uploadResult?.secureUrl || uploadResult?.url || '';
-  if (!url) throw new Error('Image upload failed');
-  return url;
 };
 
 const getCoverImage = (item = {}) => normalizeMediaValue(item.coverImage) || normalizeMediaValue(item.image) || '';
@@ -224,7 +224,7 @@ const buildDefaultForm = () => {
     poolingEnabled: false,
     advancePayment: {
       enabled: false,
-      paymentMode: 'fixed',
+      paymentMode: 'percentage',
       amount: 20,
       label: 'Advance booking payment',
       notes: '',
@@ -246,27 +246,39 @@ const SeatCell = ({ cell, onToggle }) => {
     <button
       type="button"
       onClick={onToggle}
-      className={`relative flex h-12 items-center justify-center rounded-2xl border text-[11px] font-black tracking-wide transition ${
+      className={`relative flex h-12 items-center justify-center rounded-xl border text-[11px] font-black tracking-wide transition-all ${
         blocked
-          ? 'border-rose-200 bg-rose-50 text-rose-600'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600'
+          ? 'border-slate-200 bg-slate-100 text-slate-400 opacity-60'
+          : 'border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm hover:border-indigo-400 hover:bg-indigo-100 hover:shadow-md'
       }`}
     >
-      <span className="absolute inset-x-2 top-1.5 h-1 rounded-full bg-slate-200" />
+      <span className={`absolute inset-x-2 top-1.5 h-1 rounded-full ${blocked ? 'bg-slate-200' : 'bg-indigo-200'}`} />
       {cell.label}
     </button>
   );
 };
 
-const SeatPreview = ({ blueprint, onToggleSeat }) => (
-  <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-5 shadow-inner">
-    <div className="mb-4 flex items-center justify-between">
+const SeatPreview = ({ blueprint, onToggleSeat, onReset }) => (
+  <div className="rounded-[24px] border border-slate-200 bg-slate-50/50 p-6 shadow-sm">
+    <div className="mb-6 flex items-start justify-between">
       <div>
-        <h3 className="text-sm font-bold text-slate-900">Vehicle Blueprint</h3>
-        <p className="text-[11px] font-medium text-slate-500">Tap seats to block them from the layout.</p>
+        <h3 className="text-sm font-bold text-slate-900">Vehicle Blueprint Preview</h3>
+        <p className="mt-1 text-[11px] font-medium text-slate-500">Tap seats to block/unblock them from the layout.</p>
       </div>
-      <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold text-slate-500">
-        {countSeats(blueprint)} seats
+      <div className="flex flex-col items-end gap-2">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-700 shadow-sm">
+          <Armchair size={12} />
+          {countSeats(blueprint)} Selected
+        </div>
+        {blueprint?.lowerDeck?.length ? (
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-[11px] font-bold text-slate-500 underline transition hover:text-slate-800"
+          >
+            Reset Blueprint
+          </button>
+        ) : null}
       </div>
     </div>
 
@@ -308,6 +320,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const [formData, setFormData] = useState(buildDefaultForm);
   const [togglingIds, setTogglingIds] = useState([]);
   const [galleryImageUrl, setGalleryImageUrl] = useState('');
+  const [galleryTab, setGalleryTab] = useState('upload');
 
   useEffect(() => {
     let mounted = true;
@@ -354,7 +367,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               poolingEnabled: Boolean(selected.poolingEnabled),
               advancePayment: {
                 enabled: Boolean(selected.advancePayment?.enabled),
-                paymentMode: 'fixed',
+                paymentMode: selected.advancePayment?.paymentMode || 'percentage',
                 amount: Number(selected.advancePayment?.amount ?? 20),
                 label: selected.advancePayment?.label || 'Advance booking payment',
                 notes: selected.advancePayment?.notes || '',
@@ -398,7 +411,6 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
       ...current,
       advancePayment: {
         ...current.advancePayment,
-        paymentMode: 'fixed',
         [field]: value,
       },
     }));
@@ -443,37 +455,39 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
     });
   };
 
+  const resetBlueprint = () => {
+    setFormData((current) => {
+      if (!current.blueprint?.templateKey) return current;
+      const originalBlueprint = createBlueprintFromTemplate(current.blueprint.templateKey);
+      return {
+        ...current,
+        blueprint: originalBlueprint,
+        capacity: countSeats(originalBlueprint),
+      };
+    });
+  };
+
   const handleImageChange = async (event, field) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try {
-      const result = await uploadImageFileToUrl(file, 'rental-vehicles');
-      updateForm(field, result);
-      if (field === 'coverImage' || field === 'image') {
-        updateForm('image', result);
-        updateForm('coverImage', result);
-      }
-    } catch (error) {
-      toast.error(error?.message || 'Failed to upload image');
-    } finally {
-      event.target.value = '';
+    const result = await fileToDataUrl(file);
+    updateForm(field, result);
+    if (field === 'coverImage' || field === 'image') {
+      updateForm('image', result);
+      updateForm('coverImage', result);
     }
+    event.target.value = '';
   };
 
   const handleGalleryImagesChange = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    try {
-      const results = await Promise.all(files.map((file) => uploadImageFileToUrl(file, 'rental-vehicles')));
-      setFormData((current) => ({
-        ...current,
-        galleryImages: [...(Array.isArray(current.galleryImages) ? current.galleryImages : []), ...results.filter(Boolean)],
-      }));
-    } catch (error) {
-      toast.error(error?.message || 'Failed to upload gallery images');
-    } finally {
-      event.target.value = '';
-    }
+    const results = await Promise.all(files.map((file) => fileToDataUrl(file)));
+    setFormData((current) => ({
+      ...current,
+      galleryImages: [...(Array.isArray(current.galleryImages) ? current.galleryImages : []), ...results.filter(Boolean)],
+    }));
+    event.target.value = '';
   };
 
   const removeGalleryImage = (indexToRemove) => {
@@ -495,14 +509,9 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
   const replaceGalleryImage = async (event, indexToReplace) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try {
-      const result = await uploadImageFileToUrl(file, 'rental-vehicles');
-      updateGalleryImage(indexToReplace, result);
-    } catch (error) {
-      toast.error(error?.message || 'Failed to upload image');
-    } finally {
-      event.target.value = '';
-    }
+    const result = await fileToDataUrl(file);
+    updateGalleryImage(indexToReplace, result);
+    event.target.value = '';
   };
 
   const addGalleryImageByUrl = () => {
@@ -693,7 +702,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             <button
               type="button"
               onClick={() => navigate('/taxi/admin/pricing/rental-vehicles/create')}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
+              className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-yellow-500"
             >
               <Plus size={18} />
               Add Rental Vehicle
@@ -708,7 +717,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 <Car size={20} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Total Types</p>
+                <p className="text-sm font-semibold text-slate-500">Total Types</p>
                 <p className="text-2xl font-bold text-slate-900">{items.length}</p>
               </div>
             </div>
@@ -719,7 +728,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 <CheckCircle2 size={20} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Active Types</p>
+                <p className="text-sm font-semibold text-slate-500">Active Types</p>
                 <p className="text-2xl font-bold text-slate-900">{totalActive}</p>
               </div>
             </div>
@@ -730,7 +739,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 <Clock3 size={20} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Hourly Packages</p>
+                <p className="text-sm font-semibold text-slate-500">Hourly Packages</p>
                 <p className="text-2xl font-bold text-slate-900">{items.reduce((sum, item) => sum + (item.pricing?.length || 0), 0)}</p>
               </div>
             </div>
@@ -749,7 +758,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
           <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">No rental vehicles configured yet.</div>
         ) : (
           <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="grid gap-4 border-b border-slate-100 px-6 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400" style={{ gridTemplateColumns: 'minmax(0, 1.6fr) 110px 110px 120px 180px' }}>
+            <div className="grid grid-cols-[minmax(0,1.6fr)_110px_110px_120px_180px] gap-4 border-b border-slate-100 px-6 py-4 text-xs font-bold text-slate-500">
               <span>Vehicle</span>
               <span>Seats</span>
               <span>Bags</span>
@@ -759,8 +768,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             {items.map((item) => (
               <div
                 key={item.id || item._id}
-                className="grid gap-4 border-b border-slate-100 px-6 py-4 last:border-b-0"
-                style={{ gridTemplateColumns: 'minmax(0, 1.6fr) 110px 110px 120px 180px' }}
+                className="grid grid-cols-[minmax(0,1.6fr)_110px_110px_120px_180px] gap-4 border-b border-slate-100 px-6 py-4 last:border-b-0"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50">
@@ -778,21 +786,21 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 <div className="flex items-center text-sm font-semibold text-slate-700">{item.capacity || 0}</div>
                 <div className="flex items-center text-sm font-semibold text-slate-700">{item.luggageCapacity || 0}</div>
                 <div className="flex items-center">
-                  <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${item.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${item.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                     {item.active !== false ? 'Active' : 'Inactive'}
                   </span>
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/view/${item.id || item._id}`)}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     View details
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
+                    onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${item.id || item._id}`)}
                     className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                     title="Edit"
                   >
@@ -842,8 +850,8 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             {id ? (
               <button
                 type="button"
-                onClick={() => navigate(`/taxi/admin/pricing/rental-vehicles/edit/${id}`)}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
+                onClick={() => navigate(`/admin/pricing/rental-vehicles/edit/${id}`)}
+                className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-3 text-sm font-semibold text-black transition hover:bg-yellow-500"
               >
                 <Edit2 size={16} />
                 Edit
@@ -1150,14 +1158,39 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
 
           <div>
             <label className={labelClass}>Gallery Images</label>
-            <div className="rounded-2xl border border-dashed border-slate-300 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
-                  <ImagePlus size={16} />
-                  Add gallery images
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryImagesChange} />
-                </label>
-                <div className="flex flex-1 gap-2">
+            <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-5 border-b border-slate-100">
+                <div className="flex gap-6">
+                  <button
+                    type="button"
+                    onClick={() => setGalleryTab('upload')}
+                    className={`border-b-2 py-3 text-sm font-bold transition-all ${galleryTab === 'upload' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Upload Images
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGalleryTab('url')}
+                    className={`border-b-2 py-3 text-sm font-bold transition-all ${galleryTab === 'url' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Image URL
+                  </button>
+                </div>
+              </div>
+
+              {galleryTab === 'upload' ? (
+                <div className="mb-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center">
+                  <label className="inline-flex cursor-pointer flex-col items-center gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                      <ImagePlus size={20} />
+                    </span>
+                    <span className="text-sm font-bold text-slate-700">Click to browse gallery images</span>
+                    <span className="text-xs font-medium text-slate-400">JPG, PNG up to 5MB</span>
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryImagesChange} />
+                  </label>
+                </div>
+              ) : (
+                <div className="mb-6 flex flex-col gap-3 sm:flex-row">
                   <input
                     type="text"
                     value={galleryImageUrl}
@@ -1174,49 +1207,53 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                   <button
                     type="button"
                     onClick={addGalleryImageByUrl}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm"
+                    className="whitespace-nowrap rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
                   >
                     Add URL
                   </button>
                 </div>
-              </div>
-
-              {formData.galleryImages.length ? (
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {formData.galleryImages.map((image, index) => (
-                    <div key={`gallery-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
-                      <div className="overflow-hidden rounded-xl bg-white">
-                        <img src={image} alt={`Gallery ${index + 1}`} className="h-28 w-full object-cover" />
-                      </div>
-                      <input
-                        type="text"
-                        value={image}
-                        onChange={(event) => updateGalleryImage(index, event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60"
-                        placeholder="Gallery image URL"
-                      />
-                      <label className="mt-2 flex cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                        Replace image
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => replaceGalleryImage(event, index)}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => removeGalleryImage(index)}
-                        className="mt-2 w-full rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-slate-500">Add extra gallery photos for the inside detail view.</p>
               )}
+
+              <div>
+                <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Gallery Manager</h3>
+                {formData.galleryImages.length ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                    {formData.galleryImages.map((image, index) => (
+                      <div key={`gallery-${index}`} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 transition hover:border-indigo-200 hover:shadow-md">
+                        <div className="overflow-hidden rounded-xl bg-slate-50">
+                          <img src={image} alt={`Gallery ${index + 1}`} className="h-28 w-full object-cover" />
+                        </div>
+                        <div className="mt-3 flex flex-col gap-2">
+                          <input
+                            type="text"
+                            value={image}
+                            onChange={(event) => updateGalleryImage(index, event.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] text-slate-600 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                            placeholder="Image URL"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white py-1.5 text-[10px] font-bold text-slate-600 transition hover:bg-slate-50">
+                              Replace
+                              <input type="file" accept="image/*" className="hidden" onChange={(event) => replaceGalleryImage(event, index)} />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => removeGalleryImage(index)}
+                              className="rounded-lg border border-rose-200 bg-rose-50 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center text-sm font-medium text-slate-400">
+                    No images in gallery yet.
+                  </div>
+                )}
+              </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">Cover stays separate. Gallery images are shown as supporting detail shots.</p>
           </div>
@@ -1319,6 +1356,19 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
               {formData.advancePayment?.enabled ? (
                 <div className="mt-4 space-y-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                   <div>
+                    <label className={labelClass}>Advance Payment Mode</label>
+                    <select
+                      value={formData.advancePayment?.paymentMode || 'percentage'}
+                      onChange={(event) => updateAdvancePayment('paymentMode', event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="percentage">Percentage of rental total</option>
+                      <option value="fixed">Fixed amount</option>
+                      <option value="full">Full amount</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <label className={labelClass}>Payment Label</label>
                     <input
                       type="text"
@@ -1330,17 +1380,28 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                   </div>
 
                   <div>
-                    <label className={labelClass}>Custom Advance Amount</label>
+                    <label className={labelClass}>
+                      {formData.advancePayment?.paymentMode === 'percentage'
+                        ? 'Advance Percentage'
+                        : formData.advancePayment?.paymentMode === 'full'
+                          ? 'Full Payment Value'
+                          : 'Custom Advance Amount'}
+                    </label>
                     <input
                       type="number"
                       min="0"
+                      max={formData.advancePayment?.paymentMode === 'percentage' ? '100' : undefined}
                       value={formData.advancePayment?.amount ?? 0}
                       onChange={(event) => updateAdvancePayment('amount', Number(event.target.value || 0))}
                       className={inputClass}
-                      placeholder="500"
+                      placeholder={formData.advancePayment?.paymentMode === 'percentage' ? '20' : '500'}
                     />
                     <p className="mt-2 text-xs text-slate-500">
-                      Enter the exact amount the user must pay upfront while booking this vehicle.
+                      {formData.advancePayment?.paymentMode === 'percentage'
+                        ? 'Enter the percentage of the rental total that the user must pay upfront.'
+                        : formData.advancePayment?.paymentMode === 'full'
+                          ? 'Full payment charges the full rental total during booking. Amount is kept only as a fallback.'
+                          : 'Enter the exact amount the user must pay upfront while booking this vehicle.'}
                     </p>
                   </div>
 
@@ -1393,7 +1454,7 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
             })}
             </div>
 
-            <SeatPreview blueprint={formData.blueprint} onToggleSeat={toggleSeat} />
+            <SeatPreview blueprint={formData.blueprint} onToggleSeat={toggleSeat} onReset={resetBlueprint} />
             <p className="mt-3 text-xs text-slate-500">
               Pick the closest vehicle seating blueprint first, then block any seat positions you do not want included in the rental layout.
             </p>
@@ -1422,146 +1483,162 @@ const RentalVehicleTypes = ({ mode: propMode }) => {
                 Add Package
               </button>
             </div>
-
             <div className="space-y-4">
               {formData.pricing.map((price) => (
-                <div key={price.id} className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="mb-4 flex items-center justify-between">
+                <div key={price.id} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
-                      <p className="text-sm font-black text-slate-900">{price.label}</p>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Rental package</p>
+                      <p className="text-sm font-bold text-slate-900">{price.label || 'New Package'}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Rental package configuration</p>
                     </div>
                     {formData.pricing.length > 1 ? (
                       <button
                         type="button"
                         onClick={() => removePricingRow(price.id)}
-                        className="rounded-xl border border-rose-200 bg-white p-2 text-rose-500 transition hover:bg-rose-50"
+                        className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-rose-600 transition hover:bg-rose-100"
+                        title="Remove package"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                       </button>
                     ) : null}
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-                    <input
-                      value={price.label}
-                      onChange={(event) => updatePricingRow(price.id, 'label', event.target.value)}
-                      className={inputClass}
-                      placeholder="6 Hours"
-                      title="Package name"
-                    />
-                    <input
-                      type="number"
-                      value={price.durationHours}
-                      onChange={(event) => updatePricingRow(price.id, 'durationHours', event.target.value)}
-                      className={inputClass}
-                      placeholder="6"
-                      title="Duration in hours"
-                    />
-                    <input
-                      type="number"
-                      value={price.price}
-                      onChange={(event) => updatePricingRow(price.id, 'price', event.target.value)}
-                      className={inputClass}
-                      placeholder="799"
-                      title="Base rental price"
-                    />
-                    <input
-                      type="number"
-                      value={price.includedKm}
-                      onChange={(event) => updatePricingRow(price.id, 'includedKm', event.target.value)}
-                      className={inputClass}
-                      placeholder="60"
-                      title="Included kilometers"
-                    />
-                    <input
-                      type="number"
-                      value={price.extraHourPrice}
-                      onChange={(event) => updatePricingRow(price.id, 'extraHourPrice', event.target.value)}
-                      className={inputClass}
-                      placeholder="120"
-                      title="Extra hour charge"
-                    />
-                    <input
-                      type="number"
-                      value={price.extraKmPrice}
-                      onChange={(event) => updatePricingRow(price.id, 'extraKmPrice', event.target.value)}
-                      className={inputClass}
-                      placeholder="12"
-                      title="Extra kilometer charge"
-                    />
-                  </div>
-                  <div className="mt-3 grid gap-2 text-[11px] font-medium text-slate-500 md:grid-cols-3 xl:grid-cols-6">
-                    <span>Package label</span>
-                    <span>Hours</span>
-                    <span>Base rent</span>
-                    <span>Included km</span>
-                    <span>Extra hour</span>
-                    <span>Extra km</span>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Package Name</label>
+                      <input
+                        value={price.label}
+                        onChange={(event) => updatePricingRow(price.id, 'label', event.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. 6 Hours"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Duration (Hours)</label>
+                      <input
+                        type="number"
+                        value={price.durationHours}
+                        onChange={(event) => updatePricingRow(price.id, 'durationHours', event.target.value)}
+                        className={inputClass}
+                        placeholder="6"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Base Price (Rs)</label>
+                      <input
+                        type="number"
+                        value={price.price}
+                        onChange={(event) => updatePricingRow(price.id, 'price', event.target.value)}
+                        className={inputClass}
+                        placeholder="799"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Included Distance (KM)</label>
+                      <input
+                        type="number"
+                        value={price.includedKm}
+                        onChange={(event) => updatePricingRow(price.id, 'includedKm', event.target.value)}
+                        className={inputClass}
+                        placeholder="60"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Extra Hour Fee (Rs)</label>
+                      <input
+                        type="number"
+                        value={price.extraHourPrice}
+                        onChange={(event) => updatePricingRow(price.id, 'extraHourPrice', event.target.value)}
+                        className={inputClass}
+                        placeholder="120"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Extra KM Fee (Rs)</label>
+                      <input
+                        type="number"
+                        value={price.extraKmPrice}
+                        onChange={(event) => updatePricingRow(price.id, 'extraKmPrice', event.target.value)}
+                        className={inputClass}
+                        placeholder="12"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 border-t border-slate-100 bg-slate-50/50 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 4</p>
-              <h2 className="mt-1 text-lg font-black text-slate-900">Publishing</h2>
-              <p className="mt-1 text-sm font-medium text-slate-500">Use this final part to decide whether the rental vehicle should stay live in the admin catalog.</p>
-            </div>
-            <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Seat capacity follows the selected blueprint so the admin can control the rental layout visually and keep pricing tied to the exact vehicle setup.
-            </div>
-            <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={formData.active}
-                onChange={(event) => {
-                  updateForm('active', event.target.checked);
-                  updateForm('status', event.target.checked ? 'active' : 'inactive');
-                }}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              Active rental vehicle type
-            </label>
+          <div className="lg:col-span-2 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 4</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900">Publish Setup</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Control the visibility and live status of this rental vehicle in the mobile app.
+            </p>
           </div>
 
-          <div className="flex flex-col gap-3 lg:items-end">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || loading}
-              className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60"
-            >
-              <Save size={16} />
-              {isSaving ? 'Saving...' : id ? 'Update Rental Vehicle' : 'Create Rental Vehicle'}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/taxi/admin/pricing/rental-vehicles')}
-              className="text-sm font-medium text-slate-500 transition hover:text-slate-700"
-            >
-              Cancel
-            </button>
+          <div className="lg:col-span-2 rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Visible in User App</p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  When enabled, this rental vehicle type is publicly visible and can be booked by users. When disabled, it is hidden.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateForm('active', !formData.active)}
+                className={`relative h-7 w-14 rounded-full transition-all ${formData.active ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                aria-pressed={formData.active}
+              >
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${formData.active ? 'left-8' : 'left-1'}`} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <AnimatePresence>
-        {!loading && formData.active ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="fixed bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-[#14b8a6] text-white shadow-2xl"
-          >
-            <CheckCircle2 size={24} />
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {/* Sticky Bottom Action Bar */}
+      <div className="sticky bottom-0 z-40 mt-8 -mx-6 -mb-6 border-t border-slate-200 bg-white/90 px-6 py-4 backdrop-blur-md lg:-mx-8 lg:-mb-8 lg:px-8">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-500">
+            {id ? 'Ensure all changes are saved.' : 'Ensure blueprint and pricing are complete.'}
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={async () => {
+                updateForm('active', false);
+                setTimeout(handleSave, 0);
+              }}
+              disabled={isSaving}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Draft'}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                updateForm('active', true);
+                setTimeout(handleSave, 0);
+              }}
+              disabled={isSaving}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-white" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  {id ? 'Update Vehicle' : 'Create Vehicle'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

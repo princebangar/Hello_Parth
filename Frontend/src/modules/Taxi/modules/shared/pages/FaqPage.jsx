@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { ContainerScroll } from '@/components/ui/container-scroll-animation';
+import { FAQSupportHelper } from '@/components/ui/FAQSupportHelper';
 
 const FaqPage = () => {
   const navigate = useNavigate();
@@ -18,7 +20,7 @@ const FaqPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md z-50 border-b border-gray-200 shadow-sm">
+      <div className="fixed top-0 left-0 right-0 bg-yellow-50/90 backdrop-blur-md z-50 border-b border-yellow-100/80 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-4">
             <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
               <ArrowLeft size={20} />
@@ -61,6 +63,24 @@ const FaqPage = () => {
                     </div>
                 ))}
             </div>
+        </div>
+
+        {/* Scroll Animation Section */}
+        <div className="bg-white rounded-3xl border border-gray-100 py-16 mt-10">
+          <ContainerScroll
+            titleComponent={
+              <div className="mb-8">
+                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-none text-center">
+                  Have more questions? <br />
+                  <span className="text-4xl md:text-5xl font-black text-[#FFB300] mt-2 block leading-none">
+                    We've got answers
+                  </span>
+                </h2>
+              </div>
+            }
+          >
+            <FAQSupportHelper />
+          </ContainerScroll>
         </div>
       </div>
     </div>

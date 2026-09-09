@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { 
   ArrowLeft, 
   ChevronRight, 
@@ -9,25 +10,47 @@ import {
   Megaphone
 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
+import { useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { getSavedLocation, getSavedLocationCoords, saveLocation } from '../../services/locationStore';
+import { useUserTheme } from '../../../../shared/context/UserThemeContext';
 
-import trucksImg from '../../../../assets/images/delivery/trucks.png';
-import bikeImg from '../../../../assets/images/delivery/bike.png';
-import moversImg from '../../../../assets/images/delivery/movers.png';
-
-import { useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import trucksImg from '@/assets/images/delivery/trucks.png';
+import bikeImg from '@/assets/images/delivery/bike.png';
+import moversImg from '@/assets/images/delivery/movers.png';
 
 const Motion = motion;
 const PARCEL_BOOKING_DRAFT_KEY = 'parcelBookingDraft';
-
-const unwrapVehicleCatalog = (response) => {
-  const data = response?.data?.data || response?.data || response;
-  return data?.results || data?.vehicle_types || (Array.isArray(data) ? data : []);
+const FALLBACK_PICKUP_LABEL = 'Choose your location';
+const unwrapResults = (response) => {
+  const payload = response?.data?.data || response?.data || response;
+  return payload?.results || (Array.isArray(payload) ? payload : []);
 };
 
-const isActiveDeliveryVehicle = (vehicle) => {
-  const isActive = vehicle?.active !== false && Number(vehicle?.status ?? 1) !== 0;
-  const transportType = String(vehicle?.transport_type || '').trim().toLowerCase();
-  return isActive && (transportType === 'delivery' || transportType === 'both');
+const toPlainData = (value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+};
+
+const getDeliveryPricingScore = (vehicle = {}) => {
+  const pricing = vehicle?.delivery_distance_pricing || {};
+  const enabled = Boolean(pricing?.enabled);
+  const basePrice = Number(pricing?.base_price || 0);
+  const distancePrice = Number(pricing?.distance_price || 0);
+  const baseDistance = Number(pricing?.base_distance ?? pricing?.free_distance ?? 0);
+
+  return Number(enabled) * 1000 + Number(basePrice > 0) * 100 + Number(distancePrice > 0) * 10 + Number(baseDistance > 0);
+};
+
+const getVehicleRecencyScore = (vehicle = {}) => {
+  const timestamp = new Date(vehicle?.updatedAt || vehicle?.createdAt || 0).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
 const DELIVERY_CATEGORY_OPTIONS = [
@@ -44,6 +67,12 @@ const DELIVERY_CATEGORY_OPTIONS = [
     searchTokens: ['bike', 'scooter', 'cycle', '2-wheeler'],
   },
   {
+    id: 'auto',
+    title: 'Auto',
+    img: '/2_AutoRickshaw.png',
+    searchTokens: ['auto', 'rickshaw', 'tuk', '3-wheeler', 'three-wheeler'],
+  },
+  {
     id: 'movers',
     title: 'Packers & Movers',
     img: moversImg,
@@ -51,119 +80,30 @@ const DELIVERY_CATEGORY_OPTIONS = [
   }
 ];
 
-const readParcelDraft = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.sessionStorage.getItem(PARCEL_BOOKING_DRAFT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-};
-
 const ParcelType = () => {
-  const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
-  const draft = useMemo(() => readParcelDraft(), []);
-
+  const { theme } = useUserTheme();
+  const location = useLocation();
+  const routeState = location.state || {};
+  const savedLocation = getSavedLocation();
+  const savedPickupLabel = String(savedLocation?.address || '').trim();
+  const savedPickupCoords = getSavedLocationCoords();
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [pickupAddress, setPickupAddress] = useState(() => draft?.pickup || 'Locating current location...');
-  const [pickupCoords, setPickupCoords] = useState(() => draft?.pickupCoords || null);
-  const [isLocating, setIsLocating] = useState(() => !draft?.pickup);
-
+  const [pickupAddress, setPickupAddress] = useState(() => routeState.pickup || savedPickupLabel || FALLBACK_PICKUP_LABEL);
+  const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || savedPickupCoords || null);
+  const geolocationRequestedRef = useRef(false);
   const navigate = useNavigate();
-  const location = useLocation();
-  const routePrefix = useMemo(
-    () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
-    [location.pathname],
-  );
-
-  // Fetch live location if no stored pickup in draft
-  useEffect(() => {
-    if (draft?.pickup && draft?.pickupCoords) return;
-
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setPickupAddress('Tap to select pickup location');
-      setIsLocating(false);
-      return;
-    }
-
-    setIsLocating(true);
-
-    const resolveReverseGeocode = (lat, lng) => {
-      if (typeof window !== 'undefined' && window.google?.maps?.Geocoder) {
-        const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          setIsLocating(false);
-          if (status === 'OK' && results?.[0]?.formatted_address) {
-            setPickupAddress(results[0].formatted_address);
-          } else {
-            setPickupAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-          }
-        });
-      } else {
-        setPickupAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        setIsLocating(false);
-      }
-    };
-
-    const onSuccess = (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-      const coords = [lng, lat];
-      setPickupCoords(coords);
-      resolveReverseGeocode(lat, lng);
-    };
-
-    const onError = (err) => {
-      console.warn('High accuracy geolocation failed on ParcelType, retrying low accuracy...', err);
-      navigator.geolocation.getCurrentPosition(
-        onSuccess,
-        () => {
-          setIsLocating(false);
-          setPickupAddress('Tap to select pickup location');
-        },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-      );
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      onSuccess,
-      onError,
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
-    );
-  }, [draft]);
-
-  // Re-geocode if Google Maps loaded after location was fetched as raw coordinates
-  useEffect(() => {
-    if (!isGoogleMapsLoaded || !pickupCoords || !Array.isArray(pickupCoords) || pickupCoords.length < 2) return;
-    if (pickupAddress && !pickupAddress.includes(',') && !pickupAddress.toLowerCase().includes('locating')) return;
-
-    const lng = pickupCoords[0];
-    const lat = pickupCoords[1];
-    if (typeof window !== 'undefined' && window.google?.maps?.Geocoder) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === 'OK' && results?.[0]?.formatted_address) {
-          setPickupAddress(results[0].formatted_address);
-        }
-      });
-    }
-  }, [isGoogleMapsLoaded, pickupCoords]);
+  const { isLoaded: isGoogleMapsLoaded } = useBaseGoogleMapsLoader();
 
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
         setLoading(true);
-        setLoadError('');
         const response = await api.get('/users/vehicle-types');
-        const items = unwrapVehicleCatalog(response);
-        setVehicleTypes(items.filter(isActiveDeliveryVehicle));
+        const items = unwrapResults(response);
+        setVehicleTypes(items.filter(v => v.active && (v.transport_type === 'delivery' || v.transport_type === 'both')));
       } catch (err) {
         console.error('Failed to load vehicles:', err);
-        setLoadError(err?.message || 'Could not load delivery vehicle types.');
-        setVehicleTypes([]);
       } finally {
         setLoading(false);
       }
@@ -172,8 +112,91 @@ const ParcelType = () => {
     fetchVehicles();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const draft = JSON.parse(window.sessionStorage.getItem(PARCEL_BOOKING_DRAFT_KEY) || '{}');
+
+      if (!routeState.pickup && !savedPickupLabel && draft?.pickup) {
+        setPickupAddress(String(draft.pickup || '').trim() || FALLBACK_PICKUP_LABEL);
+      }
+
+      if (!routeState.pickupCoords && !savedPickupCoords && Array.isArray(draft?.pickupCoords) && draft.pickupCoords.length === 2) {
+        setPickupCoords(draft.pickupCoords);
+      }
+    } catch {
+      // ignore invalid draft state
+    }
+  }, [routeState.pickup, routeState.pickupCoords, savedPickupCoords, savedPickupLabel]);
+
+  useEffect(() => {
+    if (geolocationRequestedRef.current || !navigator.geolocation) {
+      return;
+    }
+
+    geolocationRequestedRef.current = true;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextCoords = [position.coords.longitude, position.coords.latitude];
+        setPickupCoords(nextCoords);
+        saveLocation({
+          lon: position.coords.longitude,
+          lat: position.coords.latitude,
+          updatedAt: Date.now(),
+        });
+      },
+      () => {
+        // keep saved or route-based location when geolocation fails
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!isGoogleMapsLoaded || !window.google?.maps?.Geocoder || !Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
+      return;
+    }
+
+    let active = true;
+    const geocoder = new window.google.maps.Geocoder();
+    const [lng, lat] = pickupCoords;
+
+    geocoder.geocode({ location: { lat: Number(lat), lng: Number(lng) } }, (results, status) => {
+      if (!active) {
+        return;
+      }
+
+      const nextAddress = status === 'OK' && results?.[0]?.formatted_address
+        ? results[0].formatted_address
+        : '';
+
+      if (!nextAddress) {
+        return;
+      }
+
+      setPickupAddress(nextAddress);
+      saveLocation({
+        address: nextAddress,
+        lon: Number(lng),
+        lat: Number(lat),
+        updatedAt: Date.now(),
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isGoogleMapsLoaded, pickupCoords]);
+
   const handleCategorySelect = (category) => {
     if (loading) {
+      toast('Vehicle options are still loading. Try again in a sec.', {
+        duration: 2200,
+      });
       return;
     }
 
@@ -187,65 +210,59 @@ const ParcelType = () => {
       const iconType = String(vehicle.icon_types || '').toLowerCase();
       return category.searchTokens.some((token) => name.includes(token) || iconType.includes(token));
     });
+    const prioritizedVehicles = [...filteredVehicles].sort((left, right) => {
+      const pricingDelta = getDeliveryPricingScore(right) - getDeliveryPricingScore(left);
+      if (pricingDelta !== 0) {
+        return pricingDelta;
+      }
 
-    const selectedVehicle = filteredVehicles[0] || vehicleTypes[0] || null;
-    const selectedVehicleIds = filteredVehicles.length
-      ? filteredVehicles.map((vehicle) => vehicle?._id || vehicle?.id).filter(Boolean)
-      : [selectedVehicle?._id || selectedVehicle?.id].filter(Boolean);
-    const selectedVehicles = filteredVehicles.length
-      ? filteredVehicles
-      : selectedVehicle
-        ? [selectedVehicle]
-        : [];
+      const recencyDelta = getVehicleRecencyScore(right) - getVehicleRecencyScore(left);
+      if (recencyDelta !== 0) {
+        return recencyDelta;
+      }
+
+      return String(left?.name || '').localeCompare(String(right?.name || ''));
+    });
+
+    const selectedVehicle = prioritizedVehicles[0] || vehicleTypes[0];
+    const selectedVehicles = (prioritizedVehicles.length ? prioritizedVehicles : selectedVehicle ? [selectedVehicle] : [])
+      .map((vehicle) => toPlainData(vehicle))
+      .filter(Boolean);
+    const plainSelectedVehicle = toPlainData(selectedVehicle);
+    const selectedVehicleIds = prioritizedVehicles.length
+      ? prioritizedVehicles.map((vehicle) => vehicle?._id || vehicle?.id).filter(Boolean)
+      : [plainSelectedVehicle?._id || plainSelectedVehicle?.id].filter(Boolean);
 
     const nextState = {
       parcelType: 'General Parcel',
-      selectedVehicle,
+      selectedVehicle: plainSelectedVehicle,
       selectedVehicles,
-      selectedVehicleId: selectedVehicle?._id || selectedVehicle?.id || '',
+      selectedVehicleId: plainSelectedVehicle?._id || plainSelectedVehicle?.id,
       selectedVehicleIds,
       category: category.id,
       deliveryCategory: category.id,
       pickup: pickupAddress,
-      pickupCoords: pickupCoords,
+      pickupCoords,
     };
 
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(PARCEL_BOOKING_DRAFT_KEY, JSON.stringify(nextState));
     }
 
-    navigate(`${routePrefix || '/taxi/user'}/parcel/details`, {
+    navigate('/taxi/user/parcel/details', {
       state: nextState,
     });
   };
 
-  const handleGoBack = () => {
-    if (window.history.length > 1 && window.history.state?.idx > 0) {
-      navigate(-1);
-    } else {
-      navigate(`${routePrefix || '/taxi/user'}`, { replace: true });
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#F5F8FF] max-w-lg mx-auto flex flex-col font-sans relative overflow-x-hidden">
-      
-      {/* Floating Back Button */}
-      <button 
-        type="button"
-        onClick={handleGoBack}
-        className="fixed top-3 left-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 shadow-md active:scale-95 transition-all cursor-pointer"
-      >
-        <ArrowLeft size={16} />
-        <span className="text-xs font-bold">Go Back</span>
-      </button>
+    <div className={`min-h-screen w-full max-w-lg mx-auto flex flex-col font-sans relative overflow-x-hidden ${theme === 'dark' ? 'bg-[#05070D]' : 'bg-[#F5F8FF]'}`}>
       
       {/* Premium Header with Wave Background */}
-      <div className="relative bg-[#0047AB] pt-10 pb-20 px-6 overflow-hidden">
+      <div className={`relative pt-10 pb-20 px-6 overflow-hidden ${theme === 'dark' ? 'bg-[#090D16]' : 'bg-[#F1F5F9]'}`}>
         {/* Subtle Wave SVG */}
         <div className="absolute bottom-0 left-0 right-0 h-16 opacity-20 pointer-events-none">
             <svg viewBox="0 0 1440 320" className="w-full h-full preserve-3d">
-                <path fill="#ffffff" fillOpacity="1" d="M0,160L48,176C96,192,192,224,288,224C384,224,480,192,576,165.3C672,139,768,117,864,128C960,139,1056,181,1152,186.7C1248,192,1344,160,1392,144L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+                <path fill={theme === 'dark' ? '#05070D' : '#ffffff'} fillOpacity="1" d="M0,160L48,176C96,192,192,224,288,224C384,224,480,192,576,165.3C672,139,768,117,864,128C960,139,1056,181,1152,186.7C1248,192,1344,160,1392,144L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
             </svg>
         </div>
 
@@ -254,20 +271,17 @@ const ParcelType = () => {
            <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-[24px] p-4 flex items-center gap-4 shadow-lg border border-white/50 cursor-pointer hover:bg-slate-50/90 transition-colors"
-            onClick={() => navigate(`${routePrefix || '/taxi/user'}/parcel/details`, { state: { editPickup: true, pickup: pickupAddress, pickupCoords: pickupCoords } })}
+            className={`rounded-[24px] p-4 flex items-center gap-4 shadow-lg border transition-all cursor-pointer ${theme === 'dark' ? 'bg-[#111827] border-zinc-800/85 text-white' : 'bg-white border-white/50 text-slate-900'}`}
+            onClick={() => navigate('/taxi/user/parcel/details', { state: { editPickup: true, pickup: pickupAddress, pickupCoords } })}
            >
-             <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-               <MapPin size={20} className={`text-emerald-500 fill-emerald-500/20 ${isLocating ? 'animate-bounce' : ''}`} />
+             <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${theme === 'dark' ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+               <MapPin size={20} className="text-emerald-500 fill-emerald-500/20" />
              </div>
              <div className="flex-1 min-w-0">
-               <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
-                 Pick up from
-                 {isLocating && <span className="text-[10px] text-emerald-600 font-bold lowercase animate-pulse">(locating...)</span>}
-               </p>
-               <p className="text-[13px] font-bold text-slate-900 truncate mt-0.5">{pickupAddress}</p>
+               <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Pick up from</p>
+               <p className={`text-[13px] font-bold truncate mt-0.5 ${theme === 'dark' ? 'text-slate-200' : 'text-slate-900'}`}>{pickupAddress}</p>
              </div>
-             <ChevronRight size={18} className="text-slate-400 shrink-0" />
+             <ChevronRight size={18} className="text-slate-400" />
            </motion.div>
         </div>
       </div>
@@ -275,36 +289,27 @@ const ParcelType = () => {
       {/* Main Content Area */}
       <main className="flex-1 px-5 -mt-10 z-20 pb-10">
         
-        {!loading && vehicleTypes.length === 0 && (
-          <div className="mb-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800">
-            {loadError || 'No delivery vehicle types are configured yet. You can still continue and choose locations.'}
-          </div>
-        )}
-
         {/* Category Grid */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-2 gap-3 mb-8">
           {DELIVERY_CATEGORY_OPTIONS.map((cat, idx) => (
             <motion.button
               key={cat.id}
               type="button"
-              disabled={loading}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: idx * 0.1 }}
-              whileTap={loading ? undefined : { scale: 0.95 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => handleCategorySelect(cat)}
-              className={`bg-white rounded-[24px] p-4 flex flex-col items-center gap-4 shadow-md border border-slate-100/50 hover:shadow-xl transition-shadow aspect-[0.85/1] ${
-                loading ? 'cursor-wait opacity-60' : 'cursor-pointer'
-              }`}
+              className={`rounded-[24px] p-4 flex flex-col items-center gap-4 shadow-md border hover:shadow-xl transition-all duration-300 aspect-[0.85/1] group ${theme === 'dark' ? 'bg-[#111827] border-zinc-800/80' : 'bg-white border-slate-100/50'}`}
             >
               <div className="flex-1 flex items-center justify-center w-full">
                 <img 
                   src={cat.img} 
                   alt={cat.title} 
-                  className="w-full h-auto object-contain max-h-[80px] drop-shadow-md"
+                  className="w-full h-auto object-contain max-h-[110px] sm:max-h-[120px] drop-shadow-md transition-transform duration-300 group-hover:scale-105"
                 />
               </div>
-              <p className="text-[12px] font-black text-slate-800 text-center leading-tight">
+              <p className={`text-[14px] font-black text-center leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>
                 {cat.title}
               </p>
             </motion.button>
@@ -316,7 +321,8 @@ const ParcelType = () => {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
-          className="relative overflow-hidden rounded-[24px] bg-gradient-to-r from-[#312E81] via-[#4338CA] to-[#4F46E5] p-5 mb-8 shadow-lg group cursor-pointer"
+          onClick={() => navigate('/taxi/user/referral')}
+          className="relative overflow-hidden rounded-[24px] bg-gradient-to-r from-amber-100 via-yellow-100 to-yellow-50 border border-yellow-200/60 p-5 mb-8 shadow-md group cursor-pointer"
         >
           {/* Decorative coin circles */}
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/5 rounded-full blur-xl" />
@@ -329,19 +335,16 @@ const ParcelType = () => {
                     $
                   </div>
                </div>
-               <div className="text-white">
-                  <h3 className="text-[17px] font-black tracking-tight leading-tight">Explore Rewards</h3>
-                  <p className="text-[11px] font-bold text-white/70 mt-1">Earn 2 coins for every 100 spent</p>
-               </div>
+                <div>
+                  <h3 className="text-[17px] font-black tracking-tight leading-tight text-dark-force">Explore Rewards</h3>
+                  <p className="text-[11px] font-bold text-dark-force-muted mt-1">Earn 2 coins for every 100 spent</p>
+                </div>
             </div>
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white group-hover:translate-x-1 transition-transform">
-               <ArrowRight size={18} strokeWidth={3} />
-            </div>
+             <div className="w-8 h-8 rounded-full bg-slate-900/10 flex items-center justify-center text-dark-force group-hover:translate-x-1 transition-transform">
+                <ArrowRight size={18} strokeWidth={3} />
+             </div>
           </div>
         </motion.div>
-
-        {/* Announcements Section */}
-        
 
         {/* Footer Illustration */}
         <div className="mt-4 flex justify-center">
@@ -351,7 +354,7 @@ const ParcelType = () => {
               className="relative w-full max-w-[320px] aspect-[16/9]"
             >
                 {/* Simulated Road */}
-                <div className="absolute bottom-0 left-0 right-0 h-4 bg-slate-200/50 rounded-full blur-sm" />
+                <div className={`absolute bottom-0 left-0 right-0 h-4 rounded-full blur-sm ${theme === 'dark' ? 'bg-zinc-800/50' : 'bg-slate-200/50'}`} />
                 <img 
                   src={trucksImg} 
                   alt="Delivery Truck" 
@@ -367,6 +370,14 @@ const ParcelType = () => {
         </div>
 
       </main>
+
+      {/* Floating Back Button */}
+      <button 
+        onClick={() => navigate(-1)}
+        className={`fixed top-2 left-4 z-50 w-8 h-8 rounded-full backdrop-blur-md flex items-center justify-center border active:scale-95 transition-transform ${theme === 'dark' ? 'bg-zinc-900/80 border-zinc-800 text-white shadow-[0_4px_12px_rgba(0,0,0,0.5)]' : 'bg-white/70 border-slate-200/80 text-slate-800 shadow-sm'}`}
+      >
+        <ArrowLeft size={16} />
+      </button>
 
     </div>
   );

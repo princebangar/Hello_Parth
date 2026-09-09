@@ -31,18 +31,64 @@ export const normalizePushToken = (token) => {
   return normalized;
 };
 
+/** Drop accidental JWTs / junk that were mixed into FCM arrays on shared users. */
+const isLikelyFcmToken = (token = '') => {
+  const value = String(token || '').trim();
+  if (!value || value.length < 20) return false;
+  if (value.startsWith('eyJ')) return false;
+  return true;
+};
+
+const toTokenList = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(isLikelyFcmToken);
+  }
+
+  const single = String(value || '').trim();
+  return isLikelyFcmToken(single) ? [single] : [];
+};
+
+const pathLooksLikeArray = (entity, fieldName) => {
+  const schemaPath = entity?.schema?.paths?.[fieldName];
+  if (!schemaPath) {
+    return Array.isArray(entity?.[fieldName]);
+  }
+
+  return schemaPath.instance === 'Array' || schemaPath.$isMongooseArray === true;
+};
+
+const upsertTokenOnEntity = (entity, fieldName, token) => {
+  const existing = toTokenList(entity?.[fieldName]);
+  const next = [...existing.filter((item) => item !== token), token];
+  const schemaInstance = entity?.schema?.paths?.[fieldName]?.instance;
+  const useArray =
+    pathLooksLikeArray(entity, fieldName) ||
+    Array.isArray(entity?.[fieldName]) ||
+    schemaInstance === 'Mixed';
+
+  if (useArray) {
+    entity[fieldName] = next;
+    return;
+  }
+
+  // Drivers / owners keep a single latest scalar token.
+  entity[fieldName] = token;
+};
+
 export const getPushTokenField = (platform) =>
-  normalizePushPlatform(platform) === 'web' ? 'fcmTokens' : 'fcmTokenMobile';
+  normalizePushPlatform(platform) === 'web' ? 'fcmTokenWeb' : 'fcmTokenMobile';
 
 export const assignPushTokenToEntity = (entity, { token, platform }) => {
   const normalizedToken = normalizePushToken(token);
   const normalizedPlatform = normalizePushPlatform(platform);
   const fieldName = getPushTokenField(normalizedPlatform);
-  const nextTokens = new Set([
-    ...toTokenArray(entity[fieldName]),
-    normalizedToken,
-  ]);
-  entity[fieldName] = Array.from(nextTokens);
+
+  upsertTokenOnEntity(entity, fieldName, normalizedToken);
+
+  // Shared Food user docs also use `fcmTokens` for web push.
+  if (normalizedPlatform === 'web' && entity?.schema?.paths?.fcmTokens) {
+    upsertTokenOnEntity(entity, 'fcmTokens', normalizedToken);
+  }
 
   return {
     token: normalizedToken,
@@ -51,24 +97,31 @@ export const assignPushTokenToEntity = (entity, { token, platform }) => {
   };
 };
 
-const toTokenArray = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
-  return [String(value || '').trim()].filter(Boolean);
-};
+export const listEntityPushTokens = (entity = {}, role = 'unknown') => {
+  const mobileTokens = toTokenList(entity.fcmTokenMobile);
+  const webTokens = [
+    ...toTokenList(entity.fcmTokenWeb),
+    ...toTokenList(entity.fcmTokens),
+  ].filter((token, index, all) => all.indexOf(token) === index);
 
-export const listEntityPushTokens = (entity = {}, role = 'unknown') =>
-  [
-    ...toTokenArray(entity.fcmTokens).map((token) => ({
-      role,
-      field: 'fcmTokens',
-      platform: 'web',
-      token,
-    })),
-    ...toTokenArray(entity.fcmTokenMobile).map((token) => ({
+  // Prefer latest mobile token to avoid double notifications on hybrid WebView devices.
+  if (mobileTokens.length) {
+    return [{
       role,
       field: 'fcmTokenMobile',
       platform: 'mobile',
-      token,
-    })),
-  ];
+      token: mobileTokens[mobileTokens.length - 1],
+    }];
+  }
+
+  if (webTokens.length) {
+    return [{
+      role,
+      field: entity.fcmTokenWeb ? 'fcmTokenWeb' : 'fcmTokens',
+      platform: 'web',
+      token: webTokens[webTokens.length - 1],
+    }];
+  }
+
+  return [];
+};

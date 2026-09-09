@@ -35,6 +35,7 @@ const buildRentalBookingPayload = ({
         label: state.selectedPackage.label || '',
         durationHours: Number(state.selectedPackage.durationHours || 0),
         price: Number(state.selectedPackage.price || 0),
+        extraHourPrice: Number(state.selectedPackage.extraHourPrice || 0),
       }
     : null,
   serviceLocation: state.serviceLocation
@@ -126,7 +127,58 @@ const RentalConfirmed = () => {
   const state = location.state || {};
   const [clockNow, setClockNow] = useState(() => Date.now());
 
-  const activeRentalRide = state?.serviceType === 'rental' && state?.rideId ? state : null;
+  const [activeRentalRide, setActiveRentalRide] = useState(() => {
+    return state?.serviceType === 'rental' && state?.rideId ? state : null;
+  });
+  const [fetchingActive, setFetchingActive] = useState(false);
+
+  useEffect(() => {
+    if (activeRentalRide) return;
+
+    let mounted = true;
+    const fetchActive = async () => {
+      try {
+        setFetchingActive(true);
+        const response = await userService.getActiveRentalBooking();
+        const payload = response?.data?.data || response?.data || null;
+        if (mounted && payload) {
+          const assignedVehicle = payload.assignedVehicle || {};
+          const vehicleName = assignedVehicle?.name || payload.vehicleName || 'Assigned Vehicle';
+          const vehicleImage = assignedVehicle?.image || payload.vehicleImage || '';
+          const vehicleCategory = assignedVehicle?.vehicleCategory || payload.vehicleCategory || 'Rental';
+          const nextRide = {
+            ...payload,
+            rideId: payload.id || payload.rideId,
+            serviceType: 'rental',
+            liveStatus: payload.status || payload.liveStatus || 'assigned',
+            vehicleName,
+            vehicleImage,
+            vehicleCategory,
+            vehicle: {
+              name: vehicleName,
+              image: vehicleImage,
+              vehicleIconUrl: vehicleImage,
+            },
+            driver: {
+              name: vehicleName,
+              vehicle: vehicleCategory,
+              vehicleType: vehicleCategory,
+              vehicleIconUrl: vehicleImage,
+            },
+            vehicleIconUrl: vehicleImage,
+          };
+          setActiveRentalRide(nextRide);
+        }
+      } catch (err) {
+        console.error('Failed to fetch active rental booking:', err);
+      } finally {
+        if (mounted) setFetchingActive(false);
+      }
+    };
+    fetchActive();
+    return () => { mounted = false; };
+  }, [activeRentalRide]);
+
   const isCompletedRentalRide = Boolean(activeRentalRide?.completedAt || state?.summaryMode === 'completed');
   
   useEffect(() => {
@@ -289,6 +341,17 @@ const RentalConfirmed = () => {
     return liveCharge;
   }, [completedCharge, isCompletedRentalRide, liveCharge]);
 
+  if (fetchingActive) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-bold text-slate-550 uppercase tracking-widest animate-pulse">Loading Booking Details...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!state.vehicle && !activeRentalRide) {
     navigate('/rental');
     return null;
@@ -340,14 +403,19 @@ const RentalConfirmed = () => {
               <CheckCircle2 size={32} className={isCompletedRentalRide ? 'text-emerald-500' : 'text-orange-500'} strokeWidth={2} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 {isCompletedRentalRide ? 'Ride Completed' : isEndRequestPending ? 'End Review Pending' : 'Rental In Progress'}
               </p>
-              <h1 className="text-[22px] font-black text-slate-900 tracking-tight mt-0.5">
+              <h1 className="text-[22px] font-extrabold text-slate-950 tracking-tight mt-0.5">
                 {isCompletedRentalRide ? 'Final rental total' : isEndRequestPending ? 'Awaiting admin confirmation' : 'Vehicle assigned'}
               </h1>
+              {isEndRequestPending && (
+                <p className="text-[13px] font-bold text-orange-600 mt-1">
+                  Your ride end request is under admin review.
+                </p>
+              )}
               <p className="text-[12px] font-bold text-slate-400 mt-1">
-                Booking ID: <span className="text-slate-700 font-black">{activeRentalRide.bookingReference || bookingId}</span>
+                Booking ID: <span className="text-slate-700 font-bold">{activeRentalRide.bookingReference || bookingId}</span>
               </p>
             </div>
           </motion.div>
@@ -365,15 +433,15 @@ const RentalConfirmed = () => {
                 <div className="h-16 w-20 rounded-2xl bg-white/70 shrink-0" />
               )}
               <div>
-                <p className="text-[15px] font-black text-slate-900">{activeVehicleName}</p>
-                <p className="text-[11px] font-bold text-slate-500 mt-0.5">{activeVehicleCategory}</p>
+                <p className="text-[15px] font-bold text-slate-950">{activeVehicleName}</p>
+                <p className="text-[11px] font-medium text-slate-500/80 mt-0.5">{activeVehicleCategory}</p>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3 border-t border-slate-50">
               <div className="flex items-center justify-between rounded-[14px] bg-slate-50 px-4 py-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Time Elapsed</p>
-                  <p className="mt-1 text-[18px] font-black text-slate-900">{liveElapsedLabel}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">Time Elapsed</p>
+                  <p className="mt-1 text-[18px] font-extrabold text-slate-950">{liveElapsedLabel}</p>
                 </div>
                 <Clock size={18} className="text-orange-500" />
               </div>
@@ -383,8 +451,8 @@ const RentalConfirmed = () => {
                   <p className="mt-1 text-[16px] font-black text-emerald-600">Rs.{Number(activeRentalRide.advancePaid || activeRentalRide.payableNow || 0).toFixed(0)}</p>
                 </div>
                 <div className="rounded-[14px] bg-slate-50 px-4 py-3">
-                  <p className="text-[10px] font-bold text-slate-400">{isCompletedRentalRide ? 'Final total' : isEndRequestPending ? 'Frozen total for review' : 'Charge till now'}</p>
-                  <p className="mt-1 text-[16px] font-black text-slate-900">Rs.{finalTotal.toFixed(0)}</p>
+                  <p className="text-[10px] font-medium text-slate-400">{isCompletedRentalRide ? 'Final total' : isEndRequestPending ? 'Frozen total for review' : 'Charge till now'}</p>
+                  <p className="mt-1 text-[16px] font-bold text-slate-900">Rs.{finalTotal.toFixed(0)}</p>
                 </div>
               </div>
               <div className="rounded-[14px] bg-slate-50 px-4 py-3">
@@ -396,10 +464,10 @@ const RentalConfirmed = () => {
               <div className="rounded-[14px] bg-slate-50 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Pricing Plan</p>
-                    <p className="mt-1 text-[14px] font-black text-slate-900">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500/80">Pricing Plan</p>
+                    <p className="mt-1 text-[14px] font-bold text-slate-950">
                       {activePricingSummary.label} - Rs.{Number(activePricingSummary.basePrice || 0).toFixed(0)}
-                      <span className="ml-1 text-[11px] font-bold text-slate-400">{activePricingSummary.suffix}</span>
+                      <span className="ml-1 text-[11px] font-medium text-slate-400">{activePricingSummary.suffix}</span>
                     </p>
                     <p className="mt-1 text-[11px] font-bold text-slate-500">
                       Includes {Number(activePricingSummary.includedHours || 0)} hr
@@ -447,7 +515,7 @@ const RentalConfirmed = () => {
           {isCompletedRentalRide || isEndRequestPending ? (
             <motion.button
               whileTap={{ scale: 0.98 }}
-              onClick={() => navigate('/user')}
+              onClick={() => navigate('/taxi/user')}
               className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
             >
               <Home size={16} strokeWidth={2.5} /> {isCompletedRentalRide ? 'Back to Home' : 'Track from Home'}
@@ -498,10 +566,10 @@ const RentalConfirmed = () => {
             <CheckCircle2 size={32} className="text-emerald-500" strokeWidth={2} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
               Booking Confirmed
             </p>
-            <h1 className="text-[22px] font-black text-slate-900 tracking-tight mt-0.5">
+            <h1 className="text-[22px] font-extrabold text-slate-950 tracking-tight mt-0.5">
               You're all set!
             </h1>
             <p className="text-[12px] font-bold text-slate-400 mt-1">
@@ -576,7 +644,7 @@ const RentalConfirmed = () => {
             <div className="w-7 h-7 rounded-[9px] bg-orange-50 flex items-center justify-center">
               <Camera size={13} className="text-orange-500" strokeWidth={2.5} />
             </div>
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500/80">
               Condition Photo at Pickup
             </p>
           </div>
@@ -626,9 +694,9 @@ const RentalConfirmed = () => {
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => navigate('/taxi/user')}
-          className="pointer-events-auto w-full bg-slate-900 py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
+          className="pointer-events-auto w-full bg-slate-950 py-4 rounded-[18px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2"
         >
-          <Home size={16} strokeWidth={2.5} /> Go to Home Dashboard
+          <Home size={16} strokeWidth={2} /> Go to Home Dashboard
         </motion.button>
       </div>
     </div>

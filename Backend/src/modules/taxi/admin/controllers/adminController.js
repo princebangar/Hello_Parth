@@ -4,7 +4,10 @@ import ExcelJS from 'exceljs';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
-import { Ride } from '../../user/models/Ride.js';
+import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
+import { getOrLoadCachedValue } from '../../../../utils/cache.js';
+
+const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
 
 const ok = (res, data, extra = {}) =>
   res.json({ success: true, data, ...extra });
@@ -359,6 +362,9 @@ export const deleteAdminAccount = asyncHandler(async (req, res) => {
 export const getUsers = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUsers(req.query)),
 );
+export const getEmployees = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listEmployees(req.query, req.auth?.admin)),
+);
 export const bulkImportUsers = asyncHandler(async (req, res) =>
   ok(res, await adminService.bulkImportUsers(req.body)),
 );
@@ -373,6 +379,15 @@ export const updateUser = asyncHandler(async (req, res) =>
 );
 export const getUser = asyncHandler(async (req, res) =>
   ok(res, await adminService.getUserById(req.params.id)),
+);
+export const createEmployee = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createEmployee(req.body, req.auth?.admin)),
+);
+export const updateEmployee = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateEmployee(req.params.id, req.body, req.auth?.admin)),
+);
+export const getEmployee = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getEmployeeById(req.params.id, req.auth?.admin)),
 );
 export const deleteUser = asyncHandler(async (req, res) => {
   await adminService.deleteUser(req.params.id);
@@ -592,6 +607,12 @@ export const getServiceLocations = asyncHandler(async (req, res) =>
 export const getServiceStores = asyncHandler(async (req, res) =>
   ok(res, { results: await adminService.listServiceStores(req.auth?.admin) }),
 );
+export const getPendingServiceStoreSignups = asyncHandler(async (req, res) =>
+  ok(res, { results: await adminService.listPendingServiceStoreSignups(req.auth?.admin) }),
+);
+export const getPendingServiceCenterStaffSignups = asyncHandler(async (req, res) =>
+  ok(res, { results: await adminService.listPendingServiceCenterStaffSignups(req.auth?.admin) }),
+);
 export const getCountries = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listCountries() }),
 );
@@ -606,6 +627,21 @@ export const updateServiceLocation = asyncHandler(async (req, res) =>
 );
 export const updateServiceStore = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateServiceStore(req.params.id, req.body, req.auth?.admin)),
+);
+export const createServiceStoreStaff = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createServiceStoreStaff(req.params.id, req.body, req.auth?.admin)),
+);
+export const approveServiceStoreSignup = asyncHandler(async (req, res) =>
+  ok(res, await adminService.approveServiceStoreSignup(req.params.id, req.auth?.admin)),
+);
+export const rejectServiceStoreSignup = asyncHandler(async (req, res) =>
+  ok(res, await adminService.rejectServiceStoreSignup(req.params.id, req.body, req.auth?.admin)),
+);
+export const approveServiceCenterStaffSignup = asyncHandler(async (req, res) =>
+  ok(res, await adminService.approveServiceCenterStaffSignup(req.params.id, req.auth?.admin)),
+);
+export const rejectServiceCenterStaffSignup = asyncHandler(async (req, res) =>
+  ok(res, await adminService.rejectServiceCenterStaffSignup(req.params.id, req.body, req.auth?.admin)),
 );
 export const deleteServiceLocation = asyncHandler(async (req, res) => {
   await adminService.deleteServiceLocation(req.params.id, req.auth?.admin);
@@ -643,6 +679,9 @@ export const getVehicleTypes = asyncHandler(async (req, res) =>
 );
 export const getVehicleTypeCatalog = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listVehicleCatalog()),
+);
+export const getVehicleTypeById = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getVehicleTypeById(req.params.id)),
 );
 export const getPublicVehicleTypeCatalog = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listPublicVehicleCatalog()),
@@ -758,6 +797,9 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   const data = await adminService.listSetPrices(req.query || {}, req.auth?.admin);
   res.json({ success: true, ...data });
 });
+export const getSetPriceById = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getSetPriceById(req.params.id, req.auth?.admin)),
+);
 export const createSetPrice = asyncHandler(async (req, res) =>
   ok(res, await adminService.createSetPrice(req.body, req.auth?.admin)),
 );
@@ -786,6 +828,9 @@ export const deleteAirport = asyncHandler(async (req, res) => {
 export const getBusServices = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listBusServices() }),
 );
+export const getPendingBusDriverSignups = asyncHandler(async (_req, res) =>
+  ok(res, { results: await adminService.listPendingBusDriverSignups() }),
+);
 export const createBusService = asyncHandler(async (req, res) =>
   ok(res, await adminService.createBusService(req.body)),
 );
@@ -796,6 +841,12 @@ export const deleteBusService = asyncHandler(async (req, res) => {
   await adminService.deleteBusService(req.params.id);
   ok(res, { deleted: true });
 });
+export const approveBusDriverSignup = asyncHandler(async (req, res) =>
+  ok(res, await adminService.approveBusDriverSignup(req.params.id)),
+);
+export const rejectBusDriverSignup = asyncHandler(async (req, res) =>
+  ok(res, await adminService.rejectBusDriverSignup(req.params.id, req.body)),
+);
 
 export const getAdminBusBookings = asyncHandler(async (req, res) => {
   const busServiceId = toCleanString(req.query?.busServiceId);
@@ -1411,9 +1462,18 @@ export const deleteRole = asyncHandler(async (req, res) => {
   ok(res, { deleted: true });
 });
 
-export const getAppModules = asyncHandler(async (req, res) =>
-  ok(res, await adminService.listAppModules(req.query)),
-);
+export const getAppModules = asyncHandler(async (req, res) => {
+  const cacheKey = `cache:public:app_modules:${JSON.stringify(req.query || {})}`;
+  const data = await getOrLoadCachedValue(
+    cacheKey,
+    {
+      ttlMs: PUBLIC_BOOTSTRAP_CACHE_TTL_MS,
+      load: () => adminService.listAppModules(req.query),
+    },
+  );
+
+  ok(res, data);
+});
 export const createAppModule = asyncHandler(async (req, res) =>
   ok(res, await adminService.createAppModule(req.body)),
 );
@@ -1500,6 +1560,19 @@ export const updateMailSettings = asyncHandler(async (req, res) =>
   ok(res, { settings: await adminService.updateMailSettings(req.body) }),
 );
 
+export const getRechargeApiSettings = asyncHandler(async (_req, res) =>
+  ok(res, await adminService.getRechargeApiSettings()),
+);
+export const updateRechargeApiSettings = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateRechargeApiSettings(req.body)),
+);
+export const generateRechargeApiToken = asyncHandler(async (_req, res) =>
+  ok(res, await adminService.generateRechargeApiToken()),
+);
+export const runRechargeApiTest = asyncHandler(async (_req, res) =>
+  ok(res, await adminService.runRechargeApiTest()),
+);
+
 export const getUserOnboarding = asyncHandler(async (_req, res) =>
   res.json({
     success: true,
@@ -1563,9 +1636,22 @@ export const downloadFleetFinanceReport = asyncHandler(async (req, res) => {
   const data = await adminService.buildFleetFinanceReport(req.query);
   await sendFile(res, "fleet-finance-report", data, format);
 });
-export const getGeneralSettingsCategory = asyncHandler(async (req, res) =>
-  ok(res, await adminService.getGeneralSettings(req.params.category)),
-);
+export const getGeneralSettingsCategory = asyncHandler(async (req, res) => {
+  const category = String(req.params.category || '').trim().toLowerCase();
+  const data = await getOrLoadCachedValue(
+    `cache:public:general_settings:${category}`,
+    {
+      ttlMs: PUBLIC_BOOTSTRAP_CACHE_TTL_MS,
+      load: () => adminService.getGeneralSettings(req.params.category),
+    },
+  );
+
+  ok(res, data);
+});
+export const getUserHomeManagement = asyncHandler(async (req, res) => {
+  const result = await adminService.getGeneralSettings('user-home-management');
+  ok(res, result.settings || {});
+});
 export const updateGeneralSettingsCategory = asyncHandler(async (req, res) =>
   ok(
     res,
@@ -1576,111 +1662,34 @@ export const getTransportTypes = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listTransportTypes()),
 );
 
-export const getTaxiCancellationAnalytics = asyncHandler(async (req, res) => {
-  const totalRidesCount = await Ride.countDocuments();
-  const cancelledRides = await Ride.find({
-    $or: [
-      { status: 'cancelled' },
-      { 'cancellation.cancelled_by': { $ne: '' } }
-    ]
-  })
-    .populate('userId', 'name phone email')
-    .populate('driverId', 'name phone vehicleNumber rating')
-    .sort({ createdAt: -1 })
-    .lean();
+export const getAppBootstrap = asyncHandler(async (_req, res) => {
+  const data = await getOrLoadCachedValue(
+    'cache:public:app_bootstrap',
+    {
+      ttlMs: PUBLIC_BOOTSTRAP_CACHE_TTL_MS,
+      load: async () => {
+        const [modules, general, transportRide, customize, paymentGateway, userHomeSettings] = await Promise.all([
+          adminService.listAppModules(),
+          adminService.getGeneralSettings('general'),
+          adminService.getGeneralSettings('transport-ride'),
+          adminService.getGeneralSettings('customize'),
+          getPublicActivePaymentGateway(),
+          adminService.getGeneralSettings('user-home-management'),
+        ]);
 
-  const totalCancelledRides = cancelledRides.length;
-  const cancellationRate = totalRidesCount > 0
-    ? Math.round((totalCancelledRides / totalRidesCount) * 100 * 10) / 10
-    : 0;
+        return {
+          modules: modules.results || modules,
+          settings: {
+            general: general.settings || {},
+            transportRide: transportRide.settings || {},
+            customization: customize.settings || {},
+            paymentGateway: paymentGateway?.activeGateway || null,
+            userHomeSettings: userHomeSettings.settings || {},
+          },
+        };
+      },
+    },
+  );
 
-  let customerCancellations = 0;
-  let driverCancellations = 0;
-  let adminSystemCancellations = 0;
-  let totalRevenueLost = 0;
-  let totalCancellationFeesCollected = 0;
-
-  const reasonsCountMap = {};
-  const stageCountMap = { searching: 0, accepted: 0, arrived: 0, started: 0, unknown: 0 };
-  const driverCancellationMap = {};
-  const flaggedRides = [];
-
-  cancelledRides.forEach((ride) => {
-    const cancelledBy = String(ride.cancellation?.cancelled_by || '').toLowerCase();
-    if (cancelledBy === 'user' || cancelledBy === 'customer') {
-      customerCancellations += 1;
-    } else if (cancelledBy === 'driver') {
-      driverCancellations += 1;
-
-      if (ride.driverId?._id) {
-        const dId = String(ride.driverId._id);
-        if (!driverCancellationMap[dId]) {
-          driverCancellationMap[dId] = {
-            driverId: dId,
-            driverName: ride.driverId.name || 'Unknown Driver',
-            driverPhone: ride.driverId.phone || '',
-            cancellationCount: 0,
-          };
-        }
-        driverCancellationMap[dId].cancellationCount += 1;
-      }
-    } else {
-      adminSystemCancellations += 1;
-    }
-
-    const stage = String(ride.cancellation?.stage || '').toLowerCase() || 'unknown';
-    if (stageCountMap[stage] !== undefined) {
-      stageCountMap[stage] += 1;
-    } else {
-      stageCountMap.unknown += 1;
-    }
-
-    const reason = ride.cancellation?.reason || 'No reason specified';
-    reasonsCountMap[reason] = (reasonsCountMap[reason] || 0) + 1;
-
-    totalRevenueLost += Number(ride.fare || ride.baseFare || 0);
-
-    if (ride.cancellation?.is_fee_applied) {
-      totalCancellationFeesCollected += Number(ride.cancellation?.cancellation_charge || 0);
-    }
-
-    if (ride.cancellation?.flaggedForAdminReview) {
-      flaggedRides.push({
-        rideId: String(ride._id),
-        customerName: ride.userId?.name || 'Customer',
-        customerPhone: ride.userId?.phone || '',
-        driverName: ride.driverId?.name || 'N/A',
-        driverPhone: ride.driverId?.phone || '',
-        reason: ride.cancellation?.reason || '',
-        comment: ride.cancellation?.comment || '',
-        flagReason: ride.cancellation?.flagReason || '',
-        cancelledAt: ride.cancellation?.cancelled_at || ride.updatedAt,
-        stage: ride.cancellation?.stage || '',
-        cancellationCharge: ride.cancellation?.cancellation_charge || 0,
-      });
-    }
-  });
-
-  const reasonsBreakdown = Object.entries(reasonsCountMap)
-    .map(([reason, count]) => ({ reason, count }))
-    .sort((a, b) => b.count - a.count);
-
-  const topDriverCancellations = Object.values(driverCancellationMap)
-    .sort((a, b) => b.cancellationCount - a.cancellationCount)
-    .slice(0, 10);
-
-  ok(res, {
-    totalRidesCount,
-    totalCancelledRides,
-    cancellationRate,
-    customerCancellations,
-    driverCancellations,
-    adminSystemCancellations,
-    totalRevenueLost: Math.round(totalRevenueLost),
-    totalCancellationFeesCollected: Math.round(totalCancellationFeesCollected),
-    reasonsBreakdown,
-    stageBreakdown: stageCountMap,
-    topDriverCancellations,
-    flaggedRides,
-  });
+  ok(res, data);
 });

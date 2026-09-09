@@ -13,17 +13,21 @@ import {
     Clock,
     ShieldAlert,
     Stars,
+    Zap,
     ShieldCheck
 } from 'lucide-react';
 import RegistrationProgress from '../../../shared/components/RegistrationProgress';
-import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { getStoredDriverRegistrationSession } from '../../services/registrationService';
 
 const RegistrationDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
-    const appLogo = DEFAULT_BRAND_LOGO;
+    const appLogo = settings.general?.logo || settings.customization?.logo;
+    const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
+    const storedSession = getStoredDriverRegistrationSession();
 
     const steps = [
         { id: 'personal', title: 'Personal Information', sub: 'ID & Profile', icon: <User size={18} /> },
@@ -41,7 +45,11 @@ const RegistrationDashboard = () => {
                     animate={{ scale: 1, opacity: 1 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-taxi-text shadow-2xl overflow-hidden p-2"
                 >
-                    <img src={appLogo} alt={appName} className="w-full h-full object-contain" />
+                    {appLogo ? (
+                        <img src={appLogo} alt={appName} className="w-full h-full object-contain" />
+                    ) : (
+                        <Zap size={24} className="text-slate-900" />
+                    )}
                 </motion.div>
                 
                 <motion.div 
@@ -52,7 +60,7 @@ const RegistrationDashboard = () => {
                 >
                     <div className="flex items-center gap-2 mb-1">
                         <span className="bg-emerald-500/10 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-500/10 flex items-center gap-1.5">
-                            <ShieldCheck size={12} strokeWidth={3} /> Verified Captain Program
+                            <ShieldCheck size={12} strokeWidth={3} /> Verified Partner Program
                         </span>
                     </div>
                     <h1 className="text-3xl font-black text-taxi-text tracking-tighter leading-none uppercase">
@@ -114,7 +122,19 @@ const RegistrationDashboard = () => {
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.8, type: "spring" }}
                     whileTap={{ scale: 0.96 }}
-                    onClick={() => navigate('/taxi/driver/step-personal')}
+                    onClick={() => {
+                        const hasActiveSession = Boolean(
+                            String(storedSession.registrationId || '').trim()
+                            && String(storedSession.phone || '').replace(/\D/g, '').slice(-10),
+                        );
+
+                        navigate(
+                            hasActiveSession
+                                ? `${routePrefix}/step-personal`
+                                : `${routePrefix}/reg-phone`,
+                            { state: storedSession },
+                        );
+                    }}
                     className="w-full h-14 bg-taxi-primary text-taxi-text py-4 rounded-2xl flex items-center justify-center gap-4 text-[18px] font-black shadow-2xl shadow-taxi-primary/20 border border-taxi-primary/80 active:scale-95 transition-all tracking-tight uppercase"
                 >
                     Start Registration <ChevronRight size={22} strokeWidth={3} />

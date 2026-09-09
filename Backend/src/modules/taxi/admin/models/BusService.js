@@ -67,6 +67,122 @@ const busStopSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const busRoutePointSchema = new mongoose.Schema(
+  {
+    lat: {
+      type: Number,
+      default: null,
+    },
+    lng: {
+      type: Number,
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
+const busLiveTrackingPointSchema = new mongoose.Schema(
+  {
+    lat: {
+      type: Number,
+      default: null,
+    },
+    lng: {
+      type: Number,
+      default: null,
+    },
+    recordedAt: {
+      type: Date,
+      default: null,
+    },
+    accuracyMeters: {
+      type: Number,
+      default: null,
+    },
+    heading: {
+      type: Number,
+      default: null,
+    },
+    speedKmph: {
+      type: Number,
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
+const busLiveTrackingSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ['idle', 'in_progress', 'paused', 'completed'],
+      default: 'idle',
+    },
+    scheduleId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    travelDate: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    startedAt: {
+      type: Date,
+      default: null,
+    },
+    endedAt: {
+      type: Date,
+      default: null,
+    },
+    lastUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    currentLocation: {
+      type: busLiveTrackingPointSchema,
+      default: null,
+    },
+    recentPath: {
+      type: [busLiveTrackingPointSchema],
+      default: [],
+    },
+    totalDistanceKm: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false },
+);
+
+const busDeckLayoutConfigSchema = new mongoose.Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    rows: {
+      type: Number,
+      default: 0,
+    },
+    leftSeats: {
+      type: Number,
+      default: 0,
+    },
+    rightSeats: {
+      type: Number,
+      default: 0,
+    },
+    seatType: {
+      type: String,
+      enum: ['seat', 'sleeper'],
+      default: 'seat',
+    },
+  },
+  { _id: false },
+);
+
 const busScheduleSchema = new mongoose.Schema(
   {
     id: {
@@ -318,6 +434,16 @@ const busServiceSchema = new mongoose.Schema(
         default: 'seater_2_2',
         trim: true,
       },
+      layoutConfig: {
+        lower: {
+          type: busDeckLayoutConfigSchema,
+          default: () => ({}),
+        },
+        upper: {
+          type: busDeckLayoutConfigSchema,
+          default: () => ({}),
+        },
+      },
       lowerDeck: {
         type: [[busSeatCellSchema]],
         default: [],
@@ -342,6 +468,14 @@ const busServiceSchema = new mongoose.Schema(
         type: String,
         default: '',
         trim: true,
+      },
+      originCoords: {
+        type: busRoutePointSchema,
+        default: null,
+      },
+      destinationCoords: {
+        type: busRoutePointSchema,
+        default: null,
       },
       distanceKm: {
         type: String,
@@ -378,6 +512,14 @@ const busServiceSchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      originCoords: {
+        type: busRoutePointSchema,
+        default: null,
+      },
+      destinationCoords: {
+        type: busRoutePointSchema,
+        default: null,
+      },
       distanceKm: {
         type: String,
         default: '',
@@ -396,6 +538,10 @@ const busServiceSchema = new mongoose.Schema(
     schedules: {
       type: [busScheduleSchema],
       default: [],
+    },
+    liveTracking: {
+      type: busLiveTrackingSchema,
+      default: () => ({}),
     },
     capacity: {
       type: Number,

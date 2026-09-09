@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleMap, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, OverlayView } from '@react-google-maps/api';
 import {
   ArrowLeft,
   Calendar,
@@ -23,8 +23,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
-import { HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { toHistorySafeState } from '../../../../shared/utils/historyState';
+import { HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { userService } from '../../services/userService';
+import { useUserTheme } from '../../../../shared/context/UserThemeContext';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const RENTAL_SELECTED_VEHICLE_STORAGE_KEY = 'selectedRentalVehicleDetail';
@@ -52,6 +54,39 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
 const pickerTriggerClass =
   'w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 text-left text-sm text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.04)] transition-all';
+
+const RentalMapMarker = ({ position, title, color, active = false, onClick }) => (
+  <OverlayView
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={() => ({ x: -16, y: -32 })}
+  >
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="flex flex-col items-center bg-transparent p-0"
+    >
+      <div
+        className="relative h-8 w-8 rounded-full border-2 border-white shadow-[0_8px_18px_rgba(15,23,42,0.25)]"
+        style={{ backgroundColor: color, transform: active ? 'scale(1.05)' : 'scale(1)' }}
+      >
+        <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
+      </div>
+      <div
+        style={{
+          width: 0,
+          height: 0,
+          borderLeft: '6px solid transparent',
+          borderRight: '6px solid transparent',
+          borderTop: `10px solid ${color}`,
+          marginTop: -2,
+          filter: 'drop-shadow(0 6px 8px rgba(15,23,42,0.18))',
+        }}
+      />
+    </button>
+  </OverlayView>
+);
 
 const pad = (n) => String(n).padStart(2, '0');
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -160,15 +195,15 @@ const DateTimePickerModal = ({
           <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-300" />
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 Pick Schedule
               </p>
-              <h3 className="mt-1 text-lg font-black text-slate-900">{title}</h3>
+              <h3 className="mt-1 text-lg font-extrabold text-slate-950">{title}</h3>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600"
             >
               Close
             </button>
@@ -183,7 +218,7 @@ const DateTimePickerModal = ({
               >
                 <ChevronLeft size={16} />
               </button>
-              <p className="text-[14px] font-black text-slate-900">
+              <p className="text-[14px] font-bold text-slate-950">
                 {monthDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
               </p>
               <button
@@ -197,7 +232,7 @@ const DateTimePickerModal = ({
 
             <div className="mt-4 grid grid-cols-7 gap-2 text-center">
               {WEEK_DAYS.map((day) => (
-                <div key={day} className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <div key={day} className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   {day}
                 </div>
               ))}
@@ -215,7 +250,7 @@ const DateTimePickerModal = ({
                     type="button"
                     disabled={disabled}
                     onClick={() => onDateSelect(day)}
-                    className={`h-10 rounded-[12px] text-[12px] font-black transition-all ${
+                    className={`h-10 rounded-[12px] text-[12px] font-bold transition-all ${
                       selected
                         ? 'bg-[#2e3c78] text-white shadow-[0_10px_24px_rgba(46,60,120,0.28)]'
                         : disabled
@@ -233,7 +268,7 @@ const DateTimePickerModal = ({
           <div className="mt-4 rounded-[24px] border border-white/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
             <div className="mb-3 flex items-center gap-2">
               <Clock size={15} className="text-slate-400" />
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 Select Time
               </p>
             </div>
@@ -249,7 +284,7 @@ const DateTimePickerModal = ({
                     type="button"
                     disabled={disabled}
                     onClick={() => onTimeSelect(time)}
-                    className={`rounded-[12px] px-3 py-2.5 text-[11px] font-black transition-all ${
+                    className={`rounded-[12px] px-3 py-2.5 text-[11px] font-bold transition-all ${
                       selected
                         ? 'bg-[#2e3c78] text-white'
                         : disabled
@@ -267,7 +302,7 @@ const DateTimePickerModal = ({
           <button
             type="button"
             onClick={onApply}
-            className="mt-5 w-full rounded-[18px] bg-[#2e3c78] px-5 py-3.5 text-sm font-black text-white shadow-[0_10px_26px_rgba(46,60,120,0.28)]"
+            className="mt-5 w-full rounded-[18px] bg-[#2e3c78] px-5 py-3.5 text-sm font-bold text-white shadow-[0_10px_26px_rgba(46,60,120,0.28)]"
           >
             Apply Date & Time
           </button>
@@ -451,6 +486,9 @@ const readStoredUserInfo = () => {
 };
 
 const RentalVehicleDetail = () => {
+  
+  const { theme } = useUserTheme();
+  const isDark = theme === 'dark';
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
@@ -474,7 +512,7 @@ const RentalVehicleDetail = () => {
   const [userCoordinates, setUserCoordinates] = useState(null);
   const [isLocatingUser, setIsLocatingUser] = useState(false);
   const mapRef = useRef(null);
-  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useAppGoogleMapsLoader();
+  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useBaseGoogleMapsLoader();
   const [quoteForm, setQuoteForm] = useState({
     contactName: String(storedUserInfo?.name || '').trim(),
     contactPhone: String(storedUserInfo?.phone || '').trim(),
@@ -1062,38 +1100,52 @@ const RentalVehicleDetail = () => {
     }
 
     navigate('/rental/schedule', {
-      state: {
+      state: toHistorySafeState({
         vehicle,
         duration,
         selectedPackage,
         serviceLocation: selectedServiceLocation,
         userCoordinates,
-      },
+      }),
     });
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-36 relative overflow-hidden">
-      <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
+    <div className={`min-h-screen max-w-lg mx-auto font-sans pb-36 relative overflow-hidden transition-colors duration-300 ${isDark ? 'bg-[#05070D] text-white' : 'bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)]'}`}>
+      <div className={`absolute -top-16 right-[-40px] h-44 w-44 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-orange-500/5' : 'bg-orange-100/60'}`} />
 
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="sticky top-0 z-30 w-full"
       >
-        <div className="flex items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
-          >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-          </motion.button>
-          <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">Vehicle Details</p>
-            <h1 className="text-[18px] font-black tracking-tight text-slate-900 leading-tight truncate">
-              {vehicle.name}
-            </h1>
+        <div className={`backdrop-blur-2xl px-5 pt-12 pb-5 border-b relative overflow-hidden ${
+          isDark ? 'bg-[#0f1b2d]/85 border-zinc-800/80' : 'bg-white/85 border-white/40 shadow-[0_8px_32px_rgba(15,23,42,0.06)]'
+        }`}>
+          {/* Subtle accent gradients */}
+          <div className="absolute top-0 right-0 h-32 w-32 rounded-full bg-orange-400/5 blur-[40px] pointer-events-none" />
+          <div className="absolute top-0 left-0 h-24 w-24 rounded-full bg-blue-400/5 blur-[40px] pointer-events-none" />
+
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <motion.button
+                whileHover={{ x: -2 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => navigate(-1)}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 group transition-all ${
+                  isDark ? 'bg-[#111827] hover:bg-zinc-800' : 'bg-slate-900 shadow-[0_4px_12px_rgba(15,23,42,0.15)]'
+                }`}
+              >
+                <ArrowLeft size={20} className="text-white group-hover:opacity-80 transition-opacity" strokeWidth={2.5} />
+              </motion.button>
+              <div className="min-w-0">
+                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] leading-none mb-1.5 ${isDark ? 'text-zinc-500' : 'text-slate-500/60'}`}>Vehicle Details</p>
+                <h1 className={`text-[22px] font-[900] tracking-tight leading-none truncate max-w-[200px] ${isDark ? 'text-white' : 'text-slate-955'}`}>
+                  {vehicle.name}
+                </h1>
+              </div>
+            </div>
           </div>
         </div>
       </motion.header>
@@ -1103,16 +1155,18 @@ const RentalVehicleDetail = () => {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="rounded-[24px] border border-white/80 bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.06)] overflow-hidden"
+          className={`rounded-[24px] border overflow-hidden shadow-sm ${
+            isDark ? 'border-zinc-800 bg-[#0f1b2d]' : 'border-white/80 bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.06)]'
+          }`}
         >
           <div
             className="px-6 py-6 flex items-center justify-center"
-            style={{ background: `linear-gradient(135deg, ${vehicle.gradientFrom} 0%, ${vehicle.gradientTo} 100%)` }}
+            style={isDark ? { background: 'linear-gradient(135deg, #111c2a 0%, #0f1b2d 100%)' } : { background: `linear-gradient(135deg, ${vehicle.gradientFrom} 0%, ${vehicle.gradientTo} 100%)` }}
           >
             {selectedImage ? (
               <img src={selectedImage} alt={vehicle.name} className="h-36 object-contain drop-shadow-xl" />
             ) : (
-              <div className="flex h-36 w-full items-center justify-center text-slate-300">
+              <div className={`flex h-36 w-full items-center justify-center ${isDark ? 'text-slate-700 bg-slate-950/20' : 'text-slate-300'}`}>
                 <Car size={48} />
               </div>
             )}
@@ -1121,22 +1175,22 @@ const RentalVehicleDetail = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span
-                  className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-full border ${vehicle.tagBg} ${vehicle.tagColor} mb-1.5`}
+                  className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full border ${vehicle.tagBg} ${vehicle.tagColor} mb-1.5`}
                 >
                   {vehicle.tag}
                 </span>
-                <h2 className="text-[20px] font-black text-slate-900 tracking-tight leading-tight">
+                <h2 className={`text-[20px] font-extrabold tracking-tight leading-tight ${isDark ? 'text-white' : 'text-slate-955'}`}>
                   {vehicle.name}
                 </h2>
                 {vehicle.shortDescription ? (
-                  <p className="mt-1 text-[12px] font-semibold text-slate-500">
+                  <p className={`mt-1 text-[12px] font-semibold ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
                     {vehicle.shortDescription}
                   </p>
                 ) : null}
                 <div className="flex items-center gap-1.5 mt-1">
                   <Star size={12} className="text-yellow-500 fill-yellow-400" />
-                  <span className="text-[13px] font-black text-slate-700">{vehicle.rating}</span>
-                  <span className="text-[11px] font-bold text-slate-400">
+                  <span className={`text-[13px] font-bold ${isDark ? 'text-zinc-350' : 'text-slate-700'}`}>{vehicle.rating}</span>
+                  <span className={`text-[11px] font-bold ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>
                     {selectedPackage
                       ? `- ${selectedPackage.includedKm} km included`
                       : `- ${vehicle.kmLimit?.[duration] || 'Flexible km'} limit`}
@@ -1144,13 +1198,13 @@ const RentalVehicleDetail = () => {
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                <p className={`text-[9px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-zinc-500' : 'text-slate-500'}`}>
                   Rate
                 </p>
-                <p className="text-[24px] font-black text-slate-900 leading-none">
+                <p className={`text-[24px] font-extrabold leading-none ${isDark ? 'text-white' : 'text-slate-955'}`}>
                   Rs.{selectedPackage?.price || vehicle.prices?.[duration] || 0}
                 </p>
-                <p className="text-[11px] font-bold text-slate-400">
+                <p className={`text-[11px] font-bold ${isDark ? 'text-zinc-450' : 'text-slate-400'}`}>
                   {selectedPackage
                     ? packageSuffix(selectedPackage.durationHours)
                     : { Hourly: '/hr', 'Half-Day': '/6hr', Daily: '/day' }[duration] || '/hr'}
@@ -1165,8 +1219,10 @@ const RentalVehicleDetail = () => {
                     key={image}
                     type="button"
                     onClick={() => setSelectedImage(image)}
-                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-2xl border ${
-                      selectedImage === image ? 'border-slate-900' : 'border-slate-200'
+                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-2xl border transition-colors ${
+                      selectedImage === image 
+                        ? isDark ? 'border-[#FFC400]' : 'border-slate-900' 
+                        : isDark ? 'border-zinc-800 bg-[#05070D]' : 'border-slate-200 bg-white'
                     }`}
                   >
                     <img src={image} alt="Vehicle gallery" className="h-full w-full object-cover" />
@@ -1186,10 +1242,12 @@ const RentalVehicleDetail = () => {
           {summaryBadges.map(({ icon: Icon, label }) => (
             <div
               key={label}
-              className="rounded-[18px] border border-white/80 bg-white/90 px-3 py-3 shadow-[0_4px_14px_rgba(15,23,42,0.05)]"
+              className={`rounded-[18px] border px-3 py-3 shadow-sm ${
+                isDark ? 'border-zinc-800 bg-[#0f1b2d]' : 'border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)]'
+              }`}
             >
-              <Icon size={15} className="text-slate-400" />
-              <p className="mt-2 text-[12px] font-black text-slate-900">{label}</p>
+              <Icon size={15} className={isDark ? 'text-zinc-500' : 'text-slate-400'} />
+              <p className={`mt-2 text-[12px] font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{label}</p>
             </div>
           ))}
         </motion.div>
@@ -1198,21 +1256,23 @@ const RentalVehicleDetail = () => {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-3"
+          className={`rounded-[20px] border px-5 py-4 space-y-3 shadow-sm ${
+            isDark ? 'border-zinc-800 bg-[#0f1b2d]' : 'border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)]'
+          }`}
         >
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+          <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${isDark ? 'text-zinc-500' : 'text-slate-500/80'}`}>
             What's included
           </p>
           <div className="space-y-2">
             {(vehicle.amenities?.length ? vehicle.amenities : vehicle.features).map((feature) => (
               <div key={feature} className="flex items-center gap-2.5">
                 <CheckCircle2 size={14} className="text-emerald-500 shrink-0" strokeWidth={2.5} />
-                <span className="text-[13px] font-bold text-slate-700">{feature}</span>
+                <span className={`text-[13px] font-bold ${isDark ? 'text-zinc-300' : 'text-slate-700'}`}>{feature}</span>
               </div>
             ))}
           </div>
           {vehicle.description ? (
-            <p className="text-[12px] font-semibold text-slate-500 leading-relaxed">
+            <p className={`text-[12px] font-semibold leading-relaxed ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
               {vehicle.description}
             </p>
           ) : null}
@@ -1222,16 +1282,18 @@ const RentalVehicleDetail = () => {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
-          className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-3"
+          className={`rounded-[20px] border px-5 py-4 space-y-3 shadow-sm ${
+            isDark ? 'border-zinc-800 bg-[#0f1b2d]' : 'border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)]'
+          }`}
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Tag size={14} className="text-slate-400" />
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                 Choose Hourly Rental
               </p>
             </div>
-            <span className="rounded-full bg-orange-50 px-3 py-1 text-[10px] font-black text-orange-600">
+            <span className="rounded-full bg-orange-50 px-3 py-1 text-[10px] font-bold text-orange-600">
               {selectionStep === 'package' ? 'Step 1 of 2' : 'Step 2 of 2'}
             </span>
           </div>
@@ -1253,7 +1315,7 @@ const RentalVehicleDetail = () => {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className={`text-sm font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      <p className={`text-sm font-bold ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                         {row.label}
                       </p>
                       <p className={`text-[11px] font-semibold ${isSelected ? 'text-white/75' : 'text-slate-500'}`}>
@@ -1261,7 +1323,7 @@ const RentalVehicleDetail = () => {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-lg font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      <p className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-slate-900'}`}>
                         Rs.{row.price}
                       </p>
                       <p className={`text-[11px] font-semibold ${isSelected ? 'text-white/75' : 'text-slate-500'}`}>
@@ -1289,7 +1351,7 @@ const RentalVehicleDetail = () => {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                     Available Service Locations
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-slate-700">
@@ -1299,7 +1361,7 @@ const RentalVehicleDetail = () => {
                 <button
                   type="button"
                   onClick={() => setSelectionStep('package')}
-                  className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-black text-slate-500"
+                  className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-bold text-slate-500"
                 >
                   <span className="inline-flex items-center gap-1">
                     <ChevronLeft size={12} /> Back
@@ -1333,7 +1395,7 @@ const RentalVehicleDetail = () => {
                   <div className="overflow-hidden rounded-[22px] border border-slate-100 bg-slate-50">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-white/80 px-4 py-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
                           Pickup Map
                         </p>
                         <p className="mt-0.5 text-[12px] font-bold text-slate-600">
@@ -1341,7 +1403,7 @@ const RentalVehicleDetail = () => {
                         </p>
                       </div>
                       {selectedServiceLocation?.distanceLabel ? (
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-700">
                           {selectedServiceLocation.distanceLabel}
                         </span>
                       ) : null}
@@ -1392,15 +1454,13 @@ const RentalVehicleDetail = () => {
                           }}
                         >
                           {mapMarkers.map((marker) => (
-                            <MarkerF
+                            <RentalMapMarker
                               key={marker.key}
                               position={marker.position}
                               title={marker.title}
                               onClick={() => setSelectedServiceLocationId(String(marker.locationId))}
-                              icon={buildRentalMapPinIcon(
-                                marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b',
-                                marker.isSelected || marker.isClosest,
-                              )}
+                              color={marker.isSelected ? '#10b981' : marker.type === 'location' ? '#0f172a' : '#f59e0b'}
+                              active={marker.isSelected || marker.isClosest}
                             />
                           ))}
                         </GoogleMap>
@@ -1427,7 +1487,7 @@ const RentalVehicleDetail = () => {
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-[14px] font-black text-slate-900">{item.name}</p>
                               {index === 0 && userCoordinates ? (
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">
                                   Closest
                                 </span>
                               ) : null}

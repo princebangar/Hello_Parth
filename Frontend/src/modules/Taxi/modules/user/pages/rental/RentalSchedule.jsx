@@ -107,7 +107,7 @@ const DateTimePickerCard = ({
           <Icon size={13} className="text-slate-900" strokeWidth={2.5} />
         </div>
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500/80">
             {title}
           </p>
           <p className="text-[12px] font-bold text-slate-800 mt-1">
@@ -125,7 +125,7 @@ const DateTimePickerCard = ({
           >
             <ChevronLeft size={15} />
           </button>
-          <p className="text-[13px] font-black text-slate-900">
+          <p className="text-[14px] font-bold text-slate-950">
             {monthDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
           </p>
           <button
@@ -139,7 +139,7 @@ const DateTimePickerCard = ({
 
         <div className="grid grid-cols-7 gap-2 text-center">
           {WEEK_DAYS.map((day) => (
-            <div key={day} className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+            <div key={day} className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               {day}
             </div>
           ))}
@@ -157,9 +157,9 @@ const DateTimePickerCard = ({
                 type="button"
                 disabled={disabled}
                 onClick={() => onDateSelect(day)}
-                className={`h-10 rounded-[12px] text-[12px] font-black transition-all ${
+                className={`h-10 rounded-[12px] text-[12px] font-bold transition-all ${
                   selected
-                    ? 'bg-slate-900 text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)]'
+                    ? 'bg-slate-950 text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)]'
                     : disabled
                       ? 'bg-white/40 text-slate-300'
                       : 'bg-white text-slate-700 border border-slate-100 hover:border-slate-300'
@@ -173,7 +173,7 @@ const DateTimePickerCard = ({
       </div>
 
       <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500/80 mb-3">
           Select Time
         </p>
         <div className="grid grid-cols-3 gap-2">
@@ -189,9 +189,9 @@ const DateTimePickerCard = ({
                 type="button"
                 disabled={disabled}
                 onClick={() => onTimeSelect(time)}
-                className={`rounded-[12px] px-3 py-2.5 text-[11px] font-black transition-all ${
+                className={`rounded-[12px] px-3 py-2.5 text-[11px] font-bold transition-all ${
                   selected
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-950 text-white'
                     : disabled
                       ? 'bg-slate-100 text-slate-300'
                       : 'bg-slate-50 text-slate-600 border border-slate-100 hover:border-slate-300'
@@ -331,23 +331,29 @@ const RentalSchedule = () => {
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="sticky top-0 z-30 w-full"
       >
-        <div className="flex items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0"
-          >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-          </motion.button>
-          <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">
-              Step 3 of 5 - {vehicle.name}
-            </p>
-            <h1 className="text-[18px] font-black tracking-tight text-slate-900 leading-tight">
-              Date & Duration
-            </h1>
+        <div className="bg-white/85 backdrop-blur-2xl px-5 pt-12 pb-5 border-b border-white/40 shadow-[0_8px_32px_rgba(15,23,42,0.06)] relative overflow-hidden">
+          {/* Subtle accent gradients */}
+          <div className="absolute top-0 right-0 h-32 w-32 rounded-full bg-orange-400/5 blur-[40px] pointer-events-none" />
+          <div className="absolute top-0 left-0 h-24 w-24 rounded-full bg-blue-400/5 blur-[40px] pointer-events-none" />
+
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <motion.button
+                whileHover={{ x: -2 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => navigate(-1)}
+                className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.15)] shrink-0 group transition-all"
+              >
+                <ArrowLeft size={20} className="text-white group-hover:opacity-80 transition-opacity" strokeWidth={2.5} />
+              </motion.button>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500/60 leading-none mb-1.5">Schedule · {vehicle.name}</p>
+                <h1 className="text-[22px] font-[900] tracking-tight text-slate-950 leading-none">Date & Time</h1>
+              </div>
+            </div>
           </div>
         </div>
       </motion.header>
@@ -360,11 +366,11 @@ const RentalSchedule = () => {
             transition={{ delay: 0.03 }}
             className="rounded-[20px] border border-white/80 bg-white/90 shadow-[0_4px_14px_rgba(15,23,42,0.05)] px-5 py-4 space-y-2"
           >
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500/80">
               Rental Setup
             </p>
             {selectedPackage ? (
-              <p className="text-[13px] font-black text-slate-900">
+              <p className="text-[13px] font-bold text-slate-900">
                 {selectedPackage.label} - Rs.{selectedPackage.price}
               </p>
             ) : null}
@@ -431,7 +437,7 @@ const RentalSchedule = () => {
                 <div className="w-7 h-7 rounded-[9px] bg-emerald-50 flex items-center justify-center">
                   <Tag size={13} className="text-emerald-500" strokeWidth={2.5} />
                 </div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500/80">
                   Cost Estimate
                 </p>
               </div>
@@ -451,10 +457,10 @@ const RentalSchedule = () => {
                   ) : null}
                 </div>
                 <div className="text-right">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.12em]">
                     Total
                   </p>
-                  <p className="text-[28px] font-black text-slate-900 leading-none">
+                  <p className="text-[28px] font-extrabold text-slate-950 leading-none">
                     Rs.{totalCost}
                   </p>
                   <p className="text-[10px] font-bold text-slate-400">+ deposit (refundable)</p>
@@ -482,11 +488,11 @@ const RentalSchedule = () => {
               },
             })
           }
-          className={`pointer-events-auto w-full py-4 rounded-[18px] text-[15px] font-black text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 transition-all ${
-            isValid ? 'bg-slate-900' : 'bg-slate-300'
+          className={`pointer-events-auto w-full py-4 rounded-[18px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] flex items-center justify-center gap-2 transition-all ${
+            isValid ? 'bg-slate-950' : 'bg-slate-300'
           }`}
         >
-          Continue <ChevronRight size={17} strokeWidth={3} className="opacity-50" />
+          Continue <ChevronRight size={17} strokeWidth={2.5} className="opacity-50" />
         </motion.button>
       </div>
     </div>

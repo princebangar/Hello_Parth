@@ -2,19 +2,29 @@ import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
 import {
+  loginRateLimit,
+  otpSendRateLimit,
+  otpVerifyRateLimit,
+  paymentOrderRateLimit,
+} from "../../middlewares/rateLimitMiddleware.js";
+import {
   addDriverEmergencyContact,
   completeOnboarding,
   createOwnerBusService,
   cancelOwnerBusBookingSeats,
   createDriverPaymentQr,
+  handleDriverRazorpayWalletTopupCallback,
   createServiceCenterStaffMember,
   enrollServiceCenterStaffBiometric,
   updateServiceCenterStaffMember,
   createDriverWithdrawalRequest,
   createServiceCenterVehicle,
   captureServiceCenterBookingFingerprint,
+  completePoolingOnboardingRequest,
   createOwnerFleetDriver,
+  createOwnerPoolingVehicle,
   updateOwnerFleetDriver,
+  updateOwnerPoolingVehicle,
   updateOwnerFleetVehicle,
   deleteServiceCenterBookingFingerprint,
   deleteCurrentDriverAccount,
@@ -26,8 +36,13 @@ import {
   goOffline,
   goOnline,
   createBusDriverReservation,
+  getBusDriverLiveTrip,
   updateBusDriverSchedules,
+  startBusDriverLiveTrip,
+  updateBusDriverLiveLocation,
+  updateBusDriverLiveTripStatus,
   getCurrentDriver,
+  getPoolingDriverBookings,
   getBusDriverSeatLayout,
   listBusDriverBookings,
   getDriverPaymentQrStatus,
@@ -45,27 +60,43 @@ import {
   getServiceCenterStaffMembers,
   getServiceCenterVehicles,
   listOwnerBusServices,
+  getOwnerPoolingVehicles,
+  saveDriverFcmToken,
   getOwnerFleetDrivers,
   getOwnerFleetDashboard,
+  getOwnerFleetZones,
   getOwnerBusBookingCalendar,
   getOwnerBusBookings,
   getMyWallet,
   getOnboardingSession,
+  getOnboardingSignupOptions,
   getServiceLocations,
   loginDriver,
   startDriverLoginOtpRequest,
+  startPoolingOnboardingRequest,
   saveOnboardingDocuments,
+  saveOnboardingRoleDetails,
+  saveOnboardingRole,
   saveOnboardingPersonal,
   saveOnboardingReferral,
   saveOnboardingVehicle,
+  verifyOnboardingLicenseDocument,
+  verifyOnboardingVehicleRc,
   registerDriver,
   requestDriverAccountDeletion,
     startOnboarding,
     topUpMyWallet,
     createDriverWalletTopupOrder,
     createDriverPhonePeWalletTopupOrder,
-    verifyDriverWalletTopup,
-    verifyDriverPhonePeWalletTopup,
+  verifyDriverWalletTopup,
+  verifyDriverPhonePeWalletTopup,
+  verifyCurrentDriverBankDetails,
+  verifyCurrentDriverBankDocument,
+  verifyCurrentDriverUpiDetails,
+  verifyCurrentDriverLicenseDocument,
+  verifyCurrentDriverGstinDocument,
+  verifyCurrentDriverPanDocument,
+  verifyCurrentDriverRcDocument,
 
   updateCurrentDriver,
   updateDriverVehicle,
@@ -75,32 +106,79 @@ import {
   verifyServiceCenterBookingFingerprint,
   verifyOnboardingOtp,
   verifyDriverLoginOtpRequest,
+  verifyPoolingOnboardingOtpRequest,
   addOwnerVehicle,
   deleteOwnerBusService,
+  deleteOwnerPoolingVehicle,
   getOwnerFleetVehicles,
   deleteOwnerFleetVehicle,
   updateCurrentDriverDocument,
+  getPoolingOnboardingSessionRequest,
+  savePoolingOnboardingDetailsRequest,
+  uploadPoolingOnboardingImageRequest,
 } from "../controllers/driverController.js";
 import { triggerDriverSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const driverRouter = Router();
 
 driverRouter.post("/register", asyncHandler(registerDriver));
-driverRouter.post("/login", asyncHandler(loginDriver));
-driverRouter.post("/auth/send-otp", asyncHandler(startDriverLoginOtpRequest));
+driverRouter.post("/login", loginRateLimit, asyncHandler(loginDriver));
+driverRouter.post("/auth/send-otp", otpSendRateLimit, asyncHandler(startDriverLoginOtpRequest));
 driverRouter.post(
   "/auth/verify-otp",
+  otpVerifyRateLimit,
   asyncHandler(verifyDriverLoginOtpRequest),
+);
+driverRouter.post(
+  "/pooling/onboarding/send-otp",
+  otpSendRateLimit,
+  asyncHandler(startPoolingOnboardingRequest),
+);
+driverRouter.post(
+  "/pooling/onboarding/verify-otp",
+  otpVerifyRateLimit,
+  asyncHandler(verifyPoolingOnboardingOtpRequest),
+);
+driverRouter.get(
+  "/pooling/onboarding/session/:registrationId",
+  asyncHandler(getPoolingOnboardingSessionRequest),
+);
+driverRouter.patch(
+  "/pooling/onboarding/details",
+  asyncHandler(savePoolingOnboardingDetailsRequest),
+);
+driverRouter.post(
+  "/pooling/onboarding/complete",
+  asyncHandler(completePoolingOnboardingRequest),
+);
+driverRouter.post(
+  "/pooling/onboarding/upload-image",
+  asyncHandler(uploadPoolingOnboardingImageRequest),
 );
 driverRouter.get(
   "/me",
-  authenticate(["driver", "owner", "bus_driver", "service_center", "service_center_staff"], { allowPending: true }),
+  authenticate(["driver", "owner", "pooling_driver", "bus_driver", "service_center", "service_center_staff"], { allowPending: true }),
   asyncHandler(getCurrentDriver),
+);
+driverRouter.get(
+  "/pooling/bookings",
+  authenticate(["pooling_driver"], { allowPending: true }),
+  asyncHandler(getPoolingDriverBookings),
 );
 driverRouter.patch(
   "/me",
   authenticate(["driver", "owner"]),
   asyncHandler(updateCurrentDriver),
+);
+driverRouter.post(
+  "/me/bank-details/verify",
+  authenticate(["driver"]),
+  asyncHandler(verifyCurrentDriverBankDetails),
+);
+driverRouter.post(
+  "/me/upi/verify",
+  authenticate(["driver"]),
+  asyncHandler(verifyCurrentDriverUpiDetails),
 );
 driverRouter.get(
   "/bus/seats",
@@ -117,6 +195,26 @@ driverRouter.post(
   authenticate(["bus_driver"]),
   asyncHandler(createBusDriverReservation),
 );
+driverRouter.get(
+  "/bus/live-trip",
+  authenticate(["bus_driver"]),
+  asyncHandler(getBusDriverLiveTrip),
+);
+driverRouter.post(
+  "/bus/live-trip/start",
+  authenticate(["bus_driver"]),
+  asyncHandler(startBusDriverLiveTrip),
+);
+driverRouter.patch(
+  "/bus/live-trip/location",
+  authenticate(["bus_driver"]),
+  asyncHandler(updateBusDriverLiveLocation),
+);
+driverRouter.patch(
+  "/bus/live-trip/status",
+  authenticate(["bus_driver"]),
+  asyncHandler(updateBusDriverLiveTripStatus),
+);
 driverRouter.patch(
   "/bus/schedules",
   authenticate(["bus_driver"]),
@@ -124,7 +222,7 @@ driverRouter.patch(
 );
 driverRouter.delete(
   "/me",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(deleteCurrentDriverAccount),
 );
 driverRouter.post(
@@ -157,6 +255,31 @@ driverRouter.patch(
   authenticate(["driver", "owner"], { allowPending: true }),
   asyncHandler(updateCurrentDriverDocument),
 );
+driverRouter.post(
+  "/documents/:documentKey/verify-license",
+  authenticate(["driver"], { allowPending: true }),
+  asyncHandler(verifyCurrentDriverLicenseDocument),
+);
+driverRouter.post(
+  "/documents/:documentKey/verify-pan",
+  authenticate(["driver"], { allowPending: true }),
+  asyncHandler(verifyCurrentDriverPanDocument),
+);
+driverRouter.post(
+  "/documents/:documentKey/verify-gst",
+  authenticate(["driver"], { allowPending: true }),
+  asyncHandler(verifyCurrentDriverGstinDocument),
+);
+driverRouter.post(
+  "/documents/:documentKey/verify-rc",
+  authenticate(["driver"], { allowPending: true }),
+  asyncHandler(verifyCurrentDriverRcDocument),
+);
+driverRouter.post(
+  "/documents/:documentKey/verify-bank",
+  authenticate(["driver"], { allowPending: true }),
+  asyncHandler(verifyCurrentDriverBankDocument),
+);
 driverRouter.get(
   "/notifications",
   authenticate(["driver"]),
@@ -171,6 +294,18 @@ driverRouter.post(
   "/scheduled-rides/:rideId/cancel",
   authenticate(["driver"]),
   asyncHandler(cancelDriverScheduledRide),
+);
+driverRouter.post(
+  "/fcm-token",
+  authenticate([
+    "driver",
+    "owner",
+    "pooling_driver",
+    "bus_driver",
+    "service_center",
+    "service_center_staff",
+  ], { allowPending: true }),
+  asyncHandler(saveDriverFcmToken),
 );
 driverRouter.get(
   "/wallet",
@@ -192,16 +327,26 @@ driverRouter.post(
   authenticate(["driver"]),
   asyncHandler(topUpMyWallet),
 );
-  driverRouter.post(
+driverRouter.post(
+  "/wallet/top-up/razorpay/callback",
+  asyncHandler(handleDriverRazorpayWalletTopupCallback),
+);
+driverRouter.get(
+  "/wallet/top-up/razorpay/callback",
+  asyncHandler(handleDriverRazorpayWalletTopupCallback),
+);
+driverRouter.post(
     "/wallet/top-up/razorpay/order",
     authenticate(["driver"]),
+    paymentOrderRateLimit,
     asyncHandler(createDriverWalletTopupOrder),
-  );
-  driverRouter.post(
+);
+driverRouter.post(
     "/wallet/top-up/phonepe/order",
     authenticate(["driver"]),
+    paymentOrderRateLimit,
     asyncHandler(createDriverPhonePeWalletTopupOrder),
-  );
+);
   driverRouter.post(
     "/wallet/top-up/razorpay/verify",
     authenticate(["driver"]),
@@ -279,6 +424,11 @@ driverRouter.get(
   authenticate(["driver", "owner"]),
   asyncHandler(getOwnerFleetDrivers),
 );
+driverRouter.get(
+  "/fleet/zones",
+  authenticate(["driver", "owner"]),
+  asyncHandler(getOwnerFleetZones),
+);
 driverRouter.post(
   "/fleet/drivers",
   authenticate(["driver", "owner"]),
@@ -308,6 +458,26 @@ driverRouter.delete(
   "/fleet/vehicles/:vehicleId",
   authenticate(["driver", "owner"]),
   asyncHandler(deleteOwnerFleetVehicle),
+);
+driverRouter.get(
+  "/fleet/pooling-vehicles",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerPoolingVehicles),
+);
+driverRouter.post(
+  "/fleet/pooling-vehicles",
+  authenticate(["owner"]),
+  asyncHandler(createOwnerPoolingVehicle),
+);
+driverRouter.patch(
+  "/fleet/pooling-vehicles/:vehicleId",
+  authenticate(["owner"]),
+  asyncHandler(updateOwnerPoolingVehicle),
+);
+driverRouter.delete(
+  "/fleet/pooling-vehicles/:vehicleId",
+  authenticate(["owner"]),
+  asyncHandler(deleteOwnerPoolingVehicle),
 );
 driverRouter.get(
   "/service-center/staff",
@@ -405,6 +575,9 @@ driverRouter.get(
 );
 driverRouter.post("/onboarding/send-otp", asyncHandler(startOnboarding));
 driverRouter.post("/onboarding/verify-otp", asyncHandler(verifyOnboardingOtp));
+driverRouter.patch("/onboarding/role", asyncHandler(saveOnboardingRole));
+driverRouter.get("/onboarding/signup-options", asyncHandler(getOnboardingSignupOptions));
+driverRouter.patch("/onboarding/role-details", asyncHandler(saveOnboardingRoleDetails));
 driverRouter.patch(
   "/onboarding/personal",
   asyncHandler(saveOnboardingPersonal),
@@ -414,6 +587,11 @@ driverRouter.patch(
   asyncHandler(saveOnboardingReferral),
 );
 driverRouter.patch("/onboarding/vehicle", asyncHandler(saveOnboardingVehicle));
+driverRouter.post("/onboarding/vehicle/verify-rc", asyncHandler(verifyOnboardingVehicleRc));
+driverRouter.post(
+  "/onboarding/documents/:documentKey/verify-license",
+  asyncHandler(verifyOnboardingLicenseDocument),
+);
 driverRouter.patch(
   "/onboarding/documents",
   asyncHandler(saveOnboardingDocuments),

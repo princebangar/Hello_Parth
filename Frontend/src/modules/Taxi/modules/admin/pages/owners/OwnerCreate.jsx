@@ -95,9 +95,9 @@ const OwnerCreate = () => {
   if (isLoading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 text-indigo-950/70">
-          <Loader2 size={32} className="animate-spin" />
-          <p className="text-[12px] font-black uppercase tracking-widest">Preparing Owner Form...</p>
+        <div className="flex flex-col items-center gap-4 text-slate-500">
+          <Loader2 size={32} className="animate-spin text-yellow-500" />
+          <p className="text-sm font-bold">Preparing Owner Form...</p>
         </div>
       </div>
     );

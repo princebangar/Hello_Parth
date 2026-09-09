@@ -118,7 +118,7 @@ const DriverBulkUpload = () => {
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Bulk Upload</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Bulk Upload</h1>
           <button
             type="button"
             onClick={() => navigate('/taxi/admin/drivers')}
@@ -136,7 +136,7 @@ const DriverBulkUpload = () => {
               <UploadCloud size={18} />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Upload Driver File</h3>
+              <h3 className="text-sm text-gray-900 font-bold">Upload Driver File</h3>
               <p className="text-xs text-gray-400">
                 File columns: {DRIVER_IMPORT_COLUMNS.join(', ')}
               </p>

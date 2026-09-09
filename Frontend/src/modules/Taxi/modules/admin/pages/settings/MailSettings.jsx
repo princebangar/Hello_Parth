@@ -94,7 +94,7 @@ const MailSettings = () => {
           <span className="text-gray-700">SMTP Server Configuration</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Mail Configuration</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Mail Configuration</h1>
           <button onClick={() => window.history.back()} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
             <ArrowLeft size={16} /> Back
           </button>

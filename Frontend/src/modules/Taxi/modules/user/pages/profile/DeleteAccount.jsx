@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, ChevronRight, X } from 'lucide-react';
-import { userAuthService } from '../../services/authService';
+import { ArrowLeft, AlertTriangle, X } from 'lucide-react';
+import { clearLocalUserSession, userAuthService } from '../../services/authService';
+import { clearCurrentRide } from '../../services/currentRideService';
+import { socketService } from '../../../../shared/api/socket';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -38,9 +40,13 @@ const DeleteAccount = () => {
     setSuccess(null);
     try {
       await userAuthService.requestAccountDeletion(reason);
-      setSuccess('Your account deletion request has been sent to admin for review.');
+      clearCurrentRide();
+      socketService.disconnect();
+      clearLocalUserSession();
+      setSuccess('Your account deletion request has been sent to admin for review. Logging you out...');
       setLoading(false);
       setShowConfirm(false);
+      navigate('/taxi/user/login', { replace: true });
     } catch (requestError) {
       setError(requestError?.message || 'Something went wrong. Please try again.');
       setLoading(false);
@@ -93,7 +99,7 @@ const DeleteAccount = () => {
               <AlertTriangle size={18} className="text-red-500" strokeWidth={2} />
             </div>
             <div>
-              <p className="text-[14px] font-black text-red-700 leading-tight">Request account deletion</p>
+              <p className="text-[14px] font-black text-red-700 leading-tight">Delete acccount</p>
               <p className="text-[11px] font-bold text-red-400">Admin approval is required</p>
             </div>
           </div>

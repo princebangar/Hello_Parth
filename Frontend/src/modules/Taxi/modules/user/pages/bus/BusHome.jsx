@@ -15,9 +15,15 @@ import {
   Ticket,
   X,
 } from 'lucide-react';
-import { useSettings } from '../../../../shared/context/SettingsContext';
 import userBusService from '../../services/busService';
-import BottomNavbar from '../../components/BottomNavbar';
+import { useSettings } from '../../../../shared/context/SettingsContext';
+// ... removed BottomNavbar import ...
+
+const isEnabledFlag = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value || '').trim().toLowerCase());
+};
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -92,12 +98,12 @@ const getRouteKey = (route, index) => {
   return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || index}`;
 };
 
-const BusHome = ({ embedded = false }) => {
+const BusHome = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
   const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
-  const busEnabled = String(settings.transportRide?.enable_bus_service || '0') === '1';
+  const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
 
   const [fromCity, setFromCity] = useState('');
   const [toCity, setToCity] = useState('');
@@ -633,8 +639,6 @@ const BusHome = ({ embedded = false }) => {
           </motion.div>
         </div>
       )}
-
-      {!embedded && <BottomNavbar />}
     </div>
   );
 };

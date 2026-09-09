@@ -1,15 +1,22 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { env } from '../../../../config/env.js';
 import { Owner } from '../../admin/models/Owner.js';
 import { ServiceStore } from '../../admin/models/ServiceStore.js';
 import { ServiceCenterStaff } from '../../admin/models/ServiceCenterStaff.js';
+import { PoolingVehicle } from '../../admin/models/PoolingVehicle.js';
 import { Driver } from '../models/Driver.js';
 import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
-import { sendOtpSms, normalizeOtpPhone, getOtpTtlMs, resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
+import { sendOtpSms } from '../../services/smsService.js';
 
-const normalizePhone = (phone) => normalizeOtpPhone(phone);
+const LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
+
+const normalizePhone = (phone) => {
+  const digits = String(phone || '').replace(/\D/g, '').trim();
+  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+};
 
 const buildPhoneCandidates = (phone) => {
   const normalizedPhone = normalizePhone(phone);
@@ -24,28 +31,7 @@ const buildPhoneCandidates = (phone) => {
   return [...candidates];
 };
 
-const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const buildPhoneMatcher = (field, phone) => {
-  const normalizedPhone = normalizePhone(phone);
-  const candidates = buildPhoneCandidates(phone);
-  const clauses = [];
-
-  if (candidates.length > 0) {
-    clauses.push({ [field]: { $in: candidates } });
-  }
-
-  if (normalizedPhone) {
-    // Accept formatted storage like "+91 79741 61582" or "91-7974161582".
-    clauses.push({ [field]: { $regex: new RegExp(`${escapeRegex(normalizedPhone)}$`) } });
-  }
-
-  return clauses;
-};
-
-const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
-const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
-const resolveDriverLoginOtpForPhone = (phone) => resolveOtpForPhone(phone);
+const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 const normalizeRole = (role) => {
   const normalized = String(role || 'driver').toLowerCase();
   if (normalized === 'owner') return 'owner';
@@ -67,7 +53,44 @@ const normalizeRole = (role) => {
   if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') {
     return 'bus_driver';
   }
+  if (normalized === 'pooling_driver' || normalized === 'pooling-driver' || normalized === 'poolingdriver' || normalized === 'pooling') {
+    return 'pooling_driver';
+  }
   return 'driver';
+};
+
+const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
+const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+const TEST_LOGIN_OTP_PHONE = '6268423925';
+const TEST_LOGIN_OTP_CODE = '0000';
+const getStaticDriverOtpConfig = () => ({
+  phone: normalizePhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
+  otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
+});
+const resolveDriverLoginOtpForPhone = (phone) => {
+  const normalizedPhone = normalizePhone(phone);
+  const staticOtpConfig = getStaticDriverOtpConfig();
+  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
+
+  if (defaultOtpEnabled && staticOtpConfig.otp) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
+    return {
+      otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  return {
+    otp: generateOtp(),
+    isStatic: false,
+  };
 };
 
 const getSession = async (phone) => {
@@ -154,6 +177,30 @@ const publicBusDriverPayload = (driver) => ({
   destinationCity: driver.destinationCity || '',
 });
 
+const publicPoolingDriverPayload = (vehicle) => ({
+  id: vehicle._id,
+  name: vehicle.driverName || 'Pooling Driver',
+  phone: vehicle.driverPhone || '',
+  approve: vehicle.approve !== false,
+  active: vehicle.poolingEnabled !== false,
+  status: vehicle.status || (vehicle.approve === false ? 'pending' : 'active'),
+  vehicleId: vehicle._id,
+  vehicleName: vehicle.name || '',
+  vehicleNumber: vehicle.vehicleNumber || '',
+  vehicleModel: vehicle.vehicleModel || '',
+  vehicleType: vehicle.vehicleType || 'sedan',
+  vehicleColor: vehicle.color || '',
+});
+
+const LOGIN_ROLE_PRIORITY = [
+  'owner',
+  'service_center',
+  'service_center_staff',
+  'bus_driver',
+  'pooling_driver',
+  'driver',
+];
+
 const isApprovedDriver = (driver) =>
   Boolean(driver) &&
   driver.approve !== false &&
@@ -180,30 +227,107 @@ const isApprovedServiceCenterStaff = (staff) =>
   staff.active !== false &&
   String(staff.status || '').toLowerCase() !== 'inactive';
 
-export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
-  const normalizedPhone = normalizePhone(phone);
+export const findDriverPortalAccountByPhone = async ({ phone, role } = {}) => {
   const normalizedRole = normalizeRole(role);
-  const ownerPhoneOr = [
-    ...buildPhoneMatcher('mobile', phone),
-    ...buildPhoneMatcher('phone', phone),
-  ];
+  const phoneCandidates = buildPhoneCandidates(phone);
 
-  if (!normalizedPhone || normalizedPhone.length !== 10) {
-    throw new ApiError(400, 'A valid 10-digit mobile number is required');
+  if (!phoneCandidates.length) {
+    return null;
   }
 
   const account =
     normalizedRole === 'owner'
       ? await Owner.findOne({
-          $or: ownerPhoneOr,
+          $or: [{ mobile: { $in: phoneCandidates } }, { phone: { $in: phoneCandidates } }],
         })
       : normalizedRole === 'service_center'
-        ? await ServiceStore.findOne({ $or: buildPhoneMatcher('owner_phone', phone) })
+        ? await ServiceStore.findOne({ owner_phone: { $in: phoneCandidates } })
       : normalizedRole === 'service_center_staff'
-        ? await ServiceCenterStaff.findOne({ $or: buildPhoneMatcher('phone', phone) })
+        ? await ServiceCenterStaff.findOne({ phone: { $in: phoneCandidates } })
       : normalizedRole === 'bus_driver'
-        ? await BusDriver.findOne({ $or: buildPhoneMatcher('phone', phone) })
-        : await Driver.findOne({ $or: buildPhoneMatcher('phone', phone) });
+        ? await BusDriver.findOne({ phone: { $in: phoneCandidates } })
+      : normalizedRole === 'pooling_driver'
+        ? await PoolingVehicle.findOne({ driverPhone: { $in: phoneCandidates } })
+        : await Driver.findOne({ phone: { $in: phoneCandidates } });
+
+  return account ? { role: normalizedRole, account } : null;
+};
+
+const buildDriverPortalExistenceQuery = (role, phoneCandidates) => {
+  if (role === 'owner') {
+    return Owner.findOne({
+      $or: [{ mobile: { $in: phoneCandidates } }, { phone: { $in: phoneCandidates } }],
+    }).select('_id').lean();
+  }
+
+  if (role === 'service_center') {
+    return ServiceStore.findOne({ owner_phone: { $in: phoneCandidates } }).select('_id').lean();
+  }
+
+  if (role === 'service_center_staff') {
+    return ServiceCenterStaff.findOne({ phone: { $in: phoneCandidates } }).select('_id').lean();
+  }
+
+  if (role === 'bus_driver') {
+    return BusDriver.findOne({ phone: { $in: phoneCandidates } }).select('_id').lean();
+  }
+
+  if (role === 'pooling_driver') {
+    return PoolingVehicle.findOne({ driverPhone: { $in: phoneCandidates } }).select('_id').lean();
+  }
+
+  return Driver.findOne({ phone: { $in: phoneCandidates } }).select('_id').lean();
+};
+
+export const findPreferredDriverPortalAccountByPhone = async (phone) => {
+  const phoneCandidates = buildPhoneCandidates(phone);
+
+  if (!phoneCandidates.length) {
+    return null;
+  }
+
+  const results = await Promise.all(
+    LOGIN_ROLE_PRIORITY.map(async (role) => {
+      const account = await buildDriverPortalExistenceQuery(role, phoneCandidates);
+      return account ? { role, account } : null;
+    }),
+  );
+
+  for (const role of LOGIN_ROLE_PRIORITY) {
+    const match = results.find((item) => item?.role === role);
+    if (match) return match;
+  }
+
+  return null;
+};
+
+export const findAllDriverPortalAccountsByPhone = async (phone) => {
+  const phoneCandidates = buildPhoneCandidates(phone);
+
+  if (!phoneCandidates.length) {
+    return [];
+  }
+
+  const results = await Promise.all(
+    LOGIN_ROLE_PRIORITY.map(async (role) => {
+      const account = await buildDriverPortalExistenceQuery(role, phoneCandidates);
+      return account ? { role, id: account._id } : null;
+    }),
+  );
+
+  return results.filter(Boolean);
+};
+
+export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedRole = normalizeRole(role);
+
+  if (!normalizedPhone || normalizedPhone.length !== 10) {
+    throw new ApiError(400, 'A valid 10-digit mobile number is required');
+  }
+
+  const match = await findDriverPortalAccountByPhone({ phone: normalizedPhone, role: normalizedRole });
+  const account = match?.account;
 
   if (!account) {
     throw new ApiError(
@@ -217,6 +341,8 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
             ? 'Service center staff'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
+          : normalizedRole === 'pooling_driver'
+            ? 'Pooling driver'
             : 'Driver'
       } account not found`,
     );
@@ -246,9 +372,8 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   //   );
   // }
 
-  const { otp, isStatic, reason } = resolveDriverLoginOtpForPhone(normalizedPhone);
+  const { otp, isStatic } = resolveDriverLoginOtpForPhone(normalizedPhone);
   const now = Date.now();
-  const ttlMs = getOtpTtlMs();
 
   const session = await DriverLoginSession.findOneAndUpdate(
     { phone: normalizedPhone },
@@ -257,9 +382,9 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
       driverId: account._id,
       accountRole: normalizedRole,
       otpHash: hashOtp(otp),
-      otpExpiresAt: new Date(now + ttlMs),
+      otpExpiresAt: new Date(now + LOGIN_OTP_TTL_MS),
       verifiedAt: null,
-      expiresAt: new Date(now + ttlMs),
+      expiresAt: new Date(now + LOGIN_OTP_TTL_MS),
     },
     { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
   );
@@ -267,7 +392,7 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
   const smsDispatch = isStatic
     ? {
         mode: 'static',
-        message: `Static OTP (${reason})`,
+        message: 'Static OTP enabled',
       }
     : await sendOtpSms({
         phone: normalizedPhone,
@@ -280,15 +405,18 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
     console.log(`[loginOtpService] OTP for ${normalizedPhone} = ${debugOtp} (${smsDispatch.mode})`);
   }
 
+  const allRoles = await findAllDriverPortalAccountsByPhone(normalizedPhone);
+  const rolesList = allRoles.map((item) => item.role);
+
   return {
     message: smsDispatch.mode === 'live' ? 'OTP sent successfully' : 'OTP generated successfully',
     session: publicSessionPayload(session, debugOtp),
+    availableRoles: rolesList,
   };
 };
 
-export const verifyDriverLoginOtp = async ({ phone, otp }) => {
+export const verifyDriverLoginOtp = async ({ phone, otp, role }) => {
   const session = await getSession(phone);
-  const normalizedRole = normalizeRole(session.accountRole);
 
   if (!otp || String(otp).trim().length !== 4) {
     throw new ApiError(400, 'A valid 4-digit OTP is required');
@@ -302,16 +430,45 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
     throw new ApiError(401, 'Invalid OTP');
   }
 
-  const account =
-    normalizedRole === 'owner'
-      ? await Owner.findById(session.driverId)
-      : normalizedRole === 'service_center'
-        ? await ServiceStore.findById(session.driverId)
-      : normalizedRole === 'service_center_staff'
-        ? await ServiceCenterStaff.findById(session.driverId)
-      : normalizedRole === 'bus_driver'
-        ? await BusDriver.findById(session.driverId)
-        : await Driver.findById(session.driverId);
+  // If no role is requested, check if there are multiple roles
+  if (!role) {
+    const allRoles = await findAllDriverPortalAccountsByPhone(phone);
+    const rolesList = allRoles.map((item) => item.role);
+
+    if (rolesList.length > 1) {
+      session.verifiedAt = new Date();
+      await session.save();
+
+      return {
+        message: 'OTP verified successfully. Multiple roles detected.',
+        needsRoleSelection: true,
+        availableRoles: rolesList,
+      };
+    }
+  }
+
+  const normalizedRole = role ? normalizeRole(role) : normalizeRole(session.accountRole);
+  let account = null;
+
+  if (role) {
+    const match = await findDriverPortalAccountByPhone({ phone, role: normalizedRole });
+    if (match) {
+      account = match.account;
+    }
+  } else {
+    account =
+      normalizedRole === 'owner'
+        ? await Owner.findById(session.driverId)
+        : normalizedRole === 'service_center'
+          ? await ServiceStore.findById(session.driverId)
+        : normalizedRole === 'service_center_staff'
+          ? await ServiceCenterStaff.findById(session.driverId)
+        : normalizedRole === 'bus_driver'
+          ? await BusDriver.findById(session.driverId)
+        : normalizedRole === 'pooling_driver'
+          ? await PoolingVehicle.findById(session.driverId)
+          : await Driver.findById(session.driverId);
+  }
 
   if (!account) {
     throw new ApiError(
@@ -325,6 +482,8 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
             ? 'Service center staff'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
+          : normalizedRole === 'pooling_driver'
+            ? 'Pooling driver'
             : 'Driver'
       } account not found`,
     );
@@ -367,15 +526,18 @@ export const verifyDriverLoginOtp = async ({ phone, otp }) => {
   return {
     message: 'OTP verified successfully',
     token: signAccessToken({ sub: String(account._id), role: normalizedRole }),
+    role: normalizedRole,
     driver:
       normalizedRole === 'owner'
         ? publicOwnerPayload(account)
         : normalizedRole === 'service_center'
           ? publicServiceCenterPayload(account)
-          : normalizedRole === 'service_center_staff'
+        : normalizedRole === 'service_center_staff'
             ? publicServiceCenterStaffPayload(account)
         : normalizedRole === 'bus_driver'
           ? publicBusDriverPayload(account)
+        : normalizedRole === 'pooling_driver'
+          ? publicPoolingDriverPayload(account)
           : publicDriverPayload(account),
   };
 };

@@ -13,6 +13,12 @@ import {
   updateOwnerBusService,
 } from '../services/registrationService';
 
+const isEnabledFlag = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value || '').trim().toLowerCase());
+};
+
 const ownerBusApi = {
   deleteBus: deleteOwnerBusService,
   getBuses: async () => {
@@ -38,7 +44,7 @@ const ownerBusApi = {
 const OwnerBusServicePage = () => {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const busEnabled = String(settings.transportRide?.enable_bus_service || '0') === '1';
+  const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] pb-32">

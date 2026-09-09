@@ -130,6 +130,140 @@ const biometricAuditLogSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const thumbParticipantSchema = new mongoose.Schema(
+  {
+    participantKey: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    participantType: {
+      type: String,
+      enum: ["customer", "co_passenger", "employee", "other"],
+      default: "customer",
+    },
+    participantLabel: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    userType: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    name: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    phone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    linkedUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TaxiUser",
+      default: null,
+    },
+    linkedStaffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TaxiServiceCenterStaff",
+      default: null,
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false,
+    },
+    sortOrder: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+  },
+  { _id: false },
+);
+
+const thumbCaptureSchema = new mongoose.Schema(
+  {
+    captureId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    participantKey: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    participantType: {
+      type: String,
+      enum: ["customer", "co_passenger", "employee", "other"],
+      default: "customer",
+    },
+    participantLabel: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    userType: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    thumbCode: {
+      type: String,
+      enum: ["LEFT_THUMB", "RIGHT_THUMB", "UNKNOWN_THUMB"],
+      default: "UNKNOWN_THUMB",
+    },
+    imageUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    fileName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    mimeType: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    captureSource: {
+      type: String,
+      enum: ["phone_sensor", "usb_scanner", "bluetooth_scanner", "manual", "unknown"],
+      default: "unknown",
+    },
+    deviceLabel: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    scannerSerial: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    notes: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    capturedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false },
+);
+
 const customerBiometricProfileSchema = new mongoose.Schema(
   {
     bookingId: {
@@ -187,6 +321,14 @@ const customerBiometricProfileSchema = new mongoose.Schema(
     },
     fingers: {
       type: [biometricFingerSchema],
+      default: [],
+    },
+    thumbParticipants: {
+      type: [thumbParticipantSchema],
+      default: [],
+    },
+    thumbCaptures: {
+      type: [thumbCaptureSchema],
       default: [],
     },
     verificationSummary: {

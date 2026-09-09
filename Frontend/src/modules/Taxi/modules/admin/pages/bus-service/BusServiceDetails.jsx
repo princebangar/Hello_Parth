@@ -108,7 +108,7 @@ const BusServiceDetails = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/taxi/admin/bus-service/edit/${bus.id}`)}
+              onClick={() => navigate(`/admin/bus-service/edit/${bus.id}`)}
               className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15"
             >
               <Pencil size={16} />

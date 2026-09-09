@@ -17,6 +17,7 @@ export const ADMIN_PERMISSION_GROUPS = [
       { key: 'ongoing.view', label: 'Ongoing Requests' },
       { key: 'drivers.view', label: 'Drivers' },
       { key: 'users.view', label: 'Customers' },
+      { key: 'employees.view', label: 'Employees' },
       { key: 'wallet.view', label: 'Wallet' },
       { key: 'owners.view', label: 'Owners' },
       { key: 'support.view', label: 'Support' },
@@ -45,13 +46,8 @@ export const ADMIN_PERMISSION_GROUPS = [
 export const ALL_ADMIN_PERMISSIONS = ADMIN_PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.key));
 
 export const hasAdminPermission = (adminInfo = {}, permission) => {
-  const adminLevel = String(adminInfo?.adminLevel || adminInfo?.admin_level || '').toLowerCase();
   const type = String(adminInfo?.admin_type || adminInfo?.role || '').toLowerCase();
   const permissions = Array.isArray(adminInfo?.permissions) ? adminInfo.permissions : [];
-
-  if (adminLevel === 'platform_superadmin' || adminLevel === 'taxi_superadmin') {
-    return true;
-  }
 
   if (type === 'superadmin' || permissions.includes('*')) {
     return true;
@@ -59,5 +55,3 @@ export const hasAdminPermission = (adminInfo = {}, permission) => {
 
   return permissions.includes(permission);
 };
-
-export const canManageSubadmins = (adminInfo = {}) => hasAdminPermission(adminInfo, 'subadmins.manage');

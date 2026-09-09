@@ -9,6 +9,17 @@ const createId = (prefix = 'item') => {
 };
 
 const DEFAULT_AMENITIES = ['Charging Port', 'WiFi', 'Blanket', 'Water Bottle', 'Live Tracking'];
+const normalizeLatLng = (value) => {
+  const lat = Number(value?.lat);
+  const lng = Number(value?.lng);
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  return null;
+};
+
 const createDefaultCancellationRules = () => [
   {
     id: createId('cancel'),
@@ -56,84 +67,186 @@ const createEmptyCell = () => ({
   kind: 'aisle',
 });
 
+const SEAT_CODE_LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const DEFAULT_BUS_LAYOUT_CONFIG = {
+  lower: {
+    enabled: true,
+    rows: 10,
+    leftSeats: 2,
+    rightSeats: 2,
+    seatType: 'seat',
+  },
+  upper: {
+    enabled: false,
+    rows: 0,
+    leftSeats: 0,
+    rightSeats: 0,
+    seatType: 'seat',
+  },
+};
+
 const createEmptyRoute = () => ({
   routeName: '',
   originCity: '',
   destinationCity: '',
+  originCoords: null,
+  destinationCoords: null,
   distanceKm: '',
   durationHours: '',
   stops: [],
 });
 
-const createLowerDeckSeater = (rows = 10, deckCode = 'L') =>
-  Array.from({ length: rows }, (_, index) => {
-    const rowNumber = index + 1;
-    return [
-      createSeatCell(deckCode, rowNumber, 'A', 'window'),
-      createSeatCell(deckCode, rowNumber, 'B', 'aisle'),
-      createEmptyCell(),
-      createSeatCell(deckCode, rowNumber, 'C', 'aisle'),
-      createSeatCell(deckCode, rowNumber, 'D', 'window'),
-    ];
-  });
+const normalizeDeckConfig = (value = {}, fallback = {}) => {
+  const base = {
+    enabled: false,
+    rows: 0,
+    leftSeats: 0,
+    rightSeats: 0,
+    seatType: 'seat',
+    ...fallback,
+    ...(value && typeof value === 'object' ? value : {}),
+  };
 
-const createSleeperDeck = (rows = 6, deckCode = 'L') =>
-  Array.from({ length: rows }, (_, index) => {
-    const rowNumber = index + 1;
-    return [
-      createSeatCell(deckCode, rowNumber, 'LB', 'sleeper'),
-      createEmptyCell(),
-      createSeatCell(deckCode, rowNumber, 'UB', 'sleeper'),
-    ];
-  });
+  return {
+    enabled: Boolean(base.enabled),
+    rows: Math.max(0, Number(base.rows || 0)),
+    leftSeats: Math.max(0, Math.min(3, Number(base.leftSeats || 0))),
+    rightSeats: Math.max(0, Math.min(3, Number(base.rightSeats || 0))),
+    seatType: base.seatType === 'sleeper' ? 'sleeper' : 'seat',
+  };
+};
 
-const createMixedDeck = () => [
-  ...createLowerDeckSeater(5, 'L'),
-  [
-    createSeatCell('L', 6, 'SL', 'sleeper'),
-    createEmptyCell(),
-    createSeatCell('L', 6, 'SR', 'sleeper'),
-  ],
-  [
-    createSeatCell('L', 7, 'SL', 'sleeper'),
-    createEmptyCell(),
-    createSeatCell('L', 7, 'SR', 'sleeper'),
-  ],
-];
+export const normalizeBusLayoutConfig = (value = {}) => ({
+  lower: normalizeDeckConfig(value?.lower, DEFAULT_BUS_LAYOUT_CONFIG.lower),
+  upper: normalizeDeckConfig(value?.upper, DEFAULT_BUS_LAYOUT_CONFIG.upper),
+});
+
+const createSeatCode = (index = 0, seatType = 'seat', side = 'left') => {
+  const baseLabel = SEAT_CODE_LABELS[index] || `S${index + 1}`;
+  if (seatType === 'sleeper') {
+    return `${side === 'left' ? 'L' : 'R'}${baseLabel}`;
+  }
+  return baseLabel;
+};
+
+const createDeckFromConfig = (deckCode = 'L', config = {}) => {
+  const normalized = normalizeDeckConfig(config);
+
+  if (!normalized.enabled || normalized.rows <= 0 || normalized.leftSeats + normalized.rightSeats <= 0) {
+    return [];
+  }
+
+  return Array.from({ length: normalized.rows }, (_, index) => {
+    const rowNumber = index + 1;
+    const row = [];
+
+    for (let seatIndex = 0; seatIndex < normalized.leftSeats; seatIndex += 1) {
+      row.push(
+        createSeatCell(
+          deckCode,
+          rowNumber,
+          createSeatCode(seatIndex, normalized.seatType, 'left'),
+          normalized.seatType === 'sleeper'
+            ? 'sleeper'
+            : seatIndex === 0
+              ? 'window'
+              : 'aisle',
+        ),
+      );
+    }
+
+    row.push(createEmptyCell());
+
+    for (let seatIndex = 0; seatIndex < normalized.rightSeats; seatIndex += 1) {
+      row.push(
+        createSeatCell(
+          deckCode,
+          rowNumber,
+          createSeatCode(normalized.leftSeats + seatIndex, normalized.seatType, 'right'),
+          normalized.seatType === 'sleeper'
+            ? 'sleeper'
+            : seatIndex === normalized.rightSeats - 1
+              ? 'window'
+              : 'aisle',
+        ),
+      );
+    }
+
+    return row;
+  });
+};
+
+const createBlueprintFromLayoutConfig = (templateKey, layoutConfig = {}) => {
+  const normalizedLayoutConfig = normalizeBusLayoutConfig(layoutConfig);
+
+  return {
+    templateKey,
+    layoutConfig: normalizedLayoutConfig,
+    lowerDeck: createDeckFromConfig('L', normalizedLayoutConfig.lower),
+    upperDeck: createDeckFromConfig('U', normalizedLayoutConfig.upper),
+  };
+};
 
 export const BUS_BLUEPRINT_TEMPLATES = [
   {
     key: 'seater_2_2',
     label: 'Seater 2+2',
     category: 'Seater Coach',
-    lowerDeck: createLowerDeckSeater(11, 'L'),
-    upperDeck: [],
+    description: 'Classic 4-across pushback layout',
+    layoutConfig: {
+      lower: { enabled: true, rows: 11, leftSeats: 2, rightSeats: 2, seatType: 'seat' },
+      upper: { enabled: false, rows: 0, leftSeats: 0, rightSeats: 0, seatType: 'seat' },
+    },
+  },
+  {
+    key: 'seater_2_1',
+    label: 'Seater 2+1',
+    category: 'Seater Coach',
+    description: 'Premium intercity seater layout',
+    layoutConfig: {
+      lower: { enabled: true, rows: 10, leftSeats: 2, rightSeats: 1, seatType: 'seat' },
+      upper: { enabled: false, rows: 0, leftSeats: 0, rightSeats: 0, seatType: 'seat' },
+    },
   },
   {
     key: 'sleeper_2_1',
     label: 'Sleeper 2+1',
     category: 'Sleeper Coach',
-    lowerDeck: createSleeperDeck(6, 'L'),
-    upperDeck: createSleeperDeck(6, 'U'),
+    description: 'Popular RedBus-style sleeper stack',
+    layoutConfig: {
+      lower: { enabled: true, rows: 6, leftSeats: 2, rightSeats: 1, seatType: 'sleeper' },
+      upper: { enabled: true, rows: 6, leftSeats: 2, rightSeats: 1, seatType: 'sleeper' },
+    },
+  },
+  {
+    key: 'sleeper_1_1',
+    label: 'Sleeper 1+1',
+    category: 'Sleeper Coach',
+    description: 'Wide berth layout with more spacing',
+    layoutConfig: {
+      lower: { enabled: true, rows: 6, leftSeats: 1, rightSeats: 1, seatType: 'sleeper' },
+      upper: { enabled: true, rows: 6, leftSeats: 1, rightSeats: 1, seatType: 'sleeper' },
+    },
   },
   {
     key: 'mixed_redbus',
     label: 'Semi Sleeper Mix',
     category: 'Hybrid Coach',
-    lowerDeck: createMixedDeck(),
-    upperDeck: createSleeperDeck(4, 'U'),
+    description: 'Lower deck seating with upper sleeper berths',
+    layoutConfig: {
+      lower: { enabled: true, rows: 8, leftSeats: 2, rightSeats: 2, seatType: 'seat' },
+      upper: { enabled: true, rows: 4, leftSeats: 2, rightSeats: 1, seatType: 'sleeper' },
+    },
   },
 ];
 
 export const createBlueprintFromTemplate = (templateKey = 'seater_2_2') => {
   const template = BUS_BLUEPRINT_TEMPLATES.find((item) => item.key === templateKey) || BUS_BLUEPRINT_TEMPLATES[0];
-
-  return {
-    templateKey: template.key,
-    lowerDeck: JSON.parse(JSON.stringify(template.lowerDeck)),
-    upperDeck: JSON.parse(JSON.stringify(template.upperDeck)),
-  };
+  return createBlueprintFromLayoutConfig(template.key, template.layoutConfig);
 };
+
+export const createBusBlueprint = (templateKey = 'seater_2_2', layoutConfig = {}) =>
+  createBlueprintFromLayoutConfig(templateKey, layoutConfig);
 
 export const countSeatsInDeck = (deckRows = []) =>
   deckRows.flat().filter((cell) => cell?.kind === 'seat').length;
@@ -176,6 +289,8 @@ export const createBusDraft = () => ({
     routeName: '',
     originCity: '',
     destinationCity: '',
+    originCoords: null,
+    destinationCoords: null,
     distanceKm: '',
     durationHours: '',
     stops: [
@@ -218,7 +333,17 @@ export const createBusDraft = () => ({
 export const normalizeBusCatalog = (catalog = []) =>
   catalog.map((bus) => {
     const fallbackDraft = createBusDraft();
-    const blueprint = bus.blueprint || createBlueprintFromTemplate(bus.blueprint?.templateKey);
+    const blueprintSource = bus.blueprint || createBlueprintFromTemplate(bus.blueprint?.templateKey);
+    const blueprint = createBusBlueprint(
+      blueprintSource?.templateKey || 'seater_2_2',
+      blueprintSource?.layoutConfig,
+    );
+    if (Array.isArray(blueprintSource?.lowerDeck) && blueprintSource.lowerDeck.length) {
+      blueprint.lowerDeck = blueprintSource.lowerDeck;
+    }
+    if (Array.isArray(blueprintSource?.upperDeck)) {
+      blueprint.upperDeck = blueprintSource.upperDeck;
+    }
 
     return {
       ...fallbackDraft,
@@ -244,6 +369,8 @@ export const normalizeBusCatalog = (catalog = []) =>
       route: {
         ...fallbackDraft.route,
         ...bus.route,
+        originCoords: normalizeLatLng(bus.route?.originCoords),
+        destinationCoords: normalizeLatLng(bus.route?.destinationCoords),
         stops:
           Array.isArray(bus.route?.stops) && bus.route.stops.length > 0
             ? bus.route.stops
@@ -254,6 +381,8 @@ export const normalizeBusCatalog = (catalog = []) =>
         ...createEmptyRoute(),
         ...fallbackDraft.returnRoute,
         ...bus.returnRoute,
+        originCoords: normalizeLatLng(bus.returnRoute?.originCoords),
+        destinationCoords: normalizeLatLng(bus.returnRoute?.destinationCoords),
         stops:
           Array.isArray(bus.returnRoute?.stops) && bus.returnRoute.stops.length > 0
             ? bus.returnRoute.stops

@@ -13,7 +13,8 @@ import {
   Type,
   FileText,
   IndianRupee,
-  Plus
+  Plus,
+  Save
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
@@ -38,7 +39,7 @@ const DriverSubscriptionCreate = () => {
   });
   const [saving, setSaving] = useState(false);
 
-  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
+  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors";
   const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
 
   useEffect(() => {
@@ -86,12 +87,12 @@ const DriverSubscriptionCreate = () => {
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
           <span>Drivers</span>
           <ChevronRight size={12} />
-          <Link to="/taxi/admin/drivers/subscription" className="hover:text-gray-700">Subscription</Link>
+          <Link  param($m) $m.Value -replace '/admin/', '/taxi/admin/' drivers/subscription" className="hover:text-gray-700">Subscription</Link>
           <ChevronRight size={12} />
           <span className="text-gray-700 uppercase font-medium">Create</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Create Subscription</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Create Subscription</h1>
           <button 
             onClick={() => navigate('/taxi/admin/drivers/subscription')}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
@@ -105,11 +106,11 @@ const DriverSubscriptionCreate = () => {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <div className="w-9 h-9 rounded-lg bg-yellow-100 flex items-center justify-center text-yellow-600">
                 <Zap size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Subscription Details</h3>
+                <h3 className="text-sm text-gray-900 font-bold">Subscription Details</h3>
                 <p className="text-xs text-gray-400">Configure your new subscription plan</p>
               </div>
             </div>
@@ -232,10 +233,10 @@ const DriverSubscriptionCreate = () => {
             <button 
               onClick={handleSave}
               disabled={saving}
-              className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+              className="w-full py-3 bg-yellow-400 text-black rounded-lg text-sm font-bold hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
             >
-              {saving ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
-              Save Subscription
+              {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+              Save Changes
             </button>
             <button 
               onClick={() => navigate('/taxi/admin/drivers/subscription')}

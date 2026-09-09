@@ -137,6 +137,47 @@ const ownerSchema = new mongoose.Schema(
       default: 'pending',
       trim: true,
     },
+    deletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    deletion_reason: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    deletionRequest: {
+      status: {
+        type: String,
+        enum: ['none', 'pending', 'approved', 'rejected'],
+        default: 'none',
+        index: true,
+      },
+      reason: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      requestedAt: {
+        type: Date,
+        default: null,
+      },
+      reviewedAt: {
+        type: Date,
+        default: null,
+      },
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Admin',
+        default: null,
+      },
+      adminNote: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+    },
     fcmTokenWeb: {
       type: String,
       default: '',
@@ -168,5 +209,7 @@ const ownerSchema = new mongoose.Schema(
 ownerSchema.index({ company_name: 1 });
 ownerSchema.index({ service_location_id: 1 });
 ownerSchema.index({ legacy_id: 1 }, { sparse: true });
+ownerSchema.index({ deletedAt: 1, createdAt: -1 });
+ownerSchema.index({ 'deletionRequest.status': 1, deletedAt: 1 });
 
 export const Owner = mongoose.models.TaxiOwner || mongoose.model('TaxiOwner', ownerSchema);

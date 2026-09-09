@@ -20,17 +20,17 @@ import {
   Info,
   Layers,
   MousePointer2,
-  X
+  X,
+  MapPin
 } from "lucide-react";
 import {
   GoogleMap,
+  DrawingManager,
   Circle,
   Polygon,
   Autocomplete,
 } from "@react-google-maps/api";
-import { useManualPolygonDrawing } from "@/shared/maps/useManualPolygonDrawing";
-import { pointsFromLatLngPath } from "@/shared/maps/polygonDrawingUtils";
-import { useAppGoogleMapsLoader } from "../../utils/googleMaps";
+import { useDrawingGoogleMapsLoader } from "../../utils/googleMaps";
 import { adminService } from "../../services/adminService";
 import {
   buildCountryBoundaryUrl,
@@ -38,7 +38,7 @@ import {
   isDriverAvailable,
 } from "../../utils/mapUtils";
 
-const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
+const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-[#FFC400] focus:ring-1 focus:ring-[#FFC400] outline-none transition-colors";
 const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
 const cardClass = "bg-white rounded-xl border border-gray-200 p-6 shadow-sm";
 const ADMIN_LANGUAGE_OPTIONS = ['English', 'Hindi', 'Arabic', 'French', 'Spanish'];
@@ -49,7 +49,6 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const [view, setView] = useState(initialMode);
   const [zones, setZones] = useState([]);
   const [serviceLocations, setServiceLocations] = useState([]);
-  const [appModules, setAppModules] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -61,45 +60,21 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const [countryBoundaryPaths, setCountryBoundaryPaths] = useState([]);
   const [boundaryLoading, setBoundaryLoading] = useState(false);
   const mapRef = useRef(null);
-  const [googleMap, setGoogleMap] = useState(null);
-  const pendingPolygonCoordsRef = useRef(null);
+  const polygonRef = useRef(null);
+  const polygonListenersRef = useRef([]);
   const circleRef = useRef(null);
   const circleListenersRef = useRef([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('English');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Map & Drawing States
   const [boundaryMode, setBoundaryMode] = useState('polygon');
   const [polygonCoords, setPolygonCoords] = useState([]);
   const [circleCenter, setCircleCenter] = useState(null);
   const [circleRadiusMeters, setCircleRadiusMeters] = useState('');
-  const [isPlacingCircle, setIsPlacingCircle] = useState(false);
-  const { isLoaded, loadError } = useAppGoogleMapsLoader();
-
-  const {
-    isDrawing: isPolygonDrawing,
-    startDrawing: startPolygonDrawingHook,
-    finishDrawing: finishPolygonDrawingHook,
-    clearDrawing: clearPolygonDrawingHook,
-    loadCoordinates,
-    processMapClick,
-    getFinishedPolygon,
-  } = useManualPolygonDrawing({
-    map: view !== 'list' ? googleMap : null,
-    enabled: view !== 'list',
-    attachNativeMapClickListener: false,
-    polygonOptions: {
-      fillColor: '#4f46e5',
-      strokeColor: '#4f46e5',
-      strokeWeight: 2,
-      fillOpacity: 0.25,
-      editable: true,
-      draggable: false,
-      clickable: true,
-      zIndex: 2,
-    },
-    onCoordinatesChange: setPolygonCoords,
-  });
+  const { isLoaded, loadError } = useDrawingGoogleMapsLoader();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -111,15 +86,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     peak_zone_selection_duration: '',
     peak_zone_duration: '',
     peak_zone_surge_percentage: '',
-    ride_surge_enabled: false,
     maximum_distance_for_regular_rides: '',
     maximum_distance_for_outstation_rides: '',
-    status: 'active',
-    disabled_modules: []
+    status: 'active'
   });
 
   useEffect(() => {
-    setView(initialMode);
+    setView(initialMode === 'edit' || initialMode === 'create' || initialMode === 'view' ? 'form' : 'list');
     if (initialMode === 'list') {
       resetForm();
     }
@@ -129,26 +102,20 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     setLoading(true);
     setFetchError('');
     try {
-      const [zoneRes, slRes, driverRes, modulesRes] = await Promise.all([
+      const [zoneRes, slRes, driverRes] = await Promise.all([
         adminService.getZones(),
         adminService.getServiceLocations(),
         adminService.getDrivers(1, 200),
-        adminService.getAppModules(),
       ]);
-
-      let fetchedZones = [];
-      let fetchedLocations = [];
 
       if (zoneRes) {
         const zoneData = zoneRes.success ? (zoneRes.data?.results || zoneRes.data) : zoneRes;
-        fetchedZones = Array.isArray(zoneData) ? zoneData : [];
-        setZones(fetchedZones);
+        setZones(Array.isArray(zoneData) ? zoneData : []);
       }
 
       if (slRes) {
         const locs = slRes.success ? (slRes.data?.results || slRes.data) : slRes;
-        fetchedLocations = Array.isArray(locs) ? locs : [];
-        setServiceLocations(fetchedLocations);
+        setServiceLocations(Array.isArray(locs) ? locs : []);
       }
 
       if (driverRes) {
@@ -156,14 +123,9 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
         setDrivers(Array.isArray(driverItems) ? driverItems : []);
       }
 
-      if (modulesRes) {
-        const mods = modulesRes.success ? (modulesRes.data?.results || modulesRes.data) : modulesRes.data || modulesRes;
-        setAppModules(Array.isArray(mods) ? mods : []);
-      }
-
       if (id && initialMode === 'edit') {
-        const zoneToEdit = fetchedZones.find(z => String(z._id || z.id) === String(id));
-        if (zoneToEdit) handleEdit(zoneToEdit, fetchedLocations);
+        const zoneToEdit = Array.isArray(zoneData) && zoneData.find(z => (z._id || z.id) === id);
+        if (zoneToEdit) handleEdit(zoneToEdit);
       }
     } catch (err) {
       console.error("Fetch error:", err);
@@ -190,6 +152,23 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     return zones.filter(z => (z.name || z.zone_name || '').toLowerCase().includes(query));
   }, [zones, searchTerm]);
 
+  const totalZonePages = Math.max(1, Math.ceil(filteredZones.length / pageSize));
+
+  const paginatedZones = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredZones.slice(start, start + pageSize);
+  }, [filteredZones, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalZonePages) {
+      setCurrentPage(totalZonePages);
+    }
+  }, [currentPage, totalZonePages]);
+
   const fitMapToPaths = (paths) => {
     if (!mapRef.current || !window.google || !Array.isArray(paths) || paths.length === 0) {
       return;
@@ -209,26 +188,46 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     }
   };
 
-  useEffect(() => {
-    if (!googleMap || view === 'list' || boundaryMode !== 'polygon' || !pendingPolygonCoordsRef.current) {
-      return;
-    }
+  const onPolygonComplete = (polygon) => {
+    const coords = polygon.getPath().getArray().map(p => ({
+      lat: p.lat(),
+      lng: p.lng()
+    }));
+    setBoundaryMode('polygon');
+    setPolygonCoords(coords);
+    setCircleCenter(null);
+    setCircleRadiusMeters('');
+    polygon.setMap(null);
+  };
 
-    loadCoordinates(pendingPolygonCoordsRef.current);
-    pendingPolygonCoordsRef.current = null;
-  }, [boundaryMode, googleMap, loadCoordinates, view]);
+  const onCircleComplete = (circle) => {
+    const center = circle.getCenter();
+    setBoundaryMode('circle');
+    setCircleCenter({
+      lat: center.lat(),
+      lng: center.lng(),
+    });
+    setCircleRadiusMeters(String(Math.round(circle.getRadius())));
+    setPolygonCoords([]);
+    circle.setMap(null);
+  };
 
   const syncPolygonState = () => {
-    const finishedPolygon = getFinishedPolygon?.();
-    if (finishedPolygon?.getPath) {
-      const nextCoords = pointsFromLatLngPath(finishedPolygon.getPath());
-      if (nextCoords.length >= 3) {
-        setPolygonCoords(nextCoords);
-        return nextCoords;
-      }
+    const polygon = polygonRef.current;
+    if (!polygon) {
+      return polygonCoords;
     }
 
-    return polygonCoords;
+    const nextCoords = polygon
+      .getPath()
+      .getArray()
+      .map((point) => ({
+        lat: point.lat(),
+        lng: point.lng(),
+      }));
+
+    setPolygonCoords(nextCoords);
+    return nextCoords;
   };
 
   const syncCircleState = () => {
@@ -262,77 +261,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   };
 
   useEffect(() => () => {
+    polygonListenersRef.current.forEach((listener) => listener?.remove?.());
+    polygonListenersRef.current = [];
+    polygonRef.current = null;
     circleListenersRef.current.forEach((listener) => listener?.remove?.());
     circleListenersRef.current = [];
     circleRef.current = null;
   }, []);
-
-  const handleMapClick = (event) => {
-    if (view === 'list' || !event?.latLng) {
-      return;
-    }
-
-    if (boundaryMode === 'polygon') {
-      processMapClick(event);
-      return;
-    }
-
-    if (!isPlacingCircle) {
-      return;
-    }
-
-    const lat = event.latLng.lat();
-    const lng = event.latLng.lng();
-    setCircleCenter({ lat, lng });
-    setPolygonCoords([]);
-    clearPolygonDrawingHook();
-    setCircleRadiusMeters((current) => {
-      const numericRadius = Number(current);
-      return Number.isFinite(numericRadius) && numericRadius > 0 ? current : '2000';
-    });
-    setIsPlacingCircle(false);
-    if (googleMap) {
-      googleMap.setOptions({ draggableCursor: null, draggingCursor: null });
-    }
-  };
-
-  const startPolygonDrawing = () => {
-    setBoundaryMode('polygon');
-    setCircleCenter(null);
-    setCircleRadiusMeters('');
-    setIsPlacingCircle(false);
-
-    if (!googleMap) {
-      window.alert('Map is still loading. Please wait a moment and try again.');
-      return;
-    }
-
-    const started = startPolygonDrawingHook();
-    if (!started) {
-      window.alert('Could not start polygon drawing. Refresh the page and try again.');
-    }
-  };
-
-  const startCirclePlacement = () => {
-    setBoundaryMode('circle');
-    setIsPlacingCircle(true);
-    clearPolygonDrawingHook();
-    setPolygonCoords([]);
-    if (googleMap) {
-      googleMap.setOptions({ draggableCursor: 'crosshair', draggingCursor: 'crosshair' });
-    }
-  };
-
-  const clearBoundaryDrawing = () => {
-    clearPolygonDrawingHook();
-    setPolygonCoords([]);
-    setCircleCenter(null);
-    setCircleRadiusMeters('');
-    setIsPlacingCircle(false);
-    if (googleMap) {
-      googleMap.setOptions({ draggableCursor: null, draggingCursor: null });
-    }
-  };
 
   const onPlaceChanged = () => {
     if (autocomplete !== null) {
@@ -363,18 +298,8 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       Number.isFinite(Number(effectiveCircleCenter?.lat)) &&
       Number.isFinite(Number(effectiveCircleCenter?.lng));
 
-    if (!formData.service_location_id) {
-      alert("Please select a Service Location before saving.");
-      return;
-    }
-
-    if (!formData.name.English?.trim()) {
-      alert("Please enter a Zone Name.");
-      return;
-    }
-
-    if (!hasPolygon && !hasCircle) {
-      alert("Please draw a polygon boundary or set a circle radius on the map.");
+    if (!formData.name.English.trim() || (!hasPolygon && !hasCircle)) {
+      alert("Please add a zone name and draw a polygon or circle boundary on the map.");
       return;
     }
     setSaving(true);
@@ -416,18 +341,14 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       peak_zone_selection_duration: '',
       peak_zone_duration: '',
       peak_zone_surge_percentage: '',
-      ride_surge_enabled: false,
       maximum_distance_for_regular_rides: '',
       maximum_distance_for_outstation_rides: '',
-      status: 'active',
-      disabled_modules: []
+      status: 'active'
     });
     setBoundaryMode('polygon');
     setPolygonCoords([]);
     setCircleCenter(null);
     setCircleRadiusMeters('');
-    setIsPlacingCircle(false);
-    clearPolygonDrawingHook();
     setCountryBoundaryPaths([]);
   };
 
@@ -454,28 +375,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     }
   };
 
-  const handleEdit = (zone, locationsList = serviceLocations) => {
+  const handleEdit = (zone) => {
     const zid = zone._id || zone.id;
     setEditingId(zid);
     const localizedNames = typeof zone.name === 'object' && zone.name !== null ? zone.name : {};
     let zoneName = typeof zone.name === 'string' ? zone.name : (localizedNames.English || zone.zone_name || '');
-    let slId = typeof zone.service_location_id === 'object' && zone.service_location_id !== null
-      ? String(zone.service_location_id._id || zone.service_location_id.id || '')
-      : String(zone.service_location_id || '');
-
-    const currentLocations = Array.isArray(locationsList) && locationsList.length > 0 ? locationsList : serviceLocations;
-    if (slId && currentLocations.length > 0) {
-      const matched = currentLocations.find(l => 
-        String(l._id || l.id) === slId ||
-        String(l.name || l.service_location_name || '').toLowerCase() === slId.toLowerCase()
-      );
-      if (matched) {
-        slId = String(matched._id || matched.id);
-      }
-    }
-
     setFormData({
-      service_location_id: slId,
+      service_location_id: zone.service_location_id || '',
       name: {
         English: zoneName,
         Hindi: localizedNames.Hindi || '',
@@ -489,11 +395,9 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       peak_zone_selection_duration: zone.peak_zone_selection_duration || '',
       peak_zone_duration: zone.peak_zone_duration || '',
       peak_zone_surge_percentage: zone.peak_zone_surge_percentage || '',
-      ride_surge_enabled: zone.ride_surge_enabled === true,
       maximum_distance_for_regular_rides: zone.maximum_distance_for_regular_rides || '',
       maximum_distance_for_outstation_rides: zone.maximum_distance_for_outstation_rides || '',
-      status: zone.active ? 'active' : 'inactive',
-      disabled_modules: zone.disabled_modules || []
+      status: zone.active ? 'active' : 'inactive'
     });
     let parsedCoords = [];
     if (Array.isArray(zone.coordinates)) {
@@ -506,7 +410,6 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     if (parsedCoords.length > 0) setMapCenter(parsedCoords[0]);
     const nextBoundaryMode = zone.boundary_mode === 'circle' ? 'circle' : 'polygon';
     setBoundaryMode(nextBoundaryMode);
-    pendingPolygonCoordsRef.current = nextBoundaryMode === 'polygon' ? parsedCoords : null;
     setPolygonCoords(parsedCoords);
     setCircleCenter(
       zone.circle_center && Number.isFinite(Number(zone.circle_center?.lat)) && Number.isFinite(Number(zone.circle_center?.lng))
@@ -572,12 +475,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-semibold text-gray-900">Zone Management</h1>
+                  <h1 className="text-xl text-gray-900 font-bold">Zone Management</h1>
                   <p className="text-xs text-gray-400 mt-1">Configure geofenced boundaries for operational control.</p>
                 </div>
                 <button 
-                  onClick={() => navigate("create")}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/taxi/admin/pricing/zone/create"); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm relative z-50"
                 >
                   <Plus size={16} /> Add Market Zone
                 </button>
@@ -590,13 +494,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                      <Zap size={20} className={enablePeakZoneGlobal ? 'animate-pulse' : ''} />
                   </div>
                   <div>
-                     <h3 className="text-sm font-semibold text-gray-900">Dynamic Peak Pricing</h3>
+                     <h3 className="text-sm text-gray-900 font-bold">Dynamic Peak Pricing</h3>
                      <p className="text-[11px] text-gray-400">Toggle surge modifiers across all zones globally</p>
                   </div>
                </div>
                <button 
                  onClick={() => setEnablePeakZoneGlobal(!enablePeakZoneGlobal)}
-                 className={`relative w-11 h-6 rounded-full transition-colors ${enablePeakZoneGlobal ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                 className={`relative w-11 h-6 rounded-full transition-colors ${enablePeakZoneGlobal ? 'bg-[#FFC400]' : 'bg-gray-200'}`}
                >
                  <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${enablePeakZoneGlobal ? 'translate-x-5' : ''}`} />
                </button>
@@ -611,7 +515,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search zones..." 
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#FFC400] focus:border-[#FFC400] transition-all font-medium"
                   />
                 </div>
               </div>
@@ -619,7 +523,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
               <div className="overflow-x-auto">
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-20">
-                    <Loader2 className="animate-spin text-indigo-600 mb-2" size={32} />
+                    <Loader2 className="animate-spin text-[#FFC400] mb-2" size={32} />
                     <p className="text-xs text-gray-400 font-medium">Loading data...</p>
                   </div>
                 ) : filteredZones.length > 0 ? (
@@ -633,37 +537,38 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredZones.map((zone, idx) => (
+                      {paginatedZones.map((zone, idx) => (
                         <tr key={zone._id || zone.id} className="hover:bg-gray-50/50 transition-colors group">
-                          <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-400">{(idx + 1).toString().padStart(2, '0')}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-400">{(((currentPage - 1) * pageSize) + idx + 1).toString().padStart(2, '0')}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100/50 transition-transform group-hover:scale-105">
+                              <div className="w-9 h-9 rounded-lg bg-[#FFC400]/10 flex items-center justify-center text-[#FFC400] shadow-sm border border-[#FFC400]/20 transition-transform group-hover:scale-105">
                                 <Target size={16} />
                               </div>
                               <span className="font-semibold text-gray-900">{zone.name || zone.zone_name}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <button 
+                             <button 
                                onClick={() => handleStatusToggle(zone._id || zone.id, zone.active)} 
-                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${zone.active ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-gray-50 text-gray-400 border border-gray-200'}`}
-                            >
+                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${zone.active ? 'bg-emerald-50 text-gray-900 border border-emerald-100' : 'bg-gray-50 text-gray-400 border border-gray-200'}`}
+                             >
                                {zone.active ? 'Active' : 'Inactive'}
-                            </button>
+                             </button>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex items-center justify-end gap-2">
-                               <button onClick={() => navigate(`edit/${zone._id || zone.id}`)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit2 size={14} /></button>
-                               <button onClick={() => handleDelete(zone._id || zone.id)} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                             <div className="flex items-center justify-end gap-2 relative z-50">
+                               <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/pricing/zone/edit/${zone._id || zone.id}`); }} className="p-2 text-gray-400 hover:text-[#0B1220] hover:bg-[#FFC400] rounded-lg transition-colors"><Edit2 size={14} /></button>
+                               <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(zone._id || zone.id); }} className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
                                <button
-                                 onClick={() => handleExplore(zone)}
+                                 type="button"
+                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleExplore(zone); }}
                                  title="Explore Zone"
-                                 className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                 className="p-2 text-gray-400 hover:text-[#0B1220] hover:bg-[#FFC400] rounded-lg transition-colors"
                                >
                                  <Globe size={14} />
                                </button>
-                            </div>
+                             </div>
                           </td>
                         </tr>
                       ))}
@@ -672,11 +577,52 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                 ) : (
                   <div className="py-20 text-center">
                     <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-200 mx-auto mb-4"><Navigation size={32} /></div>
-                    <h3 className="text-sm font-semibold text-gray-900 mb-1">No Zones Configured</h3>
+                    <h3 className="text-sm text-gray-900 mb-1 font-bold">No Zones Configured</h3>
                     <p className="text-xs text-gray-400 max-w-xs mx-auto">Map your operational sector boundaries to initiate geofencing.</p>
                   </div>
                 )}
               </div>
+
+              {!loading && filteredZones.length > 0 && (
+                <div className="flex flex-col gap-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span className="font-medium">
+                      Showing {Math.min(((currentPage - 1) * pageSize) + 1, filteredZones.length)} to {Math.min(currentPage * pageSize, filteredZones.length)} of {filteredZones.length} zones
+                    </span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none transition-colors focus:border-[#FFC400]"
+                    >
+                      {[10, 20, 50].map((size) => (
+                        <option key={size} value={size}>{size} / page</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:border-[#FFC400]/50 hover:text-[#0B1220] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <span className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-gray-700 border border-gray-200">
+                      Page {currentPage} of {totalZonePages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalZonePages, page + 1))}
+                      disabled={currentPage === totalZonePages}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:border-[#FFC400]/50 hover:text-[#0B1220] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -693,10 +639,11 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                 <span className="text-gray-700">{editingId ? 'Edit' : 'Create'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <h1 className="text-xl font-semibold text-gray-900">{editingId ? 'Edit Market Zone' : 'Add Market Zone'}</h1>
+                <h1 className="text-xl text-gray-900 font-bold">{editingId ? 'Edit Market Zone' : 'Add Market Zone'}</h1>
                 <button 
-                  onClick={() => navigate("/taxi/admin/pricing/zone")}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/taxi/admin/pricing/zone"); setView('list'); }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm relative z-50"
                 >
                   <ArrowLeft size={14} /> Back
                 </button>
@@ -708,20 +655,20 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
               <div className="xl:col-span-4 space-y-6">
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                      <div className="w-9 h-9 rounded-lg bg-[#FFC400]/10 flex items-center justify-center text-[#FFC400]">
                         <Tag size={18} />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-900">Zone Identity</h3>
+                        <h3 className="text-sm text-gray-900 font-bold">Zone Identity</h3>
                         <p className="text-xs text-gray-400">Basic identification settings</p>
                       </div>
                    </div>
                    
                    <div className="space-y-5">
                       <div>
-                        <label className={labelClass}>Service Location <span className="text-rose-500">*</span></label>
+                        <label className={labelClass}>Service Location</label>
                         <select 
-                          value={String(formData.service_location_id || '')}
+                          value={formData.service_location_id}
                           onChange={(e) => {
                             const nextId = e.target.value;
                             setFormData({...formData, service_location_id: nextId});
@@ -733,71 +680,26 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                             }
                           }}
                           className={inputClass}
-                          required
                         >
                           <option value="">Select Service Location</option>
-                          {serviceLocations.map(sl => {
-                            const slId = String(sl._id || sl.id);
-                            const name = sl.name || sl.service_location_name || 'Service Location';
-                            const countryName = typeof sl.country === 'object' ? sl.country?.name : sl.country;
-                            return (
-                              <option key={slId} value={slId}>
-                                {name} {countryName ? `(${countryName})` : ''}
-                              </option>
-                            );
-                          })}
+                          {serviceLocations.map(sl => (
+                            <option key={sl._id || sl.id} value={sl._id || sl.id}>{sl.name || sl.service_location_name}</option>
+                          ))}
                         </select>
                       </div>
 
-                      <div className={`rounded-[26px] border p-5 transition-all ${
-                        formData.ride_surge_enabled
-                          ? 'border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,0.92),rgba(255,255,255,1))] shadow-[0_12px_30px_rgba(15,118,110,0.08)]'
-                          : 'border-slate-200 bg-white'
-                      }`}>
-                        <div className="flex items-start gap-4">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="min-w-0 flex-1 pr-1">
-                                <p className="text-[15px] font-semibold leading-6 text-slate-900">
-                                  Zone Ride Surge
-                                </p>
-                                <p className="mt-1 max-w-[220px] text-xs leading-5 text-slate-500">
-                                  Add vehicle surge for rides picked up in this zone.
-                                </p>
-                              </div>
-
-                              <button
-                                type="button"
-                                aria-pressed={formData.ride_surge_enabled}
-                                onClick={() => setFormData((prev) => ({ ...prev, ride_surge_enabled: !prev.ride_surge_enabled }))}
-                                className={`relative inline-flex h-8 w-14 shrink-0 self-start rounded-full border transition-all duration-200 ${
-                                  formData.ride_surge_enabled
-                                    ? 'border-emerald-500 bg-emerald-500 shadow-[0_10px_24px_rgba(16,185,129,0.24)]'
-                                    : 'border-slate-200 bg-slate-200'
-                                }`}
-                              >
-                                <span
-                                  className={`inline-block h-6 w-6 rounded-full bg-white shadow-[0_3px_8px_rgba(15,23,42,0.18)] transition-transform duration-200 ${
-                                    formData.ride_surge_enabled ? 'translate-x-7' : 'translate-x-1'
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
                       <div>
-                        <div className="flex items-center gap-1 border-b border-gray-100 mb-4">
+                        <div className="flex items-center gap-1 border-b border-gray-100 mb-4 overflow-x-auto hide-scrollbar whitespace-nowrap pb-1">
                           {ADMIN_LANGUAGE_OPTIONS.map(lang => (
                             <button
+                              type="button"
                               key={lang}
-                              onClick={() => setActiveTab(lang)}
-                              className={`px-4 py-2 text-xs font-medium transition-colors relative ${activeTab === lang ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                              onClick={(e) => { e.preventDefault(); setActiveTab(lang); }}
+                              className={`px-4 py-2 text-xs font-medium transition-colors relative whitespace-nowrap shrink-0 ${activeTab === lang ? 'text-[#FFC400]' : 'text-gray-400 hover:text-gray-600'}`}
                             >
                               {lang}
                               {activeTab === lang && (
-                                <motion.div layoutId="activeTab" className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-indigo-600" />
+                                <motion.div layoutId="activeTab" className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-[#FFC400]" />
                               )}
                             </button>
                           ))}
@@ -816,41 +718,6 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                       </div>
 
                       <div>
-                        <label className={labelClass}>Disabled Services</label>
-                        <p className="text-[10px] text-gray-500 mb-2">Select services to disable in this zone. By default, all are enabled.</p>
-                        <div className="flex flex-wrap gap-2">
-                          {appModules.map((module) => {
-                            const modId = String(module._id || module.id);
-                            const modName = module.name || 'Unknown';
-                            const isDisabled = formData.disabled_modules.includes(modId);
-                            
-                            return (
-                              <button
-                                key={modId}
-                                type="button"
-                                onClick={() => {
-                                  const newDisabled = isDisabled 
-                                    ? formData.disabled_modules.filter(id => id !== modId)
-                                    : [...formData.disabled_modules, modId];
-                                  setFormData({ ...formData, disabled_modules: newDisabled });
-                                }}
-                                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
-                                  isDisabled 
-                                    ? 'bg-rose-50 text-rose-600 border-rose-200 shadow-sm' 
-                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                                }`}
-                              >
-                                {modName} {isDisabled ? '(Disabled)' : ''}
-                              </button>
-                            );
-                          })}
-                          {appModules.length === 0 && (
-                            <span className="text-xs text-gray-400">No services found.</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
                         <label className={labelClass}>Boundary Shape</label>
                         <div className="grid grid-cols-2 gap-3">
                           {[
@@ -860,16 +727,10 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                             <button
                               key={option.id}
                               type="button"
-                              onClick={() => {
-                                setBoundaryMode(option.id);
-                                setIsPlacingCircle(false);
-                                if (option.id === 'circle') {
-                                  clearPolygonDrawingHook();
-                                }
-                              }}
+                              onClick={() => setBoundaryMode(option.id)}
                               className={`rounded-lg border px-4 py-3 text-sm font-semibold transition-colors ${
                                 boundaryMode === option.id
-                                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                  ? 'border-[#FFC400] bg-[#FFC400]/10 text-[#0B1220]'
                                   : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                               }`}
                             >
@@ -899,7 +760,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                 <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3 shadow-sm">
                    <button 
                      disabled={saving} onClick={handleSave}
-                     className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                     className="w-full py-3 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
                    >
                      {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                      {editingId ? 'Update Zone' : 'Save'}
@@ -945,102 +806,98 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
 
                       <div className="flex flex-wrap items-center justify-between gap-3 md:justify-end">
                         <div className="rounded-full bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
-                          {boundaryMode === 'polygon'
-                            ? isPolygonDrawing
-                              ? 'Click the map to place draggable points, then finish the shape.'
-                              : 'Use Draw Polygon to start a manual boundary.'
-                            : isPlacingCircle
-                              ? 'Click the map once to place the circle center.'
-                              : 'Set radius on the left, then use Place Circle.'}
+                          State and city labels remain visible while you draw zone boundaries.
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {boundaryMode === 'polygon' ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={startPolygonDrawing}
-                                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-black uppercase tracking-widest shadow-sm transition-all border active:scale-95 ${
-                                  isPolygonDrawing
-                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                                }`}
-                              >
-                                <MousePointer2 size={14} />
-                                Draw Polygon
-                              </button>
-                              {isPolygonDrawing && polygonCoords.length >= 3 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => finishPolygonDrawingHook()}
-                                  className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-50 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-emerald-700 shadow-sm transition-all active:scale-95"
-                                >
-                                  <Save size={14} />
-                                  Finish Shape
-                                </button>
-                              ) : null}
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={startCirclePlacement}
-                              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-black uppercase tracking-widest shadow-sm transition-all border active:scale-95 ${
-                                isPlacingCircle
-                                  ? 'border-teal-500 bg-teal-50 text-teal-700'
-                                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                              }`}
-                            >
-                              <Target size={14} />
-                              Place Circle
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={clearBoundaryDrawing}
-                            className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-sm transition-all border border-gray-200 hover:bg-rose-50 active:scale-95"
-                          >
-                            <X size={14} />
-                            Clear Map
-                          </button>
-                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setPolygonCoords([]);
+                            setCircleCenter(null);
+                            setCircleRadiusMeters('');
+                          }}
+                          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-sm transition-all border border-gray-200 hover:bg-rose-50 active:scale-95"
+                        >
+                          <X size={14} />
+                          Clear Map
+                        </button>
                       </div>
                    </div>
 
                    <div className="h-[620px] p-2">
                      {isLoaded ? (
                        <div className="w-full h-full rounded-lg overflow-hidden relative">
-                         {loadError ? (
-                           <div className="flex h-full items-center justify-center rounded-lg bg-rose-50 px-6 text-center text-sm font-medium text-rose-700">
-                             Google Maps failed to load. Check the browser API key and refresh the page.
-                           </div>
-                         ) : (
                          <GoogleMap
                            mapContainerStyle={{ width: '100%', height: '100%' }}
                            center={mapCenter} zoom={12}
-                           onLoad={(mapInstance) => {
-                             mapRef.current = mapInstance;
-                             setGoogleMap(mapInstance);
-                           }}
-                           onClick={handleMapClick}
+                           onLoad={m => { mapRef.current = m; }}
                            options={{
                               mapTypeId: 'roadmap',
                               disableDefaultUI: false,
                               zoomControl: true,
                               mapTypeControl: true,
                               streetViewControl: false,
-                              fullscreenControl: true,
-                              draggableCursor:
-                                isPolygonDrawing || isPlacingCircle ? 'crosshair' : undefined,
-                              draggingCursor:
-                                isPolygonDrawing || isPlacingCircle ? 'crosshair' : undefined,
+                              fullscreenControl: true
                            }}
                          >
+                           <DrawingManager
+                             onPolygonComplete={onPolygonComplete}
+                             options={{
+                               drawingControl: true,
+                               drawingControlOptions: {
+                                 position: window.google.maps.ControlPosition.TOP_RIGHT,
+                                 drawingModes: [
+                                   window.google.maps.drawing.OverlayType.POLYGON,
+                                   window.google.maps.drawing.OverlayType.CIRCLE,
+                                 ],
+                               },
+                               polygonOptions: {
+                                 fillColor: '#FFC400',
+                                 fillOpacity: 0.15,
+                                 strokeColor: '#FFC400',
+                                 strokeWeight: 2,
+                                 editable: true,
+                               },
+                               circleOptions: {
+                                 fillColor: '#FFC400',
+                                 fillOpacity: 0.12,
+                                 strokeColor: '#FFC400',
+                                 strokeWeight: 2,
+                                 editable: true,
+                               },
+                             }}
+                             onCircleComplete={onCircleComplete}
+                           />
+                           {boundaryMode === 'polygon' && polygonCoords.length > 0 && (
+                             <Polygon
+                               paths={polygonCoords}
+                               options={{ fillColor: '#FFC400', strokeColor: '#FFC400', strokeWeight: 2, fillOpacity: 0.25, editable: true, draggable: true }}
+                               onLoad={(polygon) => {
+                                 polygonListenersRef.current.forEach((listener) => listener?.remove?.());
+                                 polygonListenersRef.current = [];
+                                 polygonRef.current = polygon;
+                                 const path = polygon.getPath();
+                                 polygonListenersRef.current = [
+                                   path.addListener('set_at', syncPolygonState),
+                                   path.addListener('insert_at', syncPolygonState),
+                                   path.addListener('remove_at', syncPolygonState),
+                                   polygon.addListener('dragend', syncPolygonState),
+                                   polygon.addListener('mouseup', syncPolygonState),
+                                 ];
+                               }}
+                               onUnmount={() => {
+                                 polygonListenersRef.current.forEach((listener) => listener?.remove?.());
+                                 polygonListenersRef.current = [];
+                                 polygonRef.current = null;
+                               }}
+                             />
+                           )}
                            {boundaryMode === 'circle' && circleCenter && Number(circleRadiusMeters) > 0 ? (
                              <Circle
                                center={circleCenter}
                                radius={Number(circleRadiusMeters)}
                                options={{
-                                 fillColor: '#0f766e',
-                                 strokeColor: '#0f766e',
+                                 fillColor: '#FFC400',
+                                 strokeColor: '#FFC400',
                                  strokeWeight: 2,
                                  fillOpacity: 0.18,
                                  editable: true,
@@ -1070,7 +927,6 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                               />
                            ))}
                          </GoogleMap>
-                         )}
                        </div>
                      ) : (
                        <div className="flex h-full items-center justify-center bg-gray-50 rounded-lg">
@@ -1087,12 +943,13 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                    </p>
                 </div>
 
-                <div className="bg-indigo-900 rounded-xl p-6 text-white overflow-hidden relative shadow-md">
-                    <Maximize2 className="absolute -right-4 -bottom-4 text-white/10" size={120} />
-                    <h4 className="text-sm font-semibold mb-2">Instructions</h4>
-                    <p className="text-xs text-indigo-100 leading-relaxed">
-                      Use Draw Polygon to place draggable corner points on the map, then Finish Shape. Drag points while drawing for a live preview. After finishing, edit vertices directly on the polygon or right-click a vertex to delete it. For circles, set the radius and click Place Circle to drop the center.
-                    </p>
+                <div className="bg-gray-900 rounded-xl p-6 text-white overflow-hidden relative shadow-md">
+                    <div className="relative z-10">
+                      <h4 className="text-sm mb-2 flex items-center gap-2 font-bold"><MapPin size={16} className="text-[#FFC400]" /> Mapping Intelligence</h4>
+                      <p className="text-xs text-gray-300 leading-relaxed">
+                        Use the polygon or circle tool at the top of the map to define your zone boundary. Click to place polygon vertices and close the shape, or drop a circle and adjust its radius for a radial market boundary. The red dashed line represents the country boundary for reference.
+                      </p>
+                    </div>
                 </div>
               </div>
             </div>

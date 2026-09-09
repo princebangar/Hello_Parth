@@ -50,6 +50,7 @@ const ManageDrivers = () => {
             email: item.email || "-",
             address: item.city || "-",
             salary: Number(item.salary || 0),
+            assignedVehicle: item.assignedVehicle || null,
             status:
               item.approve === true ||
               item.approve === 1 ||
@@ -210,6 +211,14 @@ const ManageDrivers = () => {
                         <IndianRupee size={12} strokeWidth={2.5} />
                         <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
                           Monthly Salary Rs {Number(d.salary || 0).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 col-span-2">
+                        <Briefcase size={12} strokeWidth={2.5} />
+                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
+                          {d.assignedVehicle?.number
+                            ? `${d.assignedVehicle.name || "Assigned Vehicle"} ${d.assignedVehicle.number}`
+                            : "No vehicle assigned"}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-400 col-span-2">

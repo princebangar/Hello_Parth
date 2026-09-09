@@ -3,6 +3,7 @@ import {
   Plus,
   Car,
   ChevronRight,
+  ChevronDown,
   Trash2,
   Edit2,
   ArrowLeft,
@@ -18,7 +19,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 import CarIcon from '../../../../assets/icons/car.png';
 import BikeIcon from '../../../../assets/icons/bike.png';
@@ -31,12 +31,16 @@ import McvIcon from '../../../../assets/icons/mcv.png';
 import LuxuryIcon from '../../../../assets/icons/Luxury.png';
 import PremiumIcon from '../../../../assets/icons/Premium.png';
 import SuvIcon from '../../../../assets/icons/SUV.png';
+import ScootyIcon from '../../../../assets/icons/scooty.png';
+import HatchbackIcon from '../../../../assets/icons/Hatchback.png';
+import BusIcon from '../../../../assets/icons/bus.png';
+import MiniBusIcon from '../../../../assets/icons/mini_bus.png';
 import MapBackground from '../../../../assets/map_image.png';
 import trucksImg from '@/assets/images/delivery/trucks.png';
 import bikeImg from '@/assets/images/delivery/bike.png';
 import moversImg from '@/assets/images/delivery/movers.png';
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-300 focus:ring-2 focus:ring-orange-100';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-yellow-400 focus:ring-2 focus:ring-yellow-100';
 const labelClass = 'mb-2 block text-[12px] font-bold text-slate-700';
 
 const iconMap = {
@@ -51,6 +55,11 @@ const iconMap = {
   Luxary: LuxuryIcon,
   premium: PremiumIcon,
   suv: SuvIcon,
+  scooty: ScootyIcon,
+  car_5_seater: HatchbackIcon,
+  car_7_seater: SuvIcon,
+  bus: BusIcon,
+  mini_bus: MiniBusIcon,
 };
 
 const ICON_TYPE_ALIASES = {
@@ -65,6 +74,30 @@ const ICON_TYPE_ALIASES = {
   lcv: 'LCV',
   mcv: 'MCV',
   luxary: 'Luxary',
+  scooty: 'scooty',
+  'car 5 seater': 'car_5_seater',
+  'car 7 seater': 'car_7_seater',
+  bus: 'bus',
+  'mini bus': 'mini_bus',
+};
+
+const ICON_TYPE_LABELS = {
+  car: 'Car',
+  bike: 'Bike',
+  auto: 'Auto',
+  truck: 'Truck',
+  ehcb: 'Extra Heavy Commercial Vehicle',
+  HCV: 'Heavy Commercial Vehicle',
+  LCV: 'Light Commercial Vehicle',
+  MCV: 'Medium Commercial Vehicle',
+  Luxary: 'Luxury',
+  premium: 'Premium',
+  suv: 'SUV',
+  scooty: 'Scooty',
+  car_5_seater: 'Car 5 Seater',
+  car_7_seater: 'Car 7 Seater',
+  bus: 'Bus',
+  mini_bus: 'Mini Bus',
 };
 
 const normalizeIconType = (value = '') => {
@@ -82,7 +115,6 @@ const normalizeTransportType = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'delivery') return 'delivery';
   if (normalized === 'pooling') return 'pooling';
-  if (normalized === 'outstation') return 'outstation';
   if (normalized === 'both' || normalized === 'all') return 'both';
   return 'taxi';
 };
@@ -94,6 +126,74 @@ const normalizeTaxiMode = (value = '') => {
   if (normalized === 'both' || normalized === 'all') return 'both';
   return 'taxi';
 };
+
+const getTransportTypeOptionDescription = (transportType = '', vehicleName = '') => {
+  const normalizedTransportType = normalizeTransportType(transportType);
+  const normalizedVehicleName = String(vehicleName || '').trim() || 'Vehicle name preview';
+
+  if (normalizedTransportType === 'both') {
+    return `${normalizedVehicleName} in both ride and delivery`;
+  }
+
+  if (normalizedTransportType === 'delivery') {
+    return normalizedVehicleName;
+  }
+
+  return normalizedVehicleName;
+};
+
+const resolveVehicleTransportType = (vehicle = {}) => {
+  const directTransportType = normalizeTransportType(vehicle?.transport_type || vehicle?.is_taxi || '');
+  if (directTransportType !== 'taxi') {
+    return directTransportType;
+  }
+
+  const hasDeliveryCategory = Boolean(String(vehicle?.delivery_category || '').trim());
+  const hasDeliveryPricing = Boolean(
+    vehicle?.delivery_distance_pricing?.enabled ||
+    Number(vehicle?.delivery_distance_pricing?.base_price || 0) > 0 ||
+    Number(vehicle?.delivery_distance_pricing?.distance_price || 0) > 0,
+  );
+
+  if (hasDeliveryCategory || hasDeliveryPricing) {
+    return 'delivery';
+  }
+
+  return 'taxi';
+};
+
+const buildVehicleFormData = (selectedVehicle = {}) => ({
+  name: selectedVehicle.name || '',
+  short_description: selectedVehicle.short_description || '',
+  description: selectedVehicle.description || '',
+  transport_type: resolveVehicleTransportType(selectedVehicle),
+  dispatch_type: selectedVehicle.dispatch_type || selectedVehicle.trip_dispatch_type || 'normal',
+  icon_types: normalizeIconType(selectedVehicle.icon_types || selectedVehicle.icon_types_for),
+  category: String(selectedVehicle.category || ''),
+  image: selectedVehicle.image || '',
+  map_icon: selectedVehicle.map_icon || selectedVehicle.icon || selectedVehicle.image || '',
+  capacity: Number(selectedVehicle.capacity || 0),
+  size: String(selectedVehicle.size || ''),
+  is_taxi: selectedVehicle.is_taxi || resolveVehicleTransportType(selectedVehicle),
+  is_accept_share_ride: Number(selectedVehicle.is_accept_share_ride || 0),
+  delivery_category: String(selectedVehicle.delivery_category || ''),
+  delivery_distance_pricing: normalizeDeliveryDistancePricing(selectedVehicle.delivery_distance_pricing),
+  service_tax: String(selectedVehicle.service_tax ?? 0),
+  admin_commission_type_from_driver: String(selectedVehicle.admin_commission_type_from_driver ?? 1),
+  admin_commission_from_driver: String(selectedVehicle.admin_commission_from_driver ?? 0),
+  admin_commission_type_for_owner: String(selectedVehicle.admin_commission_type_for_owner ?? 1),
+  admin_commission_for_owner: String(selectedVehicle.admin_commission_for_owner ?? 0),
+  status: Number(selectedVehicle.status ?? (selectedVehicle.active !== false ? 1 : 0)),
+  active: selectedVehicle.active !== false && Number(selectedVehicle.status ?? 1) !== 0,
+  supported_other_vehicle_types: Array.isArray(selectedVehicle.supported_other_vehicle_types)
+    ? selectedVehicle.supported_other_vehicle_types.map((item) => String(item?._id || item))
+    : typeof selectedVehicle.supported_vehicles === 'string' && selectedVehicle.supported_vehicles
+      ? selectedVehicle.supported_vehicles.split(',').map((item) => item.trim()).filter(Boolean)
+      : [],
+  vehicle_preference: Array.isArray(selectedVehicle.vehicle_preference)
+    ? selectedVehicle.vehicle_preference.map((item) => String(item?._id || item))
+    : [],
+});
 
 const sanitizeObjectIdList = (items = []) =>
   (Array.isArray(items) ? items : [])
@@ -113,6 +213,7 @@ const defaultFormData = {
   transport_type: 'taxi',
   dispatch_type: 'normal',
   icon_types: 'car',
+  category: '',
   image: '',
   map_icon: '',
   capacity: 0,
@@ -125,9 +226,12 @@ const defaultFormData = {
     base_price: '',
     free_distance: '',
     distance_price: '',
-    free_time: '',
-    time_price: '',
   },
+  service_tax: '0',
+  admin_commission_type_from_driver: '1',
+  admin_commission_from_driver: '0',
+  admin_commission_type_for_owner: '1',
+  admin_commission_for_owner: '0',
   status: 1,
   active: true,
   supported_other_vehicle_types: [],
@@ -148,11 +252,24 @@ const DELIVERY_CATEGORY_OPTIONS = [
     description: 'Fast lightweight parcel bikes and two-wheel delivery options.',
   },
   {
+    id: 'auto',
+    title: 'Auto',
+    image: '/2_AutoRickshaw.png',
+    description: 'Classic three-wheeler Indian auto rickshaw for fast local parcel delivery.',
+  },
+  {
     id: 'movers',
     title: 'Packers & Movers',
     image: moversImg,
     description: 'Home shifting, helper-based, and larger move services.',
   },
+];
+
+const VEHICLE_CATEGORY_OPTIONS = [
+  { id: '', label: 'Select Category' },
+  { id: 'bike', label: 'Bike' },
+  { id: 'car', label: 'Car' },
+  { id: 'auto', label: 'Auto' },
 ];
 
 const TRANSPORT_TYPE_OPTIONS = [
@@ -166,16 +283,35 @@ const unwrap = (response) => response?.data?.data || response?.data || response;
 const normalizeDeliveryDistancePricing = (value = {}) => ({
   enabled: Boolean(value?.enabled),
   base_price: String(value?.base_price ?? ''),
-  free_distance: String(value?.free_distance ?? ''),
+  free_distance: String(value?.free_distance ?? value?.base_distance ?? ''),
   distance_price: String(value?.distance_price ?? ''),
-  free_time: String(value?.free_time ?? ''),
-  time_price: String(value?.time_price ?? ''),
 });
+
+const clampNonNegativeInput = (value) => {
+  if (value === '') {
+    return '';
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return '';
+  }
+
+  return String(Math.max(0, numericValue));
+};
 
 const normalizeVehicle = (item = {}) => ({
   ...item,
   id: String(item?._id || item?.id || ''),
 });
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
@@ -184,7 +320,7 @@ const StatusToggle = ({ active, onToggle }) => (
       e.stopPropagation();
       onToggle();
     }}
-    className={`relative h-6 w-12 rounded-full transition-all ${active ? 'bg-emerald-500' : 'bg-slate-300'}`}
+    className={`relative h-6 w-12 rounded-full transition-all ${active ? 'bg-yellow-400' : 'bg-slate-300'}`}
   >
     <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${active ? 'left-7' : 'left-1'}`} />
   </button>
@@ -217,7 +353,7 @@ const VehicleMultiSelect = ({
           {selectedItems.length ? selectedItems.map((item) => (
             <span
               key={String(item.id || item._id)}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-700 px-3 py-1.5 text-[12px] font-semibold text-white"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-700 px-3 py-1.5 text-[12px] font-semibold text-black"
             >
               {item.name}
               <button
@@ -254,26 +390,35 @@ const VehicleType = ({ mode: propMode }) => {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTransportTypeMenuOpen, setIsTransportTypeMenuOpen] = useState(false);
+  const [vehiclePreferences, setVehiclePreferences] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, current_page: 1 });
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
-  const { transportTypes: dbTransportTypes } = useTaxiTransportTypes();
+  const { transportTypes } = useTaxiTransportTypes({ enabled: isEditor });
   const transportTypeOptions = useMemo(() => {
-    if (Array.isArray(dbTransportTypes) && dbTransportTypes.length > 0) {
-      return dbTransportTypes.map((t) => ({
-        id: String(t.id || t._id || t.name || '').toLowerCase(),
-        name: String(t.name || t.id || '').toLowerCase(),
-        display_name: t.display_name || t.name || t.id,
-      }));
-    }
-    return [
-      { id: 'taxi', name: 'taxi', display_name: 'Taxi / Ride' },
-      { id: 'delivery', name: 'delivery', display_name: 'Delivery' },
-      { id: 'both', name: 'both', display_name: 'Both (Taxi & Delivery)' },
-      { id: 'pooling', name: 'pooling', display_name: 'Pooling' },
-      { id: 'outstation', name: 'outstation', display_name: 'Outstation' },
-    ];
-  }, [dbTransportTypes]);
+    const normalized = new Map();
+
+    [...TRANSPORT_TYPE_OPTIONS, ...(Array.isArray(transportTypes) ? transportTypes : [])].forEach((item) => {
+      const value = normalizeTransportType(item?.name || item?.transport_type || item?.id || '');
+      if (!value || value === 'pooling') return;
+
+      normalized.set(value, {
+        id: item?.id || item?._id || value,
+        name: value,
+        display_name:
+          value === 'both'
+            ? 'Both'
+            : (item?.display_name || item?.label || value.charAt(0).toUpperCase() + value.slice(1)),
+      });
+    });
+
+    return Array.from(normalized.values());
+  }, [transportTypes]);
+  const selectedTransportTypeOption = useMemo(
+    () => transportTypeOptions.find((item) => item.name === formData.transport_type) || null,
+    [formData.transport_type, transportTypeOptions],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -283,56 +428,86 @@ const VehicleType = ({ mode: propMode }) => {
       setErrorMessage('');
 
       try {
-        const [vehicleResponse] = await Promise.all([
-          api.get('/admin/types/vehicle-types'),
+        const vehicleCatalogPromise = api.get(isEditor ? '/admin/types/vehicle-types' : '/admin/types/vehicle-types/list');
+        const preferencePromise = isEditor ? api.get('/admin/vehicle_preference') : Promise.resolve(null);
+        const detailPromise = isEditor && id ? api.get(`/admin/types/vehicle-types/${id}`) : Promise.resolve(null);
+
+        if (!id && propMode === 'create') {
+          setFormData(defaultFormData);
+        }
+
+        detailPromise
+          .then((response) => {
+            if (!mounted || !response) {
+              return;
+            }
+
+            const detailPayload = unwrap(response);
+            if (detailPayload) {
+              setFormData(buildVehicleFormData(normalizeVehicle(detailPayload)));
+            }
+          })
+          .catch(() => {});
+
+        vehicleCatalogPromise
+          .then((response) => {
+            if (!mounted) {
+              return;
+            }
+
+            const vehiclePayload = unwrap(response);
+            const vehicleResults = Array.isArray(vehiclePayload?.results)
+              ? vehiclePayload.results
+              : Array.isArray(vehiclePayload)
+                ? vehiclePayload
+                : [];
+            const normalizedVehicles = vehicleResults.map(normalizeVehicle);
+            setVehicles(normalizedVehicles);
+            setPagination(vehiclePayload?.paginator || { total: normalizedVehicles.length, current_page: 1 });
+
+            if (id && !formData.name) {
+              const selectedVehicle = normalizedVehicles.find((item) => String(item.id) === String(id));
+              if (selectedVehicle) {
+                setFormData(buildVehicleFormData(selectedVehicle));
+              }
+            }
+          })
+          .catch(() => {});
+
+        preferencePromise
+          .then((response) => {
+            if (!mounted || !response) {
+              return;
+            }
+
+            const prefPayload = unwrap(response);
+            const prefResults = Array.isArray(prefPayload?.results)
+              ? prefPayload.results
+              : Array.isArray(prefPayload?.data)
+                ? prefPayload.data
+                : Array.isArray(prefPayload)
+                  ? prefPayload
+                  : [];
+            setVehiclePreferences(prefResults);
+          })
+          .catch(() => {});
+
+        const [vehicleCatalogResult, preferenceResult, detailResult] = await Promise.allSettled([
+          vehicleCatalogPromise,
+          preferencePromise,
+          detailPromise,
         ]);
 
         if (!mounted) {
           return;
         }
 
-        const vehiclePayload = unwrap(vehicleResponse);
-        const vehicleResults = Array.isArray(vehiclePayload?.results)
-          ? vehiclePayload.results
-          : Array.isArray(vehiclePayload)
-            ? vehiclePayload
-            : [];
-        const normalizedVehicles = vehicleResults.map(normalizeVehicle);
-        setVehicles(normalizedVehicles);
-        setPagination(vehiclePayload?.paginator || { total: normalizedVehicles.length, current_page: 1 });
+        const errors = [vehicleCatalogResult, preferenceResult, detailResult]
+          .filter((result) => result.status === 'rejected')
+          .map((result) => result.reason?.message || 'Request failed');
 
-        if (id) {
-          const selectedVehicle = normalizedVehicles.find((item) => String(item.id) === String(id));
-          if (selectedVehicle) {
-            setFormData({
-              name: selectedVehicle.name || '',
-              short_description: selectedVehicle.short_description || '',
-              description: selectedVehicle.description || '',
-              transport_type: selectedVehicle.transport_type || 'taxi',
-              dispatch_type: selectedVehicle.dispatch_type || selectedVehicle.trip_dispatch_type || 'normal',
-              icon_types: normalizeIconType(selectedVehicle.icon_types || selectedVehicle.icon_types_for),
-              image: selectedVehicle.image || '',
-              map_icon: selectedVehicle.map_icon || selectedVehicle.icon || selectedVehicle.image || '',
-              capacity: Number(selectedVehicle.capacity || 0),
-              size: String(selectedVehicle.size || ''),
-              is_taxi: selectedVehicle.is_taxi || 'taxi',
-              is_accept_share_ride: Number(selectedVehicle.is_accept_share_ride || 0),
-              delivery_category: String(selectedVehicle.delivery_category || ''),
-              delivery_distance_pricing: normalizeDeliveryDistancePricing(selectedVehicle.delivery_distance_pricing),
-              status: Number(selectedVehicle.status ?? (selectedVehicle.active !== false ? 1 : 0)),
-              active: selectedVehicle.active !== false && Number(selectedVehicle.status ?? 1) !== 0,
-              supported_other_vehicle_types: Array.isArray(selectedVehicle.supported_other_vehicle_types)
-                ? selectedVehicle.supported_other_vehicle_types.map((item) => String(item?._id || item))
-                : typeof selectedVehicle.supported_vehicles === 'string' && selectedVehicle.supported_vehicles
-                  ? selectedVehicle.supported_vehicles.split(',').map((item) => item.trim()).filter(Boolean)
-                  : [],
-              vehicle_preference: Array.isArray(selectedVehicle.vehicle_preference)
-                ? selectedVehicle.vehicle_preference.map((item) => String(item?._id || item))
-                : [],
-            });
-          }
-        } else if (propMode === 'create') {
-          setFormData(defaultFormData);
+        if (errors.length === 3 || (id && detailResult.status === 'rejected')) {
+          setErrorMessage(errors[0] || 'Could not load vehicle types.');
         }
       } catch (error) {
         if (mounted) {
@@ -371,33 +546,18 @@ const VehicleType = ({ mode: propMode }) => {
     [id, vehicles],
   );
 
+  const preferenceOptions = useMemo(
+    () => vehiclePreferences.map((item) => ({ ...item, id: String(item._id || item.id) })),
+    [vehiclePreferences],
+  );
+
   const showsDeliveryCategorySelector = useMemo(
     () => ['delivery', 'both'].includes(normalizeTransportType(formData.transport_type)),
     [formData.transport_type],
   );
 
   const updateForm = (field, value) => {
-    let sanitizedValue = value;
-    if (field === 'capacity' && value !== '') {
-      const num = Number(value);
-      if (!isNaN(num) && num < 0) {
-        sanitizedValue = 0;
-      }
-    }
-    if (field === 'delivery_distance_pricing') {
-      const pricing = { ...value };
-      const keys = ['base_price', 'free_distance', 'distance_price', 'free_time', 'time_price'];
-      for (const k of keys) {
-        if (pricing[k] !== undefined && pricing[k] !== '') {
-          const num = Number(pricing[k]);
-          if (!isNaN(num) && num < 0) {
-            pricing[k] = '0';
-          }
-        }
-      }
-      sanitizedValue = pricing;
-    }
-    setFormData((prev) => ({ ...prev, [field]: sanitizedValue }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleImageChange = async (event, field = 'image') => {
@@ -405,16 +565,9 @@ const VehicleType = ({ mode: propMode }) => {
     if (!file) {
       return;
     }
-    try {
-      const uploadResult = await uploadService.uploadImageFile(file, 'vehicle-types');
-      const url = uploadResult?.secureUrl || uploadResult?.url || '';
-      if (!url) throw new Error('Image upload failed');
-      updateForm(field, url);
-    } catch (error) {
-      setErrorMessage(error?.message || 'Failed to upload image');
-    } finally {
-      event.target.value = '';
-    }
+    const dataUrl = await fileToDataUrl(file);
+    updateForm(field, dataUrl);
+    event.target.value = '';
   };
 
   const handleSave = async () => {
@@ -433,6 +586,7 @@ const VehicleType = ({ mode: propMode }) => {
         transport_type: normalizeTransportType(formData.transport_type),
         dispatch_type: formData.dispatch_type,
         icon_types: normalizeIconType(formData.icon_types),
+        category: formData.category,
         image: formData.image || '',
         icon: formData.map_icon || '',
         map_icon: formData.map_icon || '',
@@ -447,8 +601,8 @@ const VehicleType = ({ mode: propMode }) => {
               base_price: Number(formData.delivery_distance_pricing?.base_price || 0),
               free_distance: Number(formData.delivery_distance_pricing?.free_distance || 0),
               distance_price: Number(formData.delivery_distance_pricing?.distance_price || 0),
-              free_time: Number(formData.delivery_distance_pricing?.free_time || 0),
-              time_price: Number(formData.delivery_distance_pricing?.time_price || 0),
+              free_time: 0,
+              time_price: 0,
             }
           : {
               enabled: false,
@@ -458,6 +612,11 @@ const VehicleType = ({ mode: propMode }) => {
               free_time: 0,
               time_price: 0,
             },
+        service_tax: showsDeliveryCategorySelector ? Number(formData.service_tax || 0) : 0,
+        admin_commission_type_from_driver: Number(formData.admin_commission_type_from_driver || 1),
+        admin_commission_from_driver: Number(formData.admin_commission_from_driver || 0),
+        admin_commission_type_for_owner: Number(formData.admin_commission_type_for_owner || 1),
+        admin_commission_for_owner: Number(formData.admin_commission_for_owner || 0),
         status: formData.active ? 1 : 0,
         active: formData.active,
         supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
@@ -491,39 +650,9 @@ const VehicleType = ({ mode: propMode }) => {
     }
   };
 
-  const handleToggleStatus = async (vehicle) => {
-    const isCurrentlyActive = vehicle.active !== false && Number(vehicle.status ?? 1) !== 0;
-    const nextActive = !isCurrentlyActive;
-    const nextStatus = nextActive ? 1 : 0;
-
-    setVehicles((prev) =>
-      prev.map((item) =>
-        String(item.id) === String(vehicle.id)
-          ? { ...item, active: nextActive, status: nextStatus }
-          : item
-      )
-    );
-
-    try {
-      await api.patch(`/admin/types/vehicle-types/${vehicle.id}`, {
-        active: nextActive,
-        status: nextStatus,
-      });
-    } catch (error) {
-      setVehicles((prev) =>
-        prev.map((item) =>
-          String(item.id) === String(vehicle.id)
-            ? { ...item, active: vehicle.active, status: vehicle.status }
-            : item
-        )
-      );
-      setErrorMessage(error?.response?.data?.message || error.message || 'Could not update vehicle status.');
-    }
-  };
-
   if (!isEditor) {
     return (
-      <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
+      <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
         <div className="mb-6">
           <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
             <span>Pricing</span>
@@ -537,7 +666,7 @@ const VehicleType = ({ mode: propMode }) => {
             </div>
             <button
               onClick={() => navigate('/taxi/admin/pricing/vehicle-type/create')}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#ff6b4a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:bg-[#f55a37]"
+              className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-3 text-sm font-semibold text-black shadow-lg shadow-orange-200 transition hover:bg-yellow-500"
             >
               <Plus size={18} />
               Add Vehicle
@@ -552,7 +681,7 @@ const VehicleType = ({ mode: propMode }) => {
                 <Car size={20} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Total Types</p>
+                <p className="text-sm font-medium text-slate-500">Total Types</p>
                 <p className="text-2xl font-bold text-slate-900">{vehicles.length}</p>
               </div>
             </div>
@@ -563,7 +692,7 @@ const VehicleType = ({ mode: propMode }) => {
                 <Activity size={20} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Active</p>
+                <p className="text-sm font-medium text-slate-500">Active</p>
                 <p className="text-2xl font-bold text-slate-900">{vehicles.filter((item) => item.active !== false).length}</p>
               </div>
             </div>
@@ -574,7 +703,7 @@ const VehicleType = ({ mode: propMode }) => {
                 <Package size={20} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Delivery Types</p>
+                <p className="text-sm font-medium text-slate-500">Delivery Types</p>
                 <p className="text-2xl font-bold text-slate-900">{vehicles.filter((item) => ['delivery', 'both'].includes(String(item.transport_type || '').toLowerCase())).length}</p>
               </div>
             </div>
@@ -592,11 +721,11 @@ const VehicleType = ({ mode: propMode }) => {
             <table className="w-full text-left">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Vehicle</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Transport</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Dispatch</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Active</th>
-                  <th className="px-6 py-4 text-right text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Action</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Vehicle</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Transport</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Dispatch</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Active</th>
+                  <th className="px-6 py-4 text-right text-sm font-semibold text-slate-600">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -634,15 +763,12 @@ const VehicleType = ({ mode: propMode }) => {
                     </td>
                     <td className="px-6 py-5 text-sm font-medium text-slate-700">{vehicle.trip_dispatch_type || vehicle.dispatch_type || 'normal'}</td>
                     <td className="px-6 py-5">
-                      <StatusToggle
-                        active={vehicle.active !== false && Number(vehicle.status ?? 1) !== 0}
-                        onToggle={() => handleToggleStatus(vehicle)}
-                      />
+                      <StatusToggle active={vehicle.active !== false} onToggle={() => {}} />
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/taxi/admin/pricing/vehicle-type/edit/${vehicle.id}`)}
+                          onClick={() => navigate(`/admin/pricing/vehicle-type/edit/${vehicle.id}`)}
                           className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                         >
                           <Edit2 size={15} />
@@ -666,7 +792,7 @@ const VehicleType = ({ mode: propMode }) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
+    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
@@ -698,23 +824,75 @@ const VehicleType = ({ mode: propMode }) => {
         <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-2 lg:p-8">
           <div>
             <label className={labelClass}>Transport Type *</label>
-            <select
-              value={formData.transport_type}
-              onChange={(e) => {
-                const nextTransportType = e.target.value;
-                updateForm('transport_type', nextTransportType);
-                if (!['delivery', 'both'].includes(normalizeTransportType(nextTransportType))) {
-                  updateForm('delivery_category', '');
-                  updateForm('delivery_distance_pricing', normalizeDeliveryDistancePricing());
-                }
-              }}
-              className={inputClass}
-            >
-               <option value="">Select Transport Type</option>
-               {transportTypeOptions.map((t) => (
-                 <option key={t.id || t._id || t.name} value={t.name}>{t.display_name}</option>
-               ))}
-            </select>
+            <input type="hidden" required value={formData.transport_type} onChange={() => {}} />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsTransportTypeMenuOpen((previous) => !previous)}
+                onBlur={(event) => {
+                  const nextFocusTarget = event.relatedTarget;
+                  if (!event.currentTarget.parentElement?.contains(nextFocusTarget)) {
+                    setIsTransportTypeMenuOpen(false);
+                  }
+                }}
+                className={`${inputClass} flex min-h-[76px] items-center justify-between text-left`}
+              >
+                <div>
+                  <p className="text-sm font-bold text-slate-900">
+                    {selectedTransportTypeOption?.display_name || 'Select Transport Type'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {selectedTransportTypeOption
+                      ? getTransportTypeOptionDescription(selectedTransportTypeOption.name, formData.name)
+                      : 'Choose where this vehicle name should appear.'}
+                  </p>
+                </div>
+                <ChevronDown
+                  size={18}
+                  className={`shrink-0 text-slate-400 transition-transform ${isTransportTypeMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {isTransportTypeMenuOpen ? (
+                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                  {transportTypeOptions.map((t) => {
+                    const selected = t.name === formData.transport_type;
+
+                    return (
+                      <button
+                        key={t.id || t._id || t.name}
+                        type="button"
+                        onClick={() => {
+                          const nextTransportType = t.name;
+                          updateForm('transport_type', nextTransportType);
+                          if (!['delivery', 'both'].includes(normalizeTransportType(nextTransportType))) {
+                            updateForm('delivery_category', '');
+                            updateForm('delivery_distance_pricing', normalizeDeliveryDistancePricing());
+                          }
+                          setIsTransportTypeMenuOpen(false);
+                        }}
+                        className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition ${
+                          selected ? 'bg-orange-50' : 'bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <div>
+                          <p className={`text-sm font-bold ${selected ? 'text-orange-600' : 'text-slate-900'}`}>
+                            {t.display_name}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {getTransportTypeOptionDescription(t.name, formData.name)}
+                          </p>
+                        </div>
+                        {selected ? (
+                          <span className="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-white">
+                            <CheckCircle2 size={12} />
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
             <p className="mt-2 text-xs text-slate-500">
               Choose `Both` for vehicle types like bikes that can handle ride and parcel flows.
             </p>
@@ -724,7 +902,16 @@ const VehicleType = ({ mode: propMode }) => {
             <label className={labelClass}>Icon Type *</label>
             <select value={formData.icon_types} onChange={(e) => updateForm('icon_types', e.target.value)} className={inputClass}>
               {Object.keys(iconMap).map((key) => (
-                <option key={key} value={key}>{key}</option>
+                <option key={key} value={key}>{ICON_TYPE_LABELS[key] || key}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelClass}>Category</label>
+            <select value={formData.category} onChange={(e) => updateForm('category', e.target.value)} className={inputClass}>
+              {VEHICLE_CATEGORY_OPTIONS.map((option) => (
+                <option key={option.id || 'empty'} value={option.id}>{option.label}</option>
               ))}
             </select>
           </div>
@@ -812,7 +999,7 @@ const VehicleType = ({ mode: propMode }) => {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Free Distance (KM)</label>
+                  <label className={labelClass}>Base Distance (KM)</label>
                   <input
                     type="number"
                     min="0"
@@ -825,6 +1012,9 @@ const VehicleType = ({ mode: propMode }) => {
                     placeholder="2"
                     disabled={!formData.delivery_distance_pricing?.enabled}
                   />
+                  <p className="mt-2 text-[11px] font-medium text-slate-400">
+                    Distance covered by the base price before per-km charges begin.
+                  </p>
                 </div>
 
                 <div>
@@ -844,34 +1034,68 @@ const VehicleType = ({ mode: propMode }) => {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Free Time (Min)</label>
+                  <label className={labelClass}>Service Tax (%)</label>
                   <input
                     type="number"
                     min="0"
-                    value={formData.delivery_distance_pricing?.free_time ?? ''}
-                    onChange={(e) => updateForm('delivery_distance_pricing', {
-                      ...formData.delivery_distance_pricing,
-                      free_time: e.target.value,
-                    })}
+                    value={formData.service_tax}
+                    onChange={(e) => updateForm('service_tax', clampNonNegativeInput(e.target.value))}
+                    className={inputClass}
+                    placeholder="5"
+                  />
+                  <p className="mt-2 text-[11px] font-medium text-slate-400">
+                    Added on top of the delivery fare shown to the user.
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label className={labelClass}>Admin Commission Type From Driver</label>
+                  <select
+                    value={formData.admin_commission_type_from_driver}
+                    onChange={(e) => updateForm('admin_commission_type_from_driver', e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="1">Percentage</option>
+                    <option value="2">Fixed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Admin Commission From Driver</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.admin_commission_from_driver}
+                    onChange={(e) => updateForm('admin_commission_from_driver', clampNonNegativeInput(e.target.value))}
                     className={inputClass}
                     placeholder="0"
-                    disabled={!formData.delivery_distance_pricing?.enabled}
                   />
                 </div>
 
                 <div>
-                  <label className={labelClass}>Time Price</label>
+                  <label className={labelClass}>Admin Commission Type From Owner</label>
+                  <select
+                    value={formData.admin_commission_type_for_owner}
+                    onChange={(e) => updateForm('admin_commission_type_for_owner', e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="1">Percentage</option>
+                    <option value="2">Fixed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Admin Commission From Owner</label>
                   <input
                     type="number"
                     min="0"
-                    value={formData.delivery_distance_pricing?.time_price ?? ''}
-                    onChange={(e) => updateForm('delivery_distance_pricing', {
-                      ...formData.delivery_distance_pricing,
-                      time_price: e.target.value,
-                    })}
+                    value={formData.admin_commission_for_owner}
+                    onChange={(e) => updateForm('admin_commission_for_owner', clampNonNegativeInput(e.target.value))}
                     className={inputClass}
                     placeholder="0"
-                    disabled={!formData.delivery_distance_pricing?.enabled}
                   />
                 </div>
               </div>
@@ -922,9 +1146,14 @@ const VehicleType = ({ mode: propMode }) => {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-black text-slate-900">{formData.name || 'Taxi'}</p>
-                    <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[7px] font-black text-white">FASTEST</span>
+                    <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[7px] font-black text-black">FASTEST</span>
                   </div>
                   <p className="truncate text-[11px] font-bold text-slate-500">{formData.short_description || formData.description || 'Closest driver 940 m away'}</p>
+                  {showsDeliveryCategorySelector ? (
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Includes {Number(formData.service_tax || 0).toFixed(2)}% service tax
+                    </p>
+                  ) : null}
                 </div>
                 <p className="text-sm font-black text-slate-900">₹31</p>
               </div>
@@ -961,20 +1190,20 @@ const VehicleType = ({ mode: propMode }) => {
               ) : null}
             </div>
 
-          <div>
-            <label className={labelClass}>Maximum Weight / Capacity *</label>
-            <input
-              type="number"
-              value={formData.capacity}
+            <div>
+              <label className={labelClass}>Maximum Weight / Capacity *</label>
+              <input
+                type="number"
+                value={formData.capacity}
                 onChange={(e) => updateForm('capacity', e.target.value)}
                 className={inputClass}
-              placeholder="12"
-            />
-          </div>
+                placeholder="12"
+              />
+            </div>
 
-          <div>
-            <label className={labelClass}>Short Description *</label>
-            <input
+            <div>
+              <label className={labelClass}>Short Description *</label>
+              <input
                 type="text"
                 value={formData.short_description}
                 onChange={(e) => updateForm('short_description', e.target.value)}
@@ -1019,8 +1248,8 @@ const VehicleType = ({ mode: propMode }) => {
             <label className={labelClass}>Operational Scope *</label>
             <select value={formData.is_taxi} onChange={(e) => updateForm('is_taxi', e.target.value)} className={inputClass}>
               <option value="">Select Scope</option>
-              {transportTypeOptions.map((t) => (
-                <option key={t.id || t._id || t.name} value={t.name}>{t.display_name}</option>
+              {transportTypes.map(t => (
+                <option key={t.id || t._id} value={t.name}>{t.display_name}</option>
               ))}
             </select>
           </div>
@@ -1046,6 +1275,15 @@ const VehicleType = ({ mode: propMode }) => {
             />
           </div>
 
+          <div className="lg:col-span-2">
+            <VehicleMultiSelect
+              label="Vehicle Preferences"
+              options={preferenceOptions}
+              value={formData.vehicle_preference}
+              onChange={(next) => updateForm('vehicle_preference', next)}
+              placeholder="No preferences selected"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 border-t border-slate-100 bg-slate-50/50 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
@@ -1053,7 +1291,7 @@ const VehicleType = ({ mode: propMode }) => {
             <div className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3">
               <Info size={16} className="mt-0.5 shrink-0 text-amber-600" />
               <p className="text-sm text-amber-800">
-                This form is fully dynamic from your DB. Transport type, icon type, and supported vehicles all save to the real vehicle catalog.
+                This form is fully dynamic from your DB. Transport type, icon type, supported vehicles, and preferences all save to the real vehicle catalog.
               </p>
             </div>
             <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
@@ -1083,7 +1321,7 @@ const VehicleType = ({ mode: propMode }) => {
             <button
               onClick={handleSave}
               disabled={isSaving || loading}
-              className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60"
+              className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-500 disabled:opacity-60"
             >
               <Save size={16} />
               {isSaving ? 'Saving...' : id ? 'Update' : 'Create'}

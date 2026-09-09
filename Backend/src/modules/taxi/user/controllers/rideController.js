@@ -25,15 +25,14 @@ import {
 import {
   cancelRideByUser,
   emitToDriver,
-  emitToRoom,
-  getDriverRoom,
+  getSocketServer,
   notifyRideAccepted,
   notifyRideBiddingUpdated,
   restartRideDispatchWithLatestFare,
   startDispatchFlow,
 } from '../../services/dispatchService.js';
 import { getTipSettings } from '../../services/appSettingsService.js';
-import { calculateCancellationBill } from '../../services/cancellationService.js';
+import { matchDrivers } from '../../services/matchingService.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
 
@@ -297,11 +296,19 @@ const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
 };
 
 export const createRide = async (req, res) => {
-  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount } =
+  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, zone_id, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount } =
     req.body;
 
   if (!pickup || !drop) {
     throw new ApiError(400, 'pickup and drop are required');
+  }
+
+  console.log('--- TEMPORARY DEBUG LOG ---');
+  console.log('backend received vehicleType (ID):', vehicleTypeId);
+
+  const resolvedVehicleTypeId = vehicleTypeId || (Array.isArray(vehicleTypeIds) ? vehicleTypeIds[0] : null);
+  if (!resolvedVehicleTypeId) {
+    throw new ApiError(400, 'vehicleTypeId is required');
   }
 
   const ride = await createRideRecord({
@@ -321,6 +328,7 @@ export const createRide = async (req, res) => {
     serviceType,
     intercity,
     promo_code,
+    zone_id,
     service_location_id,
     transport_type,
     scheduledAt,
@@ -406,6 +414,36 @@ export const updateRideStatus = async (req, res) => {
     nextStatus,
     paymentMethod: req.body.paymentMethod,
   });
+
+  try {
+    const io = getSocketServer();
+    if (io) {
+      const populatedRide = await getRideDetails(ride._id);
+      const payload = {
+        rideId: String(populatedRide._id),
+        status: populatedRide.status,
+        liveStatus: populatedRide.liveStatus,
+        acceptedAt: populatedRide.acceptedAt,
+        arrivedAt: populatedRide.arrivedAt,
+        startedAt: populatedRide.startedAt,
+        completedAt: populatedRide.completedAt,
+      };
+      const room = getRideRoom(populatedRide._id);
+      
+      // Emit ride:status:updated
+      io.to(room).emit('ride:status:updated', payload);
+      
+      // Emit ride:state
+      const statePayload = serializeRideRealtime(populatedRide);
+      io.to(room).emit('ride:state', statePayload);
+      
+      // Sync to Firebase/Realtime DB
+      const { mirrorRideRealtimeState } = await import('../../services/rideRealtimeSyncService.js');
+      mirrorRideRealtimeState(statePayload).catch(() => {});
+    }
+  } catch (socketError) {
+    console.error('Failed to emit status update socket event from controller:', socketError);
+  }
 
   res.json({
     success: true,
@@ -881,11 +919,10 @@ export const verifyRazorpayRideTip = async (req, res) => {
         driverId: ride.driverId,
         rideId: ride._id,
         amount: verifiedTipAmount,
-        type: 'ride_tip',
-        description: 'Ride tip credited from rider (online)',
+        type: 'adjustment',
+        description: 'Ride tip credited from rider',
         metadata: {
           source: 'ride_tip',
-          paymentMode: 'online',
           provider: 'razorpay',
           providerOrderId: orderId,
           providerPaymentId: paymentId,
@@ -923,16 +960,6 @@ export const verifyRazorpayRideTip = async (req, res) => {
     });
   }
 
-  try {
-    emitToRoom(getDriverRoom(ride.driverId), 'ride:tip:received', {
-      rideId: String(ride._id),
-      tipAmount: verifiedTipAmount,
-      rating,
-      comment: comment.trim(),
-      message: `You received a tip of Rs ${verifiedTipAmount} from passenger!`,
-    });
-  } catch (_e) {}
-
   const populatedRide = await getRideDetails(ride._id);
 
   res.json({
@@ -953,25 +980,14 @@ export const getRideAppTipSettings = async (_req, res) => {
 };
 
 export const cancelRide = async (req, res) => {
-  const reason = req.body?.cancellationReason || req.body?.reason || req.query?.reason || '';
-  const comment = req.body?.cancellationComment || req.body?.comment || req.query?.comment || '';
-
   const ride = await cancelRideByUser({
     rideId: req.params.rideId,
     userId: req.auth.sub,
-    reason,
-    comment,
   });
 
   if (!ride) {
     throw new ApiError(404, 'Ride not found');
   }
-
-  const cancellationBill = await calculateCancellationBill({
-    ride,
-    cancelledBy: 'user',
-    reason,
-  });
 
   res.json({
     success: true,
@@ -979,33 +995,7 @@ export const cancelRide = async (req, res) => {
       rideId: String(ride._id),
       status: ride.status,
       liveStatus: ride.liveStatus,
-      cancellationCharge: cancellationBill?.billBreakdown?.totalAmount || 0,
-      isFeeApplied: !cancellationBill?.billBreakdown?.isWaived,
-      cancellationBill,
     },
-  });
-};
-
-export const getCancellationBillReceipt = async (req, res) => {
-  const { rideId } = req.params;
-  const ride = await Ride.findById(rideId);
-
-  if (!ride) {
-    throw new ApiError(404, 'Ride not found');
-  }
-
-  const cancelledBy = ride.cancellation?.cancelled_by || 'user';
-  const reason = ride.cancellation?.reason || '';
-
-  const cancellationBill = await calculateCancellationBill({
-    ride,
-    cancelledBy,
-    reason,
-  });
-
-  res.json({
-    status: true,
-    data: cancellationBill,
   });
 };
 
@@ -1027,28 +1017,30 @@ export const listAvailableDrivers = async (req, res) => {
     throw new ApiError(400, 'lat and lng are required');
   }
 
-  const near = {
-    $geometry: {
-      type: 'Point',
-      coordinates: [longitude, latitude],
-    },
+  const normalizedServiceLocationId =
+    service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
+      ? new mongoose.Types.ObjectId(service_location_id)
+      : null;
+
+  const matchOptions = {
+    maxDistance: Number.isFinite(distance) && distance > 0 ? Math.min(distance, 25000) : 25000,
+    limit: Math.min(Number(limit) || 30, 50),
+    vehicleTypeId,
   };
 
-  if (Number.isFinite(distance) && distance > 0) {
-    near.$maxDistance = Math.min(distance, 25000);
+  let matchResult = await matchDrivers([longitude, latitude], {
+    ...matchOptions,
+    serviceLocationId: normalizedServiceLocationId,
+  });
+
+  if (!matchResult.drivers.length && normalizedServiceLocationId) {
+    matchResult = await matchDrivers([longitude, latitude], {
+      ...matchOptions,
+      serviceLocationId: null,
+    });
   }
 
-  const drivers = await Driver.find({
-    isOnline: true,
-    isOnRide: false,
-    vehicleTypeId,
-    location: {
-      $near: near,
-    },
-  })
-    .limit(Math.min(Number(limit) || 30, 50))
-    .select('name phone vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location')
-    .lean();
+  const { drivers } = matchResult;
 
   const enrichedDrivers = drivers.map((driver) => {
     const distanceMeters = calculateDistanceMeters([longitude, latitude], driver.location?.coordinates || []);
@@ -1073,9 +1065,7 @@ export const listAvailableDrivers = async (req, res) => {
 
   const closestDriver = enrichedDrivers[0] || null;
   const { allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
-    serviceLocationId: service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
-      ? new mongoose.Types.ObjectId(service_location_id)
-      : null,
+    serviceLocationId: normalizedServiceLocationId,
     transportType: transport_type || 'taxi',
     vehicleTypeId,
   });
@@ -1139,32 +1129,5 @@ export const updateRideBidCeiling = async (req, res) => {
   res.json({
     success: true,
     data: ride,
-  });
-};
-
-export const getPendingCancellationDues = async (req, res) => {
-  const userId = req.auth.sub;
-  const pendingDueRides = await Ride.find({
-    userId,
-    'cancellation.payment_status': 'added_to_next_ride_due',
-    'cancellation.cancellation_charge': { $gt: 0 },
-  }).select('_id cancellation createdAt').lean();
-
-  const totalDueAmount = Math.round(pendingDueRides.reduce(
-    (sum, r) => sum + Number(r.cancellation?.cancellation_charge || 0),
-    0,
-  ));
-
-  res.json({
-    success: true,
-    data: {
-      totalDueAmount,
-      pendingCount: pendingDueRides.length,
-      rides: pendingDueRides.map((r) => ({
-        rideId: String(r._id),
-        cancellationFee: Number(r.cancellation?.cancellation_charge || 0),
-        cancelledAt: r.cancellation?.cancelled_at || r.createdAt,
-      })),
-    },
   });
 };

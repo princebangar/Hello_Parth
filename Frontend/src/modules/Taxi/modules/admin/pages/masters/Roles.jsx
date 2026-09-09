@@ -64,11 +64,11 @@ const Roles = () => {
         <ChevronRight size={12} />
         <span className="text-gray-700">Roles</span>
       </div>
-      <h1 className="text-xl font-semibold text-gray-900 mb-6">Roles</h1>
+      <h1 className="text-xl text-gray-900 mb-6 font-bold">Roles</h1>
 
       {/* Create Form */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Create New Role</h3>
+        <h3 className="text-sm text-gray-900 mb-4 font-bold">Create New Role</h3>
         <form onSubmit={handleCreateRole} className="flex items-end gap-5 flex-wrap">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Role Name <span className="text-red-500">*</span></label>

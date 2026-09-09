@@ -1,17 +1,17 @@
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
+import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLoginDetails } from '@phonepe-pg/pg-sdk-node';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { User } from '../models/User.js';
-import { Ride } from '../models/Ride.js';
-import { UserWallet, ensureSharedUserWallet } from '../models/UserWallet.js';
+import { UserWallet } from '../models/UserWallet.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
-import { buildUnifiedUserSession } from '../../../../core/auth/unifiedUserSession.js';
 import { env } from '../../../../config/env.js';
-import { storeImageBuffer, deleteReplacedAssets, extractAssetUrl } from '../../../../services/storage.service.js';
+import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
 import {
@@ -20,6 +20,7 @@ import {
   startUserOtp,
   verifyUserOtp,
 } from '../services/userOtpService.js';
+import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
 import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
@@ -32,12 +33,24 @@ import { emitToDriver } from '../../services/dispatchService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../services/rentalTrackingService.js';
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
-import { listServiceStores } from '../../admin/services/adminService.js';
+import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
+import {
+  findActiveEmployeeByCode,
+  normalizeEmployeeCode,
+} from '../../admin/services/employeeAttributionService.js';
 import {
   getUserSubscriptionSummary,
   listCustomerSubscriptionPlans,
   purchaseUserSubscription,
 } from '../services/subscriptionService.js';
+import {
+  buildPaymentRequestContext,
+  logPaymentDiagnostic,
+  summarizeCheckoutUrl,
+  summarizePhonePeCredentialMeta,
+  summarizePhonePePayload,
+  summarizePhonePeRequestBody,
+} from '../../services/paymentDiagnostics.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -84,24 +97,21 @@ const normalizeMoneyAmount = (value) => {
 
 const ensureUserWallet = async (userId) => {
   if (!userId) return;
-  await ensureSharedUserWallet(userId);
+  await UserWallet.updateOne(
+    { userId },
+    { $setOnInsert: { userId, balance: 0, refundWallet: 0, transactions: [] } },
+    { upsert: true },
+  );
 };
 
-const serializeUserWalletTransaction = (entry = {}) => {
-  const kind =
-    entry.kind ||
-    (entry.type === 'deduction' || entry.type === 'refund' || entry.type === 'debit'
-      ? 'debit'
-      : 'credit');
-  return {
-    id: entry._id,
-    kind,
-    amount: Number(entry.amount || 0),
-    title: entry.title || entry.description || '',
-    counterpartyPhone: entry.counterpartyPhone || '',
-    createdAt: entry.createdAt || null,
-  };
-};
+const serializeUserWalletTransaction = (entry = {}) => ({
+  id: entry._id,
+  kind: entry.kind,
+  amount: Number(entry.amount || 0),
+  title: entry.title || '',
+  counterpartyPhone: entry.counterpartyPhone || '',
+  createdAt: entry.createdAt || null,
+});
 
 const buildUserWalletPayload = (wallet) => {
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
@@ -172,69 +182,316 @@ export const listPublicServiceStores = async (_req, res) => {
   });
 };
 
-const getFrontendBaseUrl = () => {
-  const configuredOrigin = String(env.corsOrigin || '')
-    .split(',')
-    .map((value) => value.trim())
-    .find((value) => value && value !== '*');
+const normalizeOriginCandidate = (value = '') => {
+  const trimmedValue = String(value || '').trim();
+  if (!trimmedValue || trimmedValue === '*') {
+    return '';
+  }
 
-  return (configuredOrigin || 'http://localhost:5173').replace(/\/+$/, '');
+  try {
+    return new URL(trimmedValue).origin.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
 };
 
-const getPhonePeBaseUrl = (environment = 'test') => (
+const isPublicWebOrigin = (value = '') => {
+  const origin = normalizeOriginCandidate(value);
+  if (!origin) {
+    return false;
+  }
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (!['http:', 'https:'].includes(protocol)) {
+      return false;
+    }
+
+    return !['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(hostname);
+  } catch {
+    return false;
+  }
+};
+
+const getFrontendBaseUrl = (req) => {
+  const configuredOrigins = [
+    env.phonePeRedirectBaseUrl,
+    env.publicFrontendUrl,
+    ...String(env.corsOrigin || '')
+      .split(',')
+      .map((value) => value.trim()),
+  ]
+    .map(normalizeOriginCandidate)
+    .filter(Boolean);
+
+  const requestCandidates = [
+    normalizeOriginCandidate(req?.get?.('origin')),
+    normalizeOriginCandidate(req?.get?.('referer')),
+    (() => {
+      const forwardedProto = String(req?.get?.('x-forwarded-proto') || '').trim();
+      const forwardedHost = String(req?.get?.('x-forwarded-host') || '').trim();
+      if (!forwardedProto || !forwardedHost) {
+        return '';
+      }
+      return normalizeOriginCandidate(`${forwardedProto}://${forwardedHost}`);
+    })(),
+    (() => {
+      const host = String(req?.get?.('host') || '').trim();
+      const proto =
+        String(req?.protocol || '').trim() ||
+        String(req?.get?.('x-forwarded-proto') || '').trim() ||
+        'http';
+      if (!host) {
+        return '';
+      }
+      return normalizeOriginCandidate(`${proto}://${host}`);
+    })(),
+  ].filter(Boolean);
+
+  const preferredPublicOrigin =
+    configuredOrigins.find(isPublicWebOrigin) ||
+    requestCandidates.find(isPublicWebOrigin);
+
+  if (preferredPublicOrigin) {
+    return preferredPublicOrigin;
+  }
+
+  return (
+    configuredOrigins[0] ||
+    requestCandidates[0] ||
+    'http://localhost:5173'
+  ).replace(/\/+$/, '');
+};
+
+const getPhonePeApiBaseUrl = (environment = 'test') => (
   String(environment).trim().toLowerCase() === 'production'
-    ? 'https://api.phonepe.com/apis/hermes'
+    ? 'https://api.phonepe.com/apis/pg'
     : 'https://api-preprod.phonepe.com/apis/pg-sandbox'
 );
 
-const buildPhonePeChecksum = ({ payload = '', path = '', saltKey = '', saltIndex = '1' }) => {
-  const digest = crypto
-    .createHash('sha256')
-    .update(`${payload}${path}${saltKey}`)
-    .digest('hex');
+const getPhonePeAuthUrl = (environment = 'test') => (
+  String(environment).trim().toLowerCase() === 'production'
+    ? 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token'
+    : 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token'
+);
 
-  return `${digest}###${saltIndex}`;
+const phonePeAccessTokenCache = new Map();
+const phonePeClientCache = new Map();
+
+const getPhonePeCheckoutClient = ({
+  clientId,
+  clientSecret,
+  clientVersion,
+  environment,
+}) => {
+  const normalizedEnvironment = String(environment || 'test').trim().toLowerCase();
+  const normalizedVersion = Number.parseInt(String(clientVersion || '1'), 10) || 1;
+  const cacheKey = `${normalizedEnvironment}::${clientId}::${normalizedVersion}`;
+
+  if (phonePeClientCache.has(cacheKey)) {
+    return phonePeClientCache.get(cacheKey);
+  }
+
+  const client = StandardCheckoutClient.getInstance(
+    clientId,
+    clientSecret,
+    normalizedVersion,
+    normalizedEnvironment === 'production' ? Env.PRODUCTION : Env.SANDBOX,
+  );
+
+  phonePeClientCache.set(cacheKey, client);
+  return client;
+};
+
+const getPhonePeAccessToken = async ({
+  clientId,
+  clientSecret,
+  clientVersion,
+  environment,
+}) => {
+  const cacheKey = `${String(environment).trim().toLowerCase()}::${clientId}::${clientVersion}`;
+  const cachedToken = phonePeAccessTokenCache.get(cacheKey);
+  const nowEpochSeconds = Math.floor(Date.now() / 1000);
+
+  if (cachedToken?.accessToken && Number(cachedToken.expiresAt || 0) - 60 > nowEpochSeconds) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'auth-cache-hit',
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    });
+    return cachedToken.accessToken;
+  }
+
+  const requestBody = new URLSearchParams({
+    client_id: clientId,
+    client_version: clientVersion,
+    client_secret: clientSecret,
+    grant_type: 'client_credentials',
+  });
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'auth-request',
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+  });
+
+  const response = await fetch(getPhonePeAuthUrl(environment), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+    },
+    body: requestBody.toString(),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.access_token) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'auth-failed',
+      level: 'error',
+      statusCode: response.status || 502,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
+    throw new ApiError(
+      response.status || 502,
+      payload?.message || payload?.error_description || payload?.error || 'PhonePe authorization failed',
+    );
+  }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'auth-success',
+    statusCode: response.status || 200,
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+  });
+
+  phonePeAccessTokenCache.set(cacheKey, {
+    accessToken: String(payload.access_token),
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+  });
+
+  return String(payload.access_token);
 };
 
 const phonePeRequest = async ({
   method,
   path,
   body,
-  merchantId,
-  saltKey,
-  saltIndex,
+  clientId,
+  clientSecret,
+  clientVersion,
   environment,
 }) => {
   const normalizedMethod = String(method || 'GET').trim().toUpperCase();
-  const encodedPayload =
-    body && normalizedMethod !== 'GET'
-      ? Buffer.from(JSON.stringify(body)).toString('base64')
-      : '';
-  const response = await fetch(`${getPhonePeBaseUrl(environment)}${path}`, {
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user',
+    stage: 'api-request',
     method: normalizedMethod,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-VERIFY': buildPhonePeChecksum({
-        payload: encodedPayload,
-        path,
-        saltKey,
-        saltIndex,
-      }),
-      'X-MERCHANT-ID': merchantId,
-      accept: 'application/json',
-    },
-    body: encodedPayload ? JSON.stringify({ request: encodedPayload }) : undefined,
+    path,
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    request: summarizePhonePeRequestBody(body || {}),
+  });
+  const client = getPhonePeCheckoutClient({
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
   });
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) {
+  try {
+    let payload = null;
+
+    if (normalizedMethod === 'POST' && path === '/checkout/v2/pay') {
+      const merchantOrderId = String(body?.merchantOrderId || '').trim();
+      const amount = Number(body?.amount || 0);
+      const redirectUrl = String(body?.paymentFlow?.merchantUrls?.redirectUrl || '').trim();
+
+      if (!merchantOrderId || !amount || !redirectUrl) {
+        throw new ApiError(400, 'PhonePe merchant order id, amount, and redirect URL are required');
+      }
+
+      const builder = StandardCheckoutPayRequest.builder()
+        .merchantOrderId(merchantOrderId)
+        .amount(amount)
+        .redirectUrl(redirectUrl);
+
+      if (body?.paymentFlow?.message) {
+        builder.message(String(body.paymentFlow.message));
+      }
+      if (body?.expireAfter) {
+        builder.expireAfter(Number(body.expireAfter));
+      }
+      if (body?.prefillUserLoginDetails?.phoneNumber) {
+        const prefill = PrefillUserLoginDetails.builder()
+          .phoneNumber(String(body.prefillUserLoginDetails.phoneNumber))
+          .build();
+        builder.prefillUserLoginDetails(prefill);
+      }
+      if (body?.metaInfo) {
+        builder.metaInfo(body.metaInfo);
+      }
+
+      const request = builder.build();
+      payload = await client.pay(request);
+    } else if (normalizedMethod === 'GET' && path.includes('/checkout/v2/order/')) {
+      const orderMatch = path.match(/\/checkout\/v2\/order\/([^/]+)\/status/i);
+      const merchantOrderId = decodeURIComponent(orderMatch?.[1] || '').trim();
+
+      if (!merchantOrderId) {
+        throw new ApiError(400, 'PhonePe merchant order id is required');
+      }
+
+      payload = await client.getOrderStatus(merchantOrderId);
+    } else {
+      throw new ApiError(400, `Unsupported PhonePe operation: ${normalizedMethod} ${path}`);
+    }
+
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'api-success',
+      method: normalizedMethod,
+      path,
+      statusCode: 200,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
+
+    return payload;
+  } catch (error) {
+    const payload = error?.response || error?.payload || error?.data || null;
+    const statusCode = Number(error?.statusCode || error?.status || 502);
+
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user',
+      stage: 'api-failed',
+      level: 'error',
+      method: normalizedMethod,
+      path,
+      statusCode,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+      providerMessage:
+        error?.message ||
+        payload?.message ||
+        payload?.responseCodeDescription ||
+        payload?.detailedErrorCode ||
+        '',
+    });
     throw new ApiError(
-      response.status || 502,
-      payload?.message || payload?.code || 'PhonePe request failed',
+      statusCode,
+      error?.message || payload?.message || payload?.code || 'PhonePe request failed',
     );
   }
-
-  return payload;
 };
 
 const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
@@ -544,33 +801,55 @@ const ensureBusServiceEnabled = async () => {
   }
 };
 
+let lastBusSeatHoldCleanupAt = 0;
+const BUS_HOLD_CLEANUP_COOLDOWN_MS = 30_000;
+let busSeatHoldCleanupPromise = null;
+
 const cleanupExpiredBusSeatHolds = async () => {
-  const now = new Date();
+  const nowMs = Date.now();
+  if (nowMs - lastBusSeatHoldCleanupAt < BUS_HOLD_CLEANUP_COOLDOWN_MS) {
+    return;
+  }
 
-  const expiredBookings = await BusBooking.find({
-    status: 'pending',
-    expiresAt: { $lte: now },
-  })
-    .select('_id')
-    .lean();
+  if (busSeatHoldCleanupPromise) {
+    return busSeatHoldCleanupPromise;
+  }
 
-  if (expiredBookings.length > 0) {
-    const bookingIds = expiredBookings.map((item) => item._id);
-    await BusBooking.updateMany(
-      { _id: { $in: bookingIds } },
-      { $set: { status: 'expired' } },
-    );
+  busSeatHoldCleanupPromise = (async () => {
+    const now = new Date();
+
+    const expiredBookings = await BusBooking.find({
+      status: 'pending',
+      expiresAt: { $lte: now },
+    })
+      .select('_id')
+      .lean();
+
+    if (expiredBookings.length > 0) {
+      const bookingIds = expiredBookings.map((item) => item._id);
+      await BusBooking.updateMany(
+        { _id: { $in: bookingIds } },
+        { $set: { status: 'expired' } },
+      );
+      await BusSeatHold.deleteMany({
+        bookingId: { $in: bookingIds },
+        status: 'held',
+        expiresAt: { $lte: now },
+      });
+    }
+
     await BusSeatHold.deleteMany({
-      bookingId: { $in: bookingIds },
       status: 'held',
       expiresAt: { $lte: now },
     });
-  }
 
-  await BusSeatHold.deleteMany({
-    status: 'held',
-    expiresAt: { $lte: now },
-  });
+    lastBusSeatHoldCleanupAt = Date.now();
+  })()
+    .finally(() => {
+      busSeatHoldCleanupPromise = null;
+    });
+
+  return busSeatHoldCleanupPromise;
 };
 
 const createBusBookingCode = () =>
@@ -596,6 +875,7 @@ const serializeBusSearchResult = ({ busService, schedule, availableSeats, travel
   availableSeats: Math.max(0, Number(availableSeats || 0)),
   price: Number(busService.seatPrice || 0),
   variantPricing: busService.variantPricing || null,
+  serviceTaxPercentage: Math.max(0, Number(busService.serviceTaxPercentage || 0)),
   fareCurrency: busService.fareCurrency || 'INR',
   rating: Number(busService.rating || 0),
   ratingCount: Number(busService.ratingCount || 0),
@@ -930,6 +1210,20 @@ const serializeRentalBookingRequest = (item = {}) => ({
     vehicleCategory: item.assignedVehicle?.vehicleCategory || '',
     image: item.assignedVehicle?.image || '',
   },
+  commissionSnapshot: {
+    serviceStoreId: item.commissionSnapshot?.serviceStoreId
+      ? String(item.commissionSnapshot.serviceStoreId)
+      : '',
+    serviceStoreName: item.commissionSnapshot?.serviceStoreName || '',
+    ownerName: item.commissionSnapshot?.ownerName || '',
+    serviceStoreCommissionType:
+      item.commissionSnapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage',
+    serviceStoreCommissionValue: Number(item.commissionSnapshot?.serviceStoreCommissionValue || 0),
+    ownerCommissionType:
+      item.commissionSnapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage',
+    ownerCommissionValue: Number(item.commissionSnapshot?.ownerCommissionValue || 0),
+    serviceTaxPercentage: Math.max(0, Number(item.commissionSnapshot?.serviceTaxPercentage || 0)),
+  },
   status: item.status || 'pending',
   adminNote: item.adminNote || '',
   assignedAt: item.assignedAt || null,
@@ -941,6 +1235,54 @@ const serializeRentalBookingRequest = (item = {}) => ({
   updatedAt: item.updatedAt || null,
   rentalTracking: buildRentalTrackingSnapshot(item),
 });
+
+const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
+  const baseAmount = Math.max(0, Number(grossAmount || 0));
+  const serviceStoreType =
+    snapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage';
+  const ownerType = snapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage';
+  const serviceStoreValue = Math.max(0, Number(snapshot?.serviceStoreCommissionValue || 0));
+  const ownerValue = Math.max(0, Number(snapshot?.ownerCommissionValue || 0));
+  const calculateAmount = (amount, type, value) =>
+    type === 'fixed'
+      ? Math.min(amount, value)
+      : Math.min(amount, Math.max(0, (amount * value) / 100));
+  const serviceStoreAmountRaw = calculateAmount(baseAmount, serviceStoreType, serviceStoreValue);
+  const ownerAmountRaw = calculateAmount(
+    Math.max(0, baseAmount - serviceStoreAmountRaw),
+    ownerType,
+    ownerValue,
+  );
+  const adminAmountRaw = Math.max(0, baseAmount - serviceStoreAmountRaw - ownerAmountRaw);
+  const serviceTaxPercentage = Math.max(0, Number(snapshot?.serviceTaxPercentage || 0));
+  const serviceTaxAmountRaw = (baseAmount * serviceTaxPercentage) / 100;
+  const round = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+  return {
+    grossAmount: round(baseAmount),
+    grossAmountWithTax: round(baseAmount + serviceTaxAmountRaw),
+    serviceTax: {
+      percentage: round(serviceTaxPercentage),
+      amount: round(serviceTaxAmountRaw),
+    },
+    serviceStore: {
+      id: snapshot?.serviceStoreId ? String(snapshot.serviceStoreId) : '',
+      name: snapshot?.serviceStoreName || '',
+      type: serviceStoreType,
+      value: round(serviceStoreValue),
+      amount: round(serviceStoreAmountRaw),
+    },
+    owner: {
+      name: snapshot?.ownerName || '',
+      type: ownerType,
+      value: round(ownerValue),
+      amount: round(ownerAmountRaw),
+    },
+    admin: {
+      amount: round(adminAmountRaw),
+    },
+  };
+};
 
 const resolveRentalSelectedPackagePricing = (item = {}) => {
   const selectedPackage = item.selectedPackage || {};
@@ -1046,6 +1388,15 @@ const toUserPayload = (user, options = {}) => ({
   email: user.email || '',
   gender: user.gender || '',
   profileImage: user.profileImage || '',
+  governmentIdProof: user.governmentIdProof || {
+    type: '',
+    imageUrl: '',
+    backImageUrl: '',
+    fileName: '',
+    backFileName: '',
+    uploadedAt: null,
+    backUploadedAt: null,
+  },
   referralCode: user.referralCode || '',
   referralCount: Number(user.referralCount || 0),
   deletionRequestStatus: user.deletionRequest?.status || 'none',
@@ -1068,16 +1419,94 @@ const ensureUserCanLogin = (user) => {
 
 const canRestoreUserForSignup = (user) => Boolean(user?.deletedAt);
 
-const buildReactivatedUserPayload = async ({ req, name, phone, email, countryCode, gender, profileImage, referrer }) => ({
+const VALID_GOVERNMENT_ID_TYPES = new Set(['aadhaar', 'voter_id', 'passport', 'driving_license', 'other']);
+
+const normalizeGovernmentIdProof = (input = {}, { required = false } = {}) => {
+  const type = toCleanString(input.type).toLowerCase();
+  const imageUrl = toCleanString(input.imageUrl || input.url || input.secureUrl);
+  const backImageUrl = toCleanString(input.backImageUrl || input.backUrl || input.backSecureUrl);
+  const fileName = toCleanString(input.fileName || input.name || 'government-id');
+  const backFileName = toCleanString(input.backFileName || input.backName || 'government-id-back');
+
+  if (!imageUrl && !backImageUrl && !required) {
+    return {
+      type: '',
+      imageUrl: '',
+      backImageUrl: '',
+      fileName: '',
+      backFileName: '',
+      uploadedAt: null,
+      backUploadedAt: null,
+    };
+  }
+
+  if (!VALID_GOVERNMENT_ID_TYPES.has(type)) {
+    throw new ApiError(400, 'A valid government ID type is required');
+  }
+
+  if (required && !imageUrl) {
+    throw new ApiError(400, 'Government ID front image is required');
+  }
+
+  if (required && !backImageUrl) {
+    throw new ApiError(400, 'Government ID back image is required');
+  }
+
+  return {
+    type,
+    imageUrl,
+    backImageUrl,
+    fileName: fileName || `${type}-proof`,
+    backFileName: backFileName || `${type}-proof-back`,
+    uploadedAt: input.uploadedAt ? new Date(input.uploadedAt) : new Date(),
+    backUploadedAt: backImageUrl
+      ? input.backUploadedAt
+        ? new Date(input.backUploadedAt)
+        : new Date()
+      : null,
+  };
+};
+
+const buildRentalBookingResponse = (item = {}, endedAt = null) => {
+  const rideMetrics = computeRentalRideMetrics(item, endedAt);
+
+  return {
+    ...serializeRentalBookingRequest(item),
+    rideMetrics,
+    commissionBreakdown: {
+      estimated: computeRentalCommissionBreakdown(item.commissionSnapshot, Number(item.totalCost || 0)),
+      live: computeRentalCommissionBreakdown(
+        item.commissionSnapshot,
+        Number(item.finalCharge || rideMetrics.currentCharge || item.totalCost || 0),
+      ),
+    },
+  };
+};
+
+const buildReactivatedUserPayload = async ({
+  req,
+  name,
+  phone,
+  email,
+  countryCode,
+  gender,
+  profileImage,
+  governmentIdProof,
+  referrer,
+  employee,
+}) => ({
   name,
   phone,
   countryCode,
   email,
   gender,
   profileImage,
+  governmentIdProof,
   password: await hashPassword(String(req.body.password || '').trim() || crypto.randomBytes(24).toString('hex')),
   isVerified: true,
   referredBy: referrer?._id || null,
+  acquiredByEmployeeId: employee?._id || null,
+  acquiredByEmployeeCode: employee?.employeeCode || '',
   deletedAt: null,
   deletion_reason: '',
   active: true,
@@ -1092,18 +1521,10 @@ const buildReactivatedUserPayload = async ({ req, name, phone, email, countryCod
   },
 });
 
-const createUserSession = (user) => {
-  const unified = buildUnifiedUserSession(user);
-  return {
-    token: unified.taxiAuth.token,
-    user: toUserPayload(user),
-    foodAuth: {
-      accessToken: unified.accessToken,
-      refreshToken: unified.refreshToken,
-      user: { ...toUserPayload(user), role: 'USER' },
-    },
-  };
-};
+const createUserSession = (user) => ({
+  token: signAccessToken({ sub: String(user._id), role: 'user' }),
+  user: toUserPayload(user),
+});
 
 const generateUserReferralCode = (user) => {
   const idPart = String(user?._id || '').slice(-6).toUpperCase();
@@ -1218,7 +1639,9 @@ export const registerUser = async (req, res) => {
   const countryCode = toCleanString(req.body.countryCode) || '+91';
   const gender = normalizeGender(req.body.gender);
   const profileImage = toCleanString(req.body.profileImage);
+  const governmentIdProof = normalizeGovernmentIdProof(req.body.governmentIdProof || {}, { required: false });
   const referralCode = normalizeReferralCode(req.body.referralCode);
+  const employeeCode = normalizeEmployeeCode(req.body.employeeCode);
 
   validateName(name);
   validatePhone(phone);
@@ -1227,9 +1650,14 @@ export const registerUser = async (req, res) => {
   const existingUser = await User.findOne({ phone });
 
   const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
+  const employee = employeeCode ? await findActiveEmployeeByCode(employeeCode) : null;
 
   if (referralCode && !referrer) {
     throw new ApiError(400, 'Invalid referral code');
+  }
+
+  if (employeeCode && !employee) {
+    throw new ApiError(400, 'Invalid employee code');
   }
 
   if (existingUser && !canRestoreUserForSignup(existingUser)) {
@@ -1244,7 +1672,9 @@ export const registerUser = async (req, res) => {
     countryCode,
     gender,
     profileImage,
+    governmentIdProof,
     referrer,
+    employee,
   });
 
   const user = existingUser
@@ -1283,21 +1713,12 @@ export const getUserNotifications = async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
-  // Find all service locations where the user has active or past rides
-  const userRidesServiceLocationIds = await Ride.distinct('service_location_id', {
-    userId: user._id,
-    service_location_id: { $ne: null }
-  });
-
+  // Users don't typically have a service_location_id in their profile like drivers do in this schema,
+  // but if they did, we would use it. For now, we fetch all user-targeted notifications.
   const query = {
     status: 'sent',
     send_to: { $in: ['all', 'users'] },
   };
-
-  // If the user has history in specific locations, only show notifications for those locations
-  if (userRidesServiceLocationIds.length > 0) {
-    query.service_location_id = { $in: userRidesServiceLocationIds };
-  }
 
   const notifications = await Notification.find(query)
     .sort({ sent_at: -1, createdAt: -1 })
@@ -1338,7 +1759,9 @@ export const signupUser = async (req, res) => {
   const countryCode = toCleanString(req.body.countryCode) || '+91';
   const gender = normalizeGender(req.body.gender);
   const profileImage = toCleanString(req.body.profileImage);
+  const governmentIdProof = normalizeGovernmentIdProof(req.body.governmentIdProof || {}, { required: false });
   const referralCode = normalizeReferralCode(req.body.referralCode);
+  const employeeCode = normalizeEmployeeCode(req.body.employeeCode);
 
   validateName(name);
   validatePhone(phone);
@@ -1349,9 +1772,14 @@ export const signupUser = async (req, res) => {
   const existingUser = await User.findOne({ phone });
 
   const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
+  const employee = employeeCode ? await findActiveEmployeeByCode(employeeCode) : null;
 
   if (referralCode && !referrer) {
     throw new ApiError(400, 'Invalid referral code');
+  }
+
+  if (employeeCode && !employee) {
+    throw new ApiError(400, 'Invalid employee code');
   }
 
   if (existingUser && !canRestoreUserForSignup(existingUser)) {
@@ -1366,7 +1794,9 @@ export const signupUser = async (req, res) => {
     countryCode,
     gender,
     profileImage,
+    governmentIdProof,
     referrer,
+    employee,
   });
 
   const user = existingUser
@@ -1453,6 +1883,32 @@ export const verifyUserPhoneForOtpLogin = async (req, res) => {
   });
 };
 
+export const saveUserFcmToken = async (req, res) => {
+  const user = await User.findById(req.auth?.sub);
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  ensureUserCanLogin(user);
+
+  const saved = assignPushTokenToEntity(user, {
+    token: req.body?.token,
+    platform: req.body?.platform,
+  });
+
+  await user.save();
+
+  res.json({
+    success: true,
+    data: {
+      message: 'FCM token saved successfully',
+      platform: saved.platform,
+      field: saved.fieldName,
+    },
+  });
+};
+
 export const getCurrentUser = async (req, res) => {
   const user = await User.findById(req.auth?.sub);
 
@@ -1479,36 +1935,27 @@ export const getCurrentUser = async (req, res) => {
 };
 
 export const uploadUserProfileImage = async (req, res) => {
-  if (!req.file?.buffer) {
-    throw new ApiError(400, 'Image file is required (multipart field: file)');
+  const dataUrl = String(req.body?.dataUrl || '');
+
+  if (!dataUrl) {
+    throw new ApiError(400, 'dataUrl is required');
   }
 
-  const userId = req.auth?.sub;
-  const user = userId ? await User.findById(userId) : null;
-  const replaceUrl = extractAssetUrl(req.body?.replaceUrl) || extractAssetUrl(user?.profileImage);
+  if (dataUrl.length > 12_000_000) {
+    throw new ApiError(413, 'Image is too large');
+  }
 
-  const stored = await storeImageBuffer(req.file.buffer, 'user/profile', {
-    replaceUrl: replaceUrl || undefined,
-    maxWidth: 1024,
-    mimeType: req.file.mimetype || 'image/jpeg',
-    originalName: req.file.originalname,
+  const uploadResult = await uploadDataUrlToCloudinary({
+    dataUrl,
+    folder: `${env.cloudinary.folder}/user-profile`,
+    publicIdPrefix: 'user-profile',
   });
-  const url = stored.url || stored.secure_url;
-
-  if (user && url) {
-    await deleteReplacedAssets(user.profileImage, url);
-    user.profileImage = url;
-    await user.save();
-  }
 
   res.status(201).json({
     success: true,
     data: {
-      secureUrl: url,
-      url,
-      publicId: stored.public_id || stored.filename || null,
-      format: stored.format || 'webp',
-      profileImage: url,
+      secureUrl: uploadResult.secureUrl,
+      publicId: uploadResult.publicId,
     },
   });
 };
@@ -1535,9 +1982,7 @@ export const updateCurrentUser = async (req, res) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, 'profileImage')) {
-    const nextImage = toCleanString(req.body.profileImage);
-    await deleteReplacedAssets(user.profileImage, nextImage);
-    user.profileImage = nextImage;
+    user.profileImage = toCleanString(req.body.profileImage);
   }
 
   await user.save();
@@ -1895,6 +2340,10 @@ export const createRazorpayWalletTopupOrder = async (req, res) => {
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const receipt = `uwal_${compactUserId}_${Date.now().toString(36)}`;
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
+  const backendOrigin = `${proto}://${host}`;
+  const callbackUrl = `${backendOrigin}/api/v1/users/wallet/razorpay/callback`;
 
   const order = await razorpayRequest({
     method: 'POST',
@@ -1916,8 +2365,99 @@ export const createRazorpayWalletTopupOrder = async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency || 'INR',
+      callbackUrl,
     },
   });
+};
+
+const verifyAndApplyUserRazorpayWalletTopup = async ({
+  orderId,
+  paymentId,
+  signature,
+  userId: requestedUserId = '',
+} = {}) => {
+  const normalizedOrderId = String(orderId || '').trim();
+  const normalizedPaymentId = String(paymentId || '').trim();
+  const normalizedSignature = String(signature || '').trim();
+
+  if (!normalizedOrderId || !normalizedPaymentId || !normalizedSignature) {
+    throw new ApiError(400, 'Payment verification fields are required');
+  }
+
+  const { keyId, keySecret } = await resolveRazorpayCredentials();
+
+  const expectedSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${normalizedOrderId}|${normalizedPaymentId}`)
+    .digest('hex');
+
+  if (expectedSignature !== normalizedSignature) {
+    throw new ApiError(400, 'Invalid payment signature');
+  }
+
+  const order = await razorpayRequest({
+    method: 'GET',
+    path: `/orders/${encodeURIComponent(normalizedOrderId)}`,
+    keyId,
+    keySecret,
+  });
+
+  const amountPaise = Number(order?.amount);
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+    throw new ApiError(400, 'Invalid order amount');
+  }
+
+  const orderUserId = String(order?.notes?.userId || '').trim();
+  const effectiveUserId = String(requestedUserId || orderUserId).trim();
+
+  if (!effectiveUserId) {
+    throw new ApiError(400, 'User reference is missing from this Razorpay order');
+  }
+
+  if (requestedUserId && orderUserId && requestedUserId !== orderUserId) {
+    throw new ApiError(403, 'This Razorpay order does not belong to the authenticated user');
+  }
+
+  const amount = Math.round(amountPaise) / 100;
+
+  await ensureUserWallet(effectiveUserId);
+
+  const alreadyCredited = await UserWallet.findOne({
+    userId: effectiveUserId,
+    'transactions.providerPaymentId': normalizedPaymentId,
+  })
+    .select('_id')
+    .lean();
+
+  if (!alreadyCredited) {
+    const tx = {
+      kind: 'credit',
+      amount,
+      title: 'Wallet Refilled',
+      provider: 'razorpay',
+      providerOrderId: normalizedOrderId,
+      providerPaymentId: normalizedPaymentId,
+    };
+
+    await UserWallet.updateOne(
+      { userId: effectiveUserId },
+      {
+        $inc: { balance: amount },
+        $push: { transactions: { $each: [tx], $slice: -50 } },
+      },
+    );
+  }
+
+  const wallet = await UserWallet.findOne({ userId: effectiveUserId })
+    .select('balance refundWallet transactions')
+    .slice('transactions', -10)
+    .lean();
+
+  if (!wallet) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  return buildUserWalletPayload(wallet);
 };
 
 export const createRentalAdvancePaymentOrder = async (req, res) => {
@@ -1965,43 +2505,176 @@ export const createRentalAdvancePaymentOrder = async (req, res) => {
   });
 };
 
-export const createPhonePeWalletTopupOrder = async (req, res) => {
+export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
-  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const vehicleId = String(req.body?.vehicleId || '').trim();
+  const vehicleName = String(req.body?.vehicleName || 'Rental booking').trim();
+  const pickup = String(req.body?.pickup || '').trim();
+  const returnTime = String(req.body?.returnTime || '').trim();
+  const bookingReference =
+    toCleanString(req.body?.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
-  const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
-  const frontendBaseUrl = getFrontendBaseUrl();
-  const backendBaseUrl = `${req.protocol}://${req.get('host')}`;
-  const redirectUrl = `${frontendBaseUrl}/taxi/user/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
-  const callbackUrl = `${backendBaseUrl}/api/v1/common/payment-gateway/phonepe/callback`;
+  const merchantTransactionId = `URNT${Date.now()}${compactUserId}`.slice(0, 34);
+  const frontendBaseUrl = getFrontendBaseUrl(req);
+  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-rental&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const user = userId ? await User.findById(userId).select('phone').lean() : null;
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'create-order-start',
+    merchantTransactionId,
+    bookingReference,
+    amountRupees: amount,
+    request: buildPaymentRequestContext(req),
+    metadata: {
+      vehicleId,
+      vehicleName,
+      pickup,
+      returnTime,
+      redirectUrl: summarizeCheckoutUrl(redirectUrl),
+    },
+  });
   const payload = await phonePeRequest({
     method: 'POST',
-    path: '/pg/v1/pay',
+    path: '/checkout/v2/pay',
     body: {
-      merchantId,
-      merchantTransactionId,
-      merchantUserId: compactUserId,
+      merchantOrderId: merchantTransactionId,
       amount: Math.round(amount * 100),
-      redirectUrl,
-      redirectMode: 'GET',
-      callbackUrl,
-      mobileNumber: normalizePhone(user?.phone || '') || undefined,
-      paymentInstrument: {
-        type: 'PAY_PAGE',
+      expireAfter: 1200,
+      paymentFlow: {
+        type: 'PG_CHECKOUT',
+        merchantUrls: {
+          redirectUrl,
+        },
+        message: 'Rental advance payment',
       },
+      metaInfo: {
+        udf1: vehicleId || 'rental',
+        udf2: vehicleName.slice(0, 120) || 'Rental booking',
+        udf3: bookingReference,
+      },
+      prefillUserLoginDetails: normalizePhone(user?.phone || '')
+        ? { phoneNumber: normalizePhone(user?.phone || '') }
+        : undefined,
     },
-    merchantId,
-    saltKey,
-    saltIndex,
+    clientId,
+    clientSecret,
+    clientVersion,
     environment,
   });
 
-  const checkoutUrl = payload?.data?.instrumentResponse?.redirectInfo?.url || '';
+  const checkoutUrl = payload?.redirectUrl || '';
   if (!checkoutUrl) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-rental',
+      stage: 'create-order-missing-checkout-url',
+      level: 'error',
+      merchantTransactionId,
+      bookingReference,
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(502, 'PhonePe payment URL was not returned');
   }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'create-order-success',
+    merchantTransactionId,
+    bookingReference,
+    amountPaise: Math.round(amount * 100),
+    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+    response: summarizePhonePePayload(payload || {}),
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      gateway: 'phonepe',
+      merchantTransactionId,
+      bookingReference,
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      checkoutUrl,
+      metadata: {
+        vehicleId,
+        vehicleName,
+        pickup,
+        returnTime,
+      },
+    },
+  });
+};
+
+export const createPhonePeWalletTopupOrder = async (req, res) => {
+  const amount = normalizeMoneyAmount(req.body?.amount);
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
+  const userId = String(req.auth?.sub || '');
+  const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
+  const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
+  const frontendBaseUrl = getFrontendBaseUrl(req);
+  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-wallet&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
+  const user = userId ? await User.findById(userId).select('phone').lean() : null;
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'create-order-start',
+    merchantTransactionId,
+    amountRupees: amount,
+    request: buildPaymentRequestContext(req),
+    metadata: {
+      redirectUrl: summarizeCheckoutUrl(redirectUrl),
+    },
+  });
+  const payload = await phonePeRequest({
+    method: 'POST',
+    path: '/checkout/v2/pay',
+    body: {
+      merchantOrderId: merchantTransactionId,
+      amount: Math.round(amount * 100),
+      expireAfter: 1200,
+      paymentFlow: {
+        type: 'PG_CHECKOUT',
+        merchantUrls: {
+          redirectUrl,
+        },
+        message: 'Wallet top-up',
+      },
+      prefillUserLoginDetails: normalizePhone(user?.phone || '')
+        ? { phoneNumber: normalizePhone(user?.phone || '') }
+        : undefined,
+    },
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
+  });
+
+  const checkoutUrl = payload?.redirectUrl || '';
+  if (!checkoutUrl) {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-wallet',
+      stage: 'create-order-missing-checkout-url',
+      level: 'error',
+      merchantTransactionId,
+      response: summarizePhonePePayload(payload || {}),
+    });
+    throw new ApiError(502, 'PhonePe payment URL was not returned');
+  }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'create-order-success',
+    merchantTransactionId,
+    amountPaise: Math.round(amount * 100),
+    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   res.status(201).json({
     success: true,
@@ -2077,77 +2750,60 @@ export const payRentalAdvanceWithWallet = async (req, res) => {
 };
 
 export const verifyRazorpayWalletTopup = async (req, res) => {
-  const orderId = String(req.body?.razorpay_order_id || '');
-  const paymentId = String(req.body?.razorpay_payment_id || '');
-  const signature = String(req.body?.razorpay_signature || '');
-
-  if (!orderId || !paymentId || !signature) {
-    throw new ApiError(400, 'Payment verification fields are required');
-  }
-
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
-
-  const expectedSignature = crypto
-    .createHmac('sha256', keySecret)
-    .update(`${orderId}|${paymentId}`)
-    .digest('hex');
-
-  if (expectedSignature !== signature) {
-    throw new ApiError(400, 'Invalid payment signature');
-  }
-
-  const order = await razorpayRequest({
-    method: 'GET',
-    path: `/orders/${encodeURIComponent(orderId)}`,
-    keyId,
-    keySecret,
+  const wallet = await verifyAndApplyUserRazorpayWalletTopup({
+    orderId: req.body?.razorpay_order_id,
+    paymentId: req.body?.razorpay_payment_id,
+    signature: req.body?.razorpay_signature,
+    userId: req.auth?.sub,
   });
-
-  const amountPaise = Number(order?.amount);
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
-    throw new ApiError(400, 'Invalid order amount');
-  }
-
-  const amount = Math.round(amountPaise) / 100;
-  const userId = req.auth?.sub;
-
-  await ensureUserWallet(userId);
-
-  const alreadyCredited = await UserWallet.findOne({
-    userId,
-    'transactions.providerPaymentId': paymentId,
-  })
-    .select('_id')
-    .lean();
-
-  if (!alreadyCredited) {
-    const tx = {
-      kind: 'credit',
-      amount,
-      title: 'Wallet Refilled',
-      provider: 'razorpay',
-      providerOrderId: orderId,
-      providerPaymentId: paymentId,
-    };
-
-    await UserWallet.updateOne(
-      { userId },
-      {
-        $inc: { balance: amount },
-        $push: { transactions: { $each: [tx], $slice: -50 } },
-      },
-    );
-  }
-
-  const wallet = await UserWallet.findOne({ userId }).select('balance refundWallet transactions').slice('transactions', -10).lean();
-  if (!wallet) {
-    throw new ApiError(404, 'User not found');
-  }
 
   res.status(201).json({
     success: true,
-    data: buildUserWalletPayload(wallet),
+    data: wallet,
   });
+};
+
+export const handleUserRazorpayWalletTopupCallback = async (req, res) => {
+  const frontendBaseUrl = getFrontendBaseUrl(req);
+  const redirectUrl = new URL(`${frontendBaseUrl}/razorpay/status`);
+  redirectUrl.searchParams.set('flow', 'user-wallet');
+
+  try {
+    const errorCode = String(
+      req.body?.error?.code || req.body?.error?.reason || req.query?.error_code || '',
+    ).trim();
+    const errorDescription = String(
+      req.body?.error?.description || req.query?.error_description || '',
+    ).trim();
+
+    if (errorCode || errorDescription) {
+      redirectUrl.searchParams.set('status', 'failure');
+      if (errorCode) {
+        redirectUrl.searchParams.set('error_code', errorCode);
+      }
+      if (errorDescription) {
+        redirectUrl.searchParams.set('error_description', errorDescription);
+      }
+      res.redirect(302, redirectUrl.toString());
+      return;
+    }
+
+    await verifyAndApplyUserRazorpayWalletTopup({
+      orderId: req.body?.razorpay_order_id || req.query?.razorpay_order_id,
+      paymentId: req.body?.razorpay_payment_id || req.query?.razorpay_payment_id,
+      signature: req.body?.razorpay_signature || req.query?.razorpay_signature,
+    });
+
+    redirectUrl.searchParams.set('status', 'success');
+  } catch (error) {
+    redirectUrl.searchParams.set('status', 'failure');
+    redirectUrl.searchParams.set(
+      'error_description',
+      String(error?.message || 'Payment verification failed.'),
+    );
+  }
+
+  res.redirect(302, redirectUrl.toString());
 };
 
 export const verifyPhonePeWalletTopup = async (req, res) => {
@@ -2159,20 +2815,42 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     throw new ApiError(400, 'merchantTransactionId is required');
   }
 
-  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'verify-start',
+    merchantTransactionId,
+    request: buildPaymentRequestContext(req),
+  });
+
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const payload = await phonePeRequest({
     method: 'GET',
-    path: `/pg/v1/status/${encodeURIComponent(merchantId)}/${encodeURIComponent(merchantTransactionId)}`,
-    merchantId,
-    saltKey,
-    saltIndex,
+    path: `/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status?details=false`,
+    clientId,
+    clientSecret,
+    clientVersion,
     environment,
   });
 
-  const paymentState = String(payload?.data?.state || payload?.data?.paymentState || '').trim().toUpperCase();
-  const paymentId = toCleanString(payload?.data?.transactionId || merchantTransactionId);
-  const amount = Math.round(Number(payload?.data?.amount || 0)) / 100;
+  const paymentDetails = Array.isArray(payload?.paymentDetails) ? payload.paymentDetails : [];
+  const latestPayment = paymentDetails[0] || {};
+  const paymentState = String(payload?.state || latestPayment?.state || '').trim().toUpperCase();
+  const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
   const userId = req.auth?.sub;
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'verify-response',
+    merchantTransactionId,
+    userId,
+    paymentState,
+    paymentId,
+    amountRupees: amount,
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   if (paymentState === 'COMPLETED') {
     await ensureUserWallet(userId);
@@ -2211,6 +2889,18 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
       .slice('transactions', -10)
       .lean();
 
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-wallet',
+      stage: 'verify-paid',
+      merchantTransactionId,
+      userId,
+      paymentId,
+      amountRupees: amount,
+      alreadyCredited: Boolean(alreadyCredited),
+      walletBalance: Number(wallet?.balance || 0),
+    });
+
     res.json({
       success: true,
       data: {
@@ -2225,6 +2915,15 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
   }
 
   if (paymentState === 'PENDING') {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-wallet',
+      stage: 'verify-pending',
+      merchantTransactionId,
+      userId,
+      paymentId,
+      amountRupees: amount,
+    });
     res.json({
       success: true,
       data: {
@@ -2238,6 +2937,30 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     return;
   }
 
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-wallet',
+    stage: 'verify-failed',
+    level: 'warn',
+    merchantTransactionId,
+    userId,
+    paymentId,
+    paymentState,
+    amountRupees: amount,
+    code: payload?.code || latestPayment?.responseCode || '',
+    providerMessage:
+      payload?.message ||
+      latestPayment?.responseCodeDescription ||
+      latestPayment?.detailedErrorCode ||
+      '',
+    response: summarizePhonePePayload(payload || {}),
+  });
+  const providerCode = payload?.code || latestPayment?.responseCode || '';
+  const providerMessage =
+    payload?.message ||
+    latestPayment?.responseCodeDescription ||
+    latestPayment?.detailedErrorCode ||
+    'PhonePe payment was not completed';
   res.json({
     success: true,
     data: {
@@ -2245,9 +2968,11 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
       gateway: 'phonepe',
       merchantTransactionId,
       transactionId: paymentId,
-      code: payload?.code || payload?.data?.responseCode || '',
+      code: providerCode,
+      state: paymentState,
+      providerMessage,
     },
-    message: payload?.message || 'PhonePe payment was not completed',
+    message: providerMessage,
   });
 };
 
@@ -2296,6 +3021,145 @@ export const verifyRentalAdvancePayment = async (req, res) => {
       notes: order?.notes || {},
     },
     message: 'Rental advance payment verified successfully',
+  });
+};
+
+export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
+  const merchantTransactionId = toCleanString(
+    req.params?.merchantTransactionId || req.query?.merchantTransactionId || req.query?.transactionId,
+  );
+
+  if (!merchantTransactionId) {
+    throw new ApiError(400, 'merchantTransactionId is required');
+  }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'verify-start',
+    merchantTransactionId,
+    request: buildPaymentRequestContext(req),
+  });
+
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
+  const payload = await phonePeRequest({
+    method: 'GET',
+    path: `/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status?details=false`,
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
+  });
+
+  const paymentDetails = Array.isArray(payload?.paymentDetails) ? payload.paymentDetails : [];
+  const latestPayment = paymentDetails[0] || {};
+  const paymentState = String(payload?.state || latestPayment?.state || '').trim().toUpperCase();
+  const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
+  const bookingReference = toCleanString(payload?.metaInfo?.udf3 || latestPayment?.metaInfo?.udf3);
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'verify-response',
+    merchantTransactionId,
+    bookingReference,
+    paymentState,
+    paymentId,
+    amountRupees: amount,
+    response: summarizePhonePePayload(payload || {}),
+  });
+
+  if (paymentState === 'COMPLETED') {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-rental',
+      stage: 'verify-paid',
+      merchantTransactionId,
+      bookingReference,
+      paymentId,
+      amountRupees: amount,
+    });
+    res.json({
+      success: true,
+      data: {
+        provider: 'phonepe',
+        gateway: 'phonepe',
+        status: 'paid',
+        amount,
+        currency: payload?.currency || 'INR',
+        merchantTransactionId,
+        transactionId: paymentId,
+        bookingReference,
+      },
+      message: 'Rental advance payment verified successfully',
+    });
+    return;
+  }
+
+  if (paymentState === 'PENDING') {
+    logPaymentDiagnostic({
+      provider: 'phonepe',
+      scope: 'user-rental',
+      stage: 'verify-pending',
+      merchantTransactionId,
+      bookingReference,
+      paymentId,
+      amountRupees: amount,
+    });
+    res.json({
+      success: true,
+      data: {
+        provider: 'phonepe',
+        gateway: 'phonepe',
+        status: 'pending',
+        merchantTransactionId,
+        transactionId: paymentId,
+        bookingReference,
+      },
+      message: payload?.message || 'PhonePe payment is still pending',
+    });
+    return;
+  }
+
+  logPaymentDiagnostic({
+    provider: 'phonepe',
+    scope: 'user-rental',
+    stage: 'verify-failed',
+    level: 'warn',
+    merchantTransactionId,
+    bookingReference,
+    paymentId,
+    paymentState,
+    amountRupees: amount,
+    code: payload?.code || latestPayment?.responseCode || '',
+    providerMessage:
+      payload?.message ||
+      latestPayment?.responseCodeDescription ||
+      latestPayment?.detailedErrorCode ||
+      '',
+    response: summarizePhonePePayload(payload || {}),
+  });
+  const rentalProviderCode = payload?.code || latestPayment?.responseCode || '';
+  const rentalProviderMessage =
+    payload?.message ||
+    latestPayment?.responseCodeDescription ||
+    latestPayment?.detailedErrorCode ||
+    'PhonePe payment was not completed';
+  res.json({
+    success: true,
+    data: {
+      provider: 'phonepe',
+      gateway: 'phonepe',
+      status: 'failed',
+      merchantTransactionId,
+      transactionId: paymentId,
+      bookingReference,
+      code: rentalProviderCode,
+      state: paymentState,
+      providerMessage: rentalProviderMessage,
+    },
+    message: rentalProviderMessage,
   });
 };
 
@@ -2534,12 +3398,16 @@ export const createBusBookingOrder = async (req, res) => {
     throw new ApiError(400, `Seat ${invalidSeat} is not available for booking`);
   }
 
-  const amount = Math.round(
+  const baseAmount = Math.round(
     seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, seatCellMap.get(seatId)), 0) * 100,
   ) / 100;
-  if (amount <= 0) {
+  if (baseAmount <= 0) {
     throw new ApiError(400, 'Bus fare is not configured');
   }
+
+  const serviceTaxPercentage = Math.max(0, Number(busService.serviceTaxPercentage || 0));
+  const serviceTaxAmount = Math.round(((baseAmount * serviceTaxPercentage) / 100) * 100) / 100;
+  const amount = Math.round((baseAmount + serviceTaxAmount) * 100) / 100;
 
   const { keyId, keySecret } = await resolveRazorpayCredentials();
   const amountPaise = Math.round(amount * 100);
@@ -2592,6 +3460,10 @@ export const createBusBookingOrder = async (req, res) => {
       registrationNumber: busService.registrationNumber || '',
       driverName: busService.driverName || '',
       driverPhone: busService.driverPhone || '',
+      serviceTaxPercentage,
+      baseAmount,
+      serviceTaxAmount,
+      totalAmount: amount,
     },
     payment: {
       provider: 'razorpay',
@@ -3063,9 +3935,6 @@ export const createRentalBookingRequest = async (req, res) => {
   const paymentStatus = toCleanString(payload.paymentStatus).toLowerCase() || 'pending';
   const paymentMethod = toCleanString(payload.paymentMethod).toLowerCase();
   const paymentMethodLabel = toCleanString(payload.paymentMethodLabel);
-  const advancePaymentLabel = toCleanString(payload.advancePaymentLabel) || 'Advance booking payment';
-  const totalCost = Math.max(0, Number(payload.totalCost || 0));
-  const payableNow = Math.max(0, Number(payload.payableNow || payload.deposit || 0));
   const kycCompleted = Boolean(payload.kycCompleted);
 
   if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
@@ -3113,6 +3982,43 @@ export const createRentalBookingRequest = async (req, res) => {
   const serviceLocation = payload.serviceLocation || {};
   const paymentPayload = payload.payment || {};
   const kycDocumentsPayload = payload.kycDocuments || {};
+  const matchedPackage = Array.isArray(vehicle.pricing)
+    ? vehicle.pricing.find(
+        (item) => String(item?.id || item?.packageId || '').trim() ===
+          String(selectedPackage.id || selectedPackage.packageId || '').trim(),
+      ) || null
+    : null;
+
+  if (!matchedPackage) {
+    throw new ApiError(400, 'Selected rental package is invalid');
+  }
+
+  const totalCost = Math.max(0, Number(matchedPackage.price || 0));
+  const advancePaymentConfig = vehicle.advancePayment || {};
+  const advancePaymentMode = String(advancePaymentConfig.paymentMode || '').trim().toLowerCase();
+  const advancePaymentLabel =
+    toCleanString(advancePaymentConfig.label) ||
+    toCleanString(payload.advancePaymentLabel) ||
+    'Advance booking payment';
+  const advanceAmountRaw = advancePaymentConfig.enabled
+    ? advancePaymentMode === 'full'
+      ? totalCost
+      : advancePaymentMode === 'percentage'
+        ? (totalCost * Math.max(0, Number(advancePaymentConfig.amount || 0))) / 100
+        : Math.max(0, Number(advancePaymentConfig.amount || 0))
+    : 0;
+  const payableNow = Math.min(
+    totalCost,
+    Math.round((Math.max(0, advanceAmountRaw) + Number.EPSILON) * 100) / 100,
+  );
+  const normalizedPaymentStatus = payableNow > 0
+    ? paymentStatus === 'paid'
+      ? 'paid'
+      : paymentStatus === 'failed'
+        ? 'failed'
+        : 'pending'
+    : 'not_required';
+
   const normalizedDrivingLicenseUrl = toCleanString(
     kycDocumentsPayload.drivingLicense?.imageUrl ||
       kycDocumentsPayload.drivingLicense?.secureUrl ||
@@ -3134,9 +4040,21 @@ export const createRentalBookingRequest = async (req, res) => {
         _id: { $in: allowedServiceStoreIds },
         ...(requestedLocationId ? { service_location_id: requestedLocationId } : {}),
       })
-        .select('_id')
+        .select('_id name owner_name rentalCommission')
+        .sort({ name: 1, _id: 1 })
         .lean()
     : [];
+
+  if (matchingServiceCenters.length === 0) {
+    throw new ApiError(
+      400,
+      requestedLocationId
+        ? 'No rental service store is configured for this vehicle in the selected service location'
+        : 'No rental service store is configured for this vehicle',
+    );
+  }
+
+  const primaryServiceCenter = matchingServiceCenters[0] || null;
 
   const update = {
     userId: user._id,
@@ -3146,12 +4064,37 @@ export const createRentalBookingRequest = async (req, res) => {
     vehicleCategory: vehicle.vehicleCategory || '',
     vehicleImage: vehicle.image || '',
     serviceCenterIds: matchingServiceCenters.map((item) => item._id),
+    commissionSnapshot: {
+      serviceStoreId: primaryServiceCenter?._id || null,
+      serviceStoreName: toCleanString(primaryServiceCenter?.name),
+      ownerName: toCleanString(primaryServiceCenter?.owner_name),
+      serviceStoreCommissionType:
+        primaryServiceCenter?.rentalCommission?.serviceStore?.type === 'fixed'
+          ? 'fixed'
+          : 'percentage',
+      serviceStoreCommissionValue: Math.max(
+        0,
+        Number(primaryServiceCenter?.rentalCommission?.serviceStore?.value || 0),
+      ),
+      ownerCommissionType:
+        primaryServiceCenter?.rentalCommission?.owner?.type === 'fixed'
+          ? 'fixed'
+          : 'percentage',
+      ownerCommissionValue: Math.max(
+        0,
+        Number(primaryServiceCenter?.rentalCommission?.owner?.value || 0),
+      ),
+      serviceTaxPercentage: Math.max(
+        0,
+        Number(primaryServiceCenter?.rentalCommission?.serviceTaxPercentage || 0),
+      ),
+    },
     selectedPackage: {
       packageId: toCleanString(selectedPackage.id || selectedPackage.packageId || ''),
-      label: toCleanString(selectedPackage.label),
-      durationHours: Math.max(0, Number(selectedPackage.durationHours || 0)),
-      price: Math.max(0, Number(selectedPackage.price || 0)),
-      extraHourPrice: Math.max(0, Number(selectedPackage.extraHourPrice || 0)),
+      label: toCleanString(matchedPackage.label || selectedPackage.label),
+      durationHours: Math.max(0, Number(matchedPackage.durationHours || selectedPackage.durationHours || 0)),
+      price: totalCost,
+      extraHourPrice: Math.max(0, Number(matchedPackage.extraHourPrice || selectedPackage.extraHourPrice || 0)),
     },
     serviceLocation: {
       locationId: toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || ''),
@@ -3168,13 +4111,15 @@ export const createRentalBookingRequest = async (req, res) => {
     totalCost,
     payableNow,
     advancePaymentLabel,
-    paymentStatus,
+    paymentStatus: normalizedPaymentStatus,
     paymentMethod,
     paymentMethodLabel,
     payment: {
       provider: toCleanString(paymentPayload.provider),
-      status: toCleanString(paymentPayload.status) || paymentStatus,
-      amount: Math.max(0, Number(paymentPayload.amount || payableNow || 0)),
+      status: toCleanString(paymentPayload.status) || normalizedPaymentStatus,
+      amount: normalizedPaymentStatus === 'not_required'
+        ? 0
+        : Math.max(0, Number(paymentPayload.amount || payableNow || 0)),
       currency: toCleanString(paymentPayload.currency) || 'INR',
       orderId: toCleanString(paymentPayload.orderId || paymentPayload.razorpay_order_id),
       paymentId: toCleanString(paymentPayload.paymentId || paymentPayload.razorpay_payment_id),
@@ -3232,7 +4177,7 @@ export const createRentalBookingRequest = async (req, res) => {
 
   return res.status(201).json({
     success: true,
-    data: serializeRentalBookingRequest(request),
+    data: buildRentalBookingResponse(request),
     message: 'Rental booking request submitted successfully',
   });
 };
@@ -3270,7 +4215,7 @@ export const getMyActiveRentalBooking = async (req, res) => {
   return res.status(200).json({
     success: true,
     data: {
-      ...serializeRentalBookingRequest(item),
+      ...buildRentalBookingResponse(item, item.completionRequestedAt || item.completedAt || null),
       rideMetrics: effectiveMetrics,
     },
   });
@@ -3307,7 +4252,7 @@ export const listMyRentalBookings = async (req, res) => {
   return res.status(200).json({
     success: true,
     data: {
-      results: items.map((item) => serializeRentalBookingRequest(item)),
+      results: items.map((item) => buildRentalBookingResponse(item)),
       pagination: buildPagination({ page, limit, total }),
     },
   });
@@ -3341,9 +4286,19 @@ export const endMyActiveRentalRide = async (req, res) => {
   const completionRequestedAt = new Date();
   const metrics = computeRentalRideMetrics(item, completionRequestedAt);
 
-  item.status = 'end_requested';
-  item.completionRequestedAt = completionRequestedAt;
-  item.completedAt = null;
+  const transportSettings = await getTransportRideSettings();
+  const requireApproval = String(transportSettings.require_admin_approval_to_end_rental || '0') === '1';
+
+  if (requireApproval) {
+    item.status = 'end_requested';
+    item.completionRequestedAt = completionRequestedAt;
+    item.completedAt = null;
+  } else {
+    item.status = 'completed';
+    item.completionRequestedAt = null;
+    item.completedAt = completionRequestedAt;
+  }
+
   item.finalCharge = metrics.currentCharge;
   item.finalElapsedMinutes = metrics.elapsedMinutes;
 
@@ -3352,13 +4307,15 @@ export const endMyActiveRentalRide = async (req, res) => {
   return res.status(200).json({
     success: true,
     data: {
-      ...serializeRentalBookingRequest(item.toObject()),
+      ...buildRentalBookingResponse(item.toObject(), requireApproval ? completionRequestedAt : null),
       rideMetrics: {
         ...metrics,
         currentCharge: item.finalCharge,
       },
     },
-    message: 'Rental ride end request sent for admin review',
+    message: requireApproval 
+      ? 'Rental ride end request sent for admin review'
+      : 'Rental ride ended successfully',
   });
 };
 
@@ -3388,7 +4345,11 @@ export const updateMyActiveRentalLocation = async (req, res) => {
 };
 
 export const listMyBusBookings = async (req, res) => {
-  await ensureBusServiceEnabled();
+  const transportSettings = await getTransportRideSettings();
+  if (String(transportSettings.enable_bus_service || '0') !== '1') {
+    return res.status(200).json({ success: true, results: [], total: 0, message: 'Bus service disabled' });
+  }
+
   await cleanupExpiredBusSeatHolds();
 
   const page = toPositiveInteger(req.query?.page, 1);
@@ -3452,3 +4413,14 @@ export const listMyBusBookings = async (req, res) => {
     },
   });
 };
+
+export const getSetPrices = asyncHandler(async (req, res) => {
+  const data = await listSetPrices(req.query || {}, null);
+  res.status(200).json({ success: true, ...data });
+});
+
+export const getZones = asyncHandler(async (req, res) => {
+  const results = await listZones(null);
+  res.status(200).json({ success: true, results });
+});
+

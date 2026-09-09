@@ -89,6 +89,20 @@ const busDriverSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    rejectionReason: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    signupSource: {
+      type: String,
+      enum: ['admin', 'self_signup'],
+      default: 'admin',
+    },
+    onboarding: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   { timestamps: true },
 );

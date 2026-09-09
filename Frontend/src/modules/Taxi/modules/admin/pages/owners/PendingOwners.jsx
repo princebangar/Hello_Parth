@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
@@ -78,6 +77,7 @@ const PendingOwners = () => {
   const [error, setError] = useState('');
   const [activeMenu, setActiveMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const openActionMenu = (id, anchorEl) => {
     const rect = anchorEl.getBoundingClientRect();
@@ -136,11 +136,10 @@ const PendingOwners = () => {
         } else {
           await adminService.approveOwner(id, { approve: true });
         }
-        toast.success('Owner account approved successfully!');
         await fetchPendingOwners();
       }
     } catch (err) {
-      toast.error(err?.message || `Error during ${action}`);
+      alert(err?.message || `Network error during ${action}`);
     } finally {
       closeMenu();
     }
@@ -276,11 +275,10 @@ const PendingOwners = () => {
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 items-end">
           <div>
             <label className={labelClass}>
-              <Search size={12} className="inline mr-1 text-gray-400" />
               Search
             </label>
             <input
-              className={inputClass}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
               placeholder="Search by owner, company, phone, or location"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -291,7 +289,7 @@ const PendingOwners = () => {
             <select
               value={itemsPerPage}
               onChange={(e) => setItemsPerPage(parseInt(e.target.value, 10))}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
@@ -299,11 +297,39 @@ const PendingOwners = () => {
               <option value={200}>200</option>
             </select>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 rounded-lg hover:bg-orange-600 transition-colors">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-black bg-yellow-400 rounded-lg hover:bg-yellow-500 transition-colors"
+          >
             <Filter size={16} /> Filters
           </button>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 animate-in slide-in-from-top-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Filter by Service Location</label>
+              <input
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
+                placeholder="Enter city or location..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Filter by Transport Type</label>
+              <input
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
+                placeholder="Enter transport type..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
         <div className="overflow-x-auto">

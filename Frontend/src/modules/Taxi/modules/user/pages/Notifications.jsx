@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Bell, Trash2, Tag, ShieldCheck, Star, AlertCircle, RefreshCw, Megaphone, CheckCircle2 } from 'lucide-react';
-import BottomNavbar from '../components/BottomNavbar';
+// ... removed BottomNavbar import ...
 import { userAuthService } from '../services/authService';
+import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import {
   USER_NOTIFICATIONS_UPDATED_EVENT,
   clearRealtimeNotifications,
@@ -132,22 +133,25 @@ const Notifications = () => {
 
   const totalCount = useMemo(() => notifications.length, [notifications.length]);
 
+  const { theme } = useUserTheme();
+  const isDark = theme === 'dark';
+
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-28 relative overflow-hidden">
-      <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-purple-100/60 blur-3xl pointer-events-none" />
-      <div className="absolute top-52 left-[-60px] h-52 w-52 rounded-full bg-blue-100/40 blur-3xl pointer-events-none" />
+    <div className={`min-h-screen max-w-lg mx-auto font-sans pb-28 relative overflow-hidden transition-colors duration-300 ${isDark ? 'bg-slate-950 text-white' : 'bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] text-slate-900'}`}>
+      <div className={`absolute -top-16 right-[-40px] h-44 w-44 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-yellow-500/5' : 'bg-purple-100/60'}`} />
+      <div className={`absolute top-52 left-[-60px] h-52 w-52 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-yellow-500/5' : 'bg-blue-100/40'}`} />
 
       {/* Header */}
-      <header className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]">
+      <header className={`backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b transition-colors duration-300 ${isDark ? 'bg-slate-900/90 border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.3)]' : 'bg-white/90 border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]'}`}>
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/taxi/user/profile')} className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-sm active:scale-95 transition-all">
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
+          <button onClick={() => navigate('/taxi/user/profile')} className={`w-9 h-9 rounded-[12px] border flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer ${isDark ? 'border-slate-800 bg-slate-950 text-white' : 'border-white/80 bg-white/90 text-slate-900'}`}>
+            <ArrowLeft size={18} className={isDark ? 'text-white' : 'text-slate-900'} strokeWidth={2.5} />
           </button>
           <div className="flex-1 min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.26em] text-slate-400">Inbox</p>
-            <h1 className="text-[19px] font-black tracking-tight text-slate-900 leading-tight">Notifications</h1>
+            <h1 className={`text-[19px] font-black tracking-tight leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Notifications</h1>
           </div>
-          <div className="bg-slate-900 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm">
+          <div className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm ${isDark ? 'bg-yellow-400 text-slate-950' : 'bg-slate-900 text-white'}`}>
             {totalCount}
           </div>
         </div>
@@ -254,8 +258,6 @@ const Notifications = () => {
           })}
         </AnimatePresence>
       </div>
-
-      <BottomNavbar />
     </div>
   );
 };

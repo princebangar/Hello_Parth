@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Users,
-  UserCheck,
-  Zap,
-  IndianRupee,
-  ArrowUpRight,
+import React, { useState, useEffect } from 'react';
+import { 
+  Users, 
+  UserCheck, 
+  Zap, 
+  IndianRupee, 
+  ArrowUpRight, 
   ChevronRight,
   TrendingUp,
   PieChart as PieIcon,
   Activity,
-  ArrowRight,
+  ArrowRight
 } from 'lucide-react';
-import { getUnifiedAdminToken } from '../../services/adminSession';
 
 const StatCard = ({ title, value, change, icon: Icon, color }) => (
   <div className="bg-white rounded-[32px] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between h-full group">
@@ -56,8 +55,8 @@ const ReferralDashboard = () => {
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const token = getUnifiedAdminToken() || '';
-        const res = await fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/admin/referral/dashboard', {
+        const token = localStorage.getItem('adminToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
+        const res = await fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referral/dashboard', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const json = await res.json();
@@ -268,5 +267,4 @@ const ReferralDashboard = () => {
 };
 
 export default ReferralDashboard;
-
 

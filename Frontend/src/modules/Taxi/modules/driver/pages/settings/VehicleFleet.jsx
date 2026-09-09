@@ -21,6 +21,10 @@ import McvIcon from '../../../../assets/icons/mcv.png';
 import LuxuryIcon from '../../../../assets/icons/Luxury.png';
 import PremiumIcon from '../../../../assets/icons/Premium.png';
 import SuvIcon from '../../../../assets/icons/SUV.png';
+import ScootyIcon from '../../../../assets/icons/scooty.png';
+import HatchbackIcon from '../../../../assets/icons/Hatchback.png';
+import BusIcon from '../../../../assets/icons/bus.png';
+import MiniBusIcon from '../../../../assets/icons/mini_bus.png';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const VEHICLE_FLEET_DRAFT_KEY = 'driver_vehicle_fleet_draft';
@@ -39,6 +43,11 @@ const iconMap = {
     Luxary: LuxuryIcon,
     premium: PremiumIcon,
     suv: SuvIcon,
+    scooty: ScootyIcon,
+    car_5_seater: HatchbackIcon,
+    car_7_seater: SuvIcon,
+    bus: BusIcon,
+    mini_bus: MiniBusIcon,
 };
 
 const ICON_TYPE_ALIASES = {
@@ -50,6 +59,11 @@ const ICON_TYPE_ALIASES = {
     luxary: 'Luxary',
     luxury: 'Luxary',
     mini_truck: 'truck',
+    scooty: 'scooty',
+    'car 5 seater': 'car_5_seater',
+    'car 7 seater': 'car_7_seater',
+    bus: 'bus',
+    'mini bus': 'mini_bus',
 };
 
 const getVehicleTypes = (response) => {
@@ -513,10 +527,8 @@ const VehicleFleet = () => {
                                         ref={cameraInputRef}
                                         type="file"
                                         accept="image/*"
+                                        capture="environment"
                                         className="sr-only"
-                                        onClick={(e) => {
-                                            e.target.value = "";
-                                        }}
                                         onChange={handleVehicleImageSelected}
                                         disabled={imageUploading}
                                     />

@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import mongoose from "mongoose";
 import QRCode from "qrcode";
+import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLoginDetails } from "@phonepe-pg/pg-sdk-node";
 import { env } from "../../../../config/env.js";
 import { ApiError } from "../../../../utils/ApiError.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
-import { deleteReplacedAssets } from "../../../../services/storage.service.js";
 import { Driver } from "../models/Driver.js";
 import { BusDriver } from "../models/BusDriver.js";
 import { DriverLoginSession } from "../models/DriverLoginSession.js";
@@ -15,6 +15,8 @@ import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
+import { PoolingVehicle } from "../../admin/models/PoolingVehicle.js";
+import { PoolingBooking } from "../../admin/models/PoolingBooking.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
 import { ServiceStore } from "../../admin/models/ServiceStore.js";
 import { ServiceCenterStaff } from "../../admin/models/ServiceCenterStaff.js";
@@ -25,13 +27,14 @@ import { CustomerBiometricProfile } from "../../admin/models/CustomerBiometricPr
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
+import { Zone } from "../models/Zone.js";
+import { uploadDataUrlToCloudinary } from "../../../../utils/cloudinaryUpload.js";
 import {
   comparePassword,
   hashPassword,
   signAccessToken,
 } from "../services/authService.js";
 import { cancelScheduledRideByDriver, emitToDriver } from "../../services/dispatchService.js";
-import { calculateCancellationBill } from "../../services/cancellationService.js";
 import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
@@ -45,6 +48,13 @@ import {
   startDriverLoginOtp,
   verifyDriverLoginOtp,
 } from "../services/loginOtpService.js";
+import {
+  completePoolingDriverOnboarding,
+  getPoolingDriverOnboardingSession,
+  savePoolingDriverOnboardingDetails,
+  startPoolingDriverOnboarding,
+  verifyPoolingDriverOnboardingOtp,
+} from "../services/poolingOnboardingService.js";
 import { verifyAccessToken } from "../../services/tokenService.js";
 import { clearDriverActiveRideIfStale } from "../../services/rideService.js";
 import { getWalletSettings } from "../../services/appSettingsService.js";
@@ -64,13 +74,19 @@ import {
   updateRentalVehicleType,
 } from "../../admin/services/adminService.js";
 import { resolveConfiguredGatewayCredentials } from "../../services/paymentGatewayService.js";
+import { assignPushTokenToEntity } from "../../services/pushTokenService.js";
 import {
   completeDriverOnboarding,
   getDriverOnboardingSession,
+  getDriverOnboardingSignupOptions,
   saveDriverDocuments,
+  verifyDriverOnboardingLicenseDocument,
+  saveDriverRoleDetails,
+  setDriverOnboardingRole,
   saveDriverPersonalDetails,
   saveDriverReferral,
   saveDriverVehicle,
+  verifyDriverVehicleRc,
   startDriverOnboarding,
   verifyDriverOtp,
 } from "../services/onboardingService.js";
@@ -78,6 +94,15 @@ import {
   buildDriverTodaySummaryFromDocument,
   syncDriverTodaySummaryDocument,
 } from "../services/driverTodaySummaryService.js";
+import {
+  buildPaymentRequestContext,
+  logPaymentDiagnostic,
+  summarizeCheckoutUrl,
+  summarizePhonePeCredentialMeta,
+  summarizePhonePePayload,
+  summarizePhonePeRequestBody,
+} from "../../services/paymentDiagnostics.js";
+import { verifyBankAccountWithRecharge, verifyDrivingLicenseWithRecharge, verifyGstinWithRecharge, verifyPanWithRecharge, verifyRcWithRecharge, verifyUpiWithRecharge } from "../../services/rechargeVerificationService.js";
 
 const generateDriverReferralCode = (driver) => {
   const idPart = String(driver?._id || "")
@@ -96,6 +121,8 @@ const IST_OFFSET_MS = 330 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BUS_DAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const BUS_DRIVER_SCHEDULE_DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const BUS_LIVE_TRAIL_MAX_DISTANCE_KM = 2.5;
+const BUS_LIVE_TRAIL_MAX_POINTS = 80;
 const BIOMETRIC_FINGER_CODES = [
   "LEFT_THUMB",
   "LEFT_INDEX",
@@ -111,6 +138,32 @@ const BIOMETRIC_FINGER_CODES = [
 const BIOMETRIC_CAPTURE_SOURCES = ["phone_sensor", "usb_scanner", "bluetooth_scanner", "manual", "unknown"];
 const BIOMETRIC_ENROLLMENT_MODES = ["thumbs_only", "optional", "all_ten"];
 const BIOMETRIC_STATUSES = ["not_started", "in_progress", "completed", "verified"];
+
+const resolveRechargeVerificationState = (providerResponse = {}, fallbackMessage = "") => {
+  const normalizedStatus = String(providerResponse?.status ?? "").trim().toLowerCase();
+  const message = String(
+    providerResponse?.cardData?.response?.message ||
+    providerResponse?.cardData?.message ||
+    providerResponse?.msg ||
+    providerResponse?.message ||
+    fallbackMessage ||
+    "",
+  ).trim();
+  const lowerMessage = message.toLowerCase();
+  const explicitPending =
+    ["pending", "processing", "queued", "in_progress", "in progress"].includes(normalizedStatus) ||
+    lowerMessage.includes("pending") ||
+    lowerMessage.includes("processing") ||
+    lowerMessage.includes("try after sometime") ||
+    lowerMessage.includes("please try after sometime");
+  const succeeded = normalizedStatus === "1" || normalizedStatus === "success" || normalizedStatus === "verified" || Number(providerResponse?.status || 0) === 1;
+
+  return {
+    succeeded,
+    status: succeeded ? "verified" : explicitPending ? "pending" : "failed",
+    message,
+  };
+};
 const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
 const toIstDayKey = (value = new Date()) =>
@@ -166,14 +219,14 @@ const normalizeFleetVehicleDocumentValue = (value) => {
 
   const previewUrl = String(
     value.previewUrl ||
-    value.secureUrl ||
-    value.url ||
-    value.imageUrl ||
-    value.image ||
-    value.fileUrl ||
-    value.document ||
-    value.file ||
-    "",
+      value.secureUrl ||
+      value.url ||
+      value.imageUrl ||
+      value.image ||
+      value.fileUrl ||
+      value.document ||
+      value.file ||
+      "",
   ).trim();
 
   if (!previewUrl) {
@@ -220,6 +273,119 @@ const serializeDriverRouteBooking = (routeBooking = {}) => {
     updatedAt: routeBooking?.updatedAt || null,
   };
 };
+
+const serializeDriverBankDetails = (bankDetails = {}) => ({
+  accountHolderName: String(bankDetails?.accountHolderName || "").trim(),
+  upiId: String(bankDetails?.upiId || "").trim(),
+  qrCodeImage: String(bankDetails?.qrCodeImage || "").trim(),
+  accountNumber: String(bankDetails?.accountNumber || "").trim(),
+  ifsc: String(bankDetails?.ifsc || "").trim().toUpperCase(),
+  branchName: String(bankDetails?.branchName || "").trim(),
+  verificationStatus: String(bankDetails?.verificationStatus || "").trim(),
+  verificationMode: String(bankDetails?.verificationMode || "").trim(),
+  verificationMessage: String(bankDetails?.verificationMessage || "").trim(),
+  verificationReferenceId: String(bankDetails?.verificationReferenceId || "").trim(),
+  verifiedBankName: String(bankDetails?.verifiedBankName || "").trim(),
+  verifiedBranchName: String(bankDetails?.verifiedBranchName || "").trim(),
+  verifiedAccountHolderName: String(bankDetails?.verifiedAccountHolderName || "").trim(),
+  verifiedAt: bankDetails?.verifiedAt || null,
+  upiVerificationStatus: String(bankDetails?.upiVerificationStatus || "").trim(),
+  upiVerificationMode: String(bankDetails?.upiVerificationMode || "").trim(),
+  upiVerificationMessage: String(bankDetails?.upiVerificationMessage || "").trim(),
+  upiVerificationReferenceId: String(bankDetails?.upiVerificationReferenceId || "").trim(),
+  upiVerifiedName: String(bankDetails?.upiVerifiedName || "").trim(),
+  upiAccountIfsc: String(bankDetails?.upiAccountIfsc || "").trim(),
+  upiAccountType: String(bankDetails?.upiAccountType || "").trim(),
+  upiVerifiedAt: bankDetails?.upiVerifiedAt || null,
+  updatedAt: bankDetails?.updatedAt || null,
+});
+
+const normalizeDriverBankDetails = (payload = {}, existing = {}) => {
+  const next = serializeDriverBankDetails(existing);
+  let shouldResetVerification = false;
+
+  if (Object.prototype.hasOwnProperty.call(payload, "accountHolderName")) {
+    const accountHolderName = String(payload.accountHolderName || "").trim().slice(0, 120);
+    shouldResetVerification = shouldResetVerification || accountHolderName !== next.accountHolderName;
+    next.accountHolderName = accountHolderName;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "upiId")) {
+    const upiId = String(payload.upiId || "").trim().toLowerCase();
+    if (upiId && !/^[a-z0-9.\-_]{2,}@[a-z0-9.\-_]{2,}$/i.test(upiId)) {
+      throw new ApiError(400, "Enter a valid UPI ID");
+    }
+    if (upiId !== next.upiId) {
+      next.upiVerificationStatus = "";
+      next.upiVerificationMode = "";
+      next.upiVerificationMessage = "";
+      next.upiVerificationReferenceId = "";
+      next.upiVerifiedName = "";
+      next.upiAccountIfsc = "";
+      next.upiAccountType = "";
+      next.upiVerifiedAt = null;
+    }
+    next.upiId = upiId;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "qrCodeImage")) {
+    next.qrCodeImage = String(payload.qrCodeImage || "").trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "accountNumber")) {
+    const accountNumber = String(payload.accountNumber || "").replace(/\s/g, "");
+    if (accountNumber && !/^\d{6,20}$/.test(accountNumber)) {
+      throw new ApiError(400, "Account number must be 6 to 20 digits");
+    }
+    shouldResetVerification = shouldResetVerification || accountNumber !== next.accountNumber;
+    next.accountNumber = accountNumber;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "ifsc")) {
+    const ifsc = String(payload.ifsc || "").trim().toUpperCase();
+    if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+      throw new ApiError(400, "Enter a valid IFSC code");
+    }
+    shouldResetVerification = shouldResetVerification || ifsc !== next.ifsc;
+    next.ifsc = ifsc;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "branchName")) {
+    next.branchName = String(payload.branchName || "").trim().slice(0, 120);
+  }
+
+  if (shouldResetVerification) {
+    next.verificationStatus = "";
+    next.verificationMode = "";
+    next.verificationMessage = "";
+    next.verificationReferenceId = "";
+    next.verifiedBankName = "";
+    next.verifiedBranchName = "";
+    next.verifiedAccountHolderName = "";
+    next.verifiedAt = null;
+  }
+
+  next.updatedAt = new Date();
+  return next;
+};
+
+const buildDriverBankVerificationRequestId = (driver) =>
+  `BANK-${String(driver?._id || "").slice(-6)}-${Date.now()}`;
+
+const buildDriverLicenseVerificationRequestId = (driver) =>
+  `DL-${String(driver?._id || "").slice(-6)}-${Date.now()}`;
+
+const buildDriverPanVerificationRequestId = (driver) =>
+  `PAN-${String(driver?._id || "").slice(-6)}-${Date.now()}`;
+
+const buildDriverUpiVerificationRequestId = (driver) =>
+  `UPI-${String(driver?._id || "").slice(-6)}-${Date.now()}`;
+
+const buildDriverGstinVerificationRequestId = (driver) =>
+  `GST-${String(driver?._id || "").slice(-6)}-${Date.now()}`;
+
+const buildDriverRcVerificationRequestId = (driver) =>
+  `RC-${String(driver?._id || "").slice(-6)}-${Date.now()}`;
 
 const validateBusPassengerName = (value = "") => {
   if (!BUS_DRIVER_NAME_REGEX.test(String(value || "").trim())) {
@@ -295,6 +461,161 @@ const normalizeBusTravelDate = (value) => {
   }
 
   return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeFiniteNumber = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeBusTrackingPoint = (value, fieldName = "location") => {
+  const lat = normalizeFiniteNumber(value?.lat ?? value?.latitude);
+  const lng = normalizeFiniteNumber(value?.lng ?? value?.longitude ?? value?.lon);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new ApiError(400, `${fieldName} must include valid lat and lng values`);
+  }
+
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new ApiError(400, `${fieldName} coordinates are out of range`);
+  }
+
+  const heading = normalizeFiniteNumber(value?.heading);
+  const accuracyMeters = normalizeFiniteNumber(value?.accuracyMeters ?? value?.accuracy);
+  const rawSpeedKmph = normalizeFiniteNumber(value?.speedKmph);
+  const rawSpeedMs = normalizeFiniteNumber(value?.speed);
+  const speedKmph =
+    rawSpeedKmph !== null
+      ? rawSpeedKmph
+      : rawSpeedMs !== null
+        ? Number(rawSpeedMs * 3.6)
+        : null;
+
+  return {
+    lat,
+    lng,
+    recordedAt: value?.recordedAt ? new Date(value.recordedAt) : new Date(),
+    accuracyMeters,
+    heading,
+    speedKmph,
+  };
+};
+
+const toRadians = (value) => (Number(value) * Math.PI) / 180;
+
+const calculateDistanceKm = (pointA, pointB) => {
+  if (!pointA || !pointB) {
+    return 0;
+  }
+
+  const lat1 = normalizeFiniteNumber(pointA.lat);
+  const lng1 = normalizeFiniteNumber(pointA.lng);
+  const lat2 = normalizeFiniteNumber(pointB.lat);
+  const lng2 = normalizeFiniteNumber(pointB.lng);
+
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) {
+    return 0;
+  }
+
+  const earthRadiusKm = 6371;
+  const latDelta = toRadians(lat2 - lat1);
+  const lngDelta = toRadians(lng2 - lng1);
+  const a =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(lngDelta / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+};
+
+const trimBusLiveTrail = (points = []) => {
+  const normalized = (Array.isArray(points) ? points : [])
+    .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng)))
+    .slice(-BUS_LIVE_TRAIL_MAX_POINTS);
+
+  if (normalized.length <= 2) {
+    return normalized;
+  }
+
+  const kept = [normalized[normalized.length - 1]];
+  let distanceKm = 0;
+
+  for (let index = normalized.length - 2; index >= 0; index -= 1) {
+    const candidate = normalized[index];
+    const nextPoint = kept[kept.length - 1];
+    distanceKm += calculateDistanceKm(candidate, nextPoint);
+
+    if (distanceKm > BUS_LIVE_TRAIL_MAX_DISTANCE_KM) {
+      break;
+    }
+
+    kept.push(candidate);
+  }
+
+  return kept.reverse();
+};
+
+const serializeBusLiveTracking = (liveTracking = {}) => {
+  const serializePoint = (point) =>
+    point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng))
+      ? {
+          lat: Number(point.lat),
+          lng: Number(point.lng),
+          recordedAt: point.recordedAt || null,
+          accuracyMeters:
+            point.accuracyMeters === null || point.accuracyMeters === undefined
+              ? null
+              : Number(point.accuracyMeters),
+          heading:
+            point.heading === null || point.heading === undefined ? null : Number(point.heading),
+          speedKmph:
+            point.speedKmph === null || point.speedKmph === undefined
+              ? null
+              : Number(point.speedKmph),
+        }
+      : null;
+
+  return {
+    status: String(liveTracking?.status || "idle"),
+    scheduleId: String(liveTracking?.scheduleId || "").trim(),
+    travelDate: String(liveTracking?.travelDate || "").trim(),
+    startedAt: liveTracking?.startedAt || null,
+    endedAt: liveTracking?.endedAt || null,
+    lastUpdatedAt: liveTracking?.lastUpdatedAt || null,
+    currentLocation: serializePoint(liveTracking?.currentLocation),
+    recentPath: (Array.isArray(liveTracking?.recentPath) ? liveTracking.recentPath : [])
+      .map(serializePoint)
+      .filter(Boolean),
+    totalDistanceKm: Number(liveTracking?.totalDistanceKm || 0),
+  };
+};
+
+const ensureBusDriverAssignment = async (driverId) => {
+  const busDriver = await BusDriver.findById(driverId);
+
+  if (!busDriver) {
+    throw new ApiError(404, "Bus driver not found");
+  }
+
+  if (!busDriver.assignedBusServiceId) {
+    throw new ApiError(404, "No bus is assigned to this driver");
+  }
+
+  return busDriver;
+};
+
+const getBusTrackingContext = async (driverId) => {
+  const busDriver = await ensureBusDriverAssignment(driverId);
+  const busService = await BusService.findById(busDriver.assignedBusServiceId);
+
+  if (!busService) {
+    throw new ApiError(404, "Assigned bus service not found");
+  }
+
+  return { busDriver, busService };
 };
 
 const getBusTravelDayLabel = (travelDate) => BUS_DAY_OPTIONS[new Date(travelDate).getUTCDay()] || "Mon";
@@ -387,23 +708,23 @@ const serializeOwnerBusBooking = (booking = {}) => {
     routeSnapshot: booking.routeSnapshot || {},
     user: booking.userId
       ? {
-        id: String(booking.userId?._id || booking.userId),
-        name: booking.userId?.name || "",
-        phone: booking.userId?.phone || "",
-        email: booking.userId?.email || "",
-      }
+          id: String(booking.userId?._id || booking.userId),
+          name: booking.userId?.name || "",
+          phone: booking.userId?.phone || "",
+          email: booking.userId?.email || "",
+        }
       : null,
     busService: booking.busServiceId
       ? {
-        id: String(booking.busServiceId?._id || booking.busServiceId),
-        busName: booking.busServiceId?.busName || booking.routeSnapshot?.busName || "",
-        operatorName: booking.busServiceId?.operatorName || booking.routeSnapshot?.operatorName || "",
-        serviceNumber: booking.busServiceId?.serviceNumber || "",
-        coachType: booking.busServiceId?.coachType || booking.routeSnapshot?.coachType || "",
-        busCategory: booking.busServiceId?.busCategory || booking.routeSnapshot?.busCategory || "",
-        status: booking.busServiceId?.status || "draft",
-        route: booking.busServiceId?.route || null,
-      }
+          id: String(booking.busServiceId?._id || booking.busServiceId),
+          busName: booking.busServiceId?.busName || booking.routeSnapshot?.busName || "",
+          operatorName: booking.busServiceId?.operatorName || booking.routeSnapshot?.operatorName || "",
+          serviceNumber: booking.busServiceId?.serviceNumber || "",
+          coachType: booking.busServiceId?.coachType || booking.routeSnapshot?.coachType || "",
+          busCategory: booking.busServiceId?.busCategory || booking.routeSnapshot?.busCategory || "",
+          status: booking.busServiceId?.status || "draft",
+          route: booking.busServiceId?.route || null,
+        }
       : null,
     seatSummary: {
       total: originalSeatIds.length,
@@ -742,16 +1063,16 @@ const serializeBusDriverProfile = async (busDriver) => {
 
   const upcomingBookingsCount = assignedBusServiceId
     ? await BusBooking.countDocuments({
-      busServiceId: assignedBusServiceId,
-      status: { $in: ["pending", "confirmed"] },
-    })
+        busServiceId: assignedBusServiceId,
+        status: { $in: ["pending", "confirmed"] },
+      })
     : 0;
 
   const recentBookings = assignedBusServiceId
     ? await BusBooking.find({ busServiceId: assignedBusServiceId })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean()
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
     : [];
 
   return {
@@ -766,23 +1087,24 @@ const serializeBusDriverProfile = async (busDriver) => {
     assignedBusServiceId,
     busService: busService
       ? {
-        id: String(busService._id),
-        operatorName: busService.operatorName || "",
-        busName: busService.busName || "",
-        serviceNumber: busService.serviceNumber || "",
-        registrationNumber: busService.registrationNumber || "",
-        coachType: busService.coachType || "",
-        busCategory: busService.busCategory || "",
-        seatPrice: Number(busService.seatPrice || 0),
-        fareCurrency: busService.fareCurrency || "INR",
-        driverName: busService.driverName || "",
-        driverPhone: busService.driverPhone || "",
-        route: busService.route || {},
-        schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
-        amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
-        capacity: Number(busService.capacity || 0),
-        status: busService.status || "draft",
-      }
+          id: String(busService._id),
+          operatorName: busService.operatorName || "",
+          busName: busService.busName || "",
+          serviceNumber: busService.serviceNumber || "",
+          registrationNumber: busService.registrationNumber || "",
+          coachType: busService.coachType || "",
+          busCategory: busService.busCategory || "",
+          seatPrice: Number(busService.seatPrice || 0),
+          fareCurrency: busService.fareCurrency || "INR",
+          driverName: busService.driverName || "",
+          driverPhone: busService.driverPhone || "",
+          route: busService.route || {},
+          schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
+          amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
+          liveTracking: serializeBusLiveTracking(busService.liveTracking || {}),
+          capacity: Number(busService.capacity || 0),
+          status: busService.status || "draft",
+        }
       : null,
     metrics: {
       upcomingBookings: upcomingBookingsCount,
@@ -1149,8 +1471,8 @@ const razorpayRequest = async ({ method, path, body }) => {
     throw new ApiError(
       response.status || 502,
       payload?.error?.description ||
-      payload?.error?.message ||
-      "Razorpay QR request failed",
+        payload?.error?.message ||
+        "Razorpay QR request failed",
       {
         provider: "razorpay",
         path,
@@ -1336,10 +1658,10 @@ const refreshDriverPaymentCollection = async (ride) => {
   });
   const receivedAmount = Number(
     providerPayload?.amount_paid ||
-    providerPayload?.amount_paid_total ||
-    providerPayload?.payments_amount_received ||
-    providerPayload?.amount_received ||
-    0,
+      providerPayload?.amount_paid_total ||
+      providerPayload?.payments_amount_received ||
+      providerPayload?.amount_received ||
+      0,
   );
   const expectedAmount = Number(collection.amount || 0) * 100;
   const isProviderAmountPaid = expectedAmount > 0 && receivedAmount >= expectedAmount;
@@ -1475,7 +1797,7 @@ const serializeOwnerProfile = (owner = {}) => ({
     currency: "INR",
   },
   referralCode: "",
-  deletionRequest: { status: "none" },
+  deletionRequest: owner.deletionRequest || { status: "none" },
   isOnline: false,
   isOnRide: false,
   onlineSelfie: {},
@@ -1522,9 +1844,9 @@ const serializeServiceCenterProfile = (center = {}) => ({
   location:
     Number.isFinite(Number(center.longitude)) && Number.isFinite(Number(center.latitude))
       ? {
-        type: "Point",
-        coordinates: [Number(center.longitude), Number(center.latitude)],
-      }
+          type: "Point",
+          coordinates: [Number(center.longitude), Number(center.latitude)],
+        }
       : null,
   zoneId: center.zone_id?._id || center.zone_id || null,
   documents: {},
@@ -1536,16 +1858,16 @@ const serializeServiceCenterProfile = (center = {}) => ({
   longitude: Number(center.longitude ?? 0),
   zone: center.zone_id
     ? {
-      id: center.zone_id._id || center.zone_id,
-      name: center.zone_id.name || "",
-    }
+        id: center.zone_id._id || center.zone_id,
+        name: center.zone_id.name || "",
+      }
     : null,
   serviceLocation: center.service_location_id
     ? {
-      id: center.service_location_id._id || center.service_location_id,
-      name: center.service_location_id.service_location_name || center.service_location_id.name || "",
-      country: center.service_location_id.country || "",
-    }
+        id: center.service_location_id._id || center.service_location_id,
+        name: center.service_location_id.service_location_name || center.service_location_id.name || "",
+        country: center.service_location_id.country || "",
+      }
     : null,
   onboarding: {
     role: "service_center",
@@ -1593,21 +1915,102 @@ const serializeServiceCenterStaffProfile = (staff = {}, center = null) => ({
   longitude: Number(center?.longitude ?? 0),
   zone: center?.zone_id
     ? {
-      id: center.zone_id._id || center.zone_id,
-      name: center.zone_id.name || "",
-    }
+        id: center.zone_id._id || center.zone_id,
+        name: center.zone_id.name || "",
+      }
     : null,
   serviceLocation: center?.service_location_id
     ? {
-      id: center.service_location_id._id || center.service_location_id,
-      name: center.service_location_id.service_location_name || center.service_location_id.name || "",
-      country: center.service_location_id.country || "",
-    }
+        id: center.service_location_id._id || center.service_location_id,
+        name: center.service_location_id.service_location_name || center.service_location_id.name || "",
+        country: center.service_location_id.country || "",
+      }
     : null,
   serviceCenterId: center?._id ? String(center._id) : "",
   onboarding: {
     role: "service_center_staff",
   },
+});
+
+const serializePoolingDriverProfile = (vehicle = {}) => ({
+  id: vehicle._id,
+  name: vehicle.driverName || "Pooling Driver",
+  phone: vehicle.driverPhone || "",
+  email: "",
+  profileImage: "",
+  gender: "",
+  vehicleType: vehicle.vehicleType || "sedan",
+  vehicleTypeId: null,
+  vehicleIconType: vehicle.vehicleType || "sedan",
+  vehicleIconUrl: Array.isArray(vehicle.images) && vehicle.images.length > 0 ? vehicle.images[0] : "",
+  vehicleMake: vehicle.name || "",
+  vehicleModel: vehicle.vehicleModel || "",
+  registerFor: "pooling",
+  vehicleNumber: vehicle.vehicleNumber || "",
+  vehicleColor: vehicle.color || "",
+  vehicleImage: Array.isArray(vehicle.images) && vehicle.images.length > 0 ? vehicle.images[0] : "",
+  city: "",
+  status: vehicle.status || (vehicle.approve === false ? "pending" : "active"),
+  rating: 0,
+  wallet: {
+    balance: 0,
+    currency: "INR",
+  },
+  referralCode: "",
+  deletionRequest: { status: "none" },
+  isOnline: false,
+  isOnRide: false,
+  onlineSelfie: {},
+  location: null,
+  zoneId: null,
+  documents: {},
+  emergencyContacts: [],
+  poolingVehicle: vehicle,
+  approve: vehicle.approve !== false,
+  onboarding: {
+    role: "pooling_driver",
+  },
+});
+
+const serializePoolingDriverBooking = (booking = {}) => ({
+  id: String(booking._id || ""),
+  bookingId: String(booking.bookingId || ""),
+  seatsBooked: Number(booking.seatsBooked || 0),
+  fare: Number(booking.fare || 0),
+  baseFare: Number(booking.baseFare || 0),
+  serviceTaxPercentage: Number(booking.serviceTaxPercentage || 0),
+  serviceTaxAmount: Number(booking.serviceTaxAmount || 0),
+  driverCommissionPercentage: Number(booking.driverCommissionPercentage || 0),
+  driverCommissionAmount: Number(booking.driverCommissionAmount || 0),
+  ownerCommissionPercentage: Number(booking.ownerCommissionPercentage || 0),
+  ownerCommissionAmount: Number(booking.ownerCommissionAmount || 0),
+  currency: String(booking.currency || "INR"),
+  paymentStatus: String(booking.paymentStatus || booking.payment?.status || "pending"),
+  bookingStatus: String(booking.bookingStatus || "confirmed"),
+  selectedSeats: Array.isArray(booking.selectedSeats) ? booking.selectedSeats : [],
+  pickupLabel: String(booking.pickupLabel || ""),
+  dropLabel: String(booking.dropLabel || ""),
+  scheduleId: String(booking.scheduleId || ""),
+  otp: String(booking.otp || ""),
+  travelDate: booking.travelDate || null,
+  createdAt: booking.createdAt || null,
+  updatedAt: booking.updatedAt || null,
+  user: booking.user
+    ? {
+        id: String(booking.user._id || booking.user),
+        name: String(booking.user.name || ""),
+        phone: String(booking.user.phone || ""),
+        email: String(booking.user.email || ""),
+      }
+    : null,
+  route: booking.route
+    ? {
+        id: String(booking.route._id || booking.route),
+        routeName: String(booking.route.routeName || ""),
+        originLabel: String(booking.route.originLabel || ""),
+        destinationLabel: String(booking.route.destinationLabel || ""),
+      }
+    : null,
 });
 
 const serializeServiceCenterStaff = (staff = {}, bookingCount = 0) => ({
@@ -1624,9 +2027,9 @@ const serializeServiceCenterStaff = (staff = {}, bookingCount = 0) => ({
       : [],
     updatedAt: Array.isArray(staff.biometrics) && staff.biometrics.length > 0
       ? staff.biometrics.reduce((latest, item) => {
-        const candidate = item?.lastUpdated ? new Date(item.lastUpdated) : null;
-        return !latest || (candidate && candidate > latest) ? candidate : latest;
-      }, null)
+          const candidate = item?.lastUpdated ? new Date(item.lastUpdated) : null;
+          return !latest || (candidate && candidate > latest) ? candidate : latest;
+        }, null)
       : null,
   },
   bookingCount: Number(bookingCount || 0),
@@ -1723,7 +2126,7 @@ const getBiometricFingerHand = (fingerCode = "") => {
 };
 
 const getBiometricEncryptionKey = () =>
-  crypto.createHash("sha256").update(String(env.jwtSecret || "helloparth-biometric-secret")).digest();
+  crypto.createHash("sha256").update(String(env.jwtSecret || "appzeto-biometric-secret")).digest();
 
 const encryptBiometricTemplate = (template = "") => {
   const raw = String(template || "");
@@ -1738,8 +2141,39 @@ const encryptBiometricTemplate = (template = "") => {
   return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
 };
 
+const decryptBiometricTemplate = (encrypted = "") => {
+  const raw = String(encrypted || "").trim();
+  if (!raw) return "";
+  try {
+    const parts = raw.split(":");
+    if (parts.length < 3) return "";
+    const iv = Buffer.from(parts[0], "base64");
+    const tag = Buffer.from(parts[1], "base64");
+    const data = Buffer.from(parts[2], "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getBiometricEncryptionKey(), iv);
+    decipher.setAuthTag(tag);
+    return decipher.update(data, undefined, "utf8") + decipher.final("utf8");
+  } catch {
+    return "";
+  }
+};
+
 const buildBiometricTemplateHash = (template = "") =>
   crypto.createHash("sha256").update(String(template || "")).digest("hex");
+
+const isValidBiometricTemplate = (template) => {
+  const s = String(template || "").trim();
+  if (!s || s.length < 20) return false;
+  const lower = s.toLowerCase();
+  if (lower.includes("[object object]") || lower === "undefined" || lower === "null") return false;
+  if (["success", "ok", "true", "false", "matched", "verified"].includes(lower)) return false;
+  return true;
+};
+
+const isRdServiceTemplateFormat = (templateFormat = "") =>
+  ["uidai-pid-xml", "rd-pid-xml", "rd_service_pid_xml"].includes(
+    String(templateFormat || "").trim().toLowerCase(),
+  );
 
 const normalizeBiometricPreviewImage = (value = "") => {
   const trimmed = String(value || "").trim();
@@ -1795,8 +2229,136 @@ const buildGeneratedBiometricPreview = (finger = {}) => {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
+const normalizePhoneDigits = (value = "") =>
+  String(value || "").replace(/\D/g, "").slice(-10);
+
+const buildDefaultThumbParticipantKey = (participantType = "", linkedId = "", fallback = "") => {
+  const normalizedType = String(participantType || "other").trim().toLowerCase() || "other";
+  const normalizedId = String(linkedId || "").trim();
+  return normalizedId ? `${normalizedType}:${normalizedId}` : `${normalizedType}:${String(fallback || "manual").trim()}`;
+};
+
+const getDefaultThumbParticipantsForBooking = (booking = {}) => {
+  const customerId = booking?.userId?._id || booking?.userId || "";
+  const participants = [
+    {
+      participantKey: buildDefaultThumbParticipantKey("customer", customerId, booking?._id || "booking"),
+      participantType: "customer",
+      participantLabel: "Customer",
+      userType: "customer",
+      name: booking?.userId?.name || booking?.contactName || "",
+      phone: booking?.userId?.phone || booking?.contactPhone || "",
+      linkedUserId: customerId || null,
+      linkedStaffId: null,
+      isPrimary: true,
+      sortOrder: 0,
+    },
+  ];
+
+  if (booking?.assignedStaffId || booking?.assignedStaffName || booking?.assignedStaffPhone) {
+    participants.push({
+      participantKey: buildDefaultThumbParticipantKey("employee", booking?.assignedStaffId || "", booking?._id || "employee"),
+      participantType: "employee",
+      participantLabel: "Employee",
+      userType: "employee",
+      name: booking?.assignedStaffName || "Service Center Staff",
+      phone: booking?.assignedStaffPhone || "",
+      linkedUserId: null,
+      linkedStaffId: booking?.assignedStaffId || null,
+      isPrimary: false,
+      sortOrder: 1,
+    });
+  }
+
+  return participants;
+};
+
+const mergeThumbParticipantsForBooking = (profile = {}, booking = {}) => {
+  const next = [];
+  const seen = new Set();
+  const entries = [
+    ...getDefaultThumbParticipantsForBooking(booking),
+    ...(Array.isArray(profile?.thumbParticipants) ? profile.thumbParticipants : []),
+  ];
+
+  entries.forEach((item, index) => {
+    const participantKey = String(
+      item?.participantKey ||
+      buildDefaultThumbParticipantKey(
+        item?.participantType,
+        item?.linkedUserId || item?.linkedStaffId,
+        `${booking?._id || "booking"}-${index}`,
+      ),
+    ).trim();
+
+    if (!participantKey || seen.has(participantKey)) {
+      return;
+    }
+
+    seen.add(participantKey);
+    next.push({
+      participantKey,
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: String(item?.participantLabel || item?.name || "Participant").trim(),
+      userType: String(item?.userType || item?.participantType || "participant").trim().toLowerCase(),
+      name: String(item?.name || "").trim(),
+      phone: normalizePhoneDigits(item?.phone || ""),
+      linkedUserId: item?.linkedUserId || null,
+      linkedStaffId: item?.linkedStaffId || null,
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    });
+  });
+
+  return next.sort((first, second) => Number(first.sortOrder || 0) - Number(second.sortOrder || 0));
+};
+
+const normalizeThumbCode = (value = "") => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "LEFT_THUMB" || normalized === "RIGHT_THUMB" ? normalized : "UNKNOWN_THUMB";
+};
+
+const normalizeThumbImageMimeType = (value = "", fallbackUrl = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["image/png", "image/jpeg", "image/jpg", "image/bmp", "image/webp"].includes(normalized)) {
+    return normalized === "image/jpg" ? "image/jpeg" : normalized;
+  }
+
+  const rawUrl = String(fallbackUrl || "").toLowerCase();
+  if (rawUrl.includes(".bmp")) return "image/bmp";
+  if (rawUrl.includes(".jpg") || rawUrl.includes(".jpeg")) return "image/jpeg";
+  if (rawUrl.includes(".webp")) return "image/webp";
+  return "image/png";
+};
+
+const normalizeThumbCaptureRecord = (item = {}, participantMap = new Map(), index = 0) => {
+  const participantKey = String(item?.participantKey || "").trim();
+  const participant = participantMap.get(participantKey) || {};
+  const imageUrl = normalizeBiometricPreviewImage(item?.imageUrl || item?.previewImage || "");
+
+  return {
+    captureId: String(item?.captureId || `capture-${Date.now()}-${index}`).trim(),
+    participantKey,
+    participantType: String(item?.participantType || participant?.participantType || "other").trim().toLowerCase() || "other",
+    participantLabel: String(item?.participantLabel || participant?.participantLabel || participant?.name || "Participant").trim(),
+    userType: String(item?.userType || participant?.userType || participant?.participantType || "participant").trim().toLowerCase(),
+    thumbCode: normalizeThumbCode(item?.thumbCode || item?.fingerCode),
+    imageUrl,
+    fileName: String(item?.fileName || "").trim(),
+    mimeType: normalizeThumbImageMimeType(item?.mimeType, imageUrl),
+    captureSource: String(item?.captureSource || "unknown").trim().toLowerCase() || "unknown",
+    deviceLabel: String(item?.deviceLabel || "").trim(),
+    scannerSerial: String(item?.scannerSerial || "").trim(),
+    notes: String(item?.notes || "").trim(),
+    capturedAt: item?.capturedAt || new Date(),
+    updatedAt: item?.updatedAt || new Date(),
+  };
+};
+
 const serializeBiometricProfile = (profile = {}) => {
   const fingers = Array.isArray(profile?.fingers) ? profile.fingers : [];
+  const thumbParticipants = Array.isArray(profile?.thumbParticipants) ? profile.thumbParticipants : [];
+  const thumbCaptures = Array.isArray(profile?.thumbCaptures) ? profile.thumbCaptures : [];
   const normalizedRequiredFingerCount = Number(profile?.requiredFingerCount);
   return {
     id: String(profile?._id || ""),
@@ -1808,6 +2370,8 @@ const serializeBiometricProfile = (profile = {}) => {
     requiredFingerCount: Number.isInteger(normalizedRequiredFingerCount) && normalizedRequiredFingerCount >= 0 ? normalizedRequiredFingerCount : 0,
     enrolledFingerCount: fingers.length,
     enrolledFingerCodes: fingers.map((item) => String(item?.fingerCode || "")).filter(Boolean),
+    thumbParticipantCount: thumbParticipants.length,
+    thumbCaptureCount: thumbCaptures.length,
     notes: profile?.notes || "",
     verificationSummary: {
       lastVerifiedAt: profile?.verificationSummary?.lastVerifiedAt || null,
@@ -1817,6 +2381,36 @@ const serializeBiometricProfile = (profile = {}) => {
     },
     updatedAt: profile?.updatedAt || null,
     createdAt: profile?.createdAt || null,
+    thumbParticipants: thumbParticipants.map((item, index) => ({
+      participantKey: String(item?.participantKey || "").trim() || `participant-${index + 1}`,
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: item?.participantLabel || item?.name || "Participant",
+      userType: item?.userType || item?.participantType || "participant",
+      name: item?.name || "",
+      phone: item?.phone || "",
+      linkedUserId: item?.linkedUserId ? String(item.linkedUserId) : "",
+      linkedStaffId: item?.linkedStaffId ? String(item.linkedStaffId) : "",
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    })),
+    thumbCaptures: thumbCaptures.map((item, index) => ({
+      captureId: String(item?.captureId || `capture-${index + 1}`).trim(),
+      participantKey: String(item?.participantKey || "").trim(),
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: item?.participantLabel || "Participant",
+      userType: item?.userType || item?.participantType || "participant",
+      thumbCode: normalizeThumbCode(item?.thumbCode || item?.fingerCode),
+      imageUrl: normalizeBiometricPreviewImage(item?.imageUrl || item?.previewImage || ""),
+      previewImage: normalizeBiometricPreviewImage(item?.imageUrl || item?.previewImage || ""),
+      fileName: item?.fileName || "",
+      mimeType: normalizeThumbImageMimeType(item?.mimeType, item?.imageUrl || item?.previewImage || ""),
+      captureSource: item?.captureSource || "unknown",
+      deviceLabel: item?.deviceLabel || "",
+      scannerSerial: item?.scannerSerial || "",
+      notes: item?.notes || "",
+      capturedAt: item?.capturedAt || null,
+      updatedAt: item?.updatedAt || null,
+    })),
     fingers: fingers.map((item) => ({
       fingerCode: String(item?.fingerCode || "").toUpperCase(),
       displayName: item?.displayName || getBiometricFingerDisplayName(item?.fingerCode),
@@ -1833,6 +2427,7 @@ const serializeBiometricProfile = (profile = {}) => {
       lastVerifiedAt: item?.lastVerifiedAt || null,
       verificationCount: Number(item?.verificationCount || 0),
       templateStored: Boolean(item?.templateEncrypted),
+      templateHash: item?.templateHash || "",
       templateHashPreview: item?.templateHash ? String(item.templateHash).slice(0, 10) : "",
     })),
     auditLogs: (Array.isArray(profile?.auditLogs) ? profile.auditLogs : [])
@@ -1936,12 +2531,12 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
     returnNotes: item.rentalInspection?.returnNotes || "",
     pickupMeterReading:
       item.rentalInspection?.pickupMeterReading === null ||
-        item.rentalInspection?.pickupMeterReading === undefined
+      item.rentalInspection?.pickupMeterReading === undefined
         ? null
         : Number(item.rentalInspection.pickupMeterReading),
     returnMeterReading:
       item.rentalInspection?.returnMeterReading === null ||
-        item.rentalInspection?.returnMeterReading === undefined
+      item.rentalInspection?.returnMeterReading === undefined
         ? null
         : Number(item.rentalInspection.returnMeterReading),
     pickupFuelLevel: item.rentalInspection?.pickupFuelLevel || "",
@@ -1954,13 +2549,13 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
       : [],
     beforeConditionImageDetails: Array.isArray(item.rentalInspection?.beforeConditionImageDetails)
       ? item.rentalInspection.beforeConditionImageDetails
-        .map((detail) => serializeInspectionPhotoMetadata(detail))
-        .filter((detail) => detail.imageUrl)
+          .map((detail) => serializeInspectionPhotoMetadata(detail))
+          .filter((detail) => detail.imageUrl)
       : [],
     afterConditionImageDetails: Array.isArray(item.rentalInspection?.afterConditionImageDetails)
       ? item.rentalInspection.afterConditionImageDetails
-        .map((detail) => serializeInspectionPhotoMetadata(detail))
-        .filter((detail) => detail.imageUrl)
+          .map((detail) => serializeInspectionPhotoMetadata(detail))
+          .filter((detail) => detail.imageUrl)
       : [],
   },
   serviceCenterNote: item.serviceCenterNote || "",
@@ -1968,27 +2563,31 @@ const serializeServiceCenterBooking = (item = {}, biometricProfile = null) => ({
   biometrics: biometricProfile
     ? serializeBiometricProfile(biometricProfile)
     : {
-      id: "",
-      status: "not_started",
-      consentAccepted: false,
-      consentAcceptedAt: null,
-      consentNotes: "",
-      enrollmentMode: "optional",
-      requiredFingerCount: 0,
-      enrolledFingerCount: 0,
-      enrolledFingerCodes: [],
-      notes: "",
-      verificationSummary: {
-        lastVerifiedAt: null,
-        lastVerificationStatus: "",
-        lastVerifiedFingerCode: "",
-        lastMatchScore: null,
+        id: "",
+        status: "not_started",
+        consentAccepted: false,
+        consentAcceptedAt: null,
+        consentNotes: "",
+        enrollmentMode: "optional",
+        requiredFingerCount: 0,
+        enrolledFingerCount: 0,
+        enrolledFingerCodes: [],
+        thumbParticipantCount: 0,
+        thumbCaptureCount: 0,
+        notes: "",
+        verificationSummary: {
+          lastVerifiedAt: null,
+          lastVerificationStatus: "",
+          lastVerifiedFingerCode: "",
+          lastMatchScore: null,
+        },
+        updatedAt: null,
+        createdAt: null,
+        thumbParticipants: [],
+        thumbCaptures: [],
+        fingers: [],
+        auditLogs: [],
       },
-      updatedAt: null,
-      createdAt: null,
-      fingers: [],
-      auditLogs: [],
-    },
   assignedAt: item.assignedAt || null,
   completedAt: item.completedAt || null,
   createdAt: item.createdAt || null,
@@ -2142,11 +2741,11 @@ const serializeDriverScheduledRide = (ride = {}, currentDriverId = "") => ({
   transportType: ride.transport_type || "taxi",
   user: ride.userId
     ? {
-      id: String(ride.userId._id || ""),
-      name: ride.userId.name || "Customer",
-      phone: ride.userId.phone || "",
-      countryCode: ride.userId.countryCode || "",
-    }
+        id: String(ride.userId._id || ""),
+        name: ride.userId.name || "Customer",
+        phone: ride.userId.phone || "",
+        countryCode: ride.userId.countryCode || "",
+      }
     : null,
   createdAt: ride.createdAt || null,
   updatedAt: ride.updatedAt || null,
@@ -2261,7 +2860,9 @@ export const goOnline = async (req, res) => {
     throw new ApiError(400, "A selfie is required before going online today");
   }
 
-  await ensureDriverWalletCanAcceptRide(existingDriver);
+  if (!existingDriver.owner_id) {
+    await ensureDriverWalletCanAcceptRide(existingDriver);
+  }
   await clearDriverActiveRideIfStale(existingDriver);
   const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
     existingDriver.incentiveTracking || {},
@@ -2274,17 +2875,18 @@ export const goOnline = async (req, res) => {
     hasTodaySelfie && !String(selfieImageUrl || "").trim()
       ? existingDriver.onlineSelfie
       : {
-        imageUrl: String(selfieImageUrl || "").trim(),
-        capturedAt: new Date(),
-        uploadedAt: new Date(),
-        forDate: todayKey,
-      };
+          imageUrl: String(selfieImageUrl || "").trim(),
+          capturedAt: new Date(),
+          uploadedAt: new Date(),
+          forDate: todayKey,
+        };
 
   const driver = await Driver.findByIdAndUpdate(
     req.auth.sub,
     {
       isOnline: true,
       zoneId: zone?._id || null,
+      ...(existingDriver.owner_id ? { 'wallet.isBlocked': false } : {}),
       location: toPoint(coordinates, "location"),
       onlineSelfie: nextOnlineSelfie,
       incentiveTracking: {
@@ -2374,7 +2976,22 @@ export const getCurrentDriver = async (req, res) => {
     return;
   }
 
-  const driver = await Driver.findById(req.auth.sub);
+  if (String(req.auth?.role || "").toLowerCase() === "pooling_driver") {
+    const poolingVehicle = await PoolingVehicle.findById(req.auth.sub).lean();
+
+    if (!poolingVehicle) {
+      throw new ApiError(404, "Pooling driver not found");
+    }
+
+    res.json({
+      success: true,
+      data: serializePoolingDriverProfile(poolingVehicle),
+    });
+    return;
+  }
+
+  const driver = await Driver.findById(req.auth.sub)
+    .populate("zoneId", "name service_location_id");
 
   if (!driver) {
     throw new ApiError(404, "Driver not found");
@@ -2407,9 +3024,6 @@ export const getCurrentDriver = async (req, res) => {
       vehicleMake: driver.vehicleMake,
       vehicleModel: driver.vehicleModel,
       registerFor: driver.registerFor,
-      transport_type: driver.registerFor || driver.vehicleType || '',
-      serviceCategories: Array.isArray(driver.serviceCategories) ? driver.serviceCategories : [],
-      service_categories: Array.isArray(driver.serviceCategories) ? driver.serviceCategories : [],
       vehicleNumber: driver.vehicleNumber,
       vehicleColor: driver.vehicleColor,
       vehicleImage: driver.vehicleImage || "",
@@ -2418,13 +3032,23 @@ export const getCurrentDriver = async (req, res) => {
       status: driver.status,
       rating: driver.rating,
       wallet: await serializeDriverWallet(driver),
+      bankDetails: serializeDriverBankDetails(driver.bankDetails),
       referralCode: driver.referralCode || "",
       deletionRequest: driver.deletionRequest || { status: "none" },
       isOnline: driver.isOnline,
       isOnRide: driver.isOnRide,
       onlineSelfie: driver.onlineSelfie || {},
       location: driver.location,
-      zoneId: driver.zoneId,
+      zoneId: driver.zoneId?._id || driver.zoneId || null,
+      zone: driver.zoneId
+        ? {
+            id: String(driver.zoneId._id || driver.zoneId),
+            name: driver.zoneId.name || "",
+            service_location_id: driver.zoneId.service_location_id
+              ? String(driver.zoneId.service_location_id)
+              : "",
+          }
+        : null,
       routeBooking: serializeDriverRouteBooking(driver.routeBooking),
       documents: driver.documents || {},
       emergencyContacts: Array.isArray(driver.emergencyContacts)
@@ -2433,6 +3057,23 @@ export const getCurrentDriver = async (req, res) => {
       onboarding: driver.onboarding || {},
       todaySummary: todaySummary || buildDriverTodaySummaryFromDocument(driver),
     },
+  });
+};
+
+export const getPoolingDriverBookings = async (req, res) => {
+  if (String(req.auth?.role || "").toLowerCase() !== "pooling_driver") {
+    throw new ApiError(403, "Pooling driver access is required");
+  }
+
+  const bookings = await PoolingBooking.find({ vehicle: req.auth.sub })
+    .populate("user", "name phone email")
+    .populate("route", "routeName originLabel destinationLabel")
+    .sort({ travelDate: -1, createdAt: -1 })
+    .lean();
+
+  res.json({
+    success: true,
+    data: bookings.map(serializePoolingDriverBooking),
   });
 };
 
@@ -2586,7 +3227,6 @@ export const getDriverScheduledRides = async (req, res) => {
 
 export const cancelDriverScheduledRide = async (req, res) => {
   const rideId = toCleanString(req.params?.rideId);
-  const reason = String(req.body?.reason || req.query?.reason || "").trim();
 
   if (!rideId) {
     throw new ApiError(400, "Ride id is required");
@@ -2595,27 +3235,82 @@ export const cancelDriverScheduledRide = async (req, res) => {
   const ride = await cancelScheduledRideByDriver({
     rideId,
     driverId: req.auth.sub,
-    reason,
   });
 
   if (!ride) {
     throw new ApiError(404, "Scheduled ride not found for this driver");
   }
 
-  const cancellationBill = await calculateCancellationBill({
-    ride,
-    cancelledBy: 'driver',
-    reason,
-  });
-
   res.json({
     success: true,
-    message: "Ride cancelled successfully",
+    message: "Scheduled ride cancelled successfully",
     data: {
       rideId: String(ride._id || ""),
       status: ride.status || RIDE_STATUS.CANCELLED,
       liveStatus: ride.liveStatus || RIDE_LIVE_STATUS.CANCELLED,
-      cancellationBill,
+    },
+  });
+};
+
+const DRIVER_PUSH_ROLE_MODEL_MAP = {
+  driver: Driver,
+  owner: Owner,
+  pooling_driver: PoolingVehicle,
+  bus_driver: BusDriver,
+  service_center: ServiceStore,
+  service_center_staff: ServiceCenterStaff,
+};
+
+const resolvePushTokenEntityForRole = async (req) => {
+  const role = String(req.auth?.role || "").toLowerCase();
+  const Model = DRIVER_PUSH_ROLE_MODEL_MAP[role];
+
+  if (!Model) {
+    throw new ApiError(403, "Unsupported role for driver push notifications");
+  }
+
+  const entity = await Model.findById(req.auth?.sub);
+
+  if (!entity) {
+    throw new ApiError(404, "Authenticated account not found");
+  }
+
+  if (
+    role === "service_center" &&
+    (entity.active === false ||
+      String(entity.status || "").toLowerCase() === "inactive")
+  ) {
+    throw new ApiError(403, "Service center account is inactive");
+  }
+
+  if (
+    role === "service_center_staff" &&
+    (entity.active === false ||
+      String(entity.status || "").toLowerCase() === "inactive")
+  ) {
+    throw new ApiError(403, "Service center staff account is inactive");
+  }
+
+  return entity;
+};
+
+export const saveDriverFcmToken = async (req, res) => {
+  const entity = await resolvePushTokenEntityForRole(req);
+
+  const saved = assignPushTokenToEntity(entity, {
+    token: req.body?.token,
+    platform: req.body?.platform,
+  });
+
+  await entity.save();
+
+  res.json({
+    success: true,
+    data: {
+      message: "FCM token saved successfully",
+      platform: saved.platform,
+      field: saved.fieldName,
+      role: String(req.auth?.role || "").toLowerCase(),
     },
   });
 };
@@ -2745,26 +3440,7 @@ export const updateCurrentDriver = async (req, res) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "profileImage")) {
-    const nextImage = String(req.body.profileImage || "").trim();
-    await deleteReplacedAssets(driver.profileImage, nextImage);
-    driver.profileImage = nextImage;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(req.body || {}, "registerFor") || Object.prototype.hasOwnProperty.call(req.body || {}, "transport_type") || Object.prototype.hasOwnProperty.call(req.body || {}, "transportType")) {
-    const transportType = req.body.registerFor || req.body.transport_type || req.body.transportType;
-    if (transportType) {
-      driver.registerFor = String(transportType).trim().toLowerCase();
-      driver.vehicleType = driver.registerFor;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(req.body || {}, "serviceCategories") || Object.prototype.hasOwnProperty.call(req.body || {}, "service_categories")) {
-    const categories = req.body.serviceCategories || req.body.service_categories;
-    if (Array.isArray(categories)) {
-      driver.serviceCategories = categories;
-    } else if (typeof categories === 'string') {
-      driver.serviceCategories = categories.split(',').map((s) => s.trim()).filter(Boolean);
-    }
+    driver.profileImage = String(req.body.profileImage || "").trim();
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "routeBooking")) {
@@ -2793,6 +3469,13 @@ export const updateCurrentDriver = async (req, res) => {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "bankDetails")) {
+    driver.bankDetails = normalizeDriverBankDetails(
+      req.body?.bankDetails || {},
+      driver.bankDetails || {},
+    );
+  }
+
   await driver.save();
 
   res.json({
@@ -2804,6 +3487,614 @@ export const updateCurrentDriver = async (req, res) => {
       email: driver.email,
       profileImage: driver.profileImage || "",
       routeBooking: serializeDriverRouteBooking(driver.routeBooking),
+      bankDetails: serializeDriverBankDetails(driver.bankDetails),
+    },
+  });
+};
+
+export const verifyCurrentDriverBankDetails = async (req, res) => {
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const mode = String(req.body?.mode || "penny_less").trim().toLowerCase();
+  const bankDetails = serializeDriverBankDetails(driver.bankDetails || {});
+
+  if (!bankDetails.accountNumber) {
+    throw new ApiError(400, "Please save your account number first");
+  }
+
+  if (!bankDetails.ifsc) {
+    throw new ApiError(400, "Please save your IFSC code first");
+  }
+
+  if (mode !== "v3" && !bankDetails.accountHolderName) {
+    throw new ApiError(400, "Please save account holder name first");
+  }
+
+  const providerResponse = await verifyBankAccountWithRecharge({
+    accountNumber: bankDetails.accountNumber,
+    ifscCode: bankDetails.ifsc,
+    accountHolderName: bankDetails.accountHolderName,
+    partnerRequestId: buildDriverBankVerificationRequestId(driver),
+    mode,
+  });
+
+  const accountDetails = providerResponse?.cardData?.response?.account_details || {};
+  const verification = resolveRechargeVerificationState(providerResponse);
+
+  driver.bankDetails = {
+    ...(driver.bankDetails?.toObject?.() || driver.bankDetails || {}),
+    verificationStatus: verification.status,
+    verificationMode: mode,
+    verificationMessage: verification.message,
+    verificationReferenceId: String(
+      providerResponse?.orderid
+      || providerResponse?.optransid
+      || providerResponse?.cardData?.request_id
+      || providerResponse?.data?.requestId
+      || "",
+    ).trim(),
+    verifiedBankName: String(accountDetails?.bank_name || "").trim(),
+    verifiedBranchName: String(accountDetails?.branch_name || "").trim(),
+    verifiedAccountHolderName: String(accountDetails?.beneficiary_name || "").trim(),
+    verifiedAt: verification.succeeded ? new Date() : driver.bankDetails?.verifiedAt || null,
+    updatedAt: driver.bankDetails?.updatedAt || new Date(),
+  };
+
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      bankDetails: serializeDriverBankDetails(driver.bankDetails),
+      verification: providerResponse,
+    },
+  });
+};
+
+export const verifyCurrentDriverUpiDetails = async (req, res) => {
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const bankDetails = serializeDriverBankDetails(driver.bankDetails || {});
+  const mode = String(req.body?.mode || "basic").trim().toLowerCase();
+
+  if (!bankDetails.upiId) {
+    throw new ApiError(400, "Please save your UPI ID first");
+  }
+
+  const providerResponse = await verifyUpiWithRecharge({
+    upiId: bankDetails.upiId,
+    partnerRequestId: buildDriverUpiVerificationRequestId(driver),
+    mode,
+  });
+
+  const result = providerResponse?.cardData?.result || {};
+  const vpaDetails = result?.vpa_details || {};
+  const accountDetails = result?.account_details || {};
+  const verification = resolveRechargeVerificationState(providerResponse);
+
+  driver.bankDetails = {
+    ...(driver.bankDetails?.toObject?.() || driver.bankDetails || {}),
+    upiVerificationStatus: verification.status,
+    upiVerificationMode: mode,
+    upiVerificationMessage: verification.message,
+    upiVerificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.cardData?.client_ref_num ||
+      "",
+    ).trim(),
+    upiVerifiedName: String(vpaDetails?.account_holder_name || "").trim(),
+    upiAccountIfsc: String(accountDetails?.account_ifsc || "").trim(),
+    upiAccountType: String(accountDetails?.account_type || "").trim(),
+    upiVerifiedAt: verification.succeeded ? new Date() : driver.bankDetails?.upiVerifiedAt || null,
+    updatedAt: driver.bankDetails?.updatedAt || new Date(),
+  };
+
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      bankDetails: serializeDriverBankDetails(driver.bankDetails),
+      verification: providerResponse,
+    },
+  });
+};
+
+export const verifyCurrentDriverLicenseDocument = async (req, res) => {
+  const documentKey = String(req.params.documentKey || "").trim();
+
+  if (!documentKey) {
+    throw new ApiError(400, "Document key is required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const licenseNumber = String(
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    req.body?.licenseNumber ||
+    req.body?.license_no ||
+    "",
+  ).trim().toUpperCase();
+  const birthDate = String(
+    existingDocument.birthDate ||
+    existingDocument.birth_date ||
+    req.body?.birthDate ||
+    req.body?.birth_date ||
+    "",
+  ).trim();
+  const requestNumber = String(
+    existingDocument.requestNumber ||
+    existingDocument.request_no ||
+    req.body?.requestNumber ||
+    req.body?.request_no ||
+    "",
+  ).trim();
+
+  if (!licenseNumber) {
+    throw new ApiError(400, "Driving license number is required before verification");
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) && !/^\d{2}\/\d{2}\/\d{4}$/.test(birthDate)) {
+    throw new ApiError(400, "Birth date must use YYYY-MM-DD or DD/MM/YYYY format before verification");
+  }
+
+  const providerResponse = await verifyDrivingLicenseWithRecharge({
+    licenseNumber,
+    birthDate,
+    partnerRequestId: buildDriverLicenseVerificationRequestId(driver),
+    requestNumber,
+  });
+
+  const result = providerResponse?.cardData?.result || {};
+  const licenseDetails = result?.details_of_driving_licence || {};
+  const nonTransportValidity = result?.dl_validity?.non_transport || {};
+  const badgeDetails = Array.isArray(result?.badge_details) ? result.badge_details : [];
+  const firstBadge = badgeDetails[0] || {};
+  const verification = resolveRechargeVerificationState(
+    providerResponse,
+    String(licenseDetails?.status || "").trim(),
+  );
+  const verificationMessage = verification.message;
+
+  const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
+    key: documentKey,
+    identifyNumber: licenseNumber,
+    identify_number: licenseNumber,
+    documentNumber: licenseNumber,
+    document_number: licenseNumber,
+    birthDate,
+    birth_date: birthDate,
+    requestNumber: String(
+      providerResponse?.partnerreqid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.orderid ||
+      requestNumber,
+    ).trim(),
+    request_no: String(
+      providerResponse?.partnerreqid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.orderid ||
+      requestNumber,
+    ).trim(),
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
+    verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.partnerreqid ||
+      providerResponse?.cardData?.request_id ||
+      "",
+    ).trim(),
+    verifiedName: String(licenseDetails?.name || "").trim(),
+    verifiedDob: String(result?.dob || birthDate).trim(),
+    dlStatus: String(licenseDetails?.status || "").trim(),
+    issuingRtoName: "",
+    relativeName: String(licenseDetails?.father_or_husband_name || "").trim(),
+    dlNumber: String(result?.dl_number || licenseNumber).trim(),
+    nonTransportValidFrom: String(nonTransportValidity?.from || "").trim(),
+    nonTransportValidTo: String(nonTransportValidity?.to || "").trim(),
+    transportValidFrom: String(result?.dl_validity?.transport?.from || "").trim(),
+    transportValidTo: String(result?.dl_validity?.transport?.to || "").trim(),
+    badgeNumber: String(firstBadge?.badge_no || "").trim(),
+    badgeIssueDate: String(firstBadge?.badge_issue_date || "").trim(),
+    classOfVehicle: Array.isArray(firstBadge?.class_of_vehicle) ? firstBadge.class_of_vehicle : [],
+    verificationResponse: providerResponse,
+  };
+
+  driver.documents = {
+    ...(driver.documents || {}),
+    [documentKey]: updatedDocument,
+  };
+
+  driver.markModified("documents");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      document: updatedDocument,
+      documents: driver.documents || {},
+      verification: providerResponse,
+    },
+  });
+};
+
+export const verifyCurrentDriverPanDocument = async (req, res) => {
+  const documentKey = String(req.params.documentKey || "").trim();
+
+  if (!documentKey) {
+    throw new ApiError(400, "Document key is required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const panNumber = String(
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    req.body?.panNumber ||
+    req.body?.pan_no ||
+    "",
+  ).trim().toUpperCase();
+
+  const providerResponse = await verifyPanWithRecharge({
+    panNumber,
+    partnerRequestId: buildDriverPanVerificationRequestId(driver),
+  });
+
+  const cardData = providerResponse?.cardData || {};
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
+
+  const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
+    key: documentKey,
+    identifyNumber: panNumber,
+    identify_number: panNumber,
+    documentNumber: panNumber,
+    document_number: panNumber,
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
+    verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.optransid ||
+      cardData?.reference_id ||
+      "",
+    ).trim(),
+    panType: String(cardData?.type || "").trim(),
+    verifiedName: String(cardData?.registered_name || "").trim(),
+    fatherName: String(cardData?.father_name || "").trim(),
+    panValid: String(cardData?.valid || "").trim(),
+    verificationResponse: providerResponse,
+  };
+
+  driver.documents = {
+    ...(driver.documents || {}),
+    [documentKey]: updatedDocument,
+  };
+
+  driver.markModified("documents");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      document: updatedDocument,
+      documents: driver.documents || {},
+      verification: providerResponse,
+    },
+  });
+};
+
+export const verifyCurrentDriverGstinDocument = async (req, res) => {
+  const documentKey = String(req.params.documentKey || "").trim();
+
+  if (!documentKey) {
+    throw new ApiError(400, "Document key is required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const gstin = String(
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    req.body?.gstin ||
+    req.body?.GSTIN ||
+    "",
+  ).trim().toUpperCase();
+
+  const providerResponse = await verifyGstinWithRecharge({
+    gstin,
+    partnerRequestId: buildDriverGstinVerificationRequestId(driver),
+  });
+
+  const result = providerResponse?.cardData?.result || {};
+  const taxpayerDetails = result?.taxpayerDetails || {};
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
+
+  const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
+    key: documentKey,
+    identifyNumber: gstin,
+    identify_number: gstin,
+    documentNumber: gstin,
+    document_number: gstin,
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
+    verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.optransid ||
+      providerResponse?.cardData?.request_id ||
+      "",
+    ).trim(),
+    verifiedName: String(taxpayerDetails?.lgnm || taxpayerDetails?.tradeNam || "").trim(),
+    gstStatus: String(taxpayerDetails?.sts || "").trim(),
+    gstType: String(taxpayerDetails?.dty || "").trim(),
+    gstConstitution: String(taxpayerDetails?.ctb || "").trim(),
+    verificationResponse: providerResponse,
+  };
+
+  driver.documents = {
+    ...(driver.documents || {}),
+    [documentKey]: updatedDocument,
+  };
+
+  driver.markModified("documents");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      document: updatedDocument,
+      documents: driver.documents || {},
+      verification: providerResponse,
+    },
+  });
+};
+
+export const verifyCurrentDriverRcDocument = async (req, res) => {
+  const documentKey = String(req.params.documentKey || "").trim();
+
+  if (!documentKey) {
+    throw new ApiError(400, "Document key is required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const rcNumber = String(
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    req.body?.rcNumber ||
+    req.body?.rc_no ||
+    "",
+  ).trim().toUpperCase();
+
+  const providerResponse = await verifyRcWithRecharge({
+    rcNumber,
+    partnerRequestId: buildDriverRcVerificationRequestId(driver),
+  });
+
+  const result = providerResponse?.cardData?.result || {};
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
+
+  const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
+    key: documentKey,
+    identifyNumber: rcNumber,
+    identify_number: rcNumber,
+    documentNumber: rcNumber,
+    document_number: rcNumber,
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
+    verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.optransid ||
+      providerResponse?.cardData?.request_id ||
+      "",
+    ).trim(),
+    verifiedName: String(result?.owner_name || "").trim(),
+    rcStatus: String(result?.status || "").trim(),
+    vehicleModel: String(result?.model || "").trim(),
+    vehicleManufacturer: String(result?.vehicle_manufacturer_name || "").trim(),
+    vehicleRegistrationDate: String(result?.reg_date || "").trim(),
+    vehicleInsuranceUpto: String(result?.vehicle_insurance_upto || "").trim(),
+    vehicleFitnessUpto: String(result?.fitness_upto || result?.vehicle_fitness_upto || "").trim(),
+    permitNumber: String(result?.permit_no || result?.permit_number || "").trim(),
+    permitValidUpto: String(result?.permit_valid_upto || result?.permit_upto || "").trim(),
+    pucNumber: String(
+      result?.vehicle_pucc_number ||
+      result?.pucc_number ||
+      result?.pucc_no ||
+      result?.puc_number ||
+      result?.puc_no ||
+      "",
+    ).trim(),
+    pucValidUpto: String(
+      result?.vehicle_pucc_upto ||
+      result?.pucc_upto ||
+      result?.puc_valid_upto ||
+      result?.puc_upto ||
+      "",
+    ).trim(),
+    verificationResponse: providerResponse,
+  };
+
+  driver.documents = {
+    ...(driver.documents || {}),
+    [documentKey]: updatedDocument,
+  };
+
+  driver.markModified("documents");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      document: updatedDocument,
+      documents: driver.documents || {},
+      verification: providerResponse,
+    },
+  });
+};
+
+export const verifyCurrentDriverBankDocument = async (req, res) => {
+  const documentKey = String(req.params.documentKey || "").trim();
+
+  if (!documentKey) {
+    throw new ApiError(400, "Document key is required");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const existingDocument = driver.documents?.[documentKey] || {};
+  const accountNumber = String(
+    existingDocument.identifyNumber ||
+    existingDocument.identify_number ||
+    existingDocument.documentNumber ||
+    existingDocument.document_number ||
+    req.body?.accountNumber ||
+    req.body?.bank_account ||
+    "",
+  ).trim().replace(/\s/g, "");
+  const ifscCode = String(
+    existingDocument.ifsc ||
+    existingDocument.ifscCode ||
+    existingDocument.ifsc_code ||
+    req.body?.ifsc ||
+    req.body?.ifscCode ||
+    req.body?.ifsc_code ||
+    "",
+  ).trim().toUpperCase();
+  const accountHolderName = String(
+    existingDocument.accountHolderName ||
+    existingDocument.account_holder_name ||
+    existingDocument.beneficiaryName ||
+    existingDocument.benificiary_name ||
+    req.body?.accountHolderName ||
+    req.body?.account_holder_name ||
+    req.body?.beneficiaryName ||
+    req.body?.benificiary_name ||
+    driver.bankDetails?.accountHolderName ||
+    "",
+  ).trim();
+  const mode = String(req.body?.mode || "penny_less").trim().toLowerCase();
+
+  if (!accountNumber) {
+    throw new ApiError(400, "Bank account number is required before verification");
+  }
+
+  if (!ifscCode) {
+    throw new ApiError(400, "IFSC code is required before verification");
+  }
+
+  if (mode !== "v3" && !accountHolderName) {
+    throw new ApiError(400, "Account holder name is required before verification");
+  }
+
+  const providerResponse = await verifyBankAccountWithRecharge({
+    accountNumber,
+    ifscCode,
+    accountHolderName,
+    partnerRequestId: buildDriverBankVerificationRequestId(driver),
+    mode,
+  });
+
+  const accountDetails = providerResponse?.cardData?.response?.account_details || {};
+  const verification = resolveRechargeVerificationState(providerResponse);
+  const verificationMessage = verification.message;
+
+  const updatedDocument = {
+    ...(typeof existingDocument === "object" ? existingDocument : {}),
+    key: documentKey,
+    identifyNumber: accountNumber,
+    identify_number: accountNumber,
+    documentNumber: accountNumber,
+    document_number: accountNumber,
+    ifsc: ifscCode,
+    ifscCode,
+    ifsc_code: ifscCode,
+    accountHolderName,
+    account_holder_name: accountHolderName,
+    beneficiaryName: accountHolderName,
+    benificiary_name: accountHolderName,
+    verificationStatus: verification.status,
+    verifiedAt: verification.succeeded ? new Date().toISOString() : existingDocument.verifiedAt || null,
+    verificationMode: mode,
+    verificationMessage,
+    verificationReferenceId: String(
+      providerResponse?.orderid ||
+      providerResponse?.optransid ||
+      providerResponse?.cardData?.request_id ||
+      providerResponse?.data?.requestId ||
+      "",
+    ).trim(),
+    verifiedName: String(accountDetails?.beneficiary_name || accountHolderName).trim(),
+    verifiedBankName: String(accountDetails?.bank_name || "").trim(),
+    verifiedBranchName: String(accountDetails?.branch_name || "").trim(),
+    verificationResponse: providerResponse,
+  };
+
+  driver.documents = {
+    ...(driver.documents || {}),
+    [documentKey]: updatedDocument,
+  };
+
+  driver.markModified("documents");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      document: updatedDocument,
+      documents: driver.documents || {},
+      verification: providerResponse,
     },
   });
 };
@@ -2870,14 +4161,6 @@ export const updateCurrentDriverDocument = async (req, res) => {
     throw new ApiError(400, "Document key is required");
   }
 
-  const previewUrl = String(
-    document.previewUrl || document.secureUrl || document.url || "",
-  ).trim();
-
-  if (!previewUrl) {
-    throw new ApiError(400, "Uploaded document image URL is required");
-  }
-
   const driver = await Driver.findById(req.auth.sub);
 
   if (!driver) {
@@ -2885,6 +4168,14 @@ export const updateCurrentDriverDocument = async (req, res) => {
   }
 
   const existingDocument = driver.documents?.[documentKey] || {};
+  const previewUrl = String(
+    document.previewUrl || document.secureUrl || document.url || existingDocument.previewUrl || existingDocument.secureUrl || existingDocument.url || "",
+  ).trim();
+
+  if (!previewUrl) {
+    throw new ApiError(400, "Uploaded document image URL is required");
+  }
+
   const existingStatus = String(
     existingDocument.status ||
     existingDocument.verificationStatus ||
@@ -2892,15 +4183,6 @@ export const updateCurrentDriverDocument = async (req, res) => {
     existingDocument.reviewStatus ||
     "",
   ).trim().toLowerCase();
-
-  if (["verified", "approved"].includes(existingStatus)) {
-    throw new ApiError(409, "Verified documents cannot be re-uploaded");
-  }
-
-  await deleteReplacedAssets(
-    existingDocument.previewUrl || existingDocument.secureUrl || existingDocument.url || existingDocument.imageUrl,
-    previewUrl,
-  );
 
   const updatedDocument = {
     ...(typeof existingDocument === "object" ? existingDocument : {}),
@@ -2914,14 +4196,63 @@ export const updateCurrentDriverDocument = async (req, res) => {
     secureUrl: String(document.secureUrl || previewUrl).trim(),
     imageUrl: previewUrl,
     images: [previewUrl],
-    status: "pending",
-    verificationStatus: "pending",
-    reviewStatus: "pending",
-    comment: "",
-    remarks: "",
-    reason: "",
-    admin_comment: "",
-    rejection_reason: "",
+    identifyNumber: String(
+      document.identifyNumber ||
+      document.identify_number ||
+      document.documentNumber ||
+      document.document_number ||
+      existingDocument.identifyNumber ||
+      existingDocument.identify_number ||
+      existingDocument.documentNumber ||
+      existingDocument.document_number ||
+      "",
+    ).trim().toUpperCase(),
+    identify_number: String(
+      document.identifyNumber ||
+      document.identify_number ||
+      document.documentNumber ||
+      document.document_number ||
+      existingDocument.identifyNumber ||
+      existingDocument.identify_number ||
+      existingDocument.documentNumber ||
+      existingDocument.document_number ||
+      "",
+    ).trim().toUpperCase(),
+    documentNumber: String(
+      document.identifyNumber ||
+      document.identify_number ||
+      document.documentNumber ||
+      document.document_number ||
+      existingDocument.identifyNumber ||
+      existingDocument.identify_number ||
+      existingDocument.documentNumber ||
+      existingDocument.document_number ||
+      "",
+    ).trim().toUpperCase(),
+    document_number: String(
+      document.identifyNumber ||
+      document.identify_number ||
+      document.documentNumber ||
+      document.document_number ||
+      existingDocument.identifyNumber ||
+      existingDocument.identify_number ||
+      existingDocument.documentNumber ||
+      existingDocument.document_number ||
+      "",
+    ).trim().toUpperCase(),
+    birthDate: String(document.birthDate || document.birth_date || existingDocument.birthDate || existingDocument.birth_date || "").trim(),
+    birth_date: String(document.birthDate || document.birth_date || existingDocument.birthDate || existingDocument.birth_date || "").trim(),
+    expiryDate: String(document.expiryDate || document.expiry_date || existingDocument.expiryDate || existingDocument.expiry_date || "").trim(),
+    expiry_date: String(document.expiryDate || document.expiry_date || existingDocument.expiryDate || existingDocument.expiry_date || "").trim(),
+    expiresAt: String(document.expiryDate || document.expiry_date || existingDocument.expiryDate || existingDocument.expiry_date || "").trim(),
+    status: document.status ? String(document.status).trim() : "pending",
+    verificationStatus: document.verificationStatus ? String(document.verificationStatus).trim() : "pending",
+    reviewStatus: document.reviewStatus ? String(document.reviewStatus).trim() : "pending",
+    comment: document.comment !== undefined ? String(document.comment || "").trim() : "",
+    remarks: document.remarks !== undefined ? String(document.remarks || "").trim() : "",
+    reason: document.reason !== undefined ? String(document.reason || "").trim() : "",
+    admin_comment: document.admin_comment !== undefined ? String(document.admin_comment || "").trim() : "",
+    rejection_reason: document.rejection_reason !== undefined ? String(document.rejection_reason || "").trim() : "",
     reviewedAt: null,
     reverificationRequestedAt: new Date().toISOString(),
   };
@@ -2945,6 +4276,68 @@ export const updateCurrentDriverDocument = async (req, res) => {
 
 export const deleteCurrentDriverAccount = async (req, res) => {
   const driverId = req.auth?.sub;
+  const authRole = String(req.auth?.role || "").toLowerCase();
+  const reason = String(req.body?.reason || "").trim();
+
+  if (authRole === "owner") {
+    const owner = await Owner.findById(driverId);
+
+    if (!owner) {
+      throw new ApiError(404, "Owner not found");
+    }
+
+    if (owner.deletedAt) {
+      res.json({
+        success: true,
+        data: {
+          deleted: true,
+          softDeleted: true,
+          ownerId: String(owner._id),
+        },
+        message: "Owner account already deleted",
+      });
+      return;
+    }
+
+    const deletionReason =
+      reason ||
+      owner.deletionRequest?.reason ||
+      owner.deletion_reason ||
+      "Deleted by account owner";
+    const now = new Date();
+
+    owner.deletedAt = now;
+    owner.deletion_reason = deletionReason.slice(0, 300);
+    owner.active = false;
+    owner.approve = false;
+    owner.status = "inactive";
+    owner.deletionRequest = {
+      ...(owner.deletionRequest || {}),
+      status: "approved",
+      reason: deletionReason.slice(0, 300),
+      requestedAt: owner.deletionRequest?.requestedAt || now,
+      reviewedAt: now,
+      reviewedBy: null,
+      adminNote: "",
+    };
+
+    await owner.save();
+
+    await DriverLoginSession.deleteMany({
+      $or: [{ driverId: owner._id }, { phone: owner.mobile }, { phone: owner.phone }],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        deleted: true,
+        softDeleted: true,
+        ownerId: String(owner._id),
+      },
+      message: "Owner account deleted successfully",
+    });
+    return;
+  }
 
   const activeRide = await Ride.findOne({
     driverId,
@@ -2955,16 +4348,51 @@ export const deleteCurrentDriverAccount = async (req, res) => {
     throw new ApiError(409, "Complete or cancel your active ride before deleting your account");
   }
 
-  const deletedDriver = await Driver.findByIdAndDelete(driverId);
+  const driver = await Driver.findById(driverId);
 
-  if (!deletedDriver) {
+  if (!driver) {
     throw new ApiError(404, "Driver not found");
   }
 
+  if (driver.deletedAt) {
+    res.json({
+      success: true,
+      data: {
+        deleted: true,
+        softDeleted: true,
+        driverId: String(driver._id),
+      },
+      message: "Driver account already deleted",
+    });
+    return;
+  }
+
+  const deletionReason = reason || driver.deletionRequest?.reason || driver.deletion_reason || "Deleted by account owner";
+  const now = new Date();
+
+  driver.deletedAt = now;
+  driver.deletion_reason = deletionReason.slice(0, 300);
+  driver.approve = false;
+  driver.status = "inactive";
+  driver.isOnline = false;
+  driver.isOnRide = false;
+  driver.socketId = null;
+  driver.deletionRequest = {
+    ...(driver.deletionRequest || {}),
+    status: "approved",
+    reason: deletionReason.slice(0, 300),
+    requestedAt: driver.deletionRequest?.requestedAt || now,
+    reviewedAt: now,
+    reviewedBy: null,
+    adminNote: "",
+  };
+
+  await driver.save();
+
   await DriverLoginSession.deleteMany({
     $or: [
-      { driverId: deletedDriver._id },
-      { phone: deletedDriver.phone },
+      { driverId: driver._id },
+      { phone: driver.phone },
     ],
   });
 
@@ -2972,7 +4400,8 @@ export const deleteCurrentDriverAccount = async (req, res) => {
     success: true,
     data: {
       deleted: true,
-      driverId: String(deletedDriver._id),
+      softDeleted: true,
+      driverId: String(driver._id),
     },
     message: "Driver account deleted successfully",
   });
@@ -3459,7 +4888,17 @@ const ensureBiometricProfileForBooking = async ({ booking, center, access }) => 
       serviceCenterId: center._id,
       capturedByStaffId: access.staff?._id || null,
       status: "not_started",
+      thumbParticipants: getDefaultThumbParticipantsForBooking(booking.toObject ? booking.toObject() : booking),
     });
+  }
+
+  const mergedParticipants = mergeThumbParticipantsForBooking(
+    profile.toObject ? profile.toObject() : profile,
+    booking.toObject ? booking.toObject() : booking,
+  );
+  const currentParticipants = Array.isArray(profile.thumbParticipants) ? profile.thumbParticipants : [];
+  if (JSON.stringify(currentParticipants) !== JSON.stringify(mergedParticipants)) {
+    profile.thumbParticipants = mergedParticipants;
   }
 
   return profile;
@@ -3507,8 +4946,8 @@ export const getServiceCenterBookings = async (req, res) => {
 
   const staffItems = access.canManageStaff
     ? await ServiceCenterStaff.find({ serviceCenterId: center._id, active: true, status: "active" })
-      .sort({ name: 1 })
-      .lean()
+        .sort({ name: 1 })
+        .lean()
     : [];
   const biometricProfiles = await CustomerBiometricProfile.find({
     bookingId: {
@@ -3583,12 +5022,109 @@ export const updateServiceCenterBookingBiometrics = async (req, res) => {
     profile.notes = String(req.body.notes || "").trim();
   }
 
+  if (req.body?.thumbParticipants !== undefined) {
+    if (!Array.isArray(req.body.thumbParticipants)) {
+      throw new ApiError(400, "thumbParticipants must be an array");
+    }
+
+    const nextParticipants = req.body.thumbParticipants.map((item, index) => ({
+      participantKey: String(
+        item?.participantKey ||
+        buildDefaultThumbParticipantKey(
+          item?.participantType,
+          item?.linkedUserId || item?.linkedStaffId,
+          `${booking._id}-${index}`,
+        ),
+      ).trim(),
+      participantType: String(item?.participantType || "other").trim().toLowerCase() || "other",
+      participantLabel: String(item?.participantLabel || item?.name || "Participant").trim(),
+      userType: String(item?.userType || item?.participantType || "participant").trim().toLowerCase(),
+      name: String(item?.name || "").trim(),
+      phone: normalizePhoneDigits(item?.phone || ""),
+      linkedUserId: item?.linkedUserId && mongoose.Types.ObjectId.isValid(item.linkedUserId) ? item.linkedUserId : null,
+      linkedStaffId: item?.linkedStaffId && mongoose.Types.ObjectId.isValid(item.linkedStaffId) ? item.linkedStaffId : null,
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    })).filter((item) => item.participantKey);
+
+    profile.thumbParticipants = mergeThumbParticipantsForBooking(
+      { thumbParticipants: nextParticipants },
+      booking.toObject(),
+    );
+  }
+
+  if (req.body?.thumbCaptures !== undefined) {
+    if (!Array.isArray(req.body.thumbCaptures)) {
+      throw new ApiError(400, "thumbCaptures must be an array");
+    }
+
+    const participantMap = new Map(
+      (Array.isArray(profile.thumbParticipants) ? profile.thumbParticipants : []).map((item) => [String(item?.participantKey || "").trim(), item]),
+    );
+
+    const nextCaptures = [];
+    for (const [index, item] of req.body.thumbCaptures.entries()) {
+      const rawImage = String(
+        item?.imageUrl ||
+        item?.previewImage ||
+        item?.imageBase64 ||
+        item?.base64Image ||
+        "",
+      ).trim();
+
+      let imageUrl = normalizeBiometricPreviewImage(rawImage);
+      if (imageUrl.startsWith("data:image/")) {
+        const uploaded = await uploadDataUrlToCloudinary({
+          dataUrl: imageUrl,
+          folder: `${env.cloudinary.folder}/service-center/booking-${String(booking._id || "").trim()}/thumbs`,
+          publicIdPrefix: `thumb-${String(item?.participantKey || "participant").replace(/[^a-z0-9_-]/gi, "-").toLowerCase()}-${String(item?.thumbCode || "thumb").toLowerCase()}`,
+        });
+        imageUrl = uploaded.secureUrl;
+      }
+
+      const normalized = normalizeThumbCaptureRecord(
+        {
+          ...item,
+          imageUrl,
+          updatedAt: new Date(),
+        },
+        participantMap,
+        index,
+      );
+
+      if (!normalized.participantKey) {
+        throw new ApiError(400, "Each thumb capture must include participantKey");
+      }
+
+      if (!normalized.imageUrl) {
+        throw new ApiError(400, "Each thumb capture must include an image");
+      }
+
+      nextCaptures.push(normalized);
+    }
+
+    profile.thumbCaptures = nextCaptures;
+  }
+
   if (req.body?.status !== undefined) {
     const nextStatus = String(req.body.status || "").trim().toLowerCase();
     if (!BIOMETRIC_STATUSES.includes(nextStatus)) {
       throw new ApiError(400, "Invalid biometric status");
     }
     profile.status = nextStatus;
+  } else if (req.body?.thumbCaptures !== undefined) {
+    const thumbCaptureCount = Array.isArray(profile.thumbCaptures) ? profile.thumbCaptures.length : 0;
+    const requiredFingerCount = Number(profile.requiredFingerCount);
+    const normalizedRequiredFingerCount =
+      Number.isInteger(requiredFingerCount) && requiredFingerCount >= 0 ? requiredFingerCount : 0;
+
+    if (thumbCaptureCount === 0) {
+      profile.status = "not_started";
+    } else if (normalizedRequiredFingerCount > 0 && thumbCaptureCount >= normalizedRequiredFingerCount) {
+      profile.status = "completed";
+    } else {
+      profile.status = "in_progress";
+    }
   }
 
   if (access.staff?._id) {
@@ -3657,6 +5193,10 @@ export const captureServiceCenterBookingFingerprint = async (req, res) => {
 
   if (!templateData) {
     throw new ApiError(400, "templateData is required");
+  }
+
+  if (!isValidBiometricTemplate(templateData)) {
+    throw new ApiError(400, "The captured fingerprint data is invalid or too short. Ensure the scanner bridge is returning raw template data.");
   }
 
   if (!BIOMETRIC_CAPTURE_SOURCES.includes(captureSource)) {
@@ -3809,6 +5349,7 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const notes = String(req.body?.notes || "").trim();
   const matchScore = normalizeBiometricMatchScore(req.body?.matchScore);
   const templateData = String(req.body?.templateData || req.body?.template || "").trim();
+  const isTemplateValid = isValidBiometricTemplate(templateData);
   const previewImage = normalizeBiometricPreviewImage(
     req.body?.previewImage ||
     req.body?.imageBase64 ||
@@ -3828,6 +5369,23 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
   const localMatch = req.body?.localMatch === undefined
     ? null
     : normalizeBoolean(req.body.localMatch);
+  const referenceTemplateHash = String(
+    req.body?.referenceTemplateHash ||
+    req.body?.enrolledTemplateHash ||
+    req.body?.referenceHash ||
+    "",
+  ).trim();
+  const matchedTemplateHash = String(
+    req.body?.matchedTemplateHash ||
+    req.body?.templateHash ||
+    req.body?.matchedHash ||
+    "",
+  ).trim();
+  const matchedFingerCode = String(
+    req.body?.matchedFingerCode ||
+    req.body?.comparedFingerCode ||
+    "",
+  ).trim().toUpperCase();
 
   if (!BIOMETRIC_FINGER_CODES.includes(fingerCode)) {
     throw new ApiError(400, "Valid fingerCode is required");
@@ -3843,27 +5401,50 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
 
   let resolvedVerificationStatus = verificationStatus;
   const enrolledFinger = profile.fingers[fingerIndex];
+  if (isRdServiceTemplateFormat(enrolledFinger?.templateFormat)) {
+    throw new ApiError(
+      400,
+      "This finger was enrolled through RD Service PID XML capture. Local fingerprint re-verification is not supported in this flow.",
+    );
+  }
   const hasNumericMatchScore = Number.isFinite(matchScore) && matchScore >= 0;
   const hasTemplateData = Boolean(templateData);
   const templateHashMatched =
-    hasTemplateData && buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "");
-  const hasExplicitVerificationSignal =
-    hasNumericMatchScore || localMatch !== null || ["matched", "failed", "low_quality"].includes(resolvedVerificationStatus);
+    hasTemplateData && isTemplateValid && buildBiometricTemplateHash(templateData) === String(enrolledFinger?.templateHash || "");
+
+  // Server-side template comparison: decrypt the enrolled template and compare directly
+  let serverSideTemplateMatched = false;
+  if (hasTemplateData && isTemplateValid && !templateHashMatched && enrolledFinger?.templateEncrypted) {
+    const enrolledTemplate = decryptBiometricTemplate(enrolledFinger.templateEncrypted);
+    if (enrolledTemplate && enrolledTemplate === templateData) {
+      serverSideTemplateMatched = true;
+    }
+  }
+  const templateMatched = templateHashMatched || serverSideTemplateMatched;
+  const enrolledTemplateHash = String(enrolledFinger?.templateHash || "").trim();
+  const referenceMatchesEnrolled = Boolean(referenceTemplateHash && enrolledTemplateHash && referenceTemplateHash === enrolledTemplateHash);
+  const matchedHashAllowsFinger = !matchedTemplateHash || matchedTemplateHash === enrolledTemplateHash;
+  const matchedFingerAllowsFinger = !matchedFingerCode || matchedFingerCode === fingerCode;
+  const bridgeScoreMatchesEnrolled =
+    hasNumericMatchScore &&
+    matchScore >= BIOMETRIC_MIN_MATCH_SCORE &&
+    referenceMatchesEnrolled &&
+    matchedHashAllowsFinger &&
+    matchedFingerAllowsFinger;
 
   if (captureSource === "phone_sensor" && localMatch !== null) {
     resolvedVerificationStatus = localMatch ? "matched" : "failed";
   } else if (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner") {
-    if (hasNumericMatchScore) {
-      resolvedVerificationStatus = matchScore >= BIOMETRIC_MIN_MATCH_SCORE ? "matched" : "failed";
-    } else if (localMatch !== null) {
-      resolvedVerificationStatus = localMatch ? "matched" : "failed";
-    } else if (!hasExplicitVerificationSignal && hasTemplateData) {
-      throw new ApiError(
-        400,
-        "USB fingerprint verify must return matchScore, localMatch, or verificationStatus. Template-only recaptures cannot reliably prove the same finger matched.",
-      );
+    if (hasTemplateData) {
+      // USB scanner re-captured a template — compare server-side
+      // If template is invalid/generic, we reject it immediately
+      resolvedVerificationStatus = (isTemplateValid && templateMatched) ? "matched" : "failed";
+    } else if (hasNumericMatchScore) {
+      resolvedVerificationStatus = bridgeScoreMatchesEnrolled ? "matched" : "failed";
+    } else if (localMatch !== null || verificationStatus) {
+      resolvedVerificationStatus = "failed";
     }
-  } else if (templateHashMatched) {
+  } else if (templateMatched) {
     resolvedVerificationStatus =
       "matched";
   } else if (hasTemplateData) {
@@ -3912,11 +5493,39 @@ export const verifyServiceCenterBookingFingerprint = async (req, res) => {
       verification: {
         source: captureSource || enrolledFinger?.captureSource || "unknown",
         localMatch: localMatch === true,
+        referenceTemplateHashMatched: referenceMatchesEnrolled,
+        matchedFingerCode: matchedFingerCode || null,
         usedTemplateComparison:
           (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner" || !captureSource) && hasTemplateData,
         minimumMatchScore: BIOMETRIC_MIN_MATCH_SCORE,
         matchScore,
         verificationStatus: resolvedVerificationStatus,
+        isMatch: resolvedVerificationStatus === "matched",
+        message: (() => {
+          const isMatch = resolvedVerificationStatus === "matched";
+          if (isMatch) {
+            if (captureSource === "phone_sensor") return "Matched via phone sensor";
+            if (hasNumericMatchScore) return `Matched via bridge score (${matchScore})`;
+            if (localMatch === true) return "Matched via bridge local decision";
+            if (templateHashMatched) return "Matched via template hash";
+            if (serverSideTemplateMatched) return "Matched via server-side template comparison";
+            return "Verified successfully";
+          }
+          if (resolvedVerificationStatus === "failed") {
+            if (hasNumericMatchScore && matchScore < BIOMETRIC_MIN_MATCH_SCORE) return `Failed: low match score (${matchScore})`;
+            if (hasNumericMatchScore && !referenceMatchesEnrolled) return "Failed: scanner score was not tied to the enrolled fingerprint";
+            if (hasNumericMatchScore && !matchedFingerAllowsFinger) return "Failed: scanner matched a different finger";
+            if (hasNumericMatchScore && !matchedHashAllowsFinger) return "Failed: scanner matched a different enrolled template";
+            if (localMatch === false) return "Failed: bridge reported no match";
+            if (localMatch === true && (captureSource === "usb_scanner" || captureSource === "bluetooth_scanner")) {
+              return "Failed: scanner returned only a generic local match, not enrolled fingerprint evidence";
+            }
+            if (hasTemplateData && !templateMatched) return "Failed: template data mismatch";
+            return "Fingerprint did not match";
+          }
+          if (resolvedVerificationStatus === "low_quality") return "Scan quality too low, please try again";
+          return "";
+        })(),
       },
     },
   });
@@ -4059,8 +5668,8 @@ export const updateServiceCenterBooking = async (req, res) => {
       booking.rentalInspection = booking.rentalInspection || {};
       booking.rentalInspection.beforeConditionImageDetails = Array.isArray(inspection.beforeConditionImageDetails)
         ? inspection.beforeConditionImageDetails
-          .map((item) => normalizeInspectionPhotoMetadataInput(item))
-          .filter((item) => item.imageUrl)
+            .map((item) => normalizeInspectionPhotoMetadataInput(item))
+            .filter((item) => item.imageUrl)
         : [];
 
       booking.rentalInspection.beforeConditionImages = booking.rentalInspection.beforeConditionImageDetails.map(
@@ -4072,8 +5681,8 @@ export const updateServiceCenterBooking = async (req, res) => {
       booking.rentalInspection = booking.rentalInspection || {};
       booking.rentalInspection.afterConditionImageDetails = Array.isArray(inspection.afterConditionImageDetails)
         ? inspection.afterConditionImageDetails
-          .map((item) => normalizeInspectionPhotoMetadataInput(item))
-          .filter((item) => item.imageUrl)
+            .map((item) => normalizeInspectionPhotoMetadataInput(item))
+            .filter((item) => item.imageUrl)
         : [];
 
       booking.rentalInspection.afterConditionImages = booking.rentalInspection.afterConditionImageDetails.map(
@@ -4390,6 +5999,208 @@ export const updateBusDriverSchedules = async (req, res) => {
   });
 };
 
+export const getBusDriverLiveTrip = async (req, res) => {
+  const { busService } = await getBusTrackingContext(req.auth.sub);
+  const liveTracking = serializeBusLiveTracking(busService.liveTracking || {});
+
+  res.json({
+    success: true,
+    data: {
+      busServiceId: String(busService._id),
+      busName: busService.busName || "",
+      route: busService.route || {},
+      schedules: Array.isArray(busService.schedules) ? busService.schedules : [],
+      liveTracking,
+    },
+  });
+};
+
+export const startBusDriverLiveTrip = async (req, res) => {
+  const { busService } = await getBusTrackingContext(req.auth.sub);
+  const scheduleId = toCleanString(req.body?.scheduleId);
+  const travelDate = normalizeBusTravelDate(req.body?.travelDate || req.body?.date || new Date());
+  const schedule = findBusSchedule(busService, scheduleId);
+
+  if (!isScheduleAvailableOnDate(schedule, travelDate)) {
+    throw new ApiError(404, "Bus schedule not found for the selected date");
+  }
+
+  const initialLocation = req.body?.location
+    ? normalizeBusTrackingPoint(req.body.location, "location")
+    : null;
+  const existingLiveTracking = serializeBusLiveTracking(busService.liveTracking || {});
+  const status = String(existingLiveTracking.status || "idle");
+  const now = new Date();
+
+  const nextCurrentLocation =
+    initialLocation ||
+    existingLiveTracking.currentLocation ||
+    (busService.route?.originCoords?.lat !== null && busService.route?.originCoords?.lng !== null
+      ? {
+          lat: Number(busService.route.originCoords.lat),
+          lng: Number(busService.route.originCoords.lng),
+          recordedAt: now,
+          accuracyMeters: null,
+          heading: null,
+          speedKmph: null,
+        }
+      : null);
+
+  busService.liveTracking = {
+    status:
+      status === "paused" &&
+      existingLiveTracking.scheduleId === scheduleId &&
+      existingLiveTracking.travelDate === travelDate
+        ? "in_progress"
+        : "in_progress",
+    scheduleId,
+    travelDate,
+    startedAt:
+      existingLiveTracking.scheduleId === scheduleId &&
+      existingLiveTracking.travelDate === travelDate &&
+      existingLiveTracking.startedAt
+        ? existingLiveTracking.startedAt
+        : now,
+    endedAt: null,
+    lastUpdatedAt: now,
+    currentLocation: nextCurrentLocation,
+    recentPath: nextCurrentLocation
+      ? trimBusLiveTrail([
+          ...(existingLiveTracking.scheduleId === scheduleId &&
+          existingLiveTracking.travelDate === travelDate &&
+          status === "paused"
+            ? existingLiveTracking.recentPath
+            : []),
+          nextCurrentLocation,
+        ])
+      : [],
+    totalDistanceKm:
+      existingLiveTracking.scheduleId === scheduleId &&
+      existingLiveTracking.travelDate === travelDate
+        ? Number(existingLiveTracking.totalDistanceKm || 0)
+        : 0,
+  };
+
+  await busService.save();
+
+  res.json({
+    success: true,
+    data: {
+      busServiceId: String(busService._id),
+      liveTracking: serializeBusLiveTracking(busService.liveTracking || {}),
+    },
+  });
+};
+
+export const updateBusDriverLiveLocation = async (req, res) => {
+  const { busService } = await getBusTrackingContext(req.auth.sub);
+  const liveTracking = serializeBusLiveTracking(busService.liveTracking || {});
+
+  if (!liveTracking.scheduleId || !liveTracking.travelDate) {
+    throw new ApiError(409, "Start the journey before sending live location updates");
+  }
+
+  if (!["in_progress", "paused"].includes(String(liveTracking.status || ""))) {
+    throw new ApiError(409, "Live tracking is not active for this bus");
+  }
+
+  const scheduleId = toCleanString(req.body?.scheduleId || liveTracking.scheduleId);
+  const travelDate = normalizeBusTravelDate(req.body?.travelDate || req.body?.date || liveTracking.travelDate);
+  if (scheduleId !== liveTracking.scheduleId || travelDate !== liveTracking.travelDate) {
+    throw new ApiError(409, "This live trip belongs to a different schedule or travel date");
+  }
+
+  const nextPoint = normalizeBusTrackingPoint(req.body?.location, "location");
+  const previousPoint = liveTracking.currentLocation;
+  const additionalDistanceKm = calculateDistanceKm(previousPoint, nextPoint);
+  const nextPath = trimBusLiveTrail([...liveTracking.recentPath, nextPoint]);
+
+  busService.liveTracking = {
+    ...busService.liveTracking?.toObject?.(),
+    status: "in_progress",
+    scheduleId,
+    travelDate,
+    currentLocation: nextPoint,
+    recentPath: nextPath,
+    lastUpdatedAt: new Date(),
+    totalDistanceKm: Math.round((Number(liveTracking.totalDistanceKm || 0) + additionalDistanceKm) * 1000) / 1000,
+  };
+
+  await busService.save();
+
+  res.json({
+    success: true,
+    data: {
+      busServiceId: String(busService._id),
+      liveTracking: serializeBusLiveTracking(busService.liveTracking || {}),
+    },
+  });
+};
+
+export const updateBusDriverLiveTripStatus = async (req, res) => {
+  const { busService } = await getBusTrackingContext(req.auth.sub);
+  const action = toCleanString(req.body?.action).toLowerCase();
+  const liveTracking = serializeBusLiveTracking(busService.liveTracking || {});
+
+  if (!["pause", "resume", "complete", "reset"].includes(action)) {
+    throw new ApiError(400, "A valid live trip action is required");
+  }
+
+  if (action === "reset") {
+    busService.liveTracking = {
+      status: "idle",
+      scheduleId: "",
+      travelDate: "",
+      startedAt: null,
+      endedAt: null,
+      lastUpdatedAt: new Date(),
+      currentLocation: null,
+      recentPath: [],
+      totalDistanceKm: 0,
+    };
+
+    await busService.save();
+
+    res.json({
+      success: true,
+      data: {
+        busServiceId: String(busService._id),
+        liveTracking: serializeBusLiveTracking(busService.liveTracking || {}),
+      },
+    });
+    return;
+  }
+
+  if (!liveTracking.scheduleId || !liveTracking.travelDate) {
+    throw new ApiError(409, "No active bus journey exists yet");
+  }
+
+  if (action === "pause") {
+    busService.liveTracking.status = "paused";
+    busService.liveTracking.lastUpdatedAt = new Date();
+  } else if (action === "resume") {
+    busService.liveTracking.status = "in_progress";
+    busService.liveTracking.lastUpdatedAt = new Date();
+    if (!busService.liveTracking.startedAt) {
+      busService.liveTracking.startedAt = new Date();
+    }
+  } else if (action === "complete") {
+    busService.liveTracking.status = "completed";
+    busService.liveTracking.endedAt = new Date();
+    busService.liveTracking.lastUpdatedAt = new Date();
+  }
+
+  await busService.save();
+
+  res.json({
+    success: true,
+    data: {
+      busServiceId: String(busService._id),
+      liveTracking: serializeBusLiveTracking(busService.liveTracking || {}),
+    },
+  });
+};
+
 export const createDriverWithdrawalRequest = async (req, res) => {
   const driver = await Driver.findById(req.auth.sub);
 
@@ -4439,6 +6250,7 @@ export const createDriverWithdrawalRequest = async (req, res) => {
     driver_id: req.auth.sub,
     amount: Math.round(amount * 100) / 100,
     payment_method: paymentMethod,
+    bank_details_snapshot: serializeDriverBankDetails(driver.bankDetails || {}),
     status: 'pending',
   });
 
@@ -4576,68 +6388,314 @@ const resolvePhonePeCredentials = async () => {
   return resolveConfiguredGatewayCredentials("phone_pay");
 };
 
-const getFrontendBaseUrl = () => {
-  const configuredOrigin = String(env.corsOrigin || "")
-    .split(",")
-    .map((value) => value.trim())
-    .find((value) => value && value !== "*");
+const normalizeOriginCandidate = (value = "") => {
+  const trimmedValue = String(value || "").trim();
+  if (!trimmedValue || trimmedValue === "*") {
+    return "";
+  }
 
-  return (configuredOrigin || "http://localhost:5173").replace(/\/+$/, "");
+  try {
+    return new URL(trimmedValue).origin.replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
 };
 
-const getPhonePeBaseUrl = (environment = "test") =>
+const isPublicWebOrigin = (value = "") => {
+  const origin = normalizeOriginCandidate(value);
+  if (!origin) {
+    return false;
+  }
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (!["http:", "https:"].includes(protocol)) {
+      return false;
+    }
+
+    return !["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname);
+  } catch {
+    return false;
+  }
+};
+
+const getFrontendBaseUrl = (req) => {
+  const configuredOrigins = [
+    env.phonePeRedirectBaseUrl,
+    env.publicFrontendUrl,
+    ...String(env.corsOrigin || "")
+      .split(",")
+      .map((value) => value.trim()),
+  ]
+    .map(normalizeOriginCandidate)
+    .filter(Boolean);
+
+  const requestCandidates = [
+    normalizeOriginCandidate(req?.get?.("origin")),
+    normalizeOriginCandidate(req?.get?.("referer")),
+    (() => {
+      const forwardedProto = String(req?.get?.("x-forwarded-proto") || "").trim();
+      const forwardedHost = String(req?.get?.("x-forwarded-host") || "").trim();
+      if (!forwardedProto || !forwardedHost) {
+        return "";
+      }
+      return normalizeOriginCandidate(`${forwardedProto}://${forwardedHost}`);
+    })(),
+    (() => {
+      const host = String(req?.get?.("host") || "").trim();
+      const proto =
+        String(req?.protocol || "").trim() ||
+        String(req?.get?.("x-forwarded-proto") || "").trim() ||
+        "http";
+      if (!host) {
+        return "";
+      }
+      return normalizeOriginCandidate(`${proto}://${host}`);
+    })(),
+  ].filter(Boolean);
+
+  const preferredPublicOrigin =
+    configuredOrigins.find(isPublicWebOrigin) ||
+    requestCandidates.find(isPublicWebOrigin);
+
+  if (preferredPublicOrigin) {
+    return preferredPublicOrigin;
+  }
+
+  return (
+    configuredOrigins[0] ||
+    requestCandidates[0] ||
+    "http://localhost:5173"
+  ).replace(/\/+$/, "");
+};
+
+const getPhonePeApiBaseUrl = (environment = "test") =>
   String(environment).trim().toLowerCase() === "production"
-    ? "https://api.phonepe.com/apis/hermes"
+    ? "https://api.phonepe.com/apis/pg"
     : "https://api-preprod.phonepe.com/apis/pg-sandbox";
 
-const buildPhonePeChecksum = ({ payload = "", path = "", saltKey = "", saltIndex = "1" }) => {
-  const digest = crypto
-    .createHash("sha256")
-    .update(`${payload}${path}${saltKey}`)
-    .digest("hex");
+const getPhonePeAuthUrl = (environment = "test") =>
+  String(environment).trim().toLowerCase() === "production"
+    ? "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
+    : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token";
 
-  return `${digest}###${saltIndex}`;
+const phonePeAccessTokenCache = new Map();
+const phonePeClientCache = new Map();
+
+const getPhonePeCheckoutClient = ({
+  clientId,
+  clientSecret,
+  clientVersion,
+  environment,
+}) => {
+  const normalizedEnvironment = String(environment || "test").trim().toLowerCase();
+  const normalizedVersion = Number.parseInt(String(clientVersion || "1"), 10) || 1;
+  const cacheKey = `${normalizedEnvironment}::${clientId}::${normalizedVersion}`;
+
+  if (phonePeClientCache.has(cacheKey)) {
+    return phonePeClientCache.get(cacheKey);
+  }
+
+  const client = StandardCheckoutClient.getInstance(
+    clientId,
+    clientSecret,
+    normalizedVersion,
+    normalizedEnvironment === "production" ? Env.PRODUCTION : Env.SANDBOX,
+  );
+
+  phonePeClientCache.set(cacheKey, client);
+  return client;
+};
+
+const getPhonePeAccessToken = async ({
+  clientId,
+  clientSecret,
+  clientVersion,
+  environment,
+}) => {
+  const cacheKey = `${String(environment).trim().toLowerCase()}::${clientId}::${clientVersion}`;
+  const cachedToken = phonePeAccessTokenCache.get(cacheKey);
+  const nowEpochSeconds = Math.floor(Date.now() / 1000);
+
+  if (cachedToken?.accessToken && Number(cachedToken.expiresAt || 0) - 60 > nowEpochSeconds) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "auth-cache-hit",
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    });
+    return cachedToken.accessToken;
+  }
+
+  const requestBody = new URLSearchParams({
+    client_id: clientId,
+    client_version: clientVersion,
+    client_secret: clientSecret,
+    grant_type: "client_credentials",
+  });
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "auth-request",
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+  });
+
+  const response = await fetch(getPhonePeAuthUrl(environment), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      accept: "application/json",
+    },
+    body: requestBody.toString(),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.access_token) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "auth-failed",
+      level: "error",
+      statusCode: response.status || 502,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
+    throw new ApiError(
+      response.status || 502,
+      payload?.message || payload?.error_description || payload?.error || "PhonePe authorization failed",
+    );
+  }
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "auth-success",
+    statusCode: response.status || 200,
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+  });
+
+  phonePeAccessTokenCache.set(cacheKey, {
+    accessToken: String(payload.access_token),
+    expiresAt: Number(payload.expires_at || nowEpochSeconds + 300),
+  });
+
+  return String(payload.access_token);
 };
 
 const phonePeRequest = async ({
   method,
   path,
   body,
-  merchantId,
-  saltKey,
-  saltIndex,
+  clientId,
+  clientSecret,
+  clientVersion,
   environment,
 }) => {
   const normalizedMethod = String(method || "GET").trim().toUpperCase();
-  const encodedPayload =
-    body && normalizedMethod !== "GET"
-      ? Buffer.from(JSON.stringify(body)).toString("base64")
-      : "";
-  const response = await fetch(`${getPhonePeBaseUrl(environment)}${path}`, {
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver",
+    stage: "api-request",
     method: normalizedMethod,
-    headers: {
-      "Content-Type": "application/json",
-      "X-VERIFY": buildPhonePeChecksum({
-        payload: encodedPayload,
-        path,
-        saltKey,
-        saltIndex,
-      }),
-      "X-MERCHANT-ID": merchantId,
-      accept: "application/json",
-    },
-    body: encodedPayload ? JSON.stringify({ request: encodedPayload }) : undefined,
+    path,
+    ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+    request: summarizePhonePeRequestBody(body || {}),
+  });
+  const client = getPhonePeCheckoutClient({
+    clientId,
+    clientSecret,
+    clientVersion,
+    environment,
   });
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) {
+  try {
+    let payload = null;
+
+    if (normalizedMethod === "POST" && path === "/checkout/v2/pay") {
+      const merchantOrderId = String(body?.merchantOrderId || "").trim();
+      const amount = Number(body?.amount || 0);
+      const redirectUrl = String(body?.paymentFlow?.merchantUrls?.redirectUrl || "").trim();
+
+      if (!merchantOrderId || !amount || !redirectUrl) {
+        throw new ApiError(400, "PhonePe merchant order id, amount, and redirect URL are required");
+      }
+
+      const builder = StandardCheckoutPayRequest.builder()
+        .merchantOrderId(merchantOrderId)
+        .amount(amount)
+        .redirectUrl(redirectUrl);
+
+      if (body?.paymentFlow?.message) {
+        builder.message(String(body.paymentFlow.message));
+      }
+      if (body?.expireAfter) {
+        builder.expireAfter(Number(body.expireAfter));
+      }
+      if (body?.prefillUserLoginDetails?.phoneNumber) {
+        const prefill = PrefillUserLoginDetails.builder()
+          .phoneNumber(String(body.prefillUserLoginDetails.phoneNumber))
+          .build();
+        builder.prefillUserLoginDetails(prefill);
+      }
+      if (body?.metaInfo) {
+        builder.metaInfo(body.metaInfo);
+      }
+
+      const request = builder.build();
+      payload = await client.pay(request);
+    } else if (normalizedMethod === "GET" && path.includes("/checkout/v2/order/")) {
+      const orderMatch = path.match(/\/checkout\/v2\/order\/([^/]+)\/status/i);
+      const merchantOrderId = decodeURIComponent(orderMatch?.[1] || "").trim();
+
+      if (!merchantOrderId) {
+        throw new ApiError(400, "PhonePe merchant order id is required");
+      }
+
+      payload = await client.getOrderStatus(merchantOrderId);
+    } else {
+      throw new ApiError(400, `Unsupported PhonePe operation: ${normalizedMethod} ${path}`);
+    }
+
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "api-success",
+      method: normalizedMethod,
+      path,
+      statusCode: 200,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+    });
+
+    return payload;
+  } catch (error) {
+    const payload = error?.response || error?.payload || error?.data || null;
+    const statusCode = Number(error?.statusCode || error?.status || 502);
+
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver",
+      stage: "api-failed",
+      level: "error",
+      method: normalizedMethod,
+      path,
+      statusCode,
+      ...summarizePhonePeCredentialMeta({ clientId, clientVersion, environment }),
+      response: summarizePhonePePayload(payload || {}),
+      providerMessage:
+        error?.message ||
+        payload?.message ||
+        payload?.responseCodeDescription ||
+        payload?.detailedErrorCode ||
+        "",
+    });
     throw new ApiError(
-      response.status || 502,
-      payload?.message || payload?.code || "PhonePe request failed",
+      statusCode,
+      error?.message || payload?.message || payload?.code || "PhonePe request failed",
     );
   }
-
-  return payload;
 };
 
 const fetchRazorpay = async ({ method, path, body, keyId, keySecret }) => {
@@ -4656,8 +6714,8 @@ const fetchRazorpay = async ({ method, path, body, keyId, keySecret }) => {
     throw new ApiError(
       response.status || 502,
       payload?.error?.description ||
-      payload?.error?.message ||
-      "Razorpay request failed",
+        payload?.error?.message ||
+        "Razorpay request failed",
     );
   }
 
@@ -4667,7 +6725,7 @@ const fetchRazorpay = async ({ method, path, body, keyId, keySecret }) => {
 export const createDriverWalletTopupOrder = async (req, res) => {
   const settings = await getWalletSettings();
   const minTopUp = Number(settings.minimum_amount_added_to_wallet || 0);
-  const amount = Number(req.body.amount);
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
 
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ApiError(400, "Invalid top-up amount");
@@ -4683,6 +6741,61 @@ export const createDriverWalletTopupOrder = async (req, res) => {
   const driverId = String(req.auth?.sub || "");
   const compactDriverId = driverId.replace(/[^a-zA-Z0-9]/g, "").slice(-8) || "drv";
   const receipt = `dwal_${compactDriverId}_${Date.now().toString(36)}`;
+
+  // Build the callback URL that Razorpay will redirect to after payment.
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
+  const backendOrigin = `${proto}://${host}`;
+  const callbackUrl = `${backendOrigin}/api/v1/drivers/wallet/top-up/razorpay/callback`;
+
+  const userAgent = String(req.headers["user-agent"] || "");
+  const isWebView = /; wv\)/i.test(userAgent) || /Version\/[\d.]+/i.test(userAgent) || req.body.usePaymentLink === true;
+
+  if (isWebView) {
+    const driver = driverId ? await Driver.findById(driverId).select("name phone email").lean() : null;
+    const cleanedPhone = String(driver?.phone || "").replace(/\D/g, "");
+    const customerPhone = cleanedPhone.length === 10 ? `+91${cleanedPhone}` : (cleanedPhone.length === 12 && cleanedPhone.startsWith("91")) ? `+${cleanedPhone}` : "";
+
+    const paymentLink = await razorpayRequest({
+      method: "POST",
+      path: "/payment_links",
+      body: {
+        amount: amountPaise,
+        currency: "INR",
+        accept_partial: false,
+        expire_by: Math.floor(Date.now() / 1000) + 20 * 60,
+        reference_id: receipt,
+        description: "Driver Wallet Topup",
+        callback_url: callbackUrl,
+        callback_method: "get",
+        customer: {
+          name: driver?.name || "Driver",
+          email: driver?.email || "",
+          contact: customerPhone || undefined,
+        },
+        notes: {
+          driverId,
+          source: "driver_wallet_topup",
+        },
+      },
+      keyId,
+      keySecret,
+    });
+
+    const checkoutUrl = paymentLink.short_url || paymentLink.shortUrl || paymentLink.url;
+
+    res.status(201).json({
+      success: true,
+      data: {
+        keyId,
+        checkoutUrl,
+        amount: amountPaise,
+        currency: "INR",
+        callbackUrl,
+      },
+    });
+    return;
+  }
 
   const order = await fetchRazorpay({
     method: "POST",
@@ -4704,14 +6817,235 @@ export const createDriverWalletTopupOrder = async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency || "INR",
+      callbackUrl,
     },
   });
+};
+
+const DRIVER_RAZORPAY_PAYMENT_SUCCESS_STATUSES = new Set(["authorized", "captured", "paid"]);
+const DRIVER_RAZORPAY_LINK_SUCCESS_STATUSES = new Set(["paid"]);
+
+const verifyAndApplyDriverRazorpayWalletTopup = async ({
+  orderId,
+  paymentId,
+  signature,
+  paymentLinkId = "",
+  paymentLinkReferenceId = "",
+  paymentLinkStatus = "",
+  driverId: requestedDriverId = "",
+} = {}) => {
+  const normalizedOrderId = String(orderId || "").trim();
+  const normalizedPaymentId = String(paymentId || "").trim();
+  const normalizedSignature = String(signature || "").trim();
+  const normalizedPaymentLinkId = String(paymentLinkId || "").trim();
+  const normalizedPaymentLinkReferenceId = String(paymentLinkReferenceId || "").trim();
+  const normalizedPaymentLinkStatus = String(paymentLinkStatus || "").trim().toLowerCase();
+
+  if (!normalizedPaymentId) {
+    throw new ApiError(400, "Payment verification fields are required");
+  }
+
+  if (!normalizedOrderId && !normalizedPaymentLinkId) {
+    throw new ApiError(400, "Payment verification fields are required");
+  }
+
+  const { keyId, keySecret } = await resolveRazorpayCredentials();
+
+  let effectiveOrderId = normalizedOrderId;
+  let amountPaise = 0;
+  let resolvedDriverId = "";
+
+  if (effectiveOrderId) {
+    if (!normalizedSignature) {
+      throw new ApiError(400, "Payment verification signature is required");
+    }
+
+    const expectedSignature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${effectiveOrderId}|${normalizedPaymentId}`)
+      .digest("hex");
+
+    if (expectedSignature !== normalizedSignature) {
+      throw new ApiError(400, "Invalid payment signature");
+    }
+
+    const order = await fetchRazorpay({
+      method: "GET",
+      path: `/orders/${encodeURIComponent(effectiveOrderId)}`,
+      keyId,
+      keySecret,
+    });
+
+    amountPaise = Number(order?.amount);
+    resolvedDriverId = String(order?.notes?.driverId || "").trim();
+  } else {
+    const [payment, paymentLink] = await Promise.all([
+      fetchRazorpay({
+        method: "GET",
+        path: `/payments/${encodeURIComponent(normalizedPaymentId)}`,
+        keyId,
+        keySecret,
+      }),
+      fetchRazorpay({
+        method: "GET",
+        path: `/payment_links/${encodeURIComponent(normalizedPaymentLinkId)}`,
+        keyId,
+        keySecret,
+      }),
+    ]);
+
+    const paymentStatus = String(payment?.status || "").trim().toLowerCase();
+    const linkStatus = String(paymentLink?.status || normalizedPaymentLinkStatus || "").trim().toLowerCase();
+    const linkPaymentId = String(
+      paymentLink?.payments?.[0]?.payment_id ||
+      paymentLink?.payment_id ||
+      payment?.id ||
+      "",
+    ).trim();
+
+    if (!DRIVER_RAZORPAY_PAYMENT_SUCCESS_STATUSES.has(paymentStatus)) {
+      throw new ApiError(400, "Razorpay payment is not successful yet");
+    }
+
+    if (linkStatus && !DRIVER_RAZORPAY_LINK_SUCCESS_STATUSES.has(linkStatus)) {
+      throw new ApiError(400, "Razorpay payment link is not marked as paid");
+    }
+
+    if (linkPaymentId && linkPaymentId !== normalizedPaymentId) {
+      throw new ApiError(400, "Payment link callback does not match the payment id");
+    }
+
+    if (
+      normalizedPaymentLinkReferenceId &&
+      paymentLink?.reference_id &&
+      String(paymentLink.reference_id).trim() !== normalizedPaymentLinkReferenceId
+    ) {
+      throw new ApiError(400, "Payment link callback reference did not match");
+    }
+
+    effectiveOrderId = String(payment?.order_id || "").trim();
+    amountPaise = Number(payment?.amount || paymentLink?.amount_paid || paymentLink?.amount || 0);
+    resolvedDriverId = String(paymentLink?.notes?.driverId || payment?.notes?.driverId || "").trim();
+  }
+
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+    throw new ApiError(400, "Invalid order amount");
+  }
+
+  const effectiveDriverId = String(requestedDriverId || resolvedDriverId).trim();
+
+  if (!effectiveDriverId) {
+    throw new ApiError(400, "Driver reference is missing from this Razorpay order");
+  }
+
+  if (requestedDriverId && resolvedDriverId && requestedDriverId !== resolvedDriverId) {
+    throw new ApiError(403, "This Razorpay order does not belong to the authenticated driver");
+  }
+
+  const amount = Math.round(amountPaise) / 100;
+  const alreadyCredited = await WalletTransaction.findOne({
+    driverId: effectiveDriverId,
+    "metadata.providerPaymentId": normalizedPaymentId,
+  })
+    .select("_id")
+    .lean();
+
+  if (alreadyCredited) {
+    const driver = await Driver.findById(effectiveDriverId);
+    return {
+      driverId: effectiveDriverId,
+      wallet: driver ? await serializeDriverWallet(driver) : null,
+      transaction: null,
+      alreadyCredited: true,
+    };
+  }
+
+  const result = await topUpDriverWallet({
+    driverId: effectiveDriverId,
+    amount,
+    metadata: {
+      source: "razorpay",
+      provider: "razorpay",
+      providerOrderId: effectiveOrderId,
+      providerPaymentId: normalizedPaymentId,
+      providerPaymentLinkId: normalizedPaymentLinkId,
+    },
+  });
+
+  const payload = {
+    wallet: result.wallet,
+    transaction: result.transaction,
+  };
+
+  emitToDriver(effectiveDriverId, "driver:wallet:updated", payload);
+
+  return {
+    driverId: effectiveDriverId,
+    ...payload,
+    alreadyCredited: false,
+  };
+};
+
+export const handleDriverRazorpayWalletTopupCallback = async (req, res) => {
+  const frontendBaseUrl = getFrontendBaseUrl(req);
+  const redirectUrl = new URL(`${frontendBaseUrl}/razorpay/status`);
+  redirectUrl.searchParams.set("flow", "driver-wallet");
+  const callbackPayload = {
+    razorpay_order_id: req.body?.razorpay_order_id || req.query?.razorpay_order_id,
+    razorpay_payment_id: req.body?.razorpay_payment_id || req.query?.razorpay_payment_id,
+    razorpay_signature: req.body?.razorpay_signature || req.query?.razorpay_signature,
+    razorpay_payment_link_id: req.body?.razorpay_payment_link_id || req.query?.razorpay_payment_link_id,
+    razorpay_payment_link_reference_id:
+      req.body?.razorpay_payment_link_reference_id || req.query?.razorpay_payment_link_reference_id,
+    razorpay_payment_link_status:
+      req.body?.razorpay_payment_link_status || req.query?.razorpay_payment_link_status,
+  };
+
+  try {
+    const errorCode = String(
+      req.body?.error?.code || req.body?.error?.reason || req.query?.error_code || "",
+    ).trim();
+    const errorDescription = String(
+      req.body?.error?.description || req.query?.error_description || "",
+    ).trim();
+
+    if (errorCode || errorDescription) {
+      redirectUrl.searchParams.set("status", "failure");
+      if (errorCode) {
+        redirectUrl.searchParams.set("error_code", errorCode);
+      }
+      if (errorDescription) {
+        redirectUrl.searchParams.set("error_description", errorDescription);
+      }
+      res.redirect(302, redirectUrl.toString());
+      return;
+    }
+
+    await verifyAndApplyDriverRazorpayWalletTopup({
+      orderId: callbackPayload.razorpay_order_id,
+      paymentId: callbackPayload.razorpay_payment_id,
+      signature: callbackPayload.razorpay_signature,
+      paymentLinkId: callbackPayload.razorpay_payment_link_id,
+      paymentLinkReferenceId: callbackPayload.razorpay_payment_link_reference_id,
+      paymentLinkStatus: callbackPayload.razorpay_payment_link_status,
+    });
+
+    redirectUrl.searchParams.set("status", "success");
+  } catch (error) {
+    redirectUrl.searchParams.set("status", "failure");
+    redirectUrl.searchParams.set(
+      "error_description",
+      String(error?.message || "Payment verification failed."),
+    );
+  }
+
+  res.redirect(302, redirectUrl.toString());
 };
 
 export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
   const settings = await getWalletSettings();
   const minTopUp = Number(settings.minimum_amount_added_to_wallet || 0);
-  const amount = Number(req.body.amount);
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
 
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ApiError(400, "Invalid top-up amount");
@@ -4721,41 +7055,72 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
     throw new ApiError(400, `Minimum top-up amount is Rs ${minTopUp}`);
   }
 
-  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const driverId = String(req.auth?.sub || "");
   const compactDriverId = driverId.replace(/[^a-zA-Z0-9]/g, "").slice(-8) || "drv";
   const merchantTransactionId = `DWAL${Date.now()}${compactDriverId}`.slice(0, 34);
-  const frontendBaseUrl = getFrontendBaseUrl();
-  const backendBaseUrl = `${req.protocol}://${req.get("host")}`;
-  const redirectUrl = `${frontendBaseUrl}/taxi/driver/wallet?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
-  const callbackUrl = `${backendBaseUrl}/api/v1/common/payment-gateway/phonepe/callback`;
+  const frontendBaseUrl = getFrontendBaseUrl(req);
+  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=driver-wallet&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const driver = driverId ? await Driver.findById(driverId).select("phone").lean() : null;
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "create-order-start",
+    merchantTransactionId,
+    amountRupees: amount,
+    request: buildPaymentRequestContext(req),
+    metadata: {
+      redirectUrl: summarizeCheckoutUrl(redirectUrl),
+    },
+  });
   const payload = await phonePeRequest({
     method: "POST",
-    path: "/pg/v1/pay",
+    path: "/checkout/v2/pay",
     body: {
-      merchantId,
-      merchantTransactionId,
-      merchantUserId: compactDriverId,
+      merchantOrderId: merchantTransactionId,
       amount: Math.round(amount * 100),
-      redirectUrl,
-      redirectMode: "GET",
-      callbackUrl,
-      mobileNumber: String(driver?.phone || "").replace(/\D/g, "").slice(-10) || undefined,
-      paymentInstrument: {
-        type: "PAY_PAGE",
+      expireAfter: 1200,
+      paymentFlow: {
+        type: "PG_CHECKOUT",
+        merchantUrls: {
+          redirectUrl,
+        },
+        message: "Wallet top-up",
       },
+      prefillUserLoginDetails: (() => {
+        const cleaned = String(driver?.phone || "").replace(/\D/g, "");
+        const finalPhone = (cleaned.length === 12 && cleaned.startsWith("91")) ? cleaned.slice(2) : cleaned;
+        return finalPhone.length === 10 ? { phoneNumber: finalPhone } : undefined;
+      })(),
     },
-    merchantId,
-    saltKey,
-    saltIndex,
+    clientId,
+    clientSecret,
+    clientVersion,
     environment,
   });
 
-  const checkoutUrl = payload?.data?.instrumentResponse?.redirectInfo?.url || "";
+  const checkoutUrl = payload?.redirectUrl || "";
   if (!checkoutUrl) {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver-wallet",
+      stage: "create-order-missing-checkout-url",
+      level: "error",
+      merchantTransactionId,
+      response: summarizePhonePePayload(payload || {}),
+    });
     throw new ApiError(502, "PhonePe payment URL was not returned");
   }
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "create-order-success",
+    merchantTransactionId,
+    amountPaise: Math.round(amount * 100),
+    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   res.status(201).json({
     success: true,
@@ -4765,85 +7130,24 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
       amount: Math.round(amount * 100),
       currency: "INR",
       checkoutUrl,
-      method: payload?.data?.instrumentResponse?.redirectInfo?.method || "GET",
     },
   });
 };
 
 export const verifyDriverWalletTopup = async (req, res) => {
-  const orderId = String(req.body?.razorpay_order_id || "");
-  const paymentId = String(req.body?.razorpay_payment_id || "");
-  const signature = String(req.body?.razorpay_signature || "");
-
-  if (!orderId || !paymentId || !signature) {
-    throw new ApiError(400, "Payment verification fields are required");
-  }
-
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
-
-  const expectedSignature = crypto
-    .createHmac("sha256", keySecret)
-    .update(`${orderId}|${paymentId}`)
-    .digest("hex");
-
-  if (expectedSignature !== signature) {
-    throw new ApiError(400, "Invalid payment signature");
-  }
-
-  const order = await fetchRazorpay({
-    method: "GET",
-    path: `/orders/${encodeURIComponent(orderId)}`,
-    keyId,
-    keySecret,
+  const payload = await verifyAndApplyDriverRazorpayWalletTopup({
+    orderId: req.body?.razorpay_order_id,
+    paymentId: req.body?.razorpay_payment_id,
+    signature: req.body?.razorpay_signature,
+    driverId: req.auth?.sub,
   });
-
-  const amountPaise = Number(order?.amount);
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
-    throw new ApiError(400, "Invalid order amount");
-  }
-
-  const amount = Math.round(amountPaise) / 100;
-  const driverId = req.auth?.sub;
-
-  const alreadyCredited = await WalletTransaction.findOne({
-    driverId,
-    "metadata.providerPaymentId": paymentId,
-  })
-    .select("_id")
-    .lean();
-
-  if (alreadyCredited) {
-    const driver = await Driver.findById(driverId);
-    res.json({
-      success: true,
-      data: {
-        wallet: await serializeDriverWallet(driver),
-      },
-    });
-    return;
-  }
-
-  const result = await topUpDriverWallet({
-    driverId,
-    amount,
-    metadata: {
-      source: "razorpay",
-      provider: "razorpay",
-      providerOrderId: orderId,
-      providerPaymentId: paymentId,
-    },
-  });
-
-  const payload = {
-    wallet: result.wallet,
-    transaction: result.transaction,
-  };
-
-  emitToDriver(driverId, "driver:wallet:updated", payload);
 
   res.json({
     success: true,
-    data: payload,
+    data: {
+      wallet: payload.wallet,
+      ...(payload.transaction ? { transaction: payload.transaction } : {}),
+    },
   });
 };
 
@@ -4856,20 +7160,42 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     throw new ApiError(400, "merchantTransactionId is required");
   }
 
-  const { merchantId, saltKey, saltIndex, environment } = await resolvePhonePeCredentials();
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "verify-start",
+    merchantTransactionId,
+    request: buildPaymentRequestContext(req),
+  });
+
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
   const payload = await phonePeRequest({
     method: "GET",
-    path: `/pg/v1/status/${encodeURIComponent(merchantId)}/${encodeURIComponent(merchantTransactionId)}`,
-    merchantId,
-    saltKey,
-    saltIndex,
+    path: `/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status?details=false`,
+    clientId,
+    clientSecret,
+    clientVersion,
     environment,
   });
 
-  const paymentState = String(payload?.data?.state || payload?.data?.paymentState || "").trim().toUpperCase();
-  const paymentId = toCleanString(payload?.data?.transactionId || merchantTransactionId);
-  const amount = Math.round(Number(payload?.data?.amount || 0)) / 100;
+  const paymentDetails = Array.isArray(payload?.paymentDetails) ? payload.paymentDetails : [];
+  const latestPayment = paymentDetails[0] || {};
+  const paymentState = String(payload?.state || latestPayment?.state || "").trim().toUpperCase();
+  const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
+  const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
   const driverId = req.auth?.sub;
+
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "verify-response",
+    merchantTransactionId,
+    driverId,
+    paymentState,
+    paymentId,
+    amountRupees: amount,
+    response: summarizePhonePePayload(payload || {}),
+  });
 
   if (paymentState === "COMPLETED") {
     const alreadyCredited = await WalletTransaction.findOne({
@@ -4897,6 +7223,16 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     }
 
     const driver = await Driver.findById(driverId);
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver-wallet",
+      stage: "verify-paid",
+      merchantTransactionId,
+      driverId,
+      paymentId,
+      amountRupees: amount,
+      alreadyCredited: Boolean(alreadyCredited),
+    });
     res.json({
       success: true,
       data: {
@@ -4912,6 +7248,15 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
   }
 
   if (paymentState === "PENDING") {
+    logPaymentDiagnostic({
+      provider: "phonepe",
+      scope: "driver-wallet",
+      stage: "verify-pending",
+      merchantTransactionId,
+      driverId,
+      paymentId,
+      amountRupees: amount,
+    });
     res.json({
       success: true,
       data: {
@@ -4925,6 +7270,30 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
     return;
   }
 
+  logPaymentDiagnostic({
+    provider: "phonepe",
+    scope: "driver-wallet",
+    stage: "verify-failed",
+    level: "warn",
+    merchantTransactionId,
+    driverId,
+    paymentId,
+    paymentState,
+    amountRupees: amount,
+    code: payload?.code || latestPayment?.responseCode || "",
+    providerMessage:
+      payload?.message ||
+      latestPayment?.responseCodeDescription ||
+      latestPayment?.detailedErrorCode ||
+      "",
+    response: summarizePhonePePayload(payload || {}),
+  });
+  const driverProviderCode = payload?.code || latestPayment?.responseCode || "";
+  const driverProviderMessage =
+    payload?.message ||
+    latestPayment?.responseCodeDescription ||
+    latestPayment?.detailedErrorCode ||
+    "PhonePe payment was not completed";
   res.json({
     success: true,
     data: {
@@ -4932,9 +7301,11 @@ export const verifyDriverPhonePeWalletTopup = async (req, res) => {
       gateway: "phonepe",
       merchantTransactionId,
       transactionId: paymentId,
-      code: payload?.code || payload?.data?.responseCode || "",
+      code: driverProviderCode,
+      state: paymentState,
+      providerMessage: driverProviderMessage,
     },
-    message: payload?.message || "PhonePe payment was not completed",
+    message: driverProviderMessage,
   });
 };
 
@@ -5123,11 +7494,13 @@ export const getDriverApprovalStatus = async (req, res) => {
 
   const payload = verifyAccessToken(token);
 
-  if (!["driver", "owner", "bus_driver"].includes(String(payload.role || "").toLowerCase())) {
-    throw new ApiError(403, `Insufficient permissions for this resource. Role '${payload.role}' is not allowed.`);
+  const normalizedRole = String(payload.role || "").toLowerCase();
+
+  if (!["driver", "owner", "bus_driver", "pooling_driver", "service_center", "service_center_staff"].includes(normalizedRole)) {
+    throw new ApiError(403, "Insufficient permissions for this resource. Role: " + normalizedRole);
   }
 
-  if (String(payload.role || "").toLowerCase() === "owner") {
+  if (normalizedRole === "owner") {
     const owner = await Owner.findById(payload.sub);
 
     if (!owner) {
@@ -5158,18 +7531,14 @@ export const getDriverApprovalStatus = async (req, res) => {
     return;
   }
 
-  if (String(payload.role || "").toLowerCase() === "bus_driver") {
-    const BusDriver = mongoose.model('BusDriver');
+  if (normalizedRole === "bus_driver") {
     const busDriver = await BusDriver.findById(payload.sub);
 
     if (!busDriver) {
-      throw new ApiError(404, "Bus Driver not found");
+      throw new ApiError(404, "Bus driver not found");
     }
 
-    res.setHeader(
-      "Cache-Control",
-      "no-store, no-cache, must-revalidate, proxy-revalidate",
-    );
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
 
@@ -5177,14 +7546,102 @@ export const getDriverApprovalStatus = async (req, res) => {
       success: true,
       data: {
         id: busDriver._id,
-        name: busDriver.name,
-        phone: busDriver.phone,
+        name: busDriver.name || "",
+        phone: busDriver.phone || "",
         approve: busDriver.approve,
         status: busDriver.status,
-        documents: busDriver.documents || {},
+        documents: {},
         onboarding: busDriver.onboarding || {},
-        isOnline: busDriver.active,
+        rejectionReason: busDriver.rejectionReason || "",
+        isOnline: false,
         isOnRide: false,
+      },
+    });
+    return;
+  }
+
+  if (normalizedRole === "service_center") {
+    const center = await ServiceStore.findById(payload.sub);
+
+    if (!center) {
+      throw new ApiError(404, "Service center not found");
+    }
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    res.json({
+      success: true,
+      data: {
+        id: center._id,
+        name: center.name || "",
+        phone: center.owner_phone || "",
+        approve: center.approve,
+        status: center.approve === false ? "pending" : center.status,
+        documents: {},
+        onboarding: center.onboarding || {},
+        rejectionReason: center.rejectionReason || "",
+        isOnline: false,
+        isOnRide: false,
+      },
+    });
+    return;
+  }
+
+  if (normalizedRole === "service_center_staff") {
+    const staff = await ServiceCenterStaff.findById(payload.sub);
+
+    if (!staff) {
+      throw new ApiError(404, "Service staff not found");
+    }
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    res.json({
+      success: true,
+      data: {
+        id: staff._id,
+        name: staff.name || "",
+        phone: staff.phone || "",
+        approve: staff.approve,
+        status: staff.approve === false ? "pending" : staff.status,
+        documents: {},
+        onboarding: staff.onboarding || {},
+        rejectionReason: staff.rejectionReason || "",
+        isOnline: false,
+        isOnRide: false,
+      },
+    });
+    return;
+  }
+
+  if (normalizedRole === "pooling_driver") {
+    const poolingVehicle = await PoolingVehicle.findById(payload.sub).lean();
+
+    if (!poolingVehicle) {
+      throw new ApiError(404, "Pooling driver not found");
+    }
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    res.json({
+      success: true,
+      data: {
+        id: poolingVehicle._id,
+        name: poolingVehicle.driverName || "",
+        phone: poolingVehicle.phone || "",
+        approve: poolingVehicle.approve,
+        status: poolingVehicle.status,
+        documents: poolingVehicle.documents || {},
+        onboarding: poolingVehicle.onboarding || {},
+        rejectionReason: poolingVehicle.rejectionReason || "",
+        isOnline: poolingVehicle.isOnline || false,
+        isOnRide: poolingVehicle.isOnRide || false,
       },
     });
     return;
@@ -5237,12 +7694,12 @@ export const getDriverDocumentTemplates = async (_req, res) => {
     requestedRole === "owner-vehicle";
   const results = isFleetRequest
     ? await listDriverNeededDocuments({
-      activeOnly: true,
-      includeFields: true,
-    })
+        activeOnly: true,
+        includeFields: true,
+      })
     : isOwnerRequest
-      ? await listOwnerNeededDocuments()
-      : await listDriverNeededDocuments({
+    ? await listOwnerNeededDocuments()
+    : await listDriverNeededDocuments({
         activeOnly: true,
         includeFields: true,
       });
@@ -5255,36 +7712,36 @@ export const getDriverDocumentTemplates = async (_req, res) => {
         fields:
           item.image_type === "front_back"
             ? [
-              {
-                key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}_front`,
-                label: `${item.name} Front`,
-                side: "front",
-                required: item.is_required !== false,
-              },
-              {
-                key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}_back`,
-                label: `${item.name} Back`,
-                side: "back",
-                required: item.is_required !== false,
-              },
-            ]
+                {
+                  key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}_front`,
+                  label: `${item.name} Front`,
+                  side: "front",
+                  required: item.is_required !== false,
+                },
+                {
+                  key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}_back`,
+                  label: `${item.name} Back`,
+                  side: "back",
+                  required: item.is_required !== false,
+                },
+              ]
             : [
-              {
-                key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}`,
-                label:
-                  item.image_type === "front"
-                    ? `${item.name} Front`
-                    : item.image_type === "back"
-                      ? `${item.name} Back`
-                      : item.name,
-                side: item.image_type === "front" ? "front" : item.image_type === "back" ? "back" : "single",
-                required: item.is_required !== false,
-              },
-            ],
+                {
+                  key: `${String(item.name || "owner_document").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "owner_document"}_${String(item._id || "").replace(/[^a-zA-Z0-9]/g, "")}`,
+                  label:
+                    item.image_type === "front"
+                      ? `${item.name} Front`
+                      : item.image_type === "back"
+                        ? `${item.name} Back`
+                        : item.name,
+                  side: item.image_type === "front" ? "front" : item.image_type === "back" ? "back" : "single",
+                  required: item.is_required !== false,
+                },
+              ],
       }))
-        : isFleetRequest
-          ? results
-          : results,
+      : isFleetRequest
+        ? results
+      : results,
     },
   });
 };
@@ -5293,14 +7750,28 @@ export const getDriverVehicleFieldTemplates = async (req, res) => {
   const requestedRole = String(req.query?.role || "driver").trim().toLowerCase();
   const results = await listDriverVehicleFieldTemplates({ activeOnly: true });
   const matchesAccountType = (accountType) => {
-    const normalizedAccountType = String(accountType || "individual").trim().toLowerCase();
+    const rawAccountType = String(accountType || "").trim().toLowerCase();
+    const normalizedAccountType = rawAccountType || "individual";
+
+    if (requestedRole === "owner") {
+      if (!rawAccountType) {
+        return false;
+      }
+
+      return [
+        "fleet_drivers",
+        "fleet drivers",
+        "owner",
+        "owners",
+        "fleet_owner",
+        "fleet_owners",
+        "fleet owner",
+        "fleet owners",
+      ].includes(normalizedAccountType);
+    }
 
     if (normalizedAccountType === "both") {
       return true;
-    }
-
-    if (requestedRole === "owner") {
-      return normalizedAccountType === "fleet_drivers" || normalizedAccountType === "fleet drivers";
     }
 
     return normalizedAccountType === "individual";
@@ -5463,6 +7934,27 @@ export const getOwnerFleetVehicles = async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
+  const assignedDrivers = await Driver.find({
+    owner_id: owner._id,
+    deletedAt: null,
+    assignedFleetVehicleId: { $ne: null },
+  })
+    .select("name phone assignedFleetVehicleId")
+    .lean();
+
+  const assignedVehicleMap = new Map(
+    assignedDrivers
+      .filter((driver) => driver.assignedFleetVehicleId)
+      .map((driver) => [
+        String(driver.assignedFleetVehicleId),
+        {
+          id: String(driver._id),
+          name: driver.name || "",
+          phone: driver.phone || "",
+        },
+      ]),
+  );
+
   res.json({
     success: true,
     data: {
@@ -5488,8 +7980,58 @@ export const getOwnerFleetVehicles = async (req, res) => {
           "",
         transport_type: vehicle.transport_type || "taxi",
         active: vehicle.active,
+        assignedDriver: assignedVehicleMap.get(String(vehicle._id)) || null,
         createdAt: vehicle.createdAt,
         updatedAt: vehicle.updatedAt,
+      })),
+    },
+  });
+};
+
+export const getOwnerFleetZones = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Fleet zone access is only available for owner accounts",
+    );
+  }
+
+  const baseZoneQuery = {
+    active: { $ne: false },
+    status: { $ne: "inactive" },
+  };
+  const ownerScopedZoneQuery = owner.service_location_id
+    ? { ...baseZoneQuery, service_location_id: owner.service_location_id }
+    : baseZoneQuery;
+
+  let zones = await Zone.find(ownerScopedZoneQuery)
+    .select("name service_location_id active status")
+    .sort({ name: 1, createdAt: -1 })
+    .lean();
+
+  // Some admin-created zones are global or were created without the owner's exact
+  // service location linkage. Fall back so owners can still assign a valid zone.
+  if (!zones.length && owner.service_location_id) {
+    zones = await Zone.find(baseZoneQuery)
+      .select("name service_location_id active status")
+      .sort({ name: 1, createdAt: -1 })
+      .lean();
+  }
+
+  res.json({
+    success: true,
+    data: {
+      results: zones.map((zone) => ({
+        id: String(zone._id),
+        _id: String(zone._id),
+        name: zone.name || "",
+        service_location_id: zone.service_location_id
+          ? String(zone.service_location_id)
+          : "",
+        active: zone.active !== false,
+        status: zone.status || "active",
       })),
     },
   });
@@ -5530,9 +8072,9 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   ).trim();
   const number = String(
     req.body?.vehicleNumber ||
-    req.body?.number ||
-    req.body?.license_plate_number ||
-    "",
+      req.body?.number ||
+      req.body?.license_plate_number ||
+      "",
   )
     .trim()
     .toUpperCase();
@@ -5543,10 +8085,10 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   const nextDocuments = normalizeFleetVehicleDocuments(
     req.body?.documents || {},
     rcFile ||
-    req.body?.documents?.rc ||
-    req.body?.document ||
-    req.body?.file ||
-    "",
+      req.body?.documents?.rc ||
+      req.body?.document ||
+      req.body?.file ||
+      "",
   );
 
   if (!vehicleTypeId || !mongoose.isValidObjectId(vehicleTypeId)) {
@@ -5667,6 +8209,135 @@ export const deleteOwnerFleetVehicle = async (req, res) => {
   });
 };
 
+export const getOwnerPoolingVehicles = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicles = await PoolingVehicle.find({ ownerId: owner._id })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  res.json({
+    success: true,
+    data: vehicles,
+    message: "Owner pooling vehicles fetched successfully",
+  });
+};
+
+export const createOwnerPoolingVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const body = req.body || {};
+  const vehicle = await PoolingVehicle.create({
+    name: String(body.name || "").trim(),
+    vehicleModel: String(body.vehicleModel || "").trim(),
+    vehicleNumber: String(body.vehicleNumber || "").trim(),
+    driverName: String(body.driverName || "").trim(),
+    driverPhone: String(body.driverPhone || "").trim(),
+    color: String(body.color || "").trim(),
+    capacity: Math.max(1, Number(body.capacity || 1) || 1),
+    vehicleType: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'].includes(String(body.vehicleType || ''))
+      ? String(body.vehicleType)
+      : 'sedan',
+    blueprint: body.blueprint || {},
+    images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
+    ownerId: owner._id,
+    approve: false,
+    status: 'pending',
+    poolingEnabled: true,
+    adminCommissionPercentage: 0,
+    ownerCommissionPercentage: 0,
+    serviceTaxPercentage: 0,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: vehicle,
+    message: "Pooling vehicle created successfully",
+  });
+};
+
+export const updateOwnerPoolingVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const body = req.body || {};
+  const vehicle = await PoolingVehicle.findOneAndUpdate(
+      { _id: req.params.vehicleId, ownerId: owner._id },
+      {
+        name: String(body.name || "").trim(),
+        vehicleModel: String(body.vehicleModel || "").trim(),
+        vehicleNumber: String(body.vehicleNumber || "").trim(),
+        driverName: String(body.driverName || "").trim(),
+        driverPhone: String(body.driverPhone || "").trim(),
+        color: String(body.color || "").trim(),
+        capacity: Math.max(1, Number(body.capacity || 1) || 1),
+        vehicleType: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'].includes(String(body.vehicleType || ''))
+          ? String(body.vehicleType)
+          : 'sedan',
+        blueprint: body.blueprint || {},
+        images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
+        ownerId: owner._id,
+      },
+      { returnDocument: 'after', runValidators: true },
+    );
+
+  if (!vehicle) {
+    throw new ApiError(404, "Pooling vehicle not found");
+  }
+
+  res.json({
+    success: true,
+    data: vehicle,
+    message: "Pooling vehicle updated successfully",
+  });
+};
+
+export const deleteOwnerPoolingVehicle = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(
+      403,
+      "Pooling vehicle access is only available for owner accounts",
+    );
+  }
+
+  const vehicle = await PoolingVehicle.findOneAndDelete({
+    _id: req.params.vehicleId,
+    ownerId: owner._id,
+  });
+
+  if (!vehicle) {
+    throw new ApiError(404, "Pooling vehicle not found");
+  }
+
+  res.json({
+    success: true,
+    data: { deleted: true },
+    message: "Pooling vehicle deleted successfully",
+  });
+};
+
 export const getOwnerFleetDrivers = async (req, res) => {
   const owner = await resolveAuthenticatedOwner(req);
 
@@ -5678,8 +8349,13 @@ export const getOwnerFleetDrivers = async (req, res) => {
   }
 
   const drivers = await Driver.find({ owner_id: owner._id, deletedAt: null })
+    .populate(
+      "assignedFleetVehicleId",
+      "vehicle_type_id car_brand car_model license_plate_number car_color status",
+    )
+    .populate("zoneId", "name service_location_id")
     .sort({ createdAt: -1 })
-    .select("name phone email city salary approve status isOnline isOnRide createdAt")
+    .select("name phone email city salary approve status isOnline isOnRide createdAt assignedFleetVehicleId zoneId")
     .lean();
 
   res.json({
@@ -5692,6 +8368,30 @@ export const getOwnerFleetDrivers = async (req, res) => {
         email: driver.email || "",
         city: driver.city || "",
         salary: Number(driver.salary || 0),
+        assignedVehicle: driver.assignedFleetVehicleId
+          ? {
+              vehicleId: String(driver.assignedFleetVehicleId._id || ""),
+              name: [
+                driver.assignedFleetVehicleId.car_brand,
+                driver.assignedFleetVehicleId.car_model,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .trim(),
+              number: driver.assignedFleetVehicleId.license_plate_number || "",
+              color: driver.assignedFleetVehicleId.car_color || "",
+              status: driver.assignedFleetVehicleId.status || "pending",
+            }
+          : null,
+        zone: driver.zoneId
+          ? {
+              zoneId: String(driver.zoneId._id || ""),
+              name: driver.zoneId.name || "",
+              service_location_id: driver.zoneId.service_location_id
+                ? String(driver.zoneId.service_location_id)
+                : "",
+            }
+          : null,
         approve: driver.approve,
         status: driver.status,
         isOnline: Boolean(driver.isOnline),
@@ -5717,6 +8417,9 @@ export const createOwnerFleetDriver = async (req, res) => {
   const email = String(req.body?.email || "")
     .trim()
     .toLowerCase();
+  const salaryValue = Number(
+    req.body?.salary ?? req.body?.monthly_salary ?? req.body?.monthlySalary ?? 0,
+  );
 
   if (!name) {
     throw new ApiError(400, "name is required");
@@ -5724,6 +8427,10 @@ export const createOwnerFleetDriver = async (req, res) => {
 
   if (!/^\d{10}$/.test(phone)) {
     throw new ApiError(400, "A valid 10-digit mobile number is required");
+  }
+
+  if (!Number.isFinite(salaryValue) || salaryValue < 0) {
+    throw new ApiError(400, "A valid non-negative salary is required");
   }
 
   const existing = await Driver.findOne({ phone }).lean();
@@ -5736,10 +8443,10 @@ export const createOwnerFleetDriver = async (req, res) => {
     : null;
   const coordinates =
     Array.isArray(serviceLocation?.location?.coordinates) &&
-      serviceLocation.location.coordinates.length === 2
+    serviceLocation.location.coordinates.length === 2
       ? serviceLocation.location.coordinates
       : typeof serviceLocation?.longitude === "number" &&
-        typeof serviceLocation?.latitude === "number"
+          typeof serviceLocation?.latitude === "number"
         ? [serviceLocation.longitude, serviceLocation.latitude]
         : [75.8577, 22.7196];
 
@@ -5797,10 +8504,10 @@ export const getOwnerFleetDashboard = async (req, res) => {
   const [serviceLocation, drivers, vehicles] = await Promise.all([
     owner.service_location_id
       ? ServiceLocation.findById(owner.service_location_id)
-        .select(
-          "name service_location_name address city status active latitude longitude location currency_symbol currency_code timezone",
-        )
-        .lean()
+          .select(
+            "name service_location_name address city status active latitude longitude location currency_symbol currency_code timezone",
+          )
+          .lean()
       : null,
     Driver.find({ owner_id: owner._id, deletedAt: null })
       .select("name phone email city approve status isOnline isOnRide createdAt")
@@ -6144,24 +8851,24 @@ export const getOwnerFleetDashboard = async (req, res) => {
       },
       serviceLocation: serviceLocation
         ? {
-          id: String(serviceLocation._id),
-          name:
-            serviceLocation.service_location_name ||
-            serviceLocation.name ||
-            "",
-          address: serviceLocation.address || "",
-          status: serviceLocation.status || "active",
-          active: serviceLocation.active !== false,
-          latitude: Number(serviceLocation.latitude || 0),
-          longitude: Number(serviceLocation.longitude || 0),
-          currencySymbol:
-            serviceLocation.currency_symbol &&
-              serviceLocation.currency_symbol !== "₹"
-              ? serviceLocation.currency_symbol
-              : "₹",
-          currencyCode: serviceLocation.currency_code || "INR",
-          timezone: serviceLocation.timezone || "Asia/Kolkata",
-        }
+            id: String(serviceLocation._id),
+            name:
+              serviceLocation.service_location_name ||
+              serviceLocation.name ||
+              "",
+            address: serviceLocation.address || "",
+            status: serviceLocation.status || "active",
+            active: serviceLocation.active !== false,
+            latitude: Number(serviceLocation.latitude || 0),
+            longitude: Number(serviceLocation.longitude || 0),
+            currencySymbol:
+              serviceLocation.currency_symbol &&
+              serviceLocation.currency_symbol !== "â‚¹"
+                ? serviceLocation.currency_symbol
+                : "₹",
+            currencyCode: serviceLocation.currency_code || "INR",
+            timezone: serviceLocation.timezone || "Asia/Kolkata",
+          }
         : null,
       fleet: {
         totalDrivers: drivers.length,
@@ -6402,17 +9109,17 @@ export const getOwnerBusBookings = async (req, res) => {
 
   const seatLayout = selectedBus
     ? flattenBusBlueprintSeats(selectedBus.blueprint).map((seat) => {
-      const booked = seatBookingMap.get(String(seat.id || ""));
-      return {
-        seatId: seat.id || "",
-        seatLabel: seat.label || seat.id || "",
-        variant: seat.variant || "seat",
-        price: resolveOwnerBusSeatPrice(selectedBus, seat),
-        baseStatus: seat.status || "available",
-        liveStatus: booked ? "booked" : seat.status === "blocked" ? "blocked" : "available",
-        booking: booked || null,
-      };
-    })
+        const booked = seatBookingMap.get(String(seat.id || ""));
+        return {
+          seatId: seat.id || "",
+          seatLabel: seat.label || seat.id || "",
+          variant: seat.variant || "seat",
+          price: resolveOwnerBusSeatPrice(selectedBus, seat),
+          baseStatus: seat.status || "available",
+          liveStatus: booked ? "booked" : seat.status === "blocked" ? "blocked" : "available",
+          booking: booked || null,
+        };
+      })
     : [];
 
   const summary = bookings.reduce(
@@ -6464,13 +9171,13 @@ export const getOwnerBusBookings = async (req, res) => {
       })),
       selectedBus: selectedBus
         ? {
-          id: String(selectedBus._id),
-          busName: selectedBus.busName || "",
-          operatorName: selectedBus.operatorName || "",
-          serviceNumber: selectedBus.serviceNumber || "",
-          route: selectedBus.route || {},
-          schedules: selectedSchedules,
-        }
+            id: String(selectedBus._id),
+            busName: selectedBus.busName || "",
+            operatorName: selectedBus.operatorName || "",
+            serviceNumber: selectedBus.serviceNumber || "",
+            route: selectedBus.route || {},
+            schedules: selectedSchedules,
+          }
         : null,
       schedules: selectedSchedules,
       summary,
@@ -6760,6 +9467,18 @@ export const updateOwnerFleetDriver = async (req, res) => {
     req.body?.salary ?? req.body?.monthly_salary ?? req.body?.monthlySalary ?? 0,
   );
   const city = String(req.body?.city || req.body?.address || "").trim();
+  const requestedAssignedVehicleId = String(
+    req.body?.assignedFleetVehicleId ??
+      req.body?.assignedVehicleId ??
+      req.body?.vehicleId ??
+      "",
+  ).trim();
+  const requestedZoneId = String(
+    req.body?.zoneId ??
+      req.body?.zone_id ??
+      req.body?.assignedZoneId ??
+      "",
+  ).trim();
 
   if (!name) {
     throw new ApiError(400, "name is required");
@@ -6781,11 +9500,96 @@ export const updateOwnerFleetDriver = async (req, res) => {
     throw new ApiError(409, "Phone number is already registered");
   }
 
+  let assignedVehicle = null;
+  let assignedZone = null;
+  if (requestedAssignedVehicleId) {
+    if (!mongoose.isValidObjectId(requestedAssignedVehicleId)) {
+      throw new ApiError(400, "A valid assigned vehicle id is required");
+    }
+
+    assignedVehicle = await FleetVehicle.findOne({
+      _id: requestedAssignedVehicleId,
+      owner_id: owner._id,
+      active: true,
+    })
+      .populate("vehicle_type_id", "name type_name transport_type icon_types")
+      .lean();
+
+    if (!assignedVehicle) {
+      throw new ApiError(404, "Assigned vehicle not found for this owner");
+    }
+
+    const alreadyAssigned = await Driver.findOne({
+      owner_id: owner._id,
+      deletedAt: null,
+      assignedFleetVehicleId: assignedVehicle._id,
+      _id: { $ne: driver._id },
+    })
+      .select("name")
+      .lean();
+
+    if (alreadyAssigned) {
+      throw new ApiError(
+        409,
+        `Vehicle is already assigned to ${alreadyAssigned.name || "another driver"}`,
+      );
+    }
+  }
+
+  if (requestedZoneId) {
+    if (!mongoose.isValidObjectId(requestedZoneId)) {
+      throw new ApiError(400, "A valid zone id is required");
+    }
+
+    const baseAssignedZoneQuery = {
+      _id: requestedZoneId,
+      active: { $ne: false },
+      status: { $ne: "inactive" },
+    };
+
+    assignedZone = await Zone.findOne({
+      ...baseAssignedZoneQuery,
+      ...(owner.service_location_id
+        ? { service_location_id: owner.service_location_id }
+        : {}),
+    })
+      .select("_id name service_location_id")
+      .lean();
+
+    if (!assignedZone && owner.service_location_id) {
+      assignedZone = await Zone.findOne(baseAssignedZoneQuery)
+        .select("_id name service_location_id")
+        .lean();
+    }
+
+    if (!assignedZone) {
+      throw new ApiError(404, "Assigned zone not found for this owner");
+    }
+  }
+
   driver.name = name;
   driver.phone = phone;
   driver.email = email;
   driver.city = city || driver.city || "";
   driver.salary = salaryValue;
+  driver.assignedFleetVehicleId = assignedVehicle?._id || null;
+  driver.zoneId = assignedZone?._id || null;
+
+  if (assignedVehicle) {
+    driver.vehicleTypeId = assignedVehicle.vehicle_type_id?._id || null;
+    driver.vehicleMake = assignedVehicle.car_brand || "";
+    driver.vehicleModel = assignedVehicle.car_model || "";
+    driver.vehicleNumber = assignedVehicle.license_plate_number || "";
+    driver.vehicleColor = assignedVehicle.car_color || "";
+    driver.vehicleIconType =
+      assignedVehicle.vehicle_type_id?.icon_types || driver.vehicleIconType || "car";
+  } else {
+    driver.vehicleTypeId = null;
+    driver.vehicleMake = "";
+    driver.vehicleModel = "";
+    driver.vehicleNumber = "";
+    driver.vehicleColor = "";
+  }
 
   await driver.save();
 
@@ -6799,6 +9603,27 @@ export const updateOwnerFleetDriver = async (req, res) => {
       email: driver.email || "",
       city: driver.city || "",
       salary: Number(driver.salary || 0),
+      assignedVehicle: assignedVehicle
+        ? {
+            vehicleId: String(assignedVehicle._id),
+            name: [assignedVehicle.car_brand, assignedVehicle.car_model]
+              .filter(Boolean)
+              .join(" ")
+              .trim(),
+            number: assignedVehicle.license_plate_number || "",
+            color: assignedVehicle.car_color || "",
+            status: assignedVehicle.status || "pending",
+          }
+        : null,
+      zone: assignedZone
+        ? {
+            zoneId: String(assignedZone._id),
+            name: assignedZone.name || "",
+            service_location_id: assignedZone.service_location_id
+              ? String(assignedZone.service_location_id)
+              : "",
+          }
+        : null,
       approve: driver.approve,
       status: driver.status,
       isOnline: Boolean(driver.isOnline),
@@ -6818,6 +9643,54 @@ export const verifyDriverLoginOtpRequest = async (req, res) => {
   res.json({ success: true, data: result });
 };
 
+export const startPoolingOnboardingRequest = async (req, res) => {
+  const result = await startPoolingDriverOnboarding(req.body);
+  res.status(201).json({ success: true, data: result });
+};
+
+export const verifyPoolingOnboardingOtpRequest = async (req, res) => {
+  const result = await verifyPoolingDriverOnboardingOtp(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const getPoolingOnboardingSessionRequest = async (req, res) => {
+  const result = await getPoolingDriverOnboardingSession({
+    registrationId: req.params.registrationId,
+    phone: req.query.phone,
+  });
+  res.json({ success: true, data: result });
+};
+
+export const savePoolingOnboardingDetailsRequest = async (req, res) => {
+  const result = await savePoolingDriverOnboardingDetails(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const completePoolingOnboardingRequest = async (req, res) => {
+  const result = await completePoolingDriverOnboarding(req.body);
+  res.status(201).json({ success: true, data: result });
+};
+
+export const uploadPoolingOnboardingImageRequest = async (req, res) => {
+  const image = String(req.body?.image || "").trim();
+
+  if (!image) {
+    throw new ApiError(400, "Image data is required");
+  }
+
+  const result = await uploadDataUrlToCloudinary({
+    dataUrl: image,
+    publicIdPrefix: "pooling-driver-onboarding",
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      url: result.secureUrl,
+    },
+  });
+};
+
 export const startOnboarding = async (req, res) => {
   const result = await startDriverOnboarding(req.body);
   res.status(201).json({ success: true, data: result });
@@ -6825,6 +9698,21 @@ export const startOnboarding = async (req, res) => {
 
 export const verifyOnboardingOtp = async (req, res) => {
   const result = await verifyDriverOtp(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const saveOnboardingRole = async (req, res) => {
+  const result = await setDriverOnboardingRole(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const getOnboardingSignupOptions = async (_req, res) => {
+  const result = await getDriverOnboardingSignupOptions();
+  res.json({ success: true, data: result });
+};
+
+export const saveOnboardingRoleDetails = async (req, res) => {
+  const result = await saveDriverRoleDetails(req.body);
   res.json({ success: true, data: result });
 };
 
@@ -6840,6 +9728,19 @@ export const saveOnboardingReferral = async (req, res) => {
 
 export const saveOnboardingVehicle = async (req, res) => {
   const result = await saveDriverVehicle(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const verifyOnboardingVehicleRc = async (req, res) => {
+  const result = await verifyDriverVehicleRc(req.body);
+  res.json({ success: true, data: result });
+};
+
+export const verifyOnboardingLicenseDocument = async (req, res) => {
+  const result = await verifyDriverOnboardingLicenseDocument({
+    ...req.body,
+    documentKey: req.params.documentKey,
+  });
   res.json({ success: true, data: result });
 };
 

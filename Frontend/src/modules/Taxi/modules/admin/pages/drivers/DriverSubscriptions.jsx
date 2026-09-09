@@ -15,18 +15,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 
-const ToggleSwitch = ({ label, enabled, onToggle }) => (
-  <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl shadow-sm flex-1 min-w-[280px]">
-    <span className="text-sm font-semibold text-gray-700">{label}</span>
-    <button 
-      onClick={onToggle}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-    </button>
-  </div>
-);
-
 const DriverSubscriptions = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +22,8 @@ const DriverSubscriptions = () => {
     mode: 'commissionOnly' // commissionOnly, subscriptionOnly, both
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ status: '', type: '' });
   const [plans, setPlans] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -91,7 +81,7 @@ const DriverSubscriptions = () => {
           <span className="text-gray-700">Subscription</span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Subscription</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Subscription</h1>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
               <Download size={15} /> Export List
@@ -146,28 +136,61 @@ const DriverSubscriptions = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            <button className="bg-orange-500 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm uppercase tracking-wide">
-              <Filter size={14} /> Filters
+          <div className="flex items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors ml-auto md:ml-0"
+            >
+              <Filter size={16} /> Filters
             </button>
-            <div className="relative">
+            <div className="relative flex-1 md:flex-none">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input 
                 type="text" 
                 placeholder="Search plans..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-56 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg md:w-56 focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
               />
             </div>
             <button 
               onClick={() => navigate('/taxi/admin/drivers/subscription/create')}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-black font-semibold bg-yellow-400 rounded-lg shadow-sm hover:bg-yellow-500 transition-colors whitespace-nowrap"
             >
-               <Plus size={15} /> Add Subscription
+               <Plus size={16} /> Add Subscription
             </button>
           </div>
         </div>
+
+        {/* Filters Panel */}
+        {showFilters && (
+          <div className="mx-4 mt-2 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
+              <select 
+                value={filters.status}
+                onChange={(e) => setFilters({...filters, status: e.target.value})}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
+              >
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Transport Type</label>
+              <select 
+                value={filters.type}
+                onChange={(e) => setFilters({...filters, type: e.target.value})}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
+              >
+                <option value="">All</option>
+                <option value="taxi">Taxi</option>
+                <option value="delivery">Delivery</option>
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* TABLE */}
         <div className="overflow-x-auto">

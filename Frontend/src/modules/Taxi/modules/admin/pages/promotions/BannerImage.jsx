@@ -12,8 +12,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getUnifiedAdminToken } from '../../services/adminSession';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 const Motion = motion;
 const LIST_PATH = '/admin/promotions/banner-image';
@@ -36,30 +34,72 @@ const BannerImage = () => {
   const [formData, setFormData] = useState(createInitialFormData);
   const [imagePreview, setImagePreview] = useState(null);
 
-  const token = getUnifiedAdminToken() || '';
-  const baseUrl = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/admin';
+  const token = localStorage.getItem('adminToken') || '';
+  const baseUrl = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
 
   const resolveImageUrl = useCallback(
     (img) => {
       if (!img) return null;
       if (img.startsWith('data:') || img.startsWith('http')) return img;
-      const rootUrl = baseUrl.replace('/api/v1/taxi/admin', '');
+      const rootUrl = baseUrl.replace('/api/v1/admin', '');
       return `${rootUrl}/${img.startsWith('/') ? img.slice(1) : img}`;
     },
     [baseUrl],
   );
 
+  const syncBannersToHomeSettings = useCallback(async (bannersList) => {
+    if (!token) return;
+    try {
+      const homeRes = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/general-settings/user-home-management`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!homeRes.ok) return;
+      const homeData = await homeRes.json();
+      const currentSettings = homeData.settings || {};
+
+      const nextPromos = bannersList.map((b, idx) => ({
+        id: b._id || b.id || String(idx + 1),
+        title: b.title || 'Experience A New Standard With Appzeto',
+        subtitle: b.subtitle || 'A premier private hire service where luxury and reliability converge.',
+        imageUrl: b.image || '',
+        image: b.image || '',
+        route: b.redirect_url || b.external_link || b.deep_link || '/taxi/user/ride/select-location',
+        status: b.active !== false ? 'active' : 'inactive',
+        order: idx + 1
+      }));
+
+      const updatedSettings = {
+        ...currentSettings,
+        promos: nextPromos
+      };
+
+      await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/general-settings/user-home-management`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({ settings: updatedSettings })
+      });
+    } catch (error) {
+      console.error('Failed to sync banners to home settings:', error);
+    }
+  }, [token]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const bootstrapRes = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/promotions/bootstrap`, {
+      const bootstrapRes = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/promotions/bootstrap`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (bootstrapRes.ok) {
         const bootstrapData = await bootstrapRes.json();
         if (bootstrapData.success) {
-          setBanners(bootstrapData.data?.banners || []);
+          const items = bootstrapData.data?.banners || [];
+          setBanners(items);
+          syncBannersToHomeSettings(items);
           return;
         }
       }
@@ -73,6 +113,7 @@ const BannerImage = () => {
         if (data.success) {
           const items = data.data?.results || (Array.isArray(data.data) ? data.data : data.results || []);
           setBanners(items);
+          syncBannersToHomeSettings(items);
         } else {
           setBanners([]);
         }
@@ -85,7 +126,7 @@ const BannerImage = () => {
     } finally {
       setLoading(false);
     }
-  }, [baseUrl, token]);
+  }, [baseUrl, token, syncBannersToHomeSettings]);
 
   useEffect(() => {
     fetchData();
@@ -131,11 +172,12 @@ const BannerImage = () => {
       let imageData = formData.use_url ? formData.image_url.trim() : '';
 
       if (!formData.use_url && formData.image instanceof File) {
-        const uploadResult = await uploadService.uploadImageFile(formData.image, 'promotions/banners');
-        imageData = uploadResult?.secureUrl || uploadResult?.url || '';
-        if (!imageData) {
-          throw new Error('Banner image upload failed');
-        }
+        imageData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(formData.image);
+        });
       }
 
       const payload = {
@@ -201,9 +243,11 @@ const BannerImage = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setBanners((current) =>
-          current.map((banner) => ((banner._id || banner.id) === id ? { ...banner, active: !item.active } : banner)),
-        );
+        setBanners((current) => {
+          const nextBanners = current.map((banner) => ((banner._id || banner.id) === id ? { ...banner, active: !item.active } : banner));
+          syncBannersToHomeSettings(nextBanners);
+          return nextBanners;
+        });
       }
     } catch (error) {
       console.error('Banner status toggle error:', error);
@@ -453,4 +497,3 @@ const BannerImage = () => {
 };
 
 export default BannerImage;
-

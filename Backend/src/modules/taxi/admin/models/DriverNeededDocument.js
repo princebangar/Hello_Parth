@@ -46,6 +46,13 @@ const driverNeededDocumentSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    verification_type: {
+      type: String,
+      enum: ['none', 'driving_license', 'pan', 'gstin', 'rc'],
+      default: 'none',
+      trim: true,
+      index: true,
+    },
     is_editable: {
       type: Boolean,
       default: false,

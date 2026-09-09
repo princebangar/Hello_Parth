@@ -16,11 +16,13 @@ import {
   ShieldCheck, 
   ChevronRight
 } from 'lucide-react';
-import { GoogleMap, MarkerF, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
-import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../../admin/utils/googleMaps';
+import { GoogleMap, OverlayView, OverlayViewF, PolylineF } from '@react-google-maps/api';
+import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
+import { subscribeRideRealtime } from '../../../../shared/services/rideRealtime';
+import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
 import { clearCurrentRide, getCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 
 // Assets (Using the same icons as RideTracking)
@@ -35,6 +37,11 @@ const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
 const ACTIVE_RIDE_VALIDATE_MS = 4000;
 const COMPLETED_TRACKING_STATUSES = new Set(['completed', 'delivered']);
 const TIP_OPTIONS = [0, 20, 50, 100];
+const ROUTE_REFRESH_MIN_DISTANCE_METERS = 30;
+const ROUTE_REFRESH_MIN_INTERVAL_MS = 4000;
+const ROUTE_PROGRESS_CAPTURE_METERS = 40;
+const ROUTE_DESTINATION_CHANGE_METERS = 15;
+const MAX_ROUTE_CACHE_ENTRIES = 120;
 
 const toLatLng = (coords, fallback = DEFAULT_CENTER) => {
   const [lng, lat] = coords || [];
@@ -48,6 +55,24 @@ const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
+
+const toRadians = (value) => Number(value || 0) * (Math.PI / 180);
+
+const getDistanceMeters = (first, second) => {
+  if (!first || !second) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const deltaLat = toRadians(Number(second.lat) - Number(first.lat));
+  const deltaLng = toRadians(Number(second.lng) - Number(first.lng));
+  const startLat = toRadians(first.lat);
+  const endLat = toRadians(second.lat);
+  const haversine = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
 
 const normalizeHeading = (value, fallback = 0) => {
   const numeric = Number(value);
@@ -92,6 +117,20 @@ const RotatingVehicleMarker = ({ position, iconUrl = deliveryIcon, heading = 0, 
   </OverlayViewF>
 );
 
+const CircleLocationMarker = ({ position, color = '#ef4444', size = 14, title = 'Destination' }) => (
+  <OverlayViewF
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    getPixelPositionOffset={() => ({ x: -(size / 2), y: -(size / 2) })}
+  >
+    <div
+      title={title}
+      className="pointer-events-none rounded-full border-2 border-white shadow-[0_3px_10px_rgba(15,23,42,0.25)]"
+      style={{ width: size, height: size, backgroundColor: color }}
+    />
+  </OverlayViewF>
+);
+
 const getTrackingVehicleIcon = (ride, driver) => {
   const customIcon = String(
     ride?.vehicleIconUrl ||
@@ -102,7 +141,7 @@ const getTrackingVehicleIcon = (ride, driver) => {
     driver?.icon ||
     '',
   ).trim();
-  if (customIcon) return resolveAssetUrl(customIcon);
+  if (customIcon) return customIcon;
   const iconType = String(ride?.vehicleIconType || driver?.vehicleIconType || driver?.vehicleType || '').toLowerCase();
   if (iconType.includes('bike')) return bikeIcon;
   if (iconType.includes('auto')) return autoIcon;
@@ -138,6 +177,52 @@ const getInitials = (name = '') =>
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || '')
     .join('') || 'DC';
+const getRouteCacheKey = (origin, destination) => {
+  const serializePoint = (point) =>
+    point ? `${Number(point.lat || 0).toFixed(5)},${Number(point.lng || 0).toFixed(5)}` : '';
+
+  return `${serializePoint(origin)}|${serializePoint(destination)}`;
+};
+
+const trimRoutePathFromPosition = (path = [], position) => {
+  if (!Array.isArray(path) || path.length < 2 || !position) {
+    return null;
+  }
+
+  let nearestIndex = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  path.forEach((point, index) => {
+    const distance = getDistanceMeters(position, point);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  if (nearestIndex < 0 || nearestDistance > ROUTE_PROGRESS_CAPTURE_METERS) {
+    return null;
+  }
+
+  if (nearestIndex >= path.length - 1) {
+    return [position];
+  }
+
+  return [position, ...path.slice(nearestIndex + 1)];
+};
+
+const rememberRouteCacheEntry = (cache, key, value) => {
+  cache.set(key, value);
+
+  if (cache.size <= MAX_ROUTE_CACHE_ENTRIES) {
+    return;
+  }
+
+  const firstKey = cache.keys().next().value;
+  if (firstKey) {
+    cache.delete(firstKey);
+  }
+};
 
 const ParcelTracking = () => {
   const navigate = useNavigate();
@@ -155,6 +240,7 @@ const ParcelTracking = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [shareToast, setShareToast] = useState(false);
   const [map, setMap] = useState(null);
+  const [socketRealtimeHealthy, setSocketRealtimeHealthy] = useState(() => socketService.isConnected());
   const [rating, setRating] = useState(() => Number(state.feedback?.rating || 0));
   const [comment, setComment] = useState(() => state.feedback?.comment || '');
   const [selectedTip, setSelectedTip] = useState(() => Number(state.feedback?.tipAmount || 0));
@@ -165,13 +251,19 @@ const ParcelTracking = () => {
     enable_tips: '1',
     min_tip_amount: '10',
   });
-  const { isLoaded, loadError } = useAppGoogleMapsLoader();
+  const { isLoaded, loadError } = useBaseGoogleMapsLoader();
   const latestStateRef = useRef(state);
   const latestDriverRef = useRef(state.driver || {});
   const latestRideRealtimeRef = useRef(null);
   const hydrateRideStateRef = useRef(async () => {});
   const hasAutoFramedMapRef = useRef(false);
   const hasCompletedRedirectRef = useRef(false);
+  const routeCacheRef = useRef(new Map());
+  const lastResolvedRouteRef = useRef({
+    origin: null,
+    destination: null,
+    resolvedAt: 0,
+  });
 
   const rideId = state.rideId || '';
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
@@ -244,14 +336,14 @@ const ParcelTracking = () => {
 
   useEffect(() => {
     const feedback = rideRealtime?.feedback || state.feedback || null;
-    if (!feedback || !feedback.submittedAt) {
+    if (!feedback) {
       return;
     }
 
     setRating(Number(feedback.rating || 0));
     setComment(feedback.comment || '');
     setSelectedTip(Number(feedback.tipAmount || 0));
-    setIsFeedbackSubmitted(true);
+    setIsFeedbackSubmitted(Boolean(feedback.submittedAt));
   }, [rideRealtime?.feedback, state.feedback]);
 
   useEffect(() => {
@@ -404,7 +496,10 @@ const ParcelTracking = () => {
   useEffect(() => {
     if (!rideId) return;
     const socket = socketService.connect({ role: 'user' });
-    if (!socket) return;
+    if (!socket) {
+      setSocketRealtimeHealthy(false);
+      return;
+    }
 
     const onRideState = (payload) => {
       if (String(payload?.rideId) !== String(rideId)) {
@@ -534,11 +629,21 @@ const ParcelTracking = () => {
     socketService.on('ride:driver-location:updated', onLocationUpdated);
     socketService.on('ride:status:updated', onStatusUpdated);
     socketService.emit('ride:join', { rideId });
+    setSocketRealtimeHealthy(socket.connected);
+    const onSocketConnect = () => setSocketRealtimeHealthy(true);
+    const onSocketDisconnect = () => setSocketRealtimeHealthy(false);
+    const onSocketConnectError = () => setSocketRealtimeHealthy(false);
+    socket.on('connect', onSocketConnect);
+    socket.on('disconnect', onSocketDisconnect);
+    socket.on('connect_error', onSocketConnectError);
 
     return () => {
       socketService.off('ride:state', onRideState);
       socketService.off('ride:driver-location:updated', onLocationUpdated);
       socketService.off('ride:status:updated', onStatusUpdated);
+      socket.off('connect', onSocketConnect);
+      socket.off('disconnect', onSocketDisconnect);
+      socket.off('connect_error', onSocketConnectError);
     };
   }, [rideId, navigate, routePrefix, userHomeRoute]);
 
@@ -555,9 +660,63 @@ const ParcelTracking = () => {
     navigate(userHomeRoute, { replace: true });
   }, [navigate, tripStatus, userHomeRoute]);
 
+  useEffect(() => {
+    if (!rideId || socketRealtimeHealthy) {
+      return () => {};
+    }
+
+    return subscribeRideRealtime(
+      rideId,
+      (payload) => {
+        if (!payload || String(payload.rideId || '') !== String(rideId)) {
+          return;
+        }
+
+        const nextStatus = String(payload.liveStatus || payload.status || 'accepted').toLowerCase();
+        const mergedDriver = mergeDriverSnapshot(latestDriverRef.current, payload.driver || {});
+
+        setRideRealtime((prev) => ({
+          ...(prev || {}),
+          pickup: payload.pickup || prev?.pickup || {
+            coordinates: latestStateRef.current.pickupCoords,
+            address: latestStateRef.current.pickup || 'Pickup',
+          },
+          drop: payload.drop || prev?.drop || {
+            coordinates: latestStateRef.current.dropCoords,
+            address: latestStateRef.current.drop || 'Drop',
+          },
+          driverLocation: payload.driverLocation || prev?.driverLocation || latestRideRealtimeRef.current?.driverLocation || null,
+          status: payload.liveStatus || payload.status || prev?.status || 'accepted',
+          fare: payload.fare || prev?.fare || latestStateRef.current.fare || 0,
+          paymentMethod: payload.paymentMethod || prev?.paymentMethod || latestStateRef.current.paymentMethod || 'Cash',
+          vehicleIconType: payload.vehicleIconType || prev?.vehicleIconType || latestStateRef.current.vehicleIconType || '',
+          vehicleIconUrl: payload.vehicleIconUrl || prev?.vehicleIconUrl || latestStateRef.current.vehicleIconUrl || '',
+          otp: payload.otp || prev?.otp || latestStateRef.current.otp || '',
+          completedAt: payload.completedAt || prev?.completedAt || null,
+          feedback: payload.feedback || prev?.feedback || null,
+          driver: mergedDriver,
+        }));
+
+        if (COMPLETED_TRACKING_STATUSES.has(nextStatus)) {
+          saveCurrentRide({
+            ...latestStateRef.current,
+            ...payload,
+            rideId,
+            driver: mergedDriver,
+            status: nextStatus,
+            liveStatus: nextStatus,
+            completedAt: payload.completedAt || Date.now(),
+            feedback: payload.feedback || null,
+          });
+        }
+      },
+      () => {},
+    );
+  }, [rideId, socketRealtimeHealthy]);
+
   // Route Path Update
   useEffect(() => {
-    if (!isLoaded || !window.google?.maps?.DirectionsService) {
+    if (!isLoaded || !window.google?.maps?.importLibrary) {
       setRoutePath(arePositionsNearlyEqual(driverPosition, activeDestination) ? [driverPosition] : [driverPosition, activeDestination]);
       return;
     }
@@ -567,30 +726,78 @@ const ParcelTracking = () => {
       return;
     }
 
+    const trimmedRoutePath = trimRoutePathFromPosition(routePath, driverPosition);
+    if (trimmedRoutePath) {
+      const currentFirstPoint = routePath[0];
+      const nextFirstPoint = trimmedRoutePath[0];
+      const shouldUpdateRoutePath = routePath.length !== trimmedRoutePath.length ||
+        !arePositionsNearlyEqual(currentFirstPoint, nextFirstPoint, 0.00001);
+
+      if (shouldUpdateRoutePath) {
+        setRoutePath(trimmedRoutePath);
+      }
+    }
+
+    const now = Date.now();
+    const lastResolvedRoute = lastResolvedRouteRef.current;
+    const destinationChanged = !lastResolvedRoute.destination ||
+      getDistanceMeters(lastResolvedRoute.destination, activeDestination) > ROUTE_DESTINATION_CHANGE_METERS;
+    const movedEnough = !lastResolvedRoute.origin ||
+      getDistanceMeters(lastResolvedRoute.origin, driverPosition) > ROUTE_REFRESH_MIN_DISTANCE_METERS;
+    const staleEnough = now - Number(lastResolvedRoute.resolvedAt || 0) >= ROUTE_REFRESH_MIN_INTERVAL_MS;
+
+    if (!destinationChanged && !(movedEnough && staleEnough)) {
+      return;
+    }
+
+    const routeCacheKey = getRouteCacheKey(driverPosition, activeDestination);
+    const cachedRoute = routeCacheRef.current.get(routeCacheKey);
+    if (cachedRoute) {
+      setRoutePath(cachedRoute);
+      lastResolvedRouteRef.current = {
+        origin: driverPosition,
+        destination: activeDestination,
+        resolvedAt: now,
+      };
+      return;
+    }
+
     let active = true;
-    const directionsService = new window.google.maps.DirectionsService();
-    directionsService.route({
-      origin: driverPosition,
-      destination: activeDestination,
-      travelMode: window.google.maps.TravelMode.DRIVING,
-      provideRouteAlternatives: false,
-    }, (result, status) => {
+    void (async () => {
+      const result = await computeDrivingRoute({
+        origin: driverPosition,
+        destination: activeDestination,
+      });
+
       if (!active) {
         return;
       }
 
-      if (status === 'OK' && result?.routes?.[0]?.overview_path?.length) {
-        setRoutePath(result.routes[0].overview_path.map(p => ({ lat: p.lat(), lng: p.lng() })));
+      if (result.status === 'OK' && result.path.length) {
+        rememberRouteCacheEntry(routeCacheRef.current, routeCacheKey, result.path);
+        lastResolvedRouteRef.current = {
+          origin: driverPosition,
+          destination: activeDestination,
+          resolvedAt: Date.now(),
+        };
+        setRoutePath(result.path);
         return;
       }
 
-      setRoutePath([driverPosition, activeDestination]);
-    });
+      const fallbackRoute = [driverPosition, activeDestination];
+      rememberRouteCacheEntry(routeCacheRef.current, routeCacheKey, fallbackRoute);
+      lastResolvedRouteRef.current = {
+        origin: driverPosition,
+        destination: activeDestination,
+        resolvedAt: Date.now(),
+      };
+      setRoutePath(fallbackRoute);
+    })();
 
     return () => {
       active = false;
     };
-  }, [isLoaded, driverPosition, activeDestination]);
+  }, [activeDestination, driverPosition, isLoaded, routePath]);
 
   useEffect(() => {
     if (!map || !window.google?.maps) {
@@ -724,7 +931,11 @@ const ParcelTracking = () => {
               />
             )}
             <RotatingVehicleMarker position={driverPosition} iconUrl={vehicleIcon} heading={displayDriverHeading} />
-            <MarkerF position={activeDestination} />
+            <CircleLocationMarker
+              position={activeDestination}
+              title={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? 'Drop' : 'Pickup'}
+              color={['started', 'ongoing', 'arrived', 'completed'].includes(tripStatus) ? '#ef4444' : '#10b981'}
+            />
           </GoogleMap>
         ) : (
           <div className="h-full w-full bg-slate-200 animate-pulse" />
@@ -986,7 +1197,7 @@ const ParcelTracking = () => {
             <ActionButton icon={Phone} label="Call" onClick={handleCall} />
             <ActionButton icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { rideId, peer: driver } })} />
             <ActionButton icon={Share2} label="Share" onClick={handleShare} />
-            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(`${routePrefix}/support`)} color="dark" />
+            <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')} color="dark" />
           </div>
 
           {/* Trip Footer */}

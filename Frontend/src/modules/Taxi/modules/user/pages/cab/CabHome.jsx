@@ -10,6 +10,12 @@ import imgSpiritual from '@/assets/3d images/AutoCab/temple.png';
 import imgOneWay    from '@/assets/3d images/AutoCab/one way.png';
 import imgBus       from '@/assets/3d images/AutoCab/bus.png';
 
+const isEnabledFlag = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value || '').trim().toLowerCase());
+};
+
 const services = [
   {
     id: 'shared',
@@ -67,7 +73,7 @@ const CabHome = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
-  const showBusService = String(settings.transportRide?.enable_bus_service || '0') === '1';
+  const showBusService = isEnabledFlag(settings.transportRide?.enable_bus_service);
   const visibleServices = services.filter((service) => showBusService || service.id !== 'bus');
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
 

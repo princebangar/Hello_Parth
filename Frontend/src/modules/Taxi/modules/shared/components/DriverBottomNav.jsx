@@ -13,13 +13,19 @@ import {
 } from "lucide-react";
 import { useSettings } from "../../../shared/context/SettingsContext";
 
+const isEnabledFlag = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  return ["1", "true", "yes", "on", "enabled"].includes(String(value || "").trim().toLowerCase());
+};
+
 const DriverBottomNav = () => {
   const location = useLocation();
   const { settings } = useSettings();
   const role = String(localStorage.getItem("role") || "driver").toLowerCase();
   const isOwner = role === "owner";
   const routePrefix = isOwner ? "/taxi/owner" : "/taxi/driver";
-  const busEnabled = String(settings.transportRide?.enable_bus_service || "0") === "1";
+  const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
 
   // Matching user's latest screenshot labels: Home, History, Earnings, Accounts
   const navItems = isOwner
@@ -38,6 +44,11 @@ const DriverBottomNav = () => {
           icon: <Car size={22} />,
           label: "Vehicle",
           path: `${routePrefix}/vehicle-fleet`,
+        },
+        {
+          icon: <Briefcase size={22} />,
+          label: "Pooling",
+          path: `${routePrefix}/pooling-vehicles`,
         },
         ...(busEnabled
           ? [

@@ -15,6 +15,7 @@ import {
   BadgePercent,
 } from 'lucide-react';
 import userBusService from '../../services/busService';
+import { buildBusRouteState, toPlainData } from './busNavigationState';
 
 const SORT_OPTIONS = [
   { id: 'recommended', label: 'Filter & Sort' },
@@ -118,7 +119,8 @@ const BusList = () => {
       try {
         const response = await userBusService.searchBuses({ fromCity, toCity, date });
         if (!active) return;
-        setBuses(Array.isArray(response?.data?.results) ? response.data.results : []);
+        const results = Array.isArray(response?.data?.results) ? response.data.results : [];
+        setBuses(Array.isArray(results) ? (toPlainData(results) || []) : []);
       } catch (err) {
         if (!active) return;
         setError(err?.message || 'Failed to search buses');
@@ -218,10 +220,7 @@ const BusList = () => {
 
   const handleSelect = (bus) => {
     navigate(`${routePrefix}/bus/details`, {
-      state: {
-        ...state,
-        bus,
-      },
+      state: buildBusRouteState(state, { bus }),
     });
   };
 

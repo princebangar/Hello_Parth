@@ -62,6 +62,12 @@ const driverSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    assignedFleetVehicleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiFleetVehicle',
+      default: null,
+      index: true,
+    },
     country: {
       type: mongoose.Schema.Types.Mixed,
       default: null,
@@ -184,6 +190,18 @@ const driverSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    acquiredByEmployeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiEmployee',
+      default: null,
+      index: true,
+    },
+    acquiredByEmployeeCode: {
+      type: String,
+      default: '',
+      trim: true,
+      uppercase: true,
+    },
     referralCount: {
       type: Number,
       default: 0,
@@ -277,6 +295,121 @@ const driverSchema = new mongoose.Schema(
       isBlocked: {
         type: Boolean,
         default: false,
+      },
+    },
+    bankDetails: {
+      accountHolderName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      qrCodeImage: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      accountNumber: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      ifsc: {
+        type: String,
+        default: '',
+        trim: true,
+        uppercase: true,
+      },
+      branchName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verificationStatus: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verificationMode: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verificationMessage: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verificationReferenceId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verifiedBankName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verifiedBranchName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verifiedAccountHolderName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      verifiedAt: {
+        type: Date,
+        default: null,
+      },
+      upiVerificationStatus: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiVerificationMode: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiVerificationMessage: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiVerificationReferenceId: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiVerifiedName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiAccountIfsc: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiAccountType: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      upiVerifiedAt: {
+        type: Date,
+        default: null,
+      },
+      updatedAt: {
+        type: Date,
+        default: null,
       },
     },
     zoneId: {
@@ -406,7 +539,6 @@ const driverSchema = new mongoose.Schema(
     },
   },
   { 
-    collection: 'taxidrivers',
     timestamps: true,
   },
 );
@@ -416,6 +548,7 @@ driverSchema.index({ deletedAt: 1, createdAt: -1 });
 driverSchema.index({ approve: 1, deletedAt: 1, createdAt: -1 });
 driverSchema.index({ status: 1, deletedAt: 1 });
 driverSchema.index({ phone: 1, deletedAt: 1 });
+driverSchema.index({ acquiredByEmployeeCode: 1 });
 
 driverSchema.index({ location: '2dsphere' });
 driverSchema.index({ 'routeBooking.anchorLocation': '2dsphere' });

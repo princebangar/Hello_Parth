@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { API_BASE_URL } from './runtimeConfig';
-import { syncAdminSessionBridge } from '../../modules/admin/services/adminSession';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,6 +8,91 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+const compatibleResponseCache = new WeakMap();
+
+const isCompatibleResponseCandidate = (value) => {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+    return false;
+  }
+
+  if (typeof Blob !== 'undefined' && value instanceof Blob) {
+    return false;
+  }
+
+  if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
+    return false;
+  }
+
+  if (typeof FormData !== 'undefined' && value instanceof FormData) {
+    return false;
+  }
+
+  if (value instanceof Date) {
+    return false;
+  }
+
+  return Array.isArray(value) || Object.prototype.toString.call(value) === '[object Object]';
+};
+
+const createCompatibleResponseView = (payload) => {
+  if (!isCompatibleResponseCandidate(payload)) {
+    return payload;
+  }
+
+  if (compatibleResponseCache.has(payload)) {
+    return compatibleResponseCache.get(payload);
+  }
+
+  const proxy = new Proxy(payload, {
+    get(target, prop, receiver) {
+      if (prop === '__raw') {
+        return target;
+      }
+
+      if (prop === 'data') {
+        const nestedData = target?.data;
+        if (nestedData === undefined || nestedData === target) {
+          return receiver;
+        }
+        return createCompatibleResponseView(nestedData);
+      }
+
+      const directValue = Reflect.get(target, prop, receiver);
+      if (directValue !== undefined) {
+        return createCompatibleResponseView(directValue);
+      }
+
+      const nestedData = target?.data;
+      if (nestedData && (Array.isArray(nestedData) || Object.prototype.toString.call(nestedData) === '[object Object]')) {
+        if (prop in nestedData) {
+          return createCompatibleResponseView(nestedData[prop]);
+        }
+
+        if (prop === 'results' && Array.isArray(nestedData)) {
+          return createCompatibleResponseView(nestedData);
+        }
+      }
+
+      return undefined;
+    },
+    has(target, prop) {
+      if (prop in target) {
+        return true;
+      }
+
+      const nestedData = target?.data;
+      return Boolean(
+        nestedData &&
+        (Array.isArray(nestedData) || Object.prototype.toString.call(nestedData) === '[object Object]') &&
+        prop in nestedData
+      );
+    },
+  });
+
+  compatibleResponseCache.set(payload, proxy);
+  return proxy;
+};
 
 const DEDUPED_GET_TTL_MS = 2500;
 const dedupedGetRequests = new Map();
@@ -29,7 +113,10 @@ const isDedupedGet = (url = '') => {
 
 const getDedupedRequestKey = (url = '', config = {}) => {
   const params = config?.params ? JSON.stringify(config.params) : '';
-  return `${String(url || '')}|${params}`;
+  // Resolve the same auth token that the request interceptor will attach so
+  // user-specific GETs never share cache entries across auth states.
+  const auth = resolveAuthTokenForRequest({ ...config, url }) || '';
+  return `${String(url || '')}|${params}|${auth}`;
 };
 
 const decodeBase64Url = (value) => {
@@ -50,7 +137,14 @@ const getTokenPayload = (token) => {
       return null;
     }
 
-    return JSON.parse(atob(decodeBase64Url(payload)));
+    const decoded = JSON.parse(atob(decodeBase64Url(payload)));
+    if (decoded && typeof decoded.exp === 'number') {
+      const isExpired = Date.now() / 1000 >= decoded.exp;
+      if (isExpired) {
+        return null;
+      }
+    }
+    return decoded;
   } catch {
     return null;
   }
@@ -64,6 +158,15 @@ const normalizeAuthRole = (role) => {
   return value;
 };
 
+const DRIVER_PORTAL_ROLES = new Set([
+  'driver',
+  'owner',
+  'pooling_driver',
+  'bus_driver',
+  'service_center',
+  'service_center_staff',
+]);
+
 const getSessionItem = (key) => {
   try {
     return sessionStorage.getItem(key);
@@ -74,6 +177,11 @@ const getSessionItem = (key) => {
 
 const getStoredTokenByRole = (role) => {
   const normalizedRole = normalizeAuthRole(role);
+
+  // For driver/owner roles we probe both sessionStorage AND localStorage so
+  // that after a Flutter WebView hard-refresh (which wipes sessionStorage) we
+  // can still find the persisted token in localStorage and avoid sending
+  // unauthenticated requests that produce "Authorization token is required".
   const entries = (
     normalizedRole === 'driver' || normalizedRole === 'owner'
       ? [
@@ -82,20 +190,26 @@ const getStoredTokenByRole = (role) => {
           localStorage.getItem('driverToken'),
           localStorage.getItem('token'),
         ]
+      : normalizedRole === 'admin'
+        ? [
+            // Shared Food admin login stores `admin_accessToken`; taxi bridge uses `adminToken`.
+            localStorage.getItem('admin_accessToken'),
+            localStorage.getItem('adminToken'),
+            localStorage.getItem('token'),
+          ]
       : [
-          normalizedRole === 'admin' ? localStorage.getItem('admin_accessToken') : null,
           localStorage.getItem(`${role}Token`),
-          normalizedRole === 'user' ? localStorage.getItem('user_accessToken') : null,
           localStorage.getItem('token'),
         ]
   ).filter(Boolean);
 
   return entries.find((token) => {
     const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role);
-    if (normalizedRole === 'user') {
-      // Unified food login JWT uses role "USER"; older food tokens may omit role.
-      return tokenRole === 'user' || tokenRole === '';
+
+    if ((normalizedRole === 'driver' || normalizedRole === 'owner') && DRIVER_PORTAL_ROLES.has(tokenRole)) {
+      return true;
     }
+
     return tokenRole === normalizedRole;
   }) || null;
 };
@@ -127,6 +241,83 @@ const getRoleFromPathname = () => {
   return '';
 };
 
+const resolveAuthTokenForRequest = (config = {}) => {
+  const requestPath = String(config.url || '').split('?')[0];
+  const existingAuthorization = config.headers?.Authorization || config.headers?.authorization;
+
+  if (existingAuthorization) {
+    return String(existingAuthorization).startsWith('Bearer ')
+      ? String(existingAuthorization).slice(7)
+      : String(existingAuthorization);
+  }
+
+  const chatRole = localStorage.getItem('chatRole');
+  const normalizedChatRole = String(chatRole || '').toLowerCase();
+  const userToken = getStoredTokenByRole('user');
+  const driverToken = getStoredTokenByRole('driver');
+  const ownerToken = getStoredTokenByRole('owner');
+  const adminToken =
+    getStoredTokenByRole('admin') ||
+    localStorage.getItem('admin_accessToken') ||
+    localStorage.getItem('adminToken');
+
+  const isPublicUserRoute =
+    /^\/users\/(bootstrap|app-modules|settings|goods-types|vehicle-types|register|signup|login|profile-image|auth\/send-otp|auth\/verify-otp|otp-login)(\/|$)/.test(requestPath);
+  const isPublicDriverRoute =
+    /^\/drivers\/(register|login|auth\/send-otp|auth\/verify-otp|onboarding\/send-otp|onboarding\/verify-otp|onboarding\/personal|onboarding\/referral|onboarding\/vehicle|onboarding\/documents|onboarding\/complete|onboarding\/session\/|service-locations)(\/|$)/.test(requestPath);
+  const isAdminRoute =
+    /^\/admin(\/|$)/.test(requestPath) ||
+    /^\/(countries|common\/ride_modules|types\/|on-boarding(?:-|\/|$)|roles\/|permissions\/)/.test(requestPath);
+  const isDriverRoute = /^\/drivers?(\/|$)/.test(requestPath);
+  const isUserRoute = /^\/(users|rides|deliveries|promos)(\/|$)/.test(requestPath);
+  const isSupportRoute = /^\/support(\/|$)/.test(requestPath);
+  const isChatRoute = /^\/chats?(\/|$)/.test(requestPath);
+  const pathRole = getRoleFromPathname();
+
+  if (isPublicUserRoute || isPublicDriverRoute) {
+    return null;
+  }
+
+  if (isChatRoute) {
+    if (normalizedChatRole === 'admin') {
+      return adminToken;
+    }
+    if (normalizedChatRole === 'driver') {
+      return driverToken || ownerToken;
+    }
+    if (normalizedChatRole === 'owner') {
+      return ownerToken || driverToken;
+    }
+    if (normalizedChatRole === 'user') {
+      return userToken;
+    }
+  }
+
+  if (isAdminRoute) {
+    return adminToken;
+  }
+
+  if (isSupportRoute) {
+    if (pathRole === 'admin') {
+      return adminToken;
+    }
+    if (pathRole === 'driver') {
+      return driverToken || ownerToken;
+    }
+    return userToken;
+  }
+
+  if (isUserRoute) {
+    return userToken;
+  }
+
+  if (isDriverRoute) {
+    return driverToken || ownerToken;
+  }
+
+  return userToken || driverToken || ownerToken || adminToken || null;
+};
+
 const clearStaleAuthState = (role = '', staleToken = '') => {
   const normalizedRole = normalizeAuthRole(role);
   const currentGenericToken = localStorage.getItem('token');
@@ -148,10 +339,6 @@ const clearStaleAuthState = (role = '', staleToken = '') => {
     if (!staleToken || localStorage.getItem('userToken') === staleToken) {
       localStorage.removeItem('userToken');
     }
-    localStorage.removeItem('user_accessToken');
-    localStorage.removeItem('user_refreshToken');
-    localStorage.removeItem('user_authenticated');
-    localStorage.removeItem('user_user');
     localStorage.removeItem('userInfo');
   }
 
@@ -170,100 +357,35 @@ const clearStaleAuthState = (role = '', staleToken = '') => {
   }
 
   if (!normalizedRole || normalizedRole === 'admin') {
-    if (!staleToken || localStorage.getItem('admin_accessToken') === staleToken) {
-      localStorage.removeItem('admin_accessToken');
-    }
-    localStorage.removeItem('admin_refreshToken');
-    localStorage.removeItem('admin_user');
     if (!staleToken || localStorage.getItem('adminToken') === staleToken) {
       localStorage.removeItem('adminToken');
     }
+    if (!staleToken || localStorage.getItem('admin_accessToken') === staleToken) {
+      localStorage.removeItem('admin_accessToken');
+    }
     localStorage.removeItem('adminInfo');
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('admin_refreshToken');
+    localStorage.removeItem('admin_authenticated');
   }
 
   localStorage.removeItem('chatRole');
 };
 
-const isAuthTokenFailure = (message = '') => {
-  const normalized = String(message || '').trim().toLowerCase();
-  if (!normalized) return false;
-
-  return normalized.includes('authorization token has expired') ||
-    normalized.includes('authorization token is invalid') ||
-    normalized.includes('authorization token is required') ||
-    normalized.includes('jwt expired');
+const isStaleAuthMessage = (message = '') => {
+  const normalizedMessage = String(message || '').trim().toLowerCase();
+  return normalizedMessage === 'jwt expired' || normalizedMessage === 'invalid authorization token';
 };
 
 // Request Interceptor: Attach Auth Token automatically
 api.interceptors.request.use(
   (config) => {
-    // FormData must use browser multipart boundary (same as food axios client).
-    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
-      if (config.headers) {
-        delete config.headers['Content-Type'];
-        delete config.headers['content-type'];
-      }
-    }
-
-    syncAdminSessionBridge();
-    const requestPath = String(config.url || '').split('?')[0];
     const existingAuthorization = config.headers?.Authorization || config.headers?.authorization;
 
     if (existingAuthorization) {
       return config;
     }
-
-    const chatRole = localStorage.getItem('chatRole');
-    const normalizedChatRole = String(chatRole || '').toLowerCase();
-    const userToken = getStoredTokenByRole('user');
-    const driverToken = getStoredTokenByRole('driver');
-    const ownerToken = getStoredTokenByRole('owner');
-    const adminToken = getStoredTokenByRole('admin') || localStorage.getItem('adminToken');
-
-    const isPublicUserRoute =
-      /^\/users\/(app-modules|goods-types|vehicle-types|register|signup|login|profile-image|auth\/send-otp|auth\/verify-otp|otp-login)(\/|$)/.test(requestPath);
-    const isPublicDriverRoute =
-      /^\/drivers\/(register|login|auth\/send-otp|auth\/verify-otp|onboarding\/send-otp|onboarding\/verify-otp|onboarding\/personal|onboarding\/referral|onboarding\/vehicle|onboarding\/documents|onboarding\/complete|onboarding\/session\/|service-locations)(\/|$)/.test(requestPath);
-    const isAdminRoute =
-      /^\/admin(\/|$)/.test(requestPath) ||
-      /^\/(countries|common\/ride_modules|types\/|on-boarding(?:-|\/|$)|roles\/|permissions\/)/.test(requestPath);
-    const isDriverRoute = /^\/drivers?(\/|$)/.test(requestPath);
-    const isUserRoute = /^\/(users|rides|deliveries|promos)(\/|$)/.test(requestPath);
-    const isSupportRoute = /^\/support(\/|$)/.test(requestPath);
-    const isChatRoute = /^\/chats?(\/|$)/.test(requestPath);
-    const pathRole = getRoleFromPathname();
-
-    let token = null;
-
-    if (isPublicUserRoute || isPublicDriverRoute) {
-      token = null;
-    } else if (isChatRoute) {
-      if (normalizedChatRole === 'admin') {
-        token = adminToken;
-      } else if (normalizedChatRole === 'driver') {
-        token = driverToken || ownerToken;
-      } else if (normalizedChatRole === 'owner') {
-        token = ownerToken || driverToken;
-      } else if (normalizedChatRole === 'user') {
-        token = userToken;
-      }
-    } else if (isAdminRoute) {
-      token = adminToken;
-    } else if (isSupportRoute) {
-      if (pathRole === 'admin') {
-        token = adminToken;
-      } else if (pathRole === 'driver') {
-        token = driverToken || ownerToken;
-      } else {
-        token = userToken;
-      }
-    } else if (isUserRoute) {
-      token = userToken;
-    } else if (isDriverRoute) {
-      token = driverToken || ownerToken;
-    } else {
-      token = userToken || driverToken || ownerToken || adminToken;
-    }
+    const token = resolveAuthTokenForRequest(config);
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -280,32 +402,36 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     // Pro-Level: Many APIs return data in data.data or data.result, you can flatten it here
-    return response.data;
+    return createCompatibleResponseView(response.data);
   },
   (error) => {
     if (error.response) {
       // Global error handling: e.g. deleted or inactive account logout
-      if (error.response.status === 401 || error.response.status === 403) {
-        const serverMessage = String(error.response.data?.message || '');
-        const authHeader = error.config?.headers?.Authorization || error.config?.headers?.authorization || '';
-        const token = String(authHeader).startsWith('Bearer ') ? String(authHeader).slice(7) : '';
-        const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role || '');
+      const serverMessage = String(error.response.data?.message || '');
+      const authHeader = error.config?.headers?.Authorization || error.config?.headers?.authorization || '';
+      const token = String(authHeader).startsWith('Bearer ') ? String(authHeader).slice(7) : '';
+      const tokenRole = normalizeAuthRole(getTokenPayload(token)?.role || '');
+      
+      const is401 = error.response.status === 401;
+      const is403 = error.response.status === 403;
+      const isStaleMessage = isStaleAuthMessage(serverMessage);
+      const isDeactivatedOrDeleted =
+        serverMessage === 'Authenticated account no longer exists' ||
+        (tokenRole === 'user' && serverMessage === 'User account is not active');
 
-        const hasAuthToken = Boolean(token && token.length > 10);
-        const isExplicitTokenExpired = isAuthTokenFailure(serverMessage) ||
-          serverMessage === 'Authenticated account no longer exists' ||
-          (tokenRole === 'user' && serverMessage === 'User account is not active');
+      const shouldClearAuth =
+        (is401 ||
+        isStaleMessage ||
+        (is403 && isDeactivatedOrDeleted)) &&
+        Boolean(token);
 
-        // Only clear auth if request actually had an authorization token that was invalid/expired.
-        // Unauthenticated guest requests (which get 401 "token required") should NOT force redirect to login.
-        const shouldClearAuth = hasAuthToken && isExplicitTokenExpired;
-        if (shouldClearAuth) {
-          clearStaleAuthState(tokenRole, token);
-          window.dispatchEvent(new CustomEvent('app:auth-stale', {
-            detail: { role: tokenRole || null, message: serverMessage, token },
-          }));
-        }
+      if (shouldClearAuth) {
+        clearStaleAuthState(tokenRole, token);
+        window.dispatchEvent(new CustomEvent('app:auth-stale', {
+          detail: { role: tokenRole || null, message: serverMessage, token },
+        }));
       }
+
       return Promise.reject({ ...error.response.data, status: error.response.status });
     }
 

@@ -1,15 +1,12 @@
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../../utils/ApiError.js';
 import { ServiceLocation } from '../../models/ServiceLocation.js';
-import { ensureAdminState, listUsers as listTaxiAdminUsers } from '../../services/adminService.js';
+import { ensureAdminState } from '../../services/adminService.js';
 import { User } from '../../../user/models/User.js';
 import { Banner } from '../models/Banner.js';
 import { Notification } from '../models/Notification.js';
 import { PromoCode } from '../models/PromoCode.js';
-import {
-  deleteStoredAsset,
-  deleteReplacedAssets,
-} from '../../../../../services/storage.service.js';
+import { uploadDataUrlToCloudinary } from '../../../../../utils/cloudinaryUpload.js';
 import { sendPushNotificationToAudience } from '../../../services/pushNotificationService.js';
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
@@ -72,25 +69,6 @@ const normalizeTransportType = (value, fallback = 'all') => {
   return normalized || fallback;
 };
 
-const resolveAudienceType = (payloadValue, existing = null) => {
-  const normalized = normalizeText(payloadValue).toLowerCase().replace(/\s+/g, '_');
-
-  if (['all', 'specific_user', 'new_users'].includes(normalized)) {
-    return normalized;
-  }
-
-  const existingAudience = normalizeText(existing?.audience_type).toLowerCase().replace(/\s+/g, '_');
-  if (['all', 'specific_user', 'new_users'].includes(existingAudience)) {
-    return existingAudience;
-  }
-
-  if (existing?.user_specific === true) {
-    return 'specific_user';
-  }
-
-  return 'all';
-};
-
 const toObjectIdOrThrow = (value, fieldName = 'id') => {
   if (!mongoose.isValidObjectId(value)) {
     throw new ApiError(400, `Invalid ${fieldName}`);
@@ -126,7 +104,6 @@ const serializePromoCode = (item) => ({
   user_id: item.user_id || '',
   user_name: item.user_name || '',
   user_specific: item.user_specific === true,
-  audience_type: resolveAudienceType(item.audience_type, item),
   transport_type: item.transport_type || 'all',
   code: item.code || '',
   minimum_trip_amount: Number(item.minimum_trip_amount || 0),
@@ -264,12 +241,8 @@ const ensurePromoCodeUnique = async (code, ignoreId = null) => {
 const normalizePromoPayload = async (payload, existing = null) => {
   const serviceLocationData = await normalizeServiceLocationIds(payload, existing);
   const state = await ensureAdminState();
-  const audienceType = resolveAudienceType(
-    payload.audience_type ?? (payload.user_specific === true ? 'specific_user' : payload.user_specific === false ? 'all' : ''),
-    existing,
-  );
-  const userSpecific = audienceType === 'specific_user';
-  const userId = userSpecific ? normalizeText(payload.user_id ?? existing?.user_id) : '';
+  const userSpecific = normalizeBoolean(payload.user_specific, existing?.user_specific ?? false);
+  const userId = normalizeText(payload.user_id ?? existing?.user_id);
   const realUser = userId
     ? await User.findById(toObjectIdOrThrow(userId, 'user id')).select('_id name phone').lean()
     : null;
@@ -278,7 +251,7 @@ const normalizePromoPayload = async (payload, existing = null) => {
     : null;
   const user = realUser || legacyUser;
 
-  if (userSpecific && (payload.user_id !== undefined || !existing || resolveAudienceType(existing?.audience_type, existing) !== 'specific_user')) {
+  if (userSpecific && (payload.user_id !== undefined || !existing || existing?.user_specific !== true)) {
     if (!userId) {
       throw new ApiError(400, 'User is required');
     }
@@ -332,7 +305,6 @@ const normalizePromoPayload = async (payload, existing = null) => {
     user_id: userSpecific ? user?._id || userId : '',
     user_name: userSpecific ? user?.name || '' : '',
     user_specific: userSpecific,
-    audience_type: audienceType,
     transport_type: transportType,
     code,
     minimum_trip_amount: minimumTripAmount,
@@ -370,9 +342,20 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Message is required');
   }
 
-  // Image must already be uploaded (HTTP URL). Base64 is not accepted.
+  // If image is a data URL (base64), upload it to Cloudinary
   if (image.startsWith('data:')) {
-    throw new ApiError(400, 'Upload the image via multipart first, then send the returned URL');
+    try {
+      const uploaded = await uploadDataUrlToCloudinary({
+        dataUrl: image,
+        publicIdPrefix: 'notification',
+      });
+      image = uploaded.secureUrl;
+    } catch (error) {
+      console.error('Cloudinary upload error:', error);
+      // We don't throw here to allow sending notification even if image upload fails?
+      // Actually, it's better to throw so the user knows why it failed.
+      throw new ApiError(500, `Failed to upload notification image: ${error.message}`);
+    }
   }
 
   return {
@@ -401,11 +384,18 @@ const normalizeBannerPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Banner image is required');
   }
 
-  // Image must already be uploaded (HTTP URL). Base64 is not accepted.
+  // If image is a data URL (base64), upload it to Cloudinary
   if (image.startsWith('data:')) {
-    throw new ApiError(400, 'Upload the image via multipart first, then send the returned URL');
-  } else if (existing?.image) {
-    await deleteReplacedAssets(existing.image, image);
+    try {
+      const uploaded = await uploadDataUrlToCloudinary({
+        dataUrl: image,
+        publicIdPrefix: 'banner',
+      });
+      image = uploaded.secureUrl;
+    } catch (error) {
+      console.error('Cloudinary upload error:', error);
+      throw new ApiError(500, `Failed to upload banner image: ${error.message}`);
+    }
   }
 
   if (!['external_link', 'deep_link'].includes(linkType)) {
@@ -570,7 +560,6 @@ export const deleteNotification = async (id) => {
   if (!deleted) {
     throw new ApiError(404, 'Notification not found');
   }
-  await deleteStoredAsset(deleted.image);
   return true;
 };
 
@@ -623,7 +612,6 @@ export const deleteBanner = async (id) => {
   if (!deleted) {
     throw new ApiError(404, 'Banner not found');
   }
-  await deleteStoredAsset(deleted.image);
   return true;
 };
 
@@ -672,6 +660,16 @@ export const listServiceLocationsForPromotions = async () => {
 };
 
 export const listAdminUsersForPromotions = async () => {
-  const response = await listTaxiAdminUsers({ page: 1, limit: 5000, search: '' });
-  return Array.isArray(response?.results) ? response.results : [];
+  const users = await User.find()
+    .sort({ createdAt: -1 })
+    .select('name phone createdAt updatedAt')
+    .lean();
+
+  return users.map((user) => ({
+    _id: user._id,
+    name: user.name || '',
+    phone: user.phone || '',
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  }));
 };

@@ -88,15 +88,10 @@ const buildConversationIdentityQuery = async ({ role, id, conversationKey }) => 
   }
 
   if (normalizedRole === 'admin') {
-    if (parsed.adminId !== entityId) {
-      throw new ApiError(403, 'Conversation does not belong to this admin account');
-    }
-
     return {
       $or: [
         {
           senderRole: 'admin',
-          senderId: toObjectId(entityId),
           receiverRole: parsed.peerRole,
           receiverId: toObjectId(parsed.peerId),
         },
@@ -104,15 +99,12 @@ const buildConversationIdentityQuery = async ({ role, id, conversationKey }) => 
           senderRole: parsed.peerRole,
           senderId: toObjectId(parsed.peerId),
           receiverRole: 'admin',
-          receiverId: toObjectId(entityId),
         },
       ],
     };
   }
 
-  const defaultAdminId = await resolveDefaultSupportAdminId();
-
-  if (parsed.peerRole !== normalizedRole || parsed.adminId !== defaultAdminId) {
+  if (parsed.peerRole !== normalizedRole || parsed.peerId !== entityId) {
     throw new ApiError(403, 'Conversation does not belong to this support thread');
   }
 
@@ -122,11 +114,9 @@ const buildConversationIdentityQuery = async ({ role, id, conversationKey }) => 
         senderRole: normalizedRole,
         senderId: toObjectId(entityId),
         receiverRole: 'admin',
-        receiverId: toObjectId(parsed.adminId),
       },
       {
         senderRole: 'admin',
-        senderId: toObjectId(parsed.adminId),
         receiverRole: normalizedRole,
         receiverId: toObjectId(entityId),
       },
@@ -305,12 +295,6 @@ export const resolveSupportPeerFromConversationKey = async (conversationKey, aut
     };
   }
 
-  const defaultAdminId = await resolveDefaultSupportAdminId();
-
-  if (parsed.adminId !== defaultAdminId) {
-    throw new ApiError(403, 'Conversation does not belong to the active support admin');
-  }
-
   return {
     role: 'admin',
     id: parsed.adminId,
@@ -417,8 +401,8 @@ export const listSupportConversations = async ({ role, id }) => {
     normalizedRole === 'admin'
       ? {
           $or: [
-            { senderRole: 'admin', senderId: toObjectId(entityId) },
-            { receiverRole: 'admin', receiverId: toObjectId(entityId) },
+            { senderRole: 'admin' },
+            { receiverRole: 'admin' },
           ],
         }
       : {

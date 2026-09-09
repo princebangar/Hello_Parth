@@ -2,22 +2,23 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight, Siren } from 'lucide-react';
-import BottomNavbar from '../../components/BottomNavbar';
+// ... removed BottomNavbar import ...
+import { SUPPORT_INFO } from '../../../shared/content/supportInfo';
 
-const Support = ({ embedded = false }) => {
+const Support = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
 
   const helpTopics = [
-    { title: "Driver didn't arrive", Icon: XCircle, iconClass: 'text-rose-500', ringClass: 'bg-rose-50/70' },
-    { title: 'Safety concern', Icon: ShieldCheck, iconClass: 'text-blue-600', ringClass: 'bg-blue-50/70' },
-    { title: 'I lost an item', Icon: HelpCircle, iconClass: 'text-orange-500', ringClass: 'bg-orange-50/70' },
-    { title: 'Payment failure', Icon: AlertCircle, iconClass: 'text-slate-800', ringClass: 'bg-slate-50/70' },
+    { title: "Driver didn't arrive", Icon: XCircle, iconClass: 'text-rose-500', ringClass: 'bg-rose-50/70 dark:bg-rose-950/20' },
+    { title: 'Safety concern', Icon: ShieldCheck, iconClass: 'text-blue-600', ringClass: 'bg-blue-50/70 dark:bg-blue-950/20' },
+    { title: 'I lost an item', Icon: HelpCircle, iconClass: 'text-orange-500', ringClass: 'bg-orange-50/70 dark:bg-amber-950/20' },
+    { title: 'Payment failure', Icon: AlertCircle, iconClass: 'text-slate-800 dark:text-slate-200', ringClass: 'bg-slate-50/70 dark:bg-zinc-800/40' },
   ];
 
   const handleCall = () => {
-    window.open('tel:+919876543210', '_self');
+    window.open(`tel:${SUPPORT_INFO.phoneHref}`, '_self');
   };
 
   const openSupportChat = (topicTitle = '') => {
@@ -29,10 +30,10 @@ const Support = ({ embedded = false }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto flex flex-col font-sans relative pb-24 overflow-hidden">
-      <div className="absolute -top-20 right-[-40px] h-48 w-48 rounded-full bg-orange-100/55 blur-3xl pointer-events-none" />
-      <div className="absolute top-56 left-[-60px] h-56 w-56 rounded-full bg-emerald-100/50 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-24 right-[-40px] h-44 w-44 rounded-full bg-blue-100/50 blur-3xl pointer-events-none" />
+    <div className="min-h-screen max-w-lg mx-auto flex flex-col font-sans relative pb-24 overflow-hidden user-app-theme">
+      <div className="absolute -top-20 right-[-40px] h-48 w-48 rounded-full bg-orange-100/55 dark:bg-orange-500/10 blur-3xl pointer-events-none" />
+      <div className="absolute top-56 left-[-60px] h-56 w-56 rounded-full bg-emerald-100/50 dark:bg-emerald-500/5 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-24 right-[-40px] h-44 w-44 rounded-full bg-blue-100/50 dark:bg-blue-500/5 blur-3xl pointer-events-none" />
 
       <header className="relative z-20 sticky top-0">
         <div className="bg-white/70 backdrop-blur-md border-b border-white/70 shadow-[0_10px_20px_rgba(15,23,42,0.05)]">
@@ -41,7 +42,7 @@ const Support = ({ embedded = false }) => {
               <ArrowLeft size={22} className="text-slate-900" strokeWidth={3} />
             </button>
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Support</p>
+              <p className="text-[10px] font-black tracking-[0.26em] text-slate-400">Support</p>
               <h1 className="mt-1 text-[18px] font-black text-slate-900 tracking-tight leading-none truncate">
                 Help &amp; Support
               </h1>
@@ -134,8 +135,6 @@ const Support = ({ embedded = false }) => {
           </div>
         </div>
       </div>
-
-      {!embedded && <BottomNavbar />}
     </div>
   );
 };

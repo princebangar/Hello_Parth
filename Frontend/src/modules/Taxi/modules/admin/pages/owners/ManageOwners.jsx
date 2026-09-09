@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 
 import { adminService } from '../../services/adminService';
 import OwnerFormPanel from './OwnerFormPanel';
@@ -57,6 +56,7 @@ const ManageOwners = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [formData, setFormData] = useState(initialFormData);
+  const [showFilters, setShowFilters] = useState(false);
 
   const fetchInitialData = async () => {
     setIsLoading(true);
@@ -122,15 +122,14 @@ const ManageOwners = () => {
       const response = await adminService.updateOwner(editingId, formData);
 
       if (response.success) {
-        toast.success('Owner profile updated successfully');
         setView('list');
         setFormData(initialFormData);
         fetchInitialData();
       } else {
-        toast.error(response.message || 'Failed to update owner');
+        alert(response.message || 'Failed to update owner');
       }
     } catch (error) {
-      toast.error(error.message || 'Operation failed');
+      alert(error.message || 'Operation failed');
     } finally {
       setSubmitting(false);
     }
@@ -167,16 +166,15 @@ const ManageOwners = () => {
     try {
       const response = await adminService.approveOwner(ownerId, { approve: !currentApproved });
       if (response.success) {
-        toast.success(`Owner ${!currentApproved ? 'approved' : 'unapproved'} successfully`);
         const updatedOwner = response.data;
         setOwners((currentOwners) =>
           currentOwners.map((item) => (item._id === ownerId || item.id === ownerId ? updatedOwner : item))
         );
       } else {
-        toast.error(response.message || 'Failed to update approval status');
+        alert(response.message || 'Failed to update approval status');
       }
     } catch (error) {
-      toast.error(error.message || 'Failed to update approval status');
+      alert(error.message || 'Failed to update approval status');
     }
   };
 
@@ -188,16 +186,15 @@ const ManageOwners = () => {
       });
 
       if (response.success) {
-        toast.success(`Owner status updated to ${status.toUpperCase()}`);
         const updatedOwner = response.data;
         setOwners((currentOwners) =>
           currentOwners.map((item) => (item._id === ownerId || item.id === ownerId ? updatedOwner : item))
         );
       } else {
-        toast.error(response.message || 'Failed to update owner status');
+        alert(response.message || 'Failed to update owner status');
       }
     } catch (error) {
-      toast.error(error.message || 'Failed to update owner status');
+      alert(error.message || 'Failed to update owner status');
     }
   };
 
@@ -207,13 +204,12 @@ const ManageOwners = () => {
     try {
       const response = await adminService.deleteOwner(id);
       if (response.success) {
-        toast.success('Owner account deleted');
         fetchInitialData();
       } else {
-        toast.error(response.message || 'Delete failed');
+        alert(response.message || 'Delete failed');
       }
     } catch (error) {
-      toast.error(error.message || 'Delete failed');
+      alert(error.message || 'Delete failed');
     }
   };
 
@@ -232,7 +228,7 @@ const ManageOwners = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      <div className="p-6 lg:p-8">
+      <div className="px-4 py-2 lg:px-6 lg:py-2">
         <AnimatePresence mode="wait">
           {view === 'list' ? (
             <MotionDiv
@@ -244,10 +240,10 @@ const ManageOwners = () => {
             >
               <AdminPageHeader module="Owner Management" page="Manage Owners" title="Manage Owners" />
 
-              <div className="mb-6">
+              <div className="mb-4">
                 <button
                   onClick={() => navigate('/taxi/admin/owners/create')}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-black text-sm font-bold rounded-lg hover:bg-yellow-500 transition-colors"
                 >
                   <Plus size={15} /> Add Owner
                 </button>
@@ -277,13 +273,11 @@ const ManageOwners = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    className="w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-400 flex items-center justify-center shadow-sm"
+
+                  <button 
+                    onClick={() => setShowFilters(!showFilters)}
+                    className="bg-yellow-400 text-black px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-yellow-500 transition-colors"
                   >
-                    <Search size={16} />
-                  </button>
-                  <button className="bg-orange-500 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm uppercase tracking-wide">
                     <Filter size={14} /> Filters
                   </button>
                   <div className="relative">
@@ -299,17 +293,41 @@ const ManageOwners = () => {
                 </div>
               </div>
 
+              {/* Filters Panel */}
+              {showFilters && (
+                <div className="p-4 border-b border-gray-100 bg-gray-50 flex gap-4 animate-in slide-in-from-top-2">
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Company Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="Filter by company..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Status</label>
+                    <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none">
+                      <option value="">All Statuses</option>
+                      <option value="approved">Approved</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               {/* Table */}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Company Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Email</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Mobile Number</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Document View</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Approval Status</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Action</th>
+                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-500">Company Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-500">Email</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-500">Mobile Number</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-500">Document View</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-500">Approval Status</th>
+                      <th className="px-4 py-3 text-center text-sm font-bold text-gray-500">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -317,8 +335,8 @@ const ManageOwners = () => {
                       <tr>
                         <td colSpan="6" className="py-16 text-center">
                           <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="w-7 h-7 text-indigo-600 animate-spin" />
-                            <p className="text-sm text-gray-400">Loading owners...</p>
+                            <Loader2 className="w-7 h-7 text-yellow-500 animate-spin" />
+                            <p className="text-sm font-bold text-gray-500">Loading owners...</p>
                           </div>
                         </td>
                       </tr>
@@ -334,8 +352,8 @@ const ManageOwners = () => {
                           <td className="px-4 py-4 text-sm text-gray-500">{formatMobile(owner.mobile)}</td>
                           <td className="px-4 py-4">
                             <button
-                              onClick={() => navigate(`/taxi/admin/owners/${owner._id}/documents`)}
-                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              onClick={() => navigate(`/admin/owners/${owner._id}`, { state: { tab: 'Documents' } })}
+                              className="p-1.5 text-yellow-500 hover:bg-yellow-50 rounded-lg transition-colors"
                             >
                               <FileText size={16} />
                             </button>
@@ -385,9 +403,9 @@ const ManageOwners = () => {
                 <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
                   <span>Showing 1 to {filteredOwners.length} of {filteredOwners.length} entries</span>
                   <div className="flex items-center gap-1">
-                    <button className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-400" disabled>Prev</button>
-                    <button className="w-7 h-7 rounded bg-indigo-600 text-white text-xs font-medium">1</button>
-                    <button className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-400" disabled>Next</button>
+                    <button className="px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-gray-400" disabled>Prev</button>
+                    <button className="w-7 h-7 rounded bg-yellow-400 text-black text-sm font-bold">1</button>
+                    <button className="px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-gray-400" disabled>Next</button>
                   </div>
                 </div>
               )}

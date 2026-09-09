@@ -58,6 +58,28 @@ const poolingBookingSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    driverCommissionPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    driverCommissionAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    ownerCommissionPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    ownerCommissionAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     currency: {
       type: String,
       default: 'INR',

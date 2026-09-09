@@ -1,14 +1,12 @@
 import mongoose from 'mongoose';
+import { env } from '../../../../config/env.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
+import { Vehicle } from '../../admin/models/Vehicle.js';
 import { Driver } from '../models/Driver.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
 import { Ride } from '../../user/models/Ride.js';
 import { getWalletSettings } from '../../services/appSettingsService.js';
-
-/** Fallbacks when admin SetPrice / wallet settings are missing (same pattern as food). */
-const DEFAULT_DRIVER_COMMISSION_PERCENT = 20;
-const DEFAULT_DRIVER_CASH_LIMIT = 500;
 
 const normalizeAmount = (value, fieldName = 'amount') => {
   const amount = Number(value);
@@ -96,12 +94,27 @@ const resolveCommissionConfigForRide = async (ride, session) => {
         };
       }
     }
+
+    if (normalizedServiceType === 'parcel') {
+      const vehicle = await Vehicle.findById(ride.vehicleTypeId)
+        .select('admin_commission_type_from_driver admin_commission_from_driver')
+        .session(session)
+        .lean();
+
+      if (vehicle) {
+        return {
+          source: 'vehicle_type_parcel_fallback',
+          type: Number(vehicle.admin_commission_type_from_driver ?? 1),
+          value: Number(vehicle.admin_commission_from_driver ?? 0),
+        };
+      }
+    }
   }
 
   return {
-    source: 'code_fallback',
+    source: 'env_fallback',
     type: 1,
-    value: DEFAULT_DRIVER_COMMISSION_PERCENT,
+    value: Number(env.driverWallet.commissionPercent || 0),
   };
 };
 
@@ -123,7 +136,7 @@ const resolveWalletRules = async () => {
   const configuredMinimumBalance = Number(walletSettings.driver_wallet_minimum_amount_to_get_an_order);
   const minimumBalanceForOrders = Number.isFinite(configuredMinimumBalance)
     ? Math.round(configuredMinimumBalance * 100) / 100
-    : -DEFAULT_DRIVER_CASH_LIMIT;
+    : -toNonNegativeNumber(env.driverWallet.defaultCashLimit, 500);
 
   return {
     minimumBalanceForOrders,
@@ -151,6 +164,7 @@ const getWalletSnapshot = async (driver) => {
 
 export const serializeDriverWallet = async (driver) => {
   const wallet = await getWalletSnapshot(driver);
+  const isBelowMinimumBalance = wallet.balance < wallet.minimumBalanceForOrders;
 
   return {
     balance: wallet.balance,
@@ -161,7 +175,7 @@ export const serializeDriverWallet = async (driver) => {
     isTransferEnabled: wallet.rules.isTransferEnabled,
     minimumTopUpAmount: wallet.rules.minimumTopUpAmount,
     minimumTransferAmount: wallet.rules.minimumTransferAmount,
-    isBlocked: wallet.isBlocked || !wallet.rules.isWalletEnabled || wallet.balance <= wallet.minimumBalanceForOrders,
+    isBlocked: wallet.isBlocked || !wallet.rules.isWalletEnabled || isBelowMinimumBalance,
   };
 };
 
@@ -176,7 +190,8 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
   }
 
   const wallet = await getWalletSnapshot(driver);
-  const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || wallet.balance <= wallet.minimumBalanceForOrders;
+  const isBelowMinimumBalance = wallet.balance < wallet.minimumBalanceForOrders;
+  const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || isBelowMinimumBalance;
 
   if (isBlocked) {
     await Driver.findByIdAndUpdate(driver._id, {
@@ -221,7 +236,7 @@ export const applyDriverWalletAdjustment = async ({
 
   const before = await getWalletSnapshot(driver);
   const balanceAfter = Math.round((before.balance + normalizedAmount) * 100) / 100;
-  const isBlockedAfter = !before.rules.isWalletEnabled || balanceAfter <= before.minimumBalanceForOrders;
+  const isBlockedAfter = !before.rules.isWalletEnabled || balanceAfter < before.minimumBalanceForOrders;
 
   const updatedDriver = await Driver.findByIdAndUpdate(
     driverId,
@@ -317,44 +332,28 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       return null;
     }
 
-    const fare = Math.round(ride.fare || 0);
-    const previousCancellationFee = Math.max(0, Math.round(ride.previousCancellationFee || 0));
-    const baseRideFare = Math.max(0, Math.round(ride.baseRideFare || (fare - previousCancellationFee)));
-    const surgeAmount = Math.max(0, Math.round(ride?.pricingSnapshot?.ride_surge_amount || 0));
-    const commissionableFare = Math.max(0, Math.round(baseRideFare - surgeAmount));
+    const fare = normalizeAmount(ride.fare || 0, 'fare');
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
-    const commissionAmount = Math.round(computeCommissionAmount({
-      fare: commissionableFare,
+    const commissionAmount = computeCommissionAmount({
+      fare,
       type: commissionConfig.type,
       value: commissionConfig.value,
-    }));
+    });
     const paymentMethod = normalizePaymentMethod(ride.paymentMethod);
-    const driverEarnings = Math.max(Math.round(baseRideFare - commissionAmount), 0);
-    const amount = paymentMethod === 'cash'
-      ? -Math.round(commissionAmount + previousCancellationFee)
-      : driverEarnings;
+    const driverEarnings = Math.max(Math.round((fare - commissionAmount) * 100) / 100, 0);
+    const amount = paymentMethod === 'cash' ? -commissionAmount : driverEarnings;
     const type = paymentMethod === 'cash' ? 'commission_deduction' : 'ride_earning';
 
     ride.paymentMethod = paymentMethod;
     ride.commissionAmount = commissionAmount;
     ride.driverEarnings = driverEarnings;
     ride.pricingSnapshot = {
-      ...(ride.pricingSnapshot?.toObject ? ride.pricingSnapshot.toObject() : ride.pricingSnapshot || {}),
       setPriceId: ride.pricingSnapshot?.setPriceId || commissionConfig.setPriceId || null,
       admin_commission_type_from_driver: Number(commissionConfig.type ?? ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
       admin_commission_from_driver: Number(commissionConfig.value ?? ride.pricingSnapshot?.admin_commission_from_driver ?? 0),
       resolvedAt: ride.pricingSnapshot?.resolvedAt || new Date(),
     };
     await ride.save({ session });
-
-    // Mark previous cancellation dues as paid in next ride
-    if (Array.isArray(ride.carriedCancellationRideIds) && ride.carriedCancellationRideIds.length > 0) {
-      await Ride.updateMany(
-        { _id: { $in: ride.carriedCancellationRideIds } },
-        { $set: { 'cancellation.payment_status': 'paid_in_next_ride' } },
-        { session }
-      );
-    }
 
     if (!amount) {
       await session.commitTransaction();
@@ -367,16 +366,10 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       amount,
       type,
       description: paymentMethod === 'cash'
-        ? (previousCancellationFee > 0
-            ? 'Commission & collected cancellation fee deducted'
-            : 'Commission deducted for cash ride')
+        ? 'Commission deducted for cash ride'
         : 'Driver earning credited for online ride',
       metadata: {
         fare,
-        baseRideFare,
-        previousCancellationFee,
-        surgeAmount,
-        commissionableFare,
         commissionAmount,
         driverEarnings,
         paymentMethod,

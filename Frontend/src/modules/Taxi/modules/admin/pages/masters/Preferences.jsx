@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, Upload, Plus, Trash2, Edit2, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
@@ -36,10 +35,12 @@ const Preferences = () => {
   useEffect(() => { fetchPreferences(); }, []);
 
   const handleIconChange = (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (file) {
-      setFormData((prev) => ({ ...prev, icon: file }));
-      setIconPreview(URL.createObjectURL(file));
+      setFormData(prev => ({ ...prev, icon: file }));
+      const reader = new FileReader();
+      reader.onloadend = () => setIconPreview(reader.result);
+      reader.readAsDataURL(file);
     }
   };
 
@@ -47,12 +48,7 @@ const Preferences = () => {
     if (!formData.name) return alert('Please enter preference name');
     try {
       setIsSubmitting(true);
-      let iconUrl = '';
-      if (formData.icon instanceof File) {
-        const uploadResult = await uploadService.uploadImageFile(formData.icon, 'preferences');
-        iconUrl = uploadResult?.secureUrl || uploadResult?.url || '';
-      }
-      const data = { name: formData.name, ...(iconUrl ? { icon: iconUrl } : {}) };
+      const data = { name: formData.name };
       await adminService.createPreference(data);
       setFormData({ name: '', icon: null });
       setIconPreview(null);
@@ -93,11 +89,11 @@ const Preferences = () => {
         <ChevronRight size={12} />
         <span className="text-gray-700">Preferences</span>
       </div>
-      <h1 className="text-xl font-semibold text-gray-900 mb-6">Preferences</h1>
+      <h1 className="text-xl text-gray-900 mb-6 font-bold">Preferences</h1>
 
       {/* Create Form */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Add New Preference</h3>
+        <h3 className="text-sm text-gray-900 mb-4 font-bold">Add New Preference</h3>
         <div className="flex items-end gap-6 flex-wrap">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Name <span className="text-red-500">*</span></label>

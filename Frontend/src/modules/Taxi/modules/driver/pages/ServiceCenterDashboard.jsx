@@ -26,7 +26,12 @@ import {
   ChevronUp,
   ChevronRight,
   Clock,
-  Search
+  Search,
+  Mail,
+  Shield,
+  FileText,
+  HandCoins,
+  UserPlus
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { uploadService } from '../../../shared/services/uploadService';
@@ -114,6 +119,11 @@ const biometricSourceOptions = [
   },
 ];
 
+const thumbCodeOptions = [
+  { value: 'LEFT_THUMB', label: 'Left Thumb' },
+  { value: 'RIGHT_THUMB', label: 'Right Thumb' },
+];
+
 const BIOMETRIC_BRIDGE_TIMEOUT_MS = 25000;
 const BIOMETRIC_MIN_MATCH_SCORE = 80;
 
@@ -144,6 +154,33 @@ const buildBiometricDraft = (booking) => ({
       : String(booking.biometrics.requiredFingerCount),
   notes: String(booking?.biometrics?.notes || ''),
 });
+
+const buildThumbParticipantKey = (participantType = 'co_passenger') =>
+  `${participantType}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+
+const buildThumbParticipantsDraft = (booking) => {
+  const participants = Array.isArray(booking?.biometrics?.thumbParticipants) ? booking.biometrics.thumbParticipants : [];
+  return participants.map((item, index) => ({
+    participantKey: String(item?.participantKey || buildThumbParticipantKey(item?.participantType || 'co_passenger')),
+    participantType: String(item?.participantType || 'co_passenger'),
+    participantLabel: String(item?.participantLabel || item?.name || 'Participant'),
+    userType: String(item?.userType || item?.participantType || 'participant'),
+    name: String(item?.name || ''),
+    phone: String(item?.phone || ''),
+    linkedUserId: String(item?.linkedUserId || ''),
+    linkedStaffId: String(item?.linkedStaffId || ''),
+    isPrimary: item?.isPrimary === true,
+    sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+  }));
+};
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Unable to read selected image'));
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
 
 const getBiometricTargetCount = (biometrics = {}, draft = null) => {
   if (draft) {
@@ -190,6 +227,12 @@ const getBiometricBridgeBadge = (status, preferredSource = 'usb_scanner') => {
 
 const getBiometricSourceActionLabel = (source = 'usb_scanner') =>
   source === 'phone_sensor' ? 'Phone sensor' : 'USB scanner';
+
+const isRdServiceTemplateFormat = (templateFormat = '') =>
+  ['uidai-pid-xml', 'rd-pid-xml', 'rd_service_pid_xml'].includes(String(templateFormat || '').trim().toLowerCase());
+
+const isRdServiceFingerRecord = (fingerRecord = {}) =>
+  isRdServiceTemplateFormat(fingerRecord?.templateFormat);
 
 const getBiometricModeStorageKey = (bookingId = '') =>
   `service-center-biometric-source:${String(bookingId || 'global')}`;
@@ -257,13 +300,34 @@ const withImageDataUrlPrefix = (value = '') => {
   return trimmed;
 };
 
-const pickFirstBiometricValue = (...values) =>
-  values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '';
+const pickFirstBiometricValue = (...values) => {
+  const found = values.find((value) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'object') return false;
+    const s = String(value).trim();
+    return (
+      s !== '' &&
+      s.toLowerCase() !== 'undefined' &&
+      s.toLowerCase() !== 'null' &&
+      s !== '[object Object]' &&
+      s.length > 5
+    );
+  });
+  return found !== undefined ? String(found).trim() : '';
+};
 
 const pickFirstBiometricPreviewValue = (...values) =>
   withImageDataUrlPrefix(
     values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') || '',
   );
+
+const escapePrintHtml = (value = '') =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 const parseBridgeObject = (result) => {
   if (!result) return result;
@@ -361,24 +425,32 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       qualityScore: payload.qualityScore ?? payload.quality ?? parsedResult.qualityScore ?? parsedResult.quality,
       captureSource: normalizedSource,
       deviceLabel: pickFirstBiometricValue(payload.deviceLabel, payload.deviceName, parsedResult.deviceLabel, parsedResult.deviceName),
-      scannerSerial: pickFirstBiometricValue(payload.scannerSerial, payload.deviceId, payload.serialNumber, parsedResult.scannerSerial, parsedResult.deviceId, parsedResult.serialNumber),
+      scannerSerial: pickFirstBiometricValue(payload.scannerSerial, payload.deviceId, payload.scannerSerial, parsedResult.scannerSerial, parsedResult.deviceId, parsedResult.serialNumber),
       sampleCount: payload.sampleCount ?? payload.captureCount ?? parsedResult.sampleCount ?? parsedResult.captureCount,
       notes: pickFirstBiometricValue(payload.notes, payload.message, parsedResult.notes, parsedResult.message),
     };
   }
 
   if (action === 'verifyFinger') {
-    const localMatch = payload.localMatch ?? payload.match ?? parsedResult.localMatch ?? parsedResult.match;
+    const localMatch = payload.localMatch ?? payload.match ?? payload.matched ?? payload.isMatch ?? payload.isMatched ?? parsedResult.localMatch ?? parsedResult.match ?? parsedResult.matched ?? parsedResult.isMatch ?? parsedResult.isMatched;
     return {
       ...parsedResult,
       ...payload,
       localMatch: typeof localMatch === 'boolean' ? localMatch : undefined,
-      verificationStatus:
-        payload.verificationStatus ||
-        payload.status ||
-        parsedResult.verificationStatus ||
-        parsedResult.status ||
-        (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
+      verificationStatus: (() => {
+        const raw = String(
+          payload.verificationStatus ||
+          payload.status ||
+          parsedResult.verificationStatus ||
+          parsedResult.status ||
+          (localMatch === true ? 'matched' : localMatch === false ? 'failed' : ''),
+        ).trim().toLowerCase();
+        if (['matched', 'match', 'verified'].includes(raw)) return 'matched';
+        if (['failed', 'fail', 'rejected', 'mismatch', 'no_match', 'nomatch', 'not_matched'].includes(raw)) return 'failed';
+        if (['low_quality', 'lowquality', 'low-quality', 'poor', 'retry'].includes(raw)) return 'low_quality';
+        if (['success', 'ok', 'pass', 'passed', 'true', 'yes', 'done', 'complete', 'captured'].includes(raw)) return '';
+        return raw;
+      })(),
       templateData: String(
         pickFirstBiometricValue(
           payload.templateData,
@@ -394,6 +466,30 @@ const normalizeBridgeResult = (result, preferredSource, action) => {
       captureSource: normalizedSource,
       matchScore: normalizeBiometricMatchScore(
         payload.matchScore ?? payload.score ?? parsedResult.matchScore ?? parsedResult.score,
+      ),
+      referenceTemplateHash: pickFirstBiometricValue(
+        payload.referenceTemplateHash,
+        payload.enrolledTemplateHash,
+        payload.referenceHash,
+        parsedResult.referenceTemplateHash,
+        parsedResult.enrolledTemplateHash,
+        parsedResult.referenceHash,
+      ),
+      matchedTemplateHash: pickFirstBiometricValue(
+        payload.matchedTemplateHash,
+        payload.templateHash,
+        payload.matchedHash,
+        parsedResult.matchedTemplateHash,
+        parsedResult.templateHash,
+        parsedResult.matchedHash,
+      ),
+      matchedFingerCode: pickFirstBiometricValue(
+        payload.matchedFingerCode,
+        payload.comparedFingerCode,
+        payload.fingerCode,
+        parsedResult.matchedFingerCode,
+        parsedResult.comparedFingerCode,
+        parsedResult.fingerCode,
       ),
       previewImage: pickFirstBiometricPreviewValue(
         payload.previewImage,
@@ -729,10 +825,6 @@ const loadImageFromDataUrl = (dataUrl) =>
   });
 
 const compressInspectionImageForUpload = async (file) => {
-  if (!(file instanceof File) && !(file instanceof Blob)) {
-    throw new Error('Unable to read selected image');
-  }
-
   const originalDataUrl = await fileToDataUrl(file);
 
   if (
@@ -740,9 +832,7 @@ const compressInspectionImageForUpload = async (file) => {
     || !String(file?.type || '').toLowerCase().startsWith('image/')
     || originalDataUrl.length <= 8_500_000
   ) {
-    return file instanceof File
-      ? file
-      : new File([file], 'inspection.jpg', { type: file.type || 'image/jpeg' });
+    return originalDataUrl;
   }
 
   const image = await loadImageFromDataUrl(originalDataUrl);
@@ -758,40 +848,20 @@ const compressInspectionImageForUpload = async (file) => {
 
   const context = canvas.getContext('2d');
   if (!context) {
-    return file instanceof File
-      ? file
-      : new File([file], 'inspection.jpg', { type: file.type || 'image/jpeg' });
+    return originalDataUrl;
   }
 
   context.drawImage(image, 0, 0, width, height);
 
   let quality = 0.82;
-  const blob = await new Promise((resolve) => {
-    const tryBlob = (q) => {
-      canvas.toBlob(
-        (result) => {
-          if (!result && q > 0.45) {
-            tryBlob(q - 0.1);
-            return;
-          }
-          resolve(result);
-        },
-        'image/jpeg',
-        q,
-      );
-    };
-    tryBlob(quality);
-  });
+  let compressed = canvas.toDataURL('image/jpeg', quality);
 
-  if (!blob) {
-    return file instanceof File
-      ? file
-      : new File([file], 'inspection.jpg', { type: file.type || 'image/jpeg' });
+  while (compressed.length > 8_500_000 && quality > 0.45) {
+    quality -= 0.1;
+    compressed = canvas.toDataURL('image/jpeg', quality);
   }
 
-  return new File([blob], String(file?.name || 'inspection.jpg').replace(/\.\w+$/, '.jpg'), {
-    type: 'image/jpeg',
-  });
+  return compressed;
 };
 
 const getBrowserCaptureLocation = () =>
@@ -884,17 +954,17 @@ const InspectionPhotoSlots = ({
   const accentClass =
     accent === 'amber'
       ? {
-          button: 'text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100',
-          primary: 'bg-amber-500 hover:bg-amber-600 text-white',
-          ring: 'focus:ring-amber-500/20',
-          badge: 'bg-amber-50 text-amber-700',
-        }
+        button: 'text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100',
+        primary: 'bg-amber-500 hover:bg-amber-600 text-white',
+        ring: 'focus:ring-amber-500/20',
+        badge: 'bg-amber-50 text-amber-700',
+      }
       : {
-          button: 'text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100',
-          primary: 'bg-emerald-500 hover:bg-emerald-600 text-white',
-          ring: 'focus:ring-emerald-500/20',
-          badge: 'bg-emerald-50 text-emerald-700',
-        };
+        button: 'text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100',
+        primary: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+        ring: 'focus:ring-emerald-500/20',
+        badge: 'bg-emerald-50 text-emerald-700',
+      };
 
   return (
     <div className="space-y-3">
@@ -968,12 +1038,10 @@ const InspectionPhotoSlots = ({
                     id={buildInspectionCameraInputId(field, index)}
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     disabled={busy}
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     aria-label={`${imageUrl ? 'Retake' : 'Take'} ${slot.label} photo`}
-                    onClick={(event) => {
-                      event.target.value = '';
-                    }}
                     onChange={(event) => {
                       const files = Array.from(event.target.files || []);
                       onFileSelect(field, index, files, 'camera');
@@ -1029,23 +1097,23 @@ const InspectionPhotoSlots = ({
                     </div>
                   ) : null}
                   <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onPreview(imageUrl)}
-                    className={`flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${accentClass.ring}`}
-                  >
-                    <Eye size={14} />
-                    Preview
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(bookingId, field, index)}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 transition hover:bg-rose-100"
-                  >
-                    <Trash2 size={14} />
-                    Remove
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => onPreview(imageUrl)}
+                      className={`flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700 transition hover:bg-slate-100 ${accentClass.ring}`}
+                    >
+                      <Eye size={14} />
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(bookingId, field, index)}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 transition hover:bg-rose-100"
+                    >
+                      <Trash2 size={14} />
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1077,6 +1145,7 @@ const ServiceCenterDashboard = () => {
   const [error, setError] = useState('');
   const [staffForm, setStaffForm] = useState(buildStaffForm);
   const [previewImage, setPreviewImage] = useState('');
+  const [legalModal, setLegalModal] = useState(null);
   const [cameraCaptureState, setCameraCaptureState] = useState({
     open: false,
     field: '',
@@ -1096,6 +1165,7 @@ const ServiceCenterDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [biometricDraft, setBiometricDraft] = useState(buildBiometricDraft());
+  const [thumbParticipantsDraft, setThumbParticipantsDraft] = useState([]);
   const [biometricAction, setBiometricAction] = useState('');
   const [biometricSource, setBiometricSource] = useState(() => readStoredBiometricSource());
   const [biometricStatus, setBiometricStatus] = useState({
@@ -1104,10 +1174,70 @@ const ServiceCenterDashboard = () => {
     fingerCode: '',
     action: '',
   });
+  const [thumbAction, setThumbAction] = useState('');
   const bookingsPerPage = 8;
 
   const role = String(profile?.onboarding?.role || '').toLowerCase();
   const isStaffUser = role === 'service_center_staff';
+
+  const openLegal = (type) => {
+    const contentMap = {
+      driver_app: {
+        title: 'Driver Application',
+        Icon: UserPlus,
+        description: 'Join the Appzeto 24 fleet as a certified driver.',
+        content: `Appzeto 24 is always looking for professional, dedicated drivers to join our growing ecosystem. 
+
+Steps to apply:
+1. Ensure you have a valid Commercial Driving License.
+2. Visit the Appzeto 24 Driver Onboarding center or use the Mobile App.
+3. Submit required documents: Aadhaar, PAN, License, and Police Verification.
+4. Complete the Biometric enrollment process at any authorized Service Center.
+5. Once approved, you can start accepting rides and managing your earnings via the dashboard.`
+      },
+      terms: {
+        title: 'Terms and Conditions',
+        Icon: FileText,
+        description: 'General rules for using the Appzeto 24 platform.',
+        content: `By using the Appzeto 24 platform, you agree to comply with all applicable transport regulations and our safety standards.
+
+Key Highlights:
+• Professionalism: Drivers and Staff must maintain a high standard of service.
+• Vehicle Readiness: All vehicles listed must be in active, roadworthy condition.
+• Compliance: You must ensure all permits and insurance are valid.
+• Platform Fees: Appzeto 24 charges a service fee for every successful booking handled.
+• Account Security: You are responsible for keeping your credentials and biometric data secure.`
+      },
+      privacy: {
+        title: 'Privacy Policy',
+        Icon: Shield,
+        description: 'How we handle your data and biometrics.',
+        content: `Appzeto 24 takes data security seriously. We collect specific information to ensure safety and service quality.
+
+Data Collected:
+• Biometrics: Fingerprint hashes are stored encrypted (AES-256) for verification only. Raw images are never stored permanently.
+• Location: Live GPS tracking is used during active bookings for safety.
+• Contact: Phone and email are used for booking updates and support.
+• Vehicle Data: Inspection logs and photos are kept for insurance purposes.
+
+We do not share your biometric data with third-party advertising networks.`
+      },
+      refund: {
+        title: 'Refund Policy',
+        Icon: HandCoins,
+        description: 'Cancellation and refund guidelines.',
+        content: `Transparent refund rules for customers and partners.
+
+Booking Cancellations:
+• Customer-initiated: Refund varies based on how close the pickup time is.
+• Operator-initiated: If a vehicle fails inspection, a full refund is processed to the customer.
+• Service Center Fees: Fees for inspections are non-refundable once the inspection report is generated.
+
+Processing Time: Refunds are typically credited back to the original payment method within 5-7 working days.`
+      }
+    };
+    setLegalModal(contentMap[type]);
+  };
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -1177,7 +1307,7 @@ const ServiceCenterDashboard = () => {
   const filteredBookings = useMemo(() => {
     if (!searchQuery) return bookings;
     const lowerQuery = searchQuery.toLowerCase();
-    return bookings.filter(b => 
+    return bookings.filter(b =>
       (b.bookingReference || '').toLowerCase().includes(lowerQuery) ||
       (b.customer?.name || '').toLowerCase().includes(lowerQuery) ||
       (b.vehicleName || '').toLowerCase().includes(lowerQuery)
@@ -1388,7 +1518,7 @@ const ServiceCenterDashboard = () => {
       videoElement.srcObject = cameraStream;
       const playPromise = videoElement.play?.();
       if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {});
+        playPromise.catch(() => { });
       }
       return undefined;
     }
@@ -1425,6 +1555,7 @@ const ServiceCenterDashboard = () => {
         serviceCenterNote: '',
       });
       setBiometricDraft(buildBiometricDraft());
+      setThumbParticipantsDraft([]);
       setBiometricSource(readStoredBiometricSource());
       setBiometricStatus({
         tone: 'idle',
@@ -1441,6 +1572,7 @@ const ServiceCenterDashboard = () => {
       serviceCenterNote: String(selectedBooking.serviceCenterNote || ''),
     });
     setBiometricDraft(buildBiometricDraft(selectedBooking));
+    setThumbParticipantsDraft(buildThumbParticipantsDraft(selectedBooking));
     setBiometricSource(readStoredBiometricSource(selectedBooking.id || selectedBooking._id));
     setBiometricStatus({
       tone: 'idle',
@@ -1617,13 +1749,13 @@ const ServiceCenterDashboard = () => {
       current.map((item) =>
         String(item.id || item._id) === String(bookingId)
           ? {
-              ...item,
-              ...patch,
-              rentalInspection: patch?.rentalInspection
-                ? mergeRentalInspection(item.rentalInspection, patch.rentalInspection)
-                : item.rentalInspection,
-              biometrics: patch?.biometrics || item.biometrics,
-            }
+            ...item,
+            ...patch,
+            rentalInspection: patch?.rentalInspection
+              ? mergeRentalInspection(item.rentalInspection, patch.rentalInspection)
+              : item.rentalInspection,
+            biometrics: patch?.biometrics || item.biometrics,
+          }
           : item,
       ),
     );
@@ -1654,18 +1786,7 @@ const ServiceCenterDashboard = () => {
   };
 
   const attachInspectionImageToBooking = async (bookingId, field, slotIndex, imageSource, metadata = null) => {
-    let uploadResult;
-    if (imageSource instanceof File || imageSource instanceof Blob) {
-      const file =
-        imageSource instanceof File
-          ? imageSource
-          : new File([imageSource], metadata?.fileName || 'inspection.jpg', {
-              type: imageSource.type || metadata?.mimeType || 'image/jpeg',
-            });
-      uploadResult = await uploadService.uploadImageFile(file, 'service-center-condition');
-    } else {
-      uploadResult = await uploadService.uploadImage(imageSource, 'service-center-condition');
-    }
+    const uploadResult = await uploadService.uploadImage(imageSource, 'service-center-condition');
     const imageUrl = uploadResult?.url || uploadResult?.secureUrl || '';
     if (!imageUrl) {
       throw new Error('Unable to upload selected image');
@@ -1717,15 +1838,15 @@ const ServiceCenterDashboard = () => {
 
     try {
       const file = files[0];
-      const uploadFile = await compressInspectionImageForUpload(file);
+      const dataUrl = await compressInspectionImageForUpload(file);
       const location = source === 'camera' ? await getBrowserCaptureLocation() : null;
-      await attachInspectionImageToBooking(bookingId, field, slotIndex, uploadFile, {
+      await attachInspectionImageToBooking(bookingId, field, slotIndex, dataUrl, {
         capturedAt: new Date().toISOString(),
         latitude: location?.latitude ?? null,
         longitude: location?.longitude ?? null,
         source,
         fileName: String(file?.name || '').trim(),
-        mimeType: String(uploadFile?.type || file?.type || 'image/jpeg').trim(),
+        mimeType: String(file?.type || 'image/jpeg').trim(),
       });
     } catch (err) {
       setError(err?.message || 'Unable to upload condition images');
@@ -1835,20 +1956,7 @@ const ServiceCenterDashboard = () => {
       }
 
       context.drawImage(videoElement, 0, 0, width, height);
-      const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(
-          (result) => {
-            if (!result) {
-              reject(new Error('Unable to capture the camera frame'));
-              return;
-            }
-            resolve(result);
-          },
-          'image/jpeg',
-          0.9,
-        );
-      });
-      const captureFile = new File([blob], `inspection-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       const uploadTarget = `${cameraCaptureState.field}:${cameraCaptureState.slotIndex}:camera`;
       setUploadingConditionSection(uploadTarget);
       const location = await getBrowserCaptureLocation();
@@ -1856,14 +1964,13 @@ const ServiceCenterDashboard = () => {
         cameraCaptureState.bookingId,
         cameraCaptureState.field,
         cameraCaptureState.slotIndex,
-        captureFile,
+        dataUrl,
         {
           capturedAt: new Date().toISOString(),
           latitude: location?.latitude ?? null,
           longitude: location?.longitude ?? null,
           source: 'browser_camera',
           mimeType: 'image/jpeg',
-          fileName: captureFile.name,
         },
       );
 
@@ -1970,6 +2077,371 @@ const ServiceCenterDashboard = () => {
     return null;
   };
 
+  const persistThumbParticipants = async (nextParticipants) => {
+    if (!selectedBooking) {
+      return null;
+    }
+
+    const payload = nextParticipants.map((item, index) => ({
+      participantKey: String(item?.participantKey || buildThumbParticipantKey(item?.participantType || 'co_passenger')),
+      participantType: String(item?.participantType || 'co_passenger'),
+      participantLabel: String(item?.participantLabel || item?.name || 'Participant'),
+      userType: String(item?.userType || item?.participantType || 'participant'),
+      name: String(item?.name || '').trim(),
+      phone: String(item?.phone || '').replace(/\D/g, '').slice(0, 10),
+      linkedUserId: String(item?.linkedUserId || ''),
+      linkedStaffId: String(item?.linkedStaffId || ''),
+      isPrimary: item?.isPrimary === true,
+      sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    }));
+
+    const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+      thumbParticipants: payload,
+    });
+    const updated = unwrap(response)?.booking || unwrap(response);
+    if (updated?.id || updated?._id) {
+      patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+      setThumbParticipantsDraft(buildThumbParticipantsDraft(updated));
+      return updated;
+    }
+    return refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+  };
+
+  const addCoPassengerParticipant = async () => {
+    const nextParticipants = [
+      ...thumbParticipantsDraft,
+      {
+        participantKey: buildThumbParticipantKey('co_passenger'),
+        participantType: 'co_passenger',
+        participantLabel: `Co-passenger ${thumbParticipantsDraft.filter((item) => item.participantType === 'co_passenger').length + 1}`,
+        userType: 'co_passenger',
+        name: '',
+        phone: '',
+        linkedUserId: '',
+        linkedStaffId: '',
+        isPrimary: false,
+        sortOrder: thumbParticipantsDraft.length,
+      },
+    ];
+    setThumbParticipantsDraft(nextParticipants);
+    await persistThumbParticipants(nextParticipants);
+  };
+
+  const handleThumbParticipantFieldBlur = async (participantKey, field, value) => {
+    const nextParticipants = thumbParticipantsDraft.map((item) =>
+      item.participantKey === participantKey
+        ? {
+          ...item,
+          [field]: field === 'phone' ? String(value || '').replace(/\D/g, '').slice(0, 10) : value,
+        }
+        : item,
+    );
+    setThumbParticipantsDraft(nextParticipants);
+    await persistThumbParticipants(nextParticipants);
+  };
+
+  const invokeThumbCaptureBridge = async (payload = {}, preferredSource = biometricSource) => {
+    const bridgePayload = {
+      ...payload,
+      preferredSource,
+      biometricSource: preferredSource,
+      mode: 'raw_image_only',
+      imageOnly: true,
+      allowedFormats: ['png', 'jpg', 'jpeg', 'bmp'],
+      runtime: window?.flutter_inappwebview?.callHandler ? 'flutter-webview' : 'browser',
+    };
+
+    if (window?.ServiceCenterBiometricBridge?.captureThumbImage) {
+      return window.ServiceCenterBiometricBridge.captureThumbImage(bridgePayload);
+    }
+
+    if (window?.flutter_inappwebview?.callHandler) {
+      const attempts = [
+        ['thumbCapture', [`thumb-capture:${preferredSource}`, bridgePayload]],
+        ['thumbCapture', [bridgePayload]],
+        ['biometricThumbCapture', [bridgePayload]],
+        ['fingerprint', [`fingerprint:${preferredSource}:capture-image`, bridgePayload]],
+      ];
+
+      for (const [handlerName, args] of attempts) {
+        try {
+          const result = await withBridgeTimeout(window.flutter_inappwebview.callHandler(handlerName, ...args));
+          if (result) {
+            return parseBridgeObject(result);
+          }
+        } catch {
+          // Try the next native bridge signature.
+        }
+      }
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/bmp';
+    const selectedFile = await new Promise((resolve) => {
+      input.onchange = () => resolve(input.files?.[0] || null);
+      input.click();
+    });
+
+    if (!selectedFile) {
+      throw new Error('Thumb capture was cancelled.');
+    }
+
+    const imageBase64 = await readFileAsDataUrl(selectedFile);
+    return {
+      imageBase64,
+      mimeType: selectedFile.type || 'image/png',
+      fileName: selectedFile.name || '',
+      captureSource: preferredSource || 'manual',
+      deviceLabel: preferredSource === 'phone_sensor' ? 'Phone Capture' : 'Manual Upload',
+    };
+  };
+
+  const handleThumbCapture = async (participant, thumbCode) => {
+    if (!selectedBooking || !participant?.participantKey) {
+      return;
+    }
+
+    if (!biometricDraft.consentAccepted && !selectedBooking?.biometrics?.consentAccepted) {
+      setBiometricStatus({
+        tone: 'error',
+        message: 'Save customer consent before capturing thumb images.',
+        fingerCode: thumbCode,
+        action: 'capture',
+      });
+      return;
+    }
+
+    const actionKey = `thumb:${participant.participantKey}:${thumbCode}`;
+    setThumbAction(actionKey);
+    setBiometricStatus({
+      tone: 'loading',
+      message: `Waiting for ${participant.participantLabel} ${thumbCode === 'LEFT_THUMB' ? 'left' : 'right'} thumb capture...`,
+      fingerCode: thumbCode,
+      action: 'capture',
+    });
+
+    try {
+      await saveBiometricDraft();
+
+      const bridgeResult = await invokeThumbCaptureBridge({
+        bookingId: selectedBooking.id || selectedBooking._id,
+        participantKey: participant.participantKey,
+        participantType: participant.participantType,
+        participantLabel: participant.participantLabel,
+        userType: participant.userType,
+        thumbCode,
+      }, biometricSource);
+
+      const imageBase64 = pickFirstBiometricPreviewValue(
+        bridgeResult?.imageBase64,
+        bridgeResult?.base64Image,
+        bridgeResult?.previewImage,
+        bridgeResult?.image,
+        bridgeResult?.imageUrl,
+        bridgeResult?.path,
+      );
+
+      if (!imageBase64) {
+        throw new Error('The scanner did not return a thumb image.');
+      }
+
+      const uploadResult = imageBase64.startsWith('data:image/')
+        ? await uploadService.uploadImage(imageBase64, `service-center/booking-${selectedBooking.id || selectedBooking._id}/thumbs`)
+        : { data: { url: imageBase64 }, url: imageBase64 };
+      const uploadedUrl = uploadResult?.data?.url || uploadResult?.url || uploadResult?.secureUrl || '';
+
+      if (!uploadedUrl) {
+        throw new Error('Unable to upload the captured thumb image.');
+      }
+
+      const existingCaptures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
+      const nextCaptures = [
+        ...existingCaptures.filter(
+          (item) => !(String(item?.participantKey || '') === String(participant.participantKey) && String(item?.thumbCode || '') === String(thumbCode)),
+        ),
+        {
+          captureId: `${participant.participantKey}:${thumbCode}`,
+          participantKey: participant.participantKey,
+          participantType: participant.participantType,
+          participantLabel: participant.participantLabel,
+          userType: participant.userType,
+          thumbCode,
+          imageUrl: uploadedUrl,
+          mimeType: bridgeResult?.mimeType || 'image/png',
+          fileName: bridgeResult?.fileName || '',
+          captureSource: normalizeBiometricCaptureSource(bridgeResult?.captureSource, biometricSource),
+          deviceLabel: bridgeResult?.deviceLabel || '',
+          scannerSerial: bridgeResult?.scannerSerial || '',
+          notes: bridgeResult?.notes || '',
+          capturedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+        thumbParticipants: thumbParticipantsDraft,
+        thumbCaptures: nextCaptures,
+      });
+      const updated = unwrap(response)?.booking || unwrap(response);
+      if (updated?.id || updated?._id) {
+        patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+      } else {
+        await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+      }
+
+      setBiometricStatus({
+        tone: 'success',
+        message: `${participant.participantLabel} ${thumbCode === 'LEFT_THUMB' ? 'left' : 'right'} thumb captured successfully.`,
+        fingerCode: thumbCode,
+        action: 'capture',
+      });
+    } catch (err) {
+      setBiometricStatus({
+        tone: 'error',
+        message: err?.message || 'Unable to capture thumb image.',
+        fingerCode: thumbCode,
+        action: 'capture',
+      });
+    } finally {
+      setThumbAction('');
+    }
+  };
+
+  const handleDeleteThumbCapture = async (captureId) => {
+    if (!selectedBooking || !captureId) {
+      return;
+    }
+
+    const existingCaptures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
+    const nextCaptures = existingCaptures.filter((item) => String(item?.captureId || '') !== String(captureId));
+    const response = await updateServiceCenterBookingBiometrics(selectedBooking.id || selectedBooking._id, {
+      thumbParticipants: thumbParticipantsDraft,
+      thumbCaptures: nextCaptures,
+    });
+    const updated = unwrap(response)?.booking || unwrap(response);
+    if (updated?.id || updated?._id) {
+      patchBookingLocal(selectedBooking.id || selectedBooking._id, updated);
+    } else {
+      await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
+    }
+  };
+
+  const handlePrintAgreement = () => {
+    if (!selectedBooking) {
+      return;
+    }
+
+    const captures = Array.isArray(selectedBooking?.biometrics?.thumbCaptures) ? selectedBooking.biometrics.thumbCaptures : [];
+    const participants = thumbParticipantsDraft.length > 0
+      ? thumbParticipantsDraft
+      : (Array.isArray(selectedBooking?.biometrics?.thumbParticipants) ? selectedBooking.biometrics.thumbParticipants : []);
+    const groupedCaptures = participants.map((participant) => ({
+      participant,
+      captures: captures.filter((item) => String(item?.participantKey || '') === String(participant.participantKey)),
+    }));
+    const matchedParticipantKeys = new Set(groupedCaptures.map((entry) => String(entry?.participant?.participantKey || '')));
+    const orphanCaptures = captures.filter(
+      (item) => !matchedParticipantKeys.has(String(item?.participantKey || '')),
+    );
+    if (orphanCaptures.length > 0) {
+      groupedCaptures.push({
+        participant: {
+          participantKey: 'unmatched-captures',
+          participantLabel: 'Additional Thumb Captures',
+          name: '',
+          phone: '',
+        },
+        captures: orphanCaptures,
+      });
+    }
+
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Rental Agreement ${escapePrintHtml(selectedBooking.bookingReference || '')}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
+            h1,h2,h3 { margin: 0 0 8px; }
+            .card { border: 1px solid #cbd5e1; border-radius: 16px; padding: 16px; margin: 16px 0; }
+            .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+            .thumb { border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; text-align: center; }
+            .thumb img { max-width: 100%; max-height: 180px; object-fit: contain; display: block; margin: 0 auto 8px; }
+            .muted { color: #64748b; font-size: 12px; }
+            @media print {
+              body { padding: 12px; }
+              .card { break-inside: avoid; }
+              .thumb { break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Rental Agreement</h1>
+          <p class="muted">Booking ${escapePrintHtml(selectedBooking.bookingReference || '')}</p>
+          <div class="card">
+            <h3>Customer</h3>
+            <p>${escapePrintHtml(selectedBooking.customer?.name || 'N/A')} | ${escapePrintHtml(selectedBooking.customer?.phone || 'N/A')}</p>
+            <p>${escapePrintHtml(selectedBooking.vehicleName || 'Vehicle')} | ${escapePrintHtml(selectedBooking.pickupDateTime ? new Date(selectedBooking.pickupDateTime).toLocaleString() : 'N/A')}</p>
+          </div>
+          ${groupedCaptures.map(({ participant, captures: participantCaptures }) => `
+            <div class="card">
+              <h3>${escapePrintHtml(participant.participantLabel || 'Participant')}</h3>
+              <p class="muted">${escapePrintHtml(participant.name || '')} ${participant.phone ? `| ${escapePrintHtml(participant.phone)}` : ''}</p>
+              <div class="grid">
+                ${participantCaptures.length > 0 ? participantCaptures.map((capture) => `
+                  <div class="thumb">
+                    <img src="${escapePrintHtml(capture.imageUrl || capture.previewImage || '')}" alt="${escapePrintHtml(capture.thumbCode || 'Thumb')}" />
+                    <div><strong>${capture.thumbCode === 'LEFT_THUMB' ? 'Left Thumb' : capture.thumbCode === 'RIGHT_THUMB' ? 'Right Thumb' : 'Thumb'}</strong></div>
+                    <div class="muted">${escapePrintHtml(capture.captureSource || 'unknown')}${capture.capturedAt ? ` | ${escapePrintHtml(new Date(capture.capturedAt).toLocaleString())}` : ''}</div>
+                  </div>
+                `).join('') : '<p class="muted">No thumb capture saved yet.</p>'}
+              </div>
+            </div>
+          `).join('')}
+          <script>
+            (function () {
+              const images = Array.from(document.images || []);
+              const done = () => {
+                setTimeout(() => {
+                  window.focus();
+                  window.print();
+                }, 250);
+              };
+              if (!images.length) {
+                if (document.readyState === 'complete') done();
+                else window.addEventListener('load', done, { once: true });
+                return;
+              }
+              let settled = 0;
+              const finish = () => {
+                settled += 1;
+                if (settled >= images.length) done();
+              };
+              images.forEach((img) => {
+                if (img.complete) {
+                  finish();
+                } else {
+                  img.addEventListener('load', finish, { once: true });
+                  img.addEventListener('error', finish, { once: true });
+                }
+              });
+              setTimeout(done, 3000);
+            })();
+          </script>
+        </body>
+      </html>`;
+
+    const printWindow = window.open('', '_blank', 'width=980,height=720');
+    if (!printWindow) {
+      setError('Popup blocked by the browser. Allow popups for this page and try printing again.');
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const saveBiometricDraft = async () => {
     if (!selectedBooking) {
       return null;
@@ -2021,6 +2493,18 @@ const ServiceCenterDashboard = () => {
 
     if (action === 'verifyFinger' && !enrolled) {
       return `Capture ${finger.label} before trying to verify it.`;
+    }
+
+    if (action === 'verifyFinger') {
+      const enrolledFingers = Array.isArray(selectedBooking?.biometrics?.fingers)
+        ? selectedBooking.biometrics.fingers
+        : [];
+      const enrolledRecord = enrolledFingers.find(
+        (item) => String(item?.fingerCode || '').trim().toUpperCase() === String(finger.code).toUpperCase(),
+      );
+      if (isRdServiceFingerRecord(enrolledRecord)) {
+        return 'This finger was enrolled through IDEMIA RD Service. RD capture returns secured PID XML for authentication, so local re-verify is not available in this flow. Use Rescan if you need to refresh the enrolled capture.';
+      }
     }
 
     if (biometricSource === 'usb_scanner' && bridgeStatus === 'demo-mode') {
@@ -2088,7 +2572,7 @@ const ServiceCenterDashboard = () => {
 
       if (window.isBiometricBridgeAvailable === true) {
         throw new Error(
-          `The ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} bridge is connected, but the APK did not return any scan result. Check the Flutter WebView handler names and make sure it returns template data for ${bridgeAction}.`,
+          `The ${getBiometricSourceActionLabel(preferredSource).toLowerCase()} bridge is connected, but the APK did not return any scan result. Check the Flutter WebView handler names and make sure it returns ${action === 'verifyFinger' ? 'a verification result' : 'capture data'} for ${bridgeAction}.`,
         );
       }
     }
@@ -2243,9 +2727,12 @@ const ServiceCenterDashboard = () => {
       } else {
         await refreshBookingBiometrics(selectedBooking.id || selectedBooking._id);
       }
+      const resolvedTemplateFormat = String(bridgeResult?.templateFormat || '').trim().toLowerCase();
       setBiometricStatus({
         tone: 'success',
-        message: `${finger.label} captured successfully from ${getBiometricSourceLabel(biometricSource)}.`,
+        message: isRdServiceTemplateFormat(resolvedTemplateFormat)
+          ? `${finger.label} captured successfully from the IDEMIA RD USB scanner. This enrollment is stored as RD PID XML, so local verify is disabled in this flow.`
+          : `${finger.label} captured successfully from ${getBiometricSourceLabel(biometricSource)}.`,
         fingerCode: finger.code,
         action: 'capture',
       });
@@ -2295,17 +2782,27 @@ const ServiceCenterDashboard = () => {
     setError('');
 
     try {
+      const enrolledFingers = Array.isArray(selectedBooking?.biometrics?.fingers)
+        ? selectedBooking.biometrics.fingers
+        : [];
+      const enrolledRecord = enrolledFingers.find(
+        (item) => String(item?.fingerCode || '').trim().toUpperCase() === String(finger.code).toUpperCase(),
+      );
+
       const bridgeResult = await invokeFingerprintBridge('verifyFinger', {
         fingerCode: finger.code,
         fingerLabel: finger.label,
         bookingId: selectedBooking.id || selectedBooking._id,
+        enrolledTemplateHash: enrolledRecord?.templateHashPreview || enrolledRecord?.templateHash || '',
+        enrolledTemplateFormat: enrolledRecord?.templateFormat || '',
+        enrolledCaptureSource: enrolledRecord?.captureSource || '',
       }, biometricSource);
 
       if (bridgeResult && typeof bridgeResult === 'object' && bridgeResult.success === false) {
         throw new Error(String(bridgeResult.message || `Unable to verify ${finger.label}`));
       }
 
-      const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || bridgeResult?.status || '').trim().toLowerCase();
+      const resolvedBridgeStatus = String(bridgeResult?.verificationStatus || '').trim().toLowerCase();
       const resolvedBridgeScore = normalizeBiometricMatchScore(bridgeResult?.matchScore);
       const hasBridgeTemplate = Boolean(String(bridgeResult?.templateData || bridgeResult?.template || '').trim());
       const hasBridgeBooleanMatch = typeof bridgeResult?.localMatch === 'boolean' || typeof bridgeResult?.match === 'boolean';
@@ -2321,9 +2818,26 @@ const ServiceCenterDashboard = () => {
         throw new Error('The scanner did not return a fingerprint result. Ask the customer to scan again.');
       }
 
-      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeDecision) {
+      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && !hasBridgeTemplate && !Number.isFinite(resolvedBridgeScore)) {
         throw new Error(
-          `${getBiometricSourceLabel(biometricSource)} verification is not returning a real match result yet. The bridge only sent a fresh template capture, so the app cannot reliably prove the same finger matched. Wire the scanner bridge to return matchScore, localMatch, or verificationStatus for verify.`,
+          `${getBiometricSourceLabel(biometricSource)} verification must return templateData or a numeric matchScore. A generic success response is not enough to verify a fingerprint.`,
+        );
+      }
+
+      if ((biometricSource === 'usb_scanner' || biometricSource === 'bluetooth_scanner') && Number.isFinite(resolvedBridgeScore)) {
+        const referenceHash = String(
+          bridgeResult?.referenceTemplateHash || bridgeResult?.enrolledTemplateHash || enrolledRecord?.templateHash || '',
+        ).trim();
+        if (!referenceHash) {
+          throw new Error(
+            `${getBiometricSourceLabel(biometricSource)} verification score is missing the enrolled template reference. Reconnect the APK scanner bridge and try again.`,
+          );
+        }
+      }
+
+      if (!hasBridgeDecision && !hasBridgeTemplate) {
+        throw new Error(
+          `${getBiometricSourceLabel(biometricSource)} verification did not return any result. Ask the customer to scan again.`,
         );
       }
 
@@ -2332,6 +2846,9 @@ const ServiceCenterDashboard = () => {
         verificationStatus: resolvedBridgeStatus,
         localMatch: bridgeResult?.localMatch ?? bridgeResult?.match,
         templateData: bridgeResult?.templateData || bridgeResult?.template || '',
+        referenceTemplateHash: bridgeResult?.referenceTemplateHash || bridgeResult?.enrolledTemplateHash || enrolledRecord?.templateHash || '',
+        matchedTemplateHash: bridgeResult?.matchedTemplateHash || bridgeResult?.templateHash || '',
+        matchedFingerCode: bridgeResult?.matchedFingerCode || bridgeResult?.comparedFingerCode || '',
         previewImage:
           bridgeResult?.previewImage
           || bridgeResult?.imageBase64
@@ -2377,14 +2894,15 @@ const ServiceCenterDashboard = () => {
         ? `Re-verify failed: ${finger.label} fingerprint does not match. Minimum required is ${BIOMETRIC_MIN_MATCH_SCORE}%, but this scan returned ${responseMatchScore}%.`
         : `Re-verify failed: ${finger.label} fingerprint does not match the enrolled fingerprint.`;
 
+      const resultIsMatch = responseData?.verification?.isMatch ?? (verificationStatus === 'matched');
+      const backendMessage = responseData?.verification?.message;
+
       setBiometricStatus({
-        tone: verificationStatus === 'matched' ? 'success' : 'error',
+        tone: resultIsMatch ? 'success' : 'error',
         message:
-          verificationStatus === 'matched'
+          backendMessage || (resultIsMatch
             ? successMessage
-            : verificationStatus === 'low_quality'
-              ? lowQualityMessage
-              : failedMessage,
+            : (verificationStatus === 'low_quality' ? lowQualityMessage : failedMessage)),
         fingerCode: finger.code,
         action: 'verify',
       });
@@ -2660,11 +3178,11 @@ const ServiceCenterDashboard = () => {
                 </div>
               </div>
 
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Account Name</p>
-                    <p className="mt-2 text-base font-bold text-slate-900">{profile?.name || '-'}</p>
-                  </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Account Name</p>
+                  <p className="mt-2 text-base font-bold text-slate-900">{profile?.name || '-'}</p>
+                </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Phone Number</p>
                   <p className="mt-2 text-base font-bold text-slate-900">{profile?.phone || profile?.ownerPhone || '-'}</p>
@@ -2703,6 +3221,52 @@ const ServiceCenterDashboard = () => {
               </div>
             </section>
 
+            <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-950">Support & Legal</h3>
+              <p className="mt-1 text-sm text-slate-500">Contact owner or review platform policies.</p>
+
+              <div className="mt-5 space-y-4">
+                <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 shadow-sm">
+                    <Mail size={24} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Owner</p>
+                    <a href="mailto:customercare@Appzeto 24.com" className="text-base font-bold text-slate-900 hover:text-emerald-600 transition">customercare@Appzeto 24.com</a>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-600 shadow-sm">
+                    <Phone size={24} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Call Owner</p>
+                    <a href="tel:91-93-911-911" className="text-base font-bold text-slate-900 hover:text-sky-600 transition">91-93-911-911</a>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  {[
+                    { type: 'driver_app', label: 'Driver App', Icon: UserPlus, color: 'emerald' },
+                    { type: 'terms', label: 'Terms', Icon: FileText, color: 'slate' },
+                    { type: 'privacy', label: 'Privacy', Icon: Shield, color: 'indigo' },
+                    { type: 'refund', label: 'Refunds', Icon: HandCoins, color: 'rose' }
+                  ].map((link) => (
+                    <button
+                      key={link.type}
+                      type="button"
+                      onClick={() => openLegal(link.type)}
+                      className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50 active:scale-95"
+                    >
+                      <link.Icon size={20} className={`text-${link.color}-600`} />
+                      <span className="text-xs font-bold text-slate-700">{link.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+
             <section className="rounded-[28px] border border-rose-200 bg-white p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-950">Session</h3>
               <p className="mt-1 text-sm text-slate-500">Use this action when you want to sign out from the service-center panel.</p>
@@ -2733,10 +3297,10 @@ const ServiceCenterDashboard = () => {
                   {selectedFingerprintRecord
                     ? 'Open fingerprint detail page with preview support from the Flutter bridge.'
                     : selectedBooking
-                    ? 'Review details, assign staff, and update notes.'
-                    : isStaffUser
-                      ? 'Bookings assigned to your login.'
-                      : 'Assign staff and review details.'}
+                      ? 'Review details, assign staff, and update notes.'
+                      : isStaffUser
+                        ? 'Bookings assigned to your login.'
+                        : 'Assign staff and review details.'}
                 </p>
               </div>
               {selectedBooking ? (
@@ -2757,437 +3321,561 @@ const ServiceCenterDashboard = () => {
             </div>
 
             <div className="mt-6 space-y-4">
-               {selectedBooking ? (() => {
-                 const inspection = selectedBooking.rentalInspection || {};
-                 const biometrics = selectedBooking.biometrics || {};
-                 const targetFingerCount = getBiometricTargetCount(biometrics, biometricDraft);
-                 const biometricBadge =
-                   targetFingerCount > 0
-                     ? `${biometrics.enrolledFingerCount || 0}/${targetFingerCount} enrolled`
-                     : `${biometrics.enrolledFingerCount || 0} enrolled · optional`;
-                 const beforeInspection = inspection.beforeHandover || {};
-                 const afterInspection = inspection.afterReturn || {};
-                 const beforeConditionImages = Array.isArray(inspection.beforeConditionImages) ? inspection.beforeConditionImages : [];
-                 const afterConditionImages = Array.isArray(inspection.afterConditionImages) ? inspection.afterConditionImages : [];
-                 const beforeConditionImageDetails = Array.isArray(inspection.beforeConditionImageDetails) ? inspection.beforeConditionImageDetails : [];
-                 const afterConditionImageDetails = Array.isArray(inspection.afterConditionImageDetails) ? inspection.afterConditionImageDetails : [];
-                 const enrolledFingerSet = new Set(Array.isArray(biometrics.enrolledFingerCodes) ? biometrics.enrolledFingerCodes : []);
-                 const fingerDetailMap = new Map(
-                   (Array.isArray(biometrics.fingers) ? biometrics.fingers : []).map((item) => [item.fingerCode, item]),
-                 );
-                 const bridgeStatus = getBiometricBridgeStatus(biometricSource);
-                 const customerDocumentCards = getCustomerDocumentCards(selectedBooking);
-                 const getPossessionTime = () => {
-                   const start = new Date(selectedBooking.pickupDateTime);
-                   const end = selectedBooking.status === 'completed' ? new Date(selectedBooking.updatedAt) : new Date();
-                   const diffMs = Math.max(0, end - start);
-                   const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                   const days = Math.floor(hours / 24);
-                   if (days > 0) return `${days}d ${hours % 24}h`;
-                   if (hours > 0) return `${hours}h ${mins}m`;
-                   return `${mins}m`;
-                 };
+              {selectedBooking ? (() => {
+                const inspection = selectedBooking.rentalInspection || {};
+                const biometrics = selectedBooking.biometrics || {};
+                const targetFingerCount = getBiometricTargetCount(biometrics, biometricDraft);
+                const biometricBadge =
+                  targetFingerCount > 0
+                    ? `${biometrics.enrolledFingerCount || 0}/${targetFingerCount} enrolled`
+                    : `${biometrics.enrolledFingerCount || 0} enrolled · optional`;
+                const beforeInspection = inspection.beforeHandover || {};
+                const afterInspection = inspection.afterReturn || {};
+                const beforeConditionImages = Array.isArray(inspection.beforeConditionImages) ? inspection.beforeConditionImages : [];
+                const afterConditionImages = Array.isArray(inspection.afterConditionImages) ? inspection.afterConditionImages : [];
+                const beforeConditionImageDetails = Array.isArray(inspection.beforeConditionImageDetails) ? inspection.beforeConditionImageDetails : [];
+                const afterConditionImageDetails = Array.isArray(inspection.afterConditionImageDetails) ? inspection.afterConditionImageDetails : [];
+                const enrolledFingerSet = new Set(Array.isArray(biometrics.enrolledFingerCodes) ? biometrics.enrolledFingerCodes : []);
+                const fingerDetailMap = new Map(
+                  (Array.isArray(biometrics.fingers) ? biometrics.fingers : []).map((item) => [item.fingerCode, item]),
+                );
+                const thumbCaptureMap = new Map(
+                  (Array.isArray(biometrics.thumbCaptures) ? biometrics.thumbCaptures : []).map((item) => [
+                    `${item.participantKey}:${item.thumbCode}`,
+                    item,
+                  ]),
+                );
+                const thumbParticipants = thumbParticipantsDraft.length > 0
+                  ? thumbParticipantsDraft
+                  : buildThumbParticipantsDraft(selectedBooking);
+                const bridgeStatus = getBiometricBridgeStatus(biometricSource);
+                const customerDocumentCards = getCustomerDocumentCards(selectedBooking);
+                const getPossessionTime = () => {
+                  const start = new Date(selectedBooking.pickupDateTime);
+                  const end = selectedBooking.status === 'completed' ? new Date(selectedBooking.updatedAt) : new Date();
+                  const diffMs = Math.max(0, end - start);
+                  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                  const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                  const days = Math.floor(hours / 24);
+                  if (days > 0) return `${days}d ${hours % 24}h`;
+                  if (hours > 0) return `${hours}h ${mins}m`;
+                  return `${mins}m`;
+                };
 
-                 if (selectedFingerprintRecord) {
-                   return (
-                     <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-[0_8px_40px_rgba(0,0,0,0.08)] sm:p-6">
-                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                         <div>
-                           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
-                             <ShieldCheck size={14} />
-                             Fingerprint Detail
-                           </div>
-                           <h3 className="mt-3 font-['Outfit'] text-2xl font-bold text-slate-950">
-                             {selectedFingerprintRecord.displayName || selectedFingerprintCode || 'Fingerprint'}
-                           </h3>
-                           <p className="mt-1 text-sm text-slate-500">
-                             Booking {selectedBooking.bookingReference || 'N/A'} for {selectedBooking.customer?.name || 'customer'}
-                           </p>
-                         </div>
-                         <button
-                           type="button"
-                           onClick={handleFingerprintClose}
-                           className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                         >
-                           <ArrowLeft size={14} />
-                           Back To Booking
-                         </button>
-                       </div>
+                if (selectedFingerprintRecord) {
+                  return (
+                    <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-[0_8px_40px_rgba(0,0,0,0.08)] sm:p-6">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                            <ShieldCheck size={14} />
+                            Fingerprint Detail
+                          </div>
+                          <h3 className="mt-3 font-['Outfit'] text-2xl font-bold text-slate-950">
+                            {selectedFingerprintRecord.displayName || selectedFingerprintCode || 'Fingerprint'}
+                          </h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Booking {selectedBooking.bookingReference || 'N/A'} for {selectedBooking.customer?.name || 'customer'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleFingerprintClose}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          <ArrowLeft size={14} />
+                          Back To Booking
+                        </button>
+                      </div>
 
-                       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-                         <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950">
-                           {selectedFingerprintRecord.previewImage ? (
-                             <img
-                               src={selectedFingerprintRecord.previewImage}
-                               alt={`${selectedFingerprintRecord.displayName || 'Fingerprint'} preview`}
-                               className="h-full min-h-[320px] w-full object-contain bg-[radial-gradient(circle_at_top,#1e293b_0%,#020617_78%)] p-4"
-                             />
-                           ) : (
-                             <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-10 text-center text-white">
-                               <ShieldCheck size={42} className="text-emerald-400" />
-                               <p className="mt-4 text-lg font-bold">Fingerprint preview will appear here</p>
-                               <p className="mt-2 max-w-sm text-sm text-slate-300">
-                                 No fingerprint preview was saved for this finger yet. Re-scan or re-verify from the scanner bridge so the app can attach a visual preview here.
-                               </p>
-                             </div>
-                           )}
-                         </div>
-
-                         <div className="space-y-4">
-                           <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4">
-                             <p className="text-sm font-bold text-amber-900">Current status</p>
-                             <p className="mt-1 text-sm text-amber-800">
-                               {selectedFingerprintRecord.previewImage
-                                 ? 'Preview image received from the capture or verify bridge.'
-                                 : 'Template is stored, but this saved finger record still has no visual preview attached from the scanner bridge.'}
-                             </p>
-                           </div>
-
-                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Finger Code</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.fingerCode || 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Capture Source</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricSourceLabel(selectedFingerprintRecord.captureSource || 'unknown')}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Format</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateFormat || 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Quality Score</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.qualityScore ?? 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Captured At</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.capturedAt ? formatDateTime(selectedFingerprintRecord.capturedAt) : 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Last Verified</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.lastVerifiedAt ? formatDateTime(selectedFingerprintRecord.lastVerifiedAt) : 'Not verified yet'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Verification Count</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.verificationCount ?? 0}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Stored</p>
-                               <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateStored ? 'Yes' : 'No'}</p>
-                             </div>
-                           </div>
-
-                           <div className="grid grid-cols-1 gap-3">
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Device Label</p>
-                               <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.deviceLabel || 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Scanner Serial</p>
-                               <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.scannerSerial || 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Hash Preview</p>
-                               <p className="mt-1 break-all text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateHashPreview || 'N/A'}</p>
-                             </div>
-                             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Operator Notes</p>
-                               <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.notes || 'No notes added'}</p>
-                             </div>
-                           </div>
-                         </div>
-                       </div>
-                     </section>
-                   );
-                 }
-
-                 return (
-                   <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] overflow-hidden">
-                    <div className="flex flex-col h-full">
-                        {/* Header Summary */}
-                        <div className="p-6 bg-slate-50/50 border-b border-slate-100">
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div className="space-y-1">
-                              <h3 className="font-['Outfit'] text-xl font-bold text-slate-900 leading-tight">
-                                {selectedBooking.bookingReference || 'Rental Booking'}
-                              </h3>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusBadgeClass(selectedBooking.status)}`}>
-                                  {selectedBooking.status}
-                                </span>
-                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white shadow-sm">
-                                   <Clock size={10} className="text-emerald-400" />
-                                   <span className="text-[9px] font-black uppercase tracking-widest">{getPossessionTime()}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                {new Date(selectedBooking.pickupDateTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950">
+                          {selectedFingerprintRecord.previewImage ? (
+                            <img
+                              src={selectedFingerprintRecord.previewImage}
+                              alt={`${selectedFingerprintRecord.displayName || 'Fingerprint'} preview`}
+                              className="h-full min-h-[320px] w-full object-contain bg-[radial-gradient(circle_at_top,#1e293b_0%,#020617_78%)] p-4"
+                            />
+                          ) : (
+                            <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-10 text-center text-white">
+                              <ShieldCheck size={42} className="text-emerald-400" />
+                              <p className="mt-4 text-lg font-bold">Fingerprint preview will appear here</p>
+                              <p className="mt-2 max-w-sm text-sm text-slate-300">
+                                No fingerprint preview was saved for this finger yet. Re-scan or re-verify from the scanner bridge so the app can attach a visual preview here.
                               </p>
-                              <div className="mt-1 flex items-center justify-end gap-1 text-lg font-black text-slate-950">
-                                <BadgeIndianRupee size={18} className="text-emerald-600" />
-                                {Number(selectedBooking.totalCost || 0)}
-                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4">
+                            <p className="text-sm font-bold text-amber-900">Current status</p>
+                            <p className="mt-1 text-sm text-amber-800">
+                              {selectedFingerprintRecord.previewImage
+                                ? 'Preview image received from the capture or verify bridge.'
+                                : isRdServiceFingerRecord(selectedFingerprintRecord)
+                                  ? 'This RD enrollment stores secured PID XML and device metadata. The RD response does not provide a reusable fingerprint impression image to this app.'
+                                  : 'Template is stored, but this saved finger record still has no visual preview attached from the scanner bridge.'}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Finger Code</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.fingerCode || 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Capture Source</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricSourceLabel(selectedFingerprintRecord.captureSource || 'unknown')}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Format</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateFormat || 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Quality Score</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.qualityScore ?? 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Captured At</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.capturedAt ? formatDateTime(selectedFingerprintRecord.capturedAt) : 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Last Verified</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.lastVerifiedAt ? formatDateTime(selectedFingerprintRecord.lastVerifiedAt) : 'Not verified yet'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Verification Count</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.verificationCount ?? 0}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Stored</p>
+                              <p className="mt-1 text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateStored ? 'Yes' : 'No'}</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Device Label</p>
+                              <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.deviceLabel || 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Scanner Serial</p>
+                              <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.scannerSerial || 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Template Hash Preview</p>
+                              <p className="mt-1 break-all text-sm font-bold text-slate-900">{selectedFingerprintRecord.templateHashPreview || 'N/A'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Operator Notes</p>
+                              <p className="mt-1 break-words text-sm font-bold text-slate-900">{selectedFingerprintRecord.notes || 'No notes added'}</p>
                             </div>
                           </div>
                         </div>
+                      </div>
+                    </section>
+                  );
+                }
 
-                        {/* Collapsible Content Area */}
-                        <div className="divide-y divide-slate-100">
-                          {/* 1. Customer & Documents */}
-                          <CollapsibleSection 
-                            title="Customer & Documents" 
-                            icon={UserRound}
-                            badge={`${customerDocumentCards.filter(d => d.imageUrl).length}/2 Uploaded`}
-                          >
-                            <div className="space-y-4">
-                               <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer</p>
-                                      <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedBooking.customer?.name || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone</p>
-                                      <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedBooking.customer?.phone || 'N/A'}</p>
-                                    </div>
-                                  </div>
-                               </div>
-
-                               <div className="grid grid-cols-2 gap-3">
-                                  {customerDocumentCards.map((doc) => (
-                                    <div key={doc.key} className="relative group overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70 aspect-[4/3]">
-                                      {doc.imageUrl ? (
-                                        <>
-                                          <img src={doc.imageUrl} className="h-full w-full object-cover transition group-hover:scale-105" alt={doc.label} />
-                                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-3">
-                                            <p className="text-[10px] font-black text-white/90 uppercase tracking-widest">{doc.label}</p>
-                                            <button 
-                                              onClick={() => setPreviewImage(doc.imageUrl)}
-                                              className="mt-2 w-full py-1.5 bg-white/20 backdrop-blur-md rounded-lg text-white text-[10px] font-bold hover:bg-white/30 transition"
-                                            >
-                                              View Full
-                                            </button>
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <div className="h-full flex flex-col items-center justify-center p-4 text-center">
-                                          <ShieldCheck size={24} className="text-slate-300 mb-2" />
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Awaiting {doc.label}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                               </div>
+                return (
+                  <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] overflow-hidden">
+                    <div className="flex flex-col h-full">
+                      {/* Header Summary */}
+                      <div className="p-6 bg-slate-50/50 border-b border-slate-100">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="space-y-1">
+                            <h3 className="font-['Outfit'] text-xl font-bold text-slate-900 leading-tight">
+                              {selectedBooking.bookingReference || 'Rental Booking'}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${statusBadgeClass(selectedBooking.status)}`}>
+                                {selectedBooking.status}
+                              </span>
+                              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white shadow-sm">
+                                <Clock size={10} className="text-emerald-400" />
+                                <span className="text-[9px] font-black uppercase tracking-widest">{getPossessionTime()}</span>
+                              </div>
                             </div>
-                          </CollapsibleSection>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                              {new Date(selectedBooking.pickupDateTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                            </p>
+                            <div className="mt-1 flex items-center justify-end gap-1 text-lg font-black text-slate-950">
+                              <BadgeIndianRupee size={18} className="text-emerald-600" />
+                              {Number(selectedBooking.totalCost || 0)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-                          <CollapsibleSection
-                            title="Customer Biometrics"
-                            icon={ShieldCheck}
-                            badge={biometricBadge}
-                          >
-                            <div className="space-y-4">
-                              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                                      Capture Source
-                                    </p>
-                                    <p className="mt-1 text-sm font-bold text-slate-900">
-                                      {getBiometricSourceLabel(biometricSource)}
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      This selection is passed into the Flutter WebView handler so the APK can switch between the phone sensor and the USB-connected scanner.
-                                    </p>
-                                  </div>
-                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">
-                                    {biometricSource === 'phone_sensor' ? 'WebView Phone Flow' : 'External Scanner Flow'}
-                                  </span>
+                      {/* Collapsible Content Area */}
+                      <div className="divide-y divide-slate-100">
+                        {/* 1. Customer & Documents */}
+                        <CollapsibleSection
+                          title="Customer & Documents"
+                          icon={UserRound}
+                          badge={`${customerDocumentCards.filter(d => d.imageUrl).length}/2 Uploaded`}
+                        >
+                          <div className="space-y-4">
+                            <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer</p>
+                                  <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedBooking.customer?.name || 'N/A'}</p>
                                 </div>
-
-                                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                  {biometricSourceOptions.map((option) => {
-                                    const active = biometricSource === option.value;
-                                    return (
-                                      <button
-                                        key={option.value}
-                                        type="button"
-                                        onClick={() => {
-                                          setBiometricSource(option.value);
-                                          persistBiometricSource(selectedBooking.id || selectedBooking._id, option.value);
-                                        }}
-                                        className={`rounded-2xl border p-4 text-left transition ${
-                                          active
-                                            ? 'border-emerald-300 bg-emerald-50 shadow-sm'
-                                            : 'border-slate-200 bg-slate-50 hover:border-slate-300'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between gap-3">
-                                          <p className="text-sm font-bold text-slate-900">{option.label}</p>
-                                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                                            active ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500'
-                                          }`}>
-                                            {active ? 'Selected' : 'Available'}
-                                          </span>
-                                        </div>
-                                        <p className="mt-2 text-xs text-slate-500">{option.helper}</p>
-                                      </button>
-                                    );
-                                  })}
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone</p>
+                                  <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedBooking.customer?.phone || 'N/A'}</p>
                                 </div>
+                              </div>
+                            </div>
 
-                                {biometricSource === 'phone_sensor' ? (
-                                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                                    Phone fingerprint on Android usually verifies the user but does not expose a raw fingerprint template. In the Flutter APK, the phone mode will only enroll if your native bridge returns `templateData`; otherwise use it for verification and use the USB scanner for enrollment.
+                            <div className="grid grid-cols-2 gap-3">
+                              {customerDocumentCards.map((doc) => (
+                                <div key={doc.key} className="relative group overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70 aspect-[4/3]">
+                                  {doc.imageUrl ? (
+                                    <>
+                                      <img src={doc.imageUrl} className="h-full w-full object-cover transition group-hover:scale-105" alt={doc.label} />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-3">
+                                        <p className="text-[10px] font-black text-white/90 uppercase tracking-widest">{doc.label}</p>
+                                        <button
+                                          onClick={() => setPreviewImage(doc.imageUrl)}
+                                          className="mt-2 w-full py-1.5 bg-white/20 backdrop-blur-md rounded-lg text-white text-[10px] font-bold hover:bg-white/30 transition"
+                                        >
+                                          View Full
+                                        </button>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="h-full flex flex-col items-center justify-center p-4 text-center">
+                                      <ShieldCheck size={24} className="text-slate-300 mb-2" />
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Awaiting {doc.label}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleSection>
+
+                        <CollapsibleSection
+                          title="Customer Biometrics"
+                          icon={ShieldCheck}
+                          badge={biometricBadge}
+                        >
+                          <div className="space-y-4">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Capture Source
                                   </p>
-                                ) : null}
-                              </div>
-
-                              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
-                                      Bridge Status
-                                    </p>
-                                    <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricBridgeBadge(bridgeStatus, biometricSource)}</p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      The website flow is ready now. Flutter can answer either `fingerprint:{'{source}'}:{'{action}'}` or the existing `fingerprint:{'{action}'}` handler names inside the WebView bridge.
-                                    </p>
-                                  </div>
-                                  <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 shadow-sm">
-                                    {String(biometrics.status || 'not_started').replace(/_/g, ' ')}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {biometricStatus.message ? (
-                                <div
-                                  className={`rounded-2xl border px-4 py-3 ${
-                                    biometricStatus.tone === 'error'
-                                      ? 'border-rose-200 bg-rose-50'
-                                      : biometricStatus.tone === 'success'
-                                        ? 'border-emerald-200 bg-emerald-50'
-                                        : 'border-sky-200 bg-sky-50'
-                                  }`}
-                                >
-                                  <div className="flex items-start gap-3">
-                                    {biometricStatus.tone === 'loading' ? (
-                                      <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin text-sky-600" />
-                                    ) : biometricStatus.tone === 'success' ? (
-                                      <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
-                                    ) : (
-                                      <X size={16} className="mt-0.5 shrink-0 text-rose-600" />
-                                    )}
-                                    <div>
-                                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                        {biometricStatus.action ? `${biometricStatus.action} status` : 'Scanner status'}
-                                      </p>
-                                      <p className="mt-1 text-sm font-bold text-slate-900">{biometricStatus.message}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <label className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                  <div className="flex items-start gap-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={biometricDraft.consentAccepted}
-                                      onChange={(event) => setBiometricDraft((current) => ({ ...current, consentAccepted: event.target.checked }))}
-                                      className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                    />
-                                    <div>
-                                      <p className="text-sm font-bold text-slate-900">Customer consent collected</p>
-                                      <p className="mt-1 text-xs text-slate-500">Only needed if you plan to capture or verify fingerprints for this booking.</p>
-                                    </div>
-                                  </div>
-                                </label>
-
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Last verification</p>
                                   <p className="mt-1 text-sm font-bold text-slate-900">
-                                    {biometrics.verificationSummary?.lastVerificationStatus
-                                      ? `${biometrics.verificationSummary.lastVerificationStatus} via ${biometrics.verificationSummary.lastVerifiedFingerCode || 'finger'}`
-                                      : 'No verification yet'}
+                                    {getBiometricSourceLabel(biometricSource)}
                                   </p>
                                   <p className="mt-1 text-xs text-slate-500">
-                                    {biometrics.verificationSummary?.lastVerifiedAt
-                                      ? formatDateTime(biometrics.verificationSummary.lastVerifiedAt)
-                                      : 'Verification records will appear here after a scan.'}
+                                    This selection is passed into the Flutter WebView handler so the APK can switch between the phone sensor and the USB-connected scanner.
                                   </p>
                                 </div>
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">
+                                  {biometricSource === 'phone_sensor' ? 'WebView Phone Flow' : 'External Scanner Flow'}
+                                </span>
                               </div>
 
-                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                {biometricSourceOptions.map((option) => {
+                                  const active = biometricSource === option.value;
+                                  return (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => {
+                                        setBiometricSource(option.value);
+                                        persistBiometricSource(selectedBooking.id || selectedBooking._id, option.value);
+                                      }}
+                                      className={`rounded-2xl border p-4 text-left transition ${active
+                                        ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                                        : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                                        }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-sm font-bold text-slate-900">{option.label}</p>
+                                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${active ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500'
+                                          }`}>
+                                          {active ? 'Selected' : 'Available'}
+                                        </span>
+                                      </div>
+                                      <p className="mt-2 text-xs text-slate-500">{option.helper}</p>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {biometricSource === 'phone_sensor' ? (
+                                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                                  This flow runs in raw thumb image mode only. The Android WebView bridge should return a capture image as base64 or file path. Do not use Aadhaar, RD service auth, or fingerprint template matching here.
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                              <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <label className={labelClass}>Enrollment Mode</label>
-                                  <select
-                                    value={biometricDraft.enrollmentMode}
-                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, enrollmentMode: event.target.value }))}
-                                    className={inputClass}
-                                  >
-                                    {enrollmentModeOptions.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                                    Bridge Status
+                                  </p>
+                                  <p className="mt-1 text-sm font-bold text-slate-900">{getBiometricBridgeBadge(bridgeStatus, biometricSource)}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Flutter can return a raw thumb image payload to the WebView for each participant capture request. The MERN app stores the uploaded image against this booking.
+                                  </p>
                                 </div>
-                                <div>
-                                  <label className={labelClass}>Target Finger Count (Optional)</label>
+                                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 shadow-sm">
+                                  {String(biometrics.status || 'not_started').replace(/_/g, ' ')}
+                                </span>
+                              </div>
+                            </div>
+
+                            {biometricStatus.message ? (
+                              <div
+                                className={`rounded-2xl border px-4 py-3 ${biometricStatus.tone === 'error'
+                                  ? 'border-rose-200 bg-rose-50'
+                                  : biometricStatus.tone === 'success'
+                                    ? 'border-emerald-200 bg-emerald-50'
+                                    : 'border-sky-200 bg-sky-50'
+                                  }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  {biometricStatus.tone === 'loading' ? (
+                                    <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin text-sky-600" />
+                                  ) : biometricStatus.tone === 'success' ? (
+                                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                                  ) : (
+                                    <X size={16} className="mt-0.5 shrink-0 text-rose-600" />
+                                  )}
+                                  <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                      {biometricStatus.action ? `${biometricStatus.action} status` : 'Scanner status'}
+                                    </p>
+                                    <p className="mt-1 text-sm font-bold text-slate-900">{biometricStatus.message}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <label className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                <div className="flex items-start gap-3">
                                   <input
-                                    type="number"
-                                    min={0}
-                                    max={10}
-                                    value={biometricDraft.requiredFingerCount}
-                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, requiredFingerCount: event.target.value }))}
-                                    className={inputClass}
-                                    placeholder="0"
+                                    type="checkbox"
+                                    checked={biometricDraft.consentAccepted}
+                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, consentAccepted: event.target.checked }))}
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                   />
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    Leave this blank or set it to 0 if no fingerprint enrollment is needed for this booking.
-                                  </p>
+                                  <div>
+                                    <p className="text-sm font-bold text-slate-900">Customer consent collected</p>
+                                    <p className="mt-1 text-xs text-slate-500">Required before capturing customer, co-passenger, or employee thumb images.</p>
+                                  </div>
                                 </div>
-                              </div>
+                              </label>
 
-                              <div className="space-y-3">
-                                <div>
-                                  <label className={labelClass}>Consent Notes</label>
-                                  <textarea
-                                    rows={2}
-                                    value={biometricDraft.consentNotes}
-                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, consentNotes: event.target.value }))}
-                                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                                    placeholder="Add operator notes, consent wording, or language confirmation..."
-                                  />
-                                </div>
-                                <div>
-                                  <label className={labelClass}>Enrollment Notes</label>
-                                  <textarea
-                                    rows={2}
-                                    value={biometricDraft.notes}
-                                    onChange={(event) => setBiometricDraft((current) => ({ ...current, notes: event.target.value }))}
-                                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                                    placeholder="Example: customer gave thumbs now, remaining fingers later at return desk."
-                                  />
-                                </div>
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Last verification</p>
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                  {biometrics.verificationSummary?.lastVerificationStatus
+                                    ? `${biometrics.verificationSummary.lastVerificationStatus} via ${biometrics.verificationSummary.lastVerifiedFingerCode || 'finger'}`
+                                    : 'No verification yet'}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {biometrics.verificationSummary?.lastVerifiedAt
+                                    ? formatDateTime(biometrics.verificationSummary.lastVerifiedAt)
+                                    : 'Verification records will appear here after a scan.'}
+                                </p>
                               </div>
+                            </div>
 
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <div>
+                                <label className={labelClass}>Enrollment Mode</label>
+                                <select
+                                  value={biometricDraft.enrollmentMode}
+                                  onChange={(event) => setBiometricDraft((current) => ({ ...current, enrollmentMode: event.target.value }))}
+                                  className={inputClass}
+                                >
+                                  {enrollmentModeOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className={labelClass}>Target Thumb Count (Optional)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={10}
+                                  value={biometricDraft.requiredFingerCount}
+                                  onChange={(event) => setBiometricDraft((current) => ({ ...current, requiredFingerCount: event.target.value }))}
+                                  className={inputClass}
+                                  placeholder="0"
+                                />
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Leave this blank or set it to 0 if no minimum thumb image count is required for this booking.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div>
+                                <label className={labelClass}>Consent Notes</label>
+                                <textarea
+                                  rows={2}
+                                  value={biometricDraft.consentNotes}
+                                  onChange={(event) => setBiometricDraft((current) => ({ ...current, consentNotes: event.target.value }))}
+                                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                                  placeholder="Add operator notes, consent wording, or language confirmation..."
+                                />
+                              </div>
+                              <div>
+                                <label className={labelClass}>Enrollment Notes</label>
+                                <textarea
+                                  rows={2}
+                                  value={biometricDraft.notes}
+                                  onChange={(event) => setBiometricDraft((current) => ({ ...current, notes: event.target.value }))}
+                                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                                  placeholder="Example: customer left thumb captured, co-passenger right thumb pending."
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={saveBiometricDraft}
+                              disabled={biometricAction === 'settings'}
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                            >
+                              {biometricAction === 'settings' ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                              Save Enrollment Setup
+                            </button>
+
+                            <div className="flex flex-wrap gap-3">
                               <button
                                 type="button"
-                                onClick={saveBiometricDraft}
-                                disabled={biometricAction === 'settings'}
-                                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                onClick={addCoPassengerParticipant}
+                                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                               >
-                                {biometricAction === 'settings' ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                                Save Enrollment Setup
+                                <Plus size={16} />
+                                Add Co-passenger
                               </button>
+                              <button
+                                type="button"
+                                onClick={handlePrintAgreement}
+                                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+                              >
+                                <FileText size={16} />
+                                Print Agreement PDF
+                              </button>
+                            </div>
 
+                            <div className="space-y-4">
+                              {thumbParticipants.map((participant, participantIndex) => (
+                                <div key={participant.participantKey} className="rounded-3xl border border-slate-200 bg-slate-50/60 p-4">
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div>
+                                      <label className={labelClass}>Section Label</label>
+                                      <input
+                                        type="text"
+                                        defaultValue={participant.participantLabel}
+                                        readOnly={participant.participantType !== 'co_passenger'}
+                                        onBlur={(event) => handleThumbParticipantFieldBlur(participant.participantKey, 'participantLabel', event.target.value)}
+                                        className={`${inputClass} ${participant.participantType !== 'co_passenger' ? 'bg-slate-100 text-slate-500' : ''}`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className={labelClass}>Person Name</label>
+                                      <input
+                                        type="text"
+                                        defaultValue={participant.name}
+                                        readOnly={participant.participantType !== 'co_passenger'}
+                                        onBlur={(event) => handleThumbParticipantFieldBlur(participant.participantKey, 'name', event.target.value)}
+                                        className={`${inputClass} ${participant.participantType !== 'co_passenger' ? 'bg-slate-100 text-slate-500' : ''}`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className={labelClass}>Phone</label>
+                                      <input
+                                        type="tel"
+                                        defaultValue={participant.phone}
+                                        readOnly={participant.participantType !== 'co_passenger'}
+                                        onBlur={(event) => handleThumbParticipantFieldBlur(participant.participantKey, 'phone', event.target.value)}
+                                        className={`${inputClass} ${participant.participantType !== 'co_passenger' ? 'bg-slate-100 text-slate-500' : ''}`}
+                                      />
+                                    </div>
+                                    <div className="flex items-end">
+                                      <div className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+                                        {participant.participantType === 'co_passenger' ? `Co-passenger ${participantIndex + 1}` : participant.participantLabel}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                    {thumbCodeOptions.map((thumb) => {
+                                      const capture = thumbCaptureMap.get(`${participant.participantKey}:${thumb.value}`);
+                                      const busy = thumbAction === `thumb:${participant.participantKey}:${thumb.value}`;
+                                      return (
+                                        <div key={`${participant.participantKey}:${thumb.value}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                              <p className="text-sm font-bold text-slate-900">{thumb.label}</p>
+                                              <p className="mt-1 text-xs text-slate-500">
+                                                {capture?.capturedAt ? `Captured ${formatDateTime(capture.capturedAt)}` : 'No image captured yet'}
+                                              </p>
+                                            </div>
+                                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${capture?.imageUrl ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                              {capture?.imageUrl ? 'Saved' : 'Pending'}
+                                            </span>
+                                          </div>
+                                          <div className="mt-4 overflow-hidden rounded-2xl border border-dashed border-slate-200 bg-slate-50">
+                                            {capture?.imageUrl ? (
+                                              <img src={capture.imageUrl} alt={`${participant.participantLabel} ${thumb.label}`} className="h-44 w-full object-contain bg-white p-3" />
+                                            ) : (
+                                              <div className="flex h-44 flex-col items-center justify-center px-4 text-center text-slate-400">
+                                                <ShieldCheck size={28} />
+                                                <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em]">Awaiting Capture</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="mt-4 grid grid-cols-2 gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleThumbCapture(participant, thumb.value)}
+                                              disabled={Boolean(thumbAction && !busy)}
+                                              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                            >
+                                              {busy ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                                              {busy ? 'Capturing...' : capture?.imageUrl ? 'Retake' : 'Capture'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteThumbCapture(capture?.captureId)}
+                                              disabled={!capture?.captureId || Boolean(thumbAction)}
+                                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                                            >
+                                              <Trash2 size={14} />
+                                              Remove
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {false && (
                               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 {biometricFingerOptions.map((finger) => {
                                   const enrolled = enrolledFingerSet.has(finger.code);
@@ -3195,6 +3883,7 @@ const ServiceCenterDashboard = () => {
                                   const captureBusy = biometricAction === `capture:${finger.code}`;
                                   const verifyBusy = biometricAction === `verify:${finger.code}`;
                                   const deleteBusy = biometricAction === `delete:${finger.code}`;
+                                  const rdServiceFlow = isRdServiceFingerRecord(fingerInfo);
 
                                   return (
                                     <div key={finger.code} className={`rounded-2xl border p-4 ${enrolled ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}>
@@ -3209,6 +3898,11 @@ const ServiceCenterDashboard = () => {
                                           {fingerInfo?.captureSource ? (
                                             <p className="mt-1 text-[11px] font-semibold text-slate-500">
                                               Source {getBiometricSourceLabel(fingerInfo.captureSource)}
+                                            </p>
+                                          ) : null}
+                                          {rdServiceFlow ? (
+                                            <p className="mt-1 text-[11px] font-semibold text-sky-700">
+                                              IDEMIA RD Service enrollment
                                             </p>
                                           ) : null}
                                           {fingerInfo?.qualityScore ? (
@@ -3235,11 +3929,12 @@ const ServiceCenterDashboard = () => {
                                         <button
                                           type="button"
                                           onClick={() => handleVerifyFinger(finger)}
-                                          disabled={!enrolled || Boolean(biometricAction && biometricAction !== `verify:${finger.code}`)}
+                                          disabled={!enrolled || rdServiceFlow || Boolean(biometricAction && biometricAction !== `verify:${finger.code}`)}
                                           className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                                          title={rdServiceFlow ? 'IDEMIA RD Service captures are stored as secured PID XML. Local verify is not available in this flow.' : ''}
                                         >
                                           {verifyBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                                          {verifyBusy ? 'Verifying…' : 'Verify'}
+                                          {verifyBusy ? 'Verifying...' : rdServiceFlow ? 'RD Flow' : 'Verify'}
                                         </button>
                                         <button
                                           type="button"
@@ -3254,15 +3949,20 @@ const ServiceCenterDashboard = () => {
 
                                       {biometricStatus.fingerCode === finger.code ? (
                                         <p
-                                          className={`mt-2 text-[11px] font-semibold ${
-                                            biometricStatus.tone === 'error'
-                                              ? 'text-rose-600'
-                                              : biometricStatus.tone === 'success'
-                                                ? 'text-emerald-700'
-                                                : 'text-sky-700'
-                                          }`}
+                                          className={`mt-2 text-[11px] font-semibold ${biometricStatus.tone === 'error'
+                                            ? 'text-rose-600'
+                                            : biometricStatus.tone === 'success'
+                                              ? 'text-emerald-700'
+                                              : 'text-sky-700'
+                                            }`}
                                         >
                                           {biometricStatus.message}
+                                        </p>
+                                      ) : null}
+
+                                      {rdServiceFlow ? (
+                                        <p className="mt-2 text-[11px] font-medium text-slate-500">
+                                          This finger was captured through the IDEMIA registered-device flow. Use Rescan to refresh the stored RD capture. Local verify is intentionally disabled for this device path.
                                         </p>
                                       ) : null}
 
@@ -3280,323 +3980,325 @@ const ServiceCenterDashboard = () => {
                                   );
                                 })}
                               </div>
+                            )}
 
-                              {Array.isArray(biometrics.auditLogs) && biometrics.auditLogs.length > 0 ? (
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Recent Activity</p>
-                                  <div className="mt-3 space-y-2">
-                                    {biometrics.auditLogs.slice(0, 5).map((log, index) => (
-                                      <div key={`${log.createdAt || index}-${log.action || index}`} className="rounded-xl bg-slate-50 px-3 py-2">
-                                        <p className="text-xs font-bold text-slate-900">
-                                          {(log.action || 'updated').replace(/_/g, ' ')} {log.fingerCode ? `• ${log.fingerCode}` : ''}
-                                        </p>
-                                        <p className="mt-1 text-[11px] text-slate-500">
-                                          {log.notes || 'No notes'} • {formatDateTime(log.createdAt)}
-                                        </p>
-                                      </div>
-                                    ))}
-                                  </div>
+                            {Array.isArray(biometrics.auditLogs) && biometrics.auditLogs.length > 0 ? (
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Recent Activity</p>
+                                <div className="mt-3 space-y-2">
+                                  {biometrics.auditLogs.slice(0, 5).map((log, index) => (
+                                    <div key={`${log.createdAt || index}-${log.action || index}`} className="rounded-xl bg-slate-50 px-3 py-2">
+                                      <p className="text-xs font-bold text-slate-900">
+                                        {(log.action || 'updated').replace(/_/g, ' ')} {log.fingerCode ? `• ${log.fingerCode}` : ''}
+                                      </p>
+                                      <p className="mt-1 text-[11px] text-slate-500">
+                                        {log.notes || 'No notes'} • {formatDateTime(log.createdAt)}
+                                      </p>
+                                    </div>
+                                  ))}
                                 </div>
-                              ) : null}
-                            </div>
-                          </CollapsibleSection>
-
-                          {/* 2. Before Handover */}
-                          <CollapsibleSection title="Pickup Inspection" icon={ClipboardList} badge="Before Handover">
-                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-2">
-                                  {beforeHandoverItems.map((item) => {
-                                    const active = beforeInspection[item.key] === true;
-                                    return (
-                                      <button
-                                        key={item.key}
-                                        type="button"
-                                        onClick={() => updateBookingInspection(selectedBooking.id || selectedBooking._id, 'beforeHandover', item.key, !active)}
-                                        className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'}`}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          {active ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300" />}
-                                          <span className="text-[11px] font-bold">{item.label}</span>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <InspectionPhotoSlots
-                                  title="Handover Photos"
-                                  accent="emerald"
-                                  bookingId={selectedBooking.id || selectedBooking._id}
-                                  field="beforeConditionImages"
-                                  images={beforeConditionImages}
-                                  imageDetails={beforeConditionImageDetails}
-                                  uploadingTarget={uploadingConditionSection}
-                                  onFileSelect={(field, slotIndex, fileList, source) =>
-                                    uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
-                                  }
-                                  onCameraCapture={requestInspectionCameraCapture}
-                                  onPreview={setPreviewImage}
-                                  onRemove={removeConditionImage}
-                                />
-
-                                <div className="grid grid-cols-2 gap-3">
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Pickup KM</p>
-                                      <input
-                                        type="number"
-                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20"
-                                        value={inspection.pickupMeterReading ?? ''}
-                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { pickupMeterReading: e.target.value })}
-                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupMeterReading', e.target.value)}
-                                      />
-                                   </div>
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Fuel Level</p>
-                                      <input
-                                        type="text"
-                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20"
-                                        value={inspection.pickupFuelLevel || ''}
-                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { pickupFuelLevel: e.target.value })}
-                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupFuelLevel', e.target.value)}
-                                      />
-                                   </div>
-                                </div>
-                             </div>
-                          </CollapsibleSection>
-
-                          {/* 3. After Return */}
-                          <CollapsibleSection title="Return Inspection" icon={CheckCircle2} badge="After Return">
-                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-2">
-                                  {afterReturnItems.map((item) => {
-                                    const active = afterInspection[item.key] === true;
-                                    return (
-                                      <button
-                                        key={item.key}
-                                        type="button"
-                                        onClick={() => updateBookingInspection(selectedBooking.id || selectedBooking._id, 'afterReturn', item.key, !active)}
-                                        className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'}`}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          {active ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300" />}
-                                          <span className="text-[11px] font-bold">{item.label}</span>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <InspectionPhotoSlots
-                                  title="Return Photos"
-                                  accent="amber"
-                                  bookingId={selectedBooking.id || selectedBooking._id}
-                                  field="afterConditionImages"
-                                  images={afterConditionImages}
-                                  imageDetails={afterConditionImageDetails}
-                                  uploadingTarget={uploadingConditionSection}
-                                  onFileSelect={(field, slotIndex, fileList, source) =>
-                                    uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
-                                  }
-                                  onCameraCapture={requestInspectionCameraCapture}
-                                  onPreview={setPreviewImage}
-                                  onRemove={removeConditionImage}
-                                />
-
-                                <div className="grid grid-cols-2 gap-3">
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Return KM</p>
-                                      <input
-                                        type="number"
-                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20"
-                                        value={inspection.returnMeterReading ?? ''}
-                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnMeterReading: e.target.value })}
-                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnMeterReading', e.target.value)}
-                                      />
-                                   </div>
-                                   <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-slate-400">Return Fuel</p>
-                                      <input
-                                        type="text"
-                                        className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20"
-                                        value={inspection.returnFuelLevel || ''}
-                                        onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnFuelLevel: e.target.value })}
-                                        onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnFuelLevel', e.target.value)}
-                                      />
-                                   </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                   <p className="text-[10px] font-black uppercase text-slate-400">Return Notes</p>
-                                   <textarea
-                                     rows={3}
-                                     className="w-full resize-none rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-amber-500/20 border-none"
-                                     placeholder="Add return condition notes, damage observations, fuel remarks, or handover comments..."
-                                     value={inspection.returnNotes || ''}
-                                     onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnNotes: e.target.value })}
-                                     onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnNotes', e.target.value)}
-                                   />
-                                </div>
-                             </div>
-                          </CollapsibleSection>
-                        </div>
-
-                        {/* Bottom Action Section */}
-                        <div className="p-5 sm:p-6 bg-slate-900 text-white mt-auto rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
-                           <div className="space-y-5">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                 {permissions.canAssignBookings && (
-                                   <div className="space-y-1.5">
-                                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Assign Staff</label>
-                                      <select 
-                                        value={bookingDraft.assignedStaffId} 
-                                        onChange={(e) => setBookingDraft(c => ({...c, assignedStaffId: e.target.value}))}
-                                        className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-[13px] font-bold py-2.5 px-3 focus:ring-2 focus:ring-white/20 appearance-none"
-                                      >
-                                        <option value="" className="text-slate-900">Unassigned</option>
-                                        {bookingStaffOptions.map(s => <option key={s.id || s._id} value={s.id || s._id} className="text-slate-900">{s.name}</option>)}
-                                      </select>
-                                   </div>
-                                 )}
-                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Status</label>
-                                    <select 
-                                      value={bookingDraft.status} 
-                                      onChange={(e) => setBookingDraft(c => ({...c, status: e.target.value}))}
-                                      className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-[13px] font-bold py-2.5 px-3 focus:ring-2 focus:ring-white/20 appearance-none"
-                                    >
-                                      <option value="pending" className="text-slate-900">Pending</option>
-                                      <option value="confirmed" className="text-slate-900">Confirmed</option>
-                                      <option value="assigned" className="text-slate-900">Assigned</option>
-                                      <option value="end_requested" className="text-slate-900">End Requested</option>
-                                      <option value="completed" className="text-slate-900">Completed</option>
-                                    </select>
-                                 </div>
                               </div>
+                            ) : null}
+                          </div>
+                        </CollapsibleSection>
 
-                              <div className="space-y-1.5">
-                                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Internal Handling Notes</label>
-                                 <textarea 
-                                    rows={2}
-                                    value={bookingDraft.serviceCenterNote}
-                                    onChange={(e) => setBookingDraft(c => ({...c, serviceCenterNote: e.target.value}))}
-                                    className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-sm font-medium py-2 px-3 focus:ring-2 focus:ring-white/20 resize-none"
-                                    placeholder="Add notes for the team..."
-                                 />
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-2">
-                                 <button
-                                    onClick={saveBookingDraft}
-                                    disabled={!bookingDraftDirty || updatingBookingId === String(selectedBooking.id || selectedBooking._id)}
-                                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:opacity-50 text-white py-3 sm:py-3.5 rounded-2xl text-[13px] sm:text-sm font-black transition-all"
+                        {/* 2. Before Handover */}
+                        <CollapsibleSection title="Pickup Inspection" icon={ClipboardList} badge="Before Handover">
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-2">
+                              {beforeHandoverItems.map((item) => {
+                                const active = beforeInspection[item.key] === true;
+                                return (
+                                  <button
+                                    key={item.key}
+                                    type="button"
+                                    onClick={() => updateBookingInspection(selectedBooking.id || selectedBooking._id, 'beforeHandover', item.key, !active)}
+                                    className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'}`}
                                   >
-                                    {updatingBookingId === String(selectedBooking.id || selectedBooking._id) ? 'Saving...' : 'Update Booking'}
-                                 </button>
-                                 {canFinalizeBooking(selectedBooking) && (
-                                   <button onClick={completeRide} className="bg-white text-slate-900 px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-[13px] sm:text-sm font-black hover:bg-slate-100 transition-all">
-                                      Finalize
-                                   </button>
-                                 )}
+                                    <div className="flex items-center gap-2">
+                                      {active ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300" />}
+                                      <span className="text-[11px] font-bold">{item.label}</span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <InspectionPhotoSlots
+                              title="Handover Photos"
+                              accent="emerald"
+                              bookingId={selectedBooking.id || selectedBooking._id}
+                              field="beforeConditionImages"
+                              images={beforeConditionImages}
+                              imageDetails={beforeConditionImageDetails}
+                              uploadingTarget={uploadingConditionSection}
+                              onFileSelect={(field, slotIndex, fileList, source) =>
+                                uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
+                              }
+                              onCameraCapture={requestInspectionCameraCapture}
+                              onPreview={setPreviewImage}
+                              onRemove={removeConditionImage}
+                            />
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase text-slate-400">Pickup KM</p>
+                                <input
+                                  type="number"
+                                  className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20"
+                                  value={inspection.pickupMeterReading ?? ''}
+                                  onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { pickupMeterReading: e.target.value })}
+                                  onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupMeterReading', e.target.value)}
+                                />
                               </div>
-                           </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase text-slate-400">Fuel Level</p>
+                                <input
+                                  type="text"
+                                  className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-emerald-500/20"
+                                  value={inspection.pickupFuelLevel || ''}
+                                  onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { pickupFuelLevel: e.target.value })}
+                                  onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'pickupFuelLevel', e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </CollapsibleSection>
+
+                        {/* 3. After Return */}
+                        <CollapsibleSection title="Return Inspection" icon={CheckCircle2} badge="After Return">
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-2">
+                              {afterReturnItems.map((item) => {
+                                const active = afterInspection[item.key] === true;
+                                return (
+                                  <button
+                                    key={item.key}
+                                    type="button"
+                                    onClick={() => updateBookingInspection(selectedBooking.id || selectedBooking._id, 'afterReturn', item.key, !active)}
+                                    className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {active ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300" />}
+                                      <span className="text-[11px] font-bold">{item.label}</span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <InspectionPhotoSlots
+                              title="Return Photos"
+                              accent="amber"
+                              bookingId={selectedBooking.id || selectedBooking._id}
+                              field="afterConditionImages"
+                              images={afterConditionImages}
+                              imageDetails={afterConditionImageDetails}
+                              uploadingTarget={uploadingConditionSection}
+                              onFileSelect={(field, slotIndex, fileList, source) =>
+                                uploadConditionImages(selectedBooking.id || selectedBooking._id, field, slotIndex, fileList, source)
+                              }
+                              onCameraCapture={requestInspectionCameraCapture}
+                              onPreview={setPreviewImage}
+                              onRemove={removeConditionImage}
+                            />
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase text-slate-400">Return KM</p>
+                                <input
+                                  type="number"
+                                  className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20"
+                                  value={inspection.returnMeterReading ?? ''}
+                                  onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnMeterReading: e.target.value })}
+                                  onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnMeterReading', e.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase text-slate-400">Return Fuel</p>
+                                <input
+                                  type="text"
+                                  className="w-full bg-slate-50 border-none rounded-xl text-sm font-bold p-3 focus:ring-2 focus:ring-amber-500/20"
+                                  value={inspection.returnFuelLevel || ''}
+                                  onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnFuelLevel: e.target.value })}
+                                  onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnFuelLevel', e.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black uppercase text-slate-400">Return Notes</p>
+                              <textarea
+                                rows={3}
+                                className="w-full resize-none rounded-xl bg-slate-50 p-3 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-amber-500/20 border-none"
+                                placeholder="Add return condition notes, damage observations, fuel remarks, or handover comments..."
+                                value={inspection.returnNotes || ''}
+                                onChange={(e) => patchBookingInspectionLocal(selectedBooking.id || selectedBooking._id, { returnNotes: e.target.value })}
+                                onBlur={(e) => updateBookingInspectionNotes(selectedBooking.id || selectedBooking._id, 'returnNotes', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </CollapsibleSection>
+                      </div>
+
+                      {/* Bottom Action Section */}
+                      <div className="p-5 sm:p-6 bg-slate-900 text-white mt-auto rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
+                        <div className="space-y-5">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {permissions.canAssignBookings && (
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Assign Staff</label>
+                                <select
+                                  value={bookingDraft.assignedStaffId}
+                                  onChange={(e) => setBookingDraft(c => ({ ...c, assignedStaffId: e.target.value }))}
+                                  className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-[13px] font-bold py-2.5 px-3 focus:ring-2 focus:ring-white/20 appearance-none"
+                                >
+                                  <option value="" className="text-slate-900">Unassigned</option>
+                                  {bookingStaffOptions.map(s => <option key={s.id || s._id} value={s.id || s._id} className="text-slate-900">{s.name}</option>)}
+                                </select>
+                              </div>
+                            )}
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                              <select
+                                value={bookingDraft.status}
+                                onChange={(e) => setBookingDraft(c => ({ ...c, status: e.target.value }))}
+                                className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-[13px] font-bold py-2.5 px-3 focus:ring-2 focus:ring-white/20 appearance-none"
+                              >
+                                <option value="pending" className="text-slate-900">Pending</option>
+                                <option value="confirmed" className="text-slate-900">Confirmed</option>
+                                <option value="assigned" className="text-slate-900">Assigned</option>
+                                <option value="end_requested" className="text-slate-900">End Requested</option>
+                                <option value="completed" className="text-slate-900">Completed</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Internal Handling Notes</label>
+                            <textarea
+                              rows={2}
+                              value={bookingDraft.serviceCenterNote}
+                              onChange={(e) => setBookingDraft(c => ({ ...c, serviceCenterNote: e.target.value }))}
+                              className="w-full bg-white/10 border-none rounded-xl text-[12px] sm:text-sm font-medium py-2 px-3 focus:ring-2 focus:ring-white/20 resize-none"
+                              placeholder="Add notes for the team..."
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-3 pt-2">
+                            <button
+                              onClick={saveBookingDraft}
+                              disabled={!bookingDraftDirty || updatingBookingId === String(selectedBooking.id || selectedBooking._id)}
+                              className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:opacity-50 text-white py-3 sm:py-3.5 rounded-2xl text-[13px] sm:text-sm font-black transition-all"
+                            >
+                              {updatingBookingId === String(selectedBooking.id || selectedBooking._id) ? 'Saving...' : 'Update Booking'}
+                            </button>
+                            {canFinalizeBooking(selectedBooking) && (
+                              <button onClick={completeRide} className="bg-white text-slate-900 px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-[13px] sm:text-sm font-black hover:bg-slate-100 transition-all">
+                                Finalize
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                 </div>
-               ); })() : (
-                 <>
-                   <div className="relative mb-6">
-                     <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                     <input 
-                       type="text" 
-                       placeholder="Search by ID, name, or vehicle..."
-                       value={searchQuery}
-                       onChange={(e) => setSearchQuery(e.target.value)}
-                       className="w-full bg-slate-50 border-slate-100 rounded-[20px] py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-200 transition-all"
-                     />
-                   </div>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <>
+                  <div className="relative mb-6">
+                    <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by ID, name, or vehicle..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-slate-50 border-slate-100 rounded-[20px] py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-200 transition-all"
+                    />
+                  </div>
 
-                   {paginatedBookings.length > 0 ? (
-                     <>
-                       <div className="space-y-3">
-                         {paginatedBookings.map((booking) => (
-                           <motion.button
-                             key={booking.id || booking._id}
-                             whileHover={{ x: 4 }}
-                             whileTap={{ scale: 0.99 }}
-                             onClick={() => handleBookingOpen(booking.id || booking._id)}
-                             className="w-full flex items-center gap-3 rounded-[24px] border border-slate-100 bg-white p-3 sm:p-4 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md group relative"
-                           >
-                             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${statusBadgeClass(booking.status).replace('text-', 'bg-').split(' ')[0]} opacity-10 group-hover:opacity-20 transition-opacity`} />
-                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl absolute left-3 sm:left-4">
-                               <ClipboardList size={18} className={statusBadgeClass(booking.status).split(' ')[1]} />
-                             </div>
-
-                             <div className="flex-1 min-w-0">
-                               <div className="flex items-center justify-between gap-2">
-                                 <h3 className="font-['Outfit'] text-[13px] sm:text-[15px] font-bold text-slate-900 truncate">
-                                   {booking.bookingReference || 'Rental Booking'}
-                                 </h3>
-                               </div>
-                               
-                               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                  <p className="text-[10px] sm:text-[12px] font-bold text-slate-500">
-                                   {booking.vehicleName || 'Vehicle'}
-                                 </p>
-                                 <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300" />
-                                 <p className="text-[9px] sm:text-[11px] font-medium text-slate-400">
-                                   {booking.customer?.name || 'Customer'}
-                                 </p>
-                               </div>
-                               <div className="mt-1 sm:hidden">
-                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusBadgeClass(booking.status)}`}>
-                                   {booking.status}
-                                 </span>
-                               </div>
-                             </div>
-
-                             <div className="shrink-0 text-right space-y-0.5">
-                               <p className="text-[12px] sm:text-[13px] font-black text-slate-900">₹{Number(booking.totalCost || 0)}</p>
-                               <p className="text-[9px] font-bold text-slate-400">{new Date(booking.pickupDateTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}</p>
-                             </div>
-
-                             <div className="hidden sm:flex ml-1 shrink-0 h-7 w-7 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:text-emerald-500 group-hover:bg-emerald-50 transition-all">
-                               <ChevronRight size={14} strokeWidth={3} />
-                             </div>
-                           </motion.button>
-                         ))}
-                       </div>
-
-                       {totalPages > 1 && (
-                         <div className="mt-8 flex items-center justify-between px-2">
-                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Page {currentPage} of {totalPages}</p>
-                            <div className="flex items-center gap-2">
-                               <button 
-                                 disabled={currentPage === 1}
-                                 onClick={() => setCurrentPage(c => c - 1)}
-                                 className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 disabled:opacity-30 transition hover:bg-slate-100 hover:text-slate-600"
-                               >
-                                  <ChevronRight size={16} className="rotate-180" />
-                               </button>
-                               <button 
-                                 disabled={currentPage === totalPages}
-                                 onClick={() => setCurrentPage(c => c + 1)}
-                                 className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 disabled:opacity-30 transition hover:bg-slate-100 hover:text-slate-600"
-                               >
-                                  <ChevronRight size={16} />
-                               </button>
+                  {paginatedBookings.length > 0 ? (
+                    <>
+                      <div className="space-y-3">
+                        {paginatedBookings.map((booking) => (
+                          <motion.button
+                            key={booking.id || booking._id}
+                            whileHover={{ x: 4 }}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={() => handleBookingOpen(booking.id || booking._id)}
+                            className="w-full flex items-center gap-3 rounded-[24px] border border-slate-100 bg-white p-3 sm:p-4 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md group relative"
+                          >
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${statusBadgeClass(booking.status).replace('text-', 'bg-').split(' ')[0]} opacity-10 group-hover:opacity-20 transition-opacity`} />
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl absolute left-3 sm:left-4">
+                              <ClipboardList size={18} className={statusBadgeClass(booking.status).split(' ')[1]} />
                             </div>
-                         </div>
-                       )}
-                     </>
-                   ) : (
-                     <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                        <Search size={32} className="mx-auto text-slate-200 mb-3" />
-                        <p className="text-sm font-bold text-slate-500">No matching bookings found</p>
-                        <p className="mt-1 text-xs text-slate-400">Try searching for a different name or reference</p>
-                     </div>
-                   )}
-                 </>
-               )}
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h3 className="font-['Outfit'] text-[13px] sm:text-[15px] font-bold text-slate-900 truncate">
+                                  {booking.bookingReference || 'Rental Booking'}
+                                </h3>
+                              </div>
+
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <p className="text-[10px] sm:text-[12px] font-bold text-slate-500">
+                                  {booking.vehicleName || 'Vehicle'}
+                                </p>
+                                <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300" />
+                                <p className="text-[9px] sm:text-[11px] font-medium text-slate-400">
+                                  {booking.customer?.name || 'Customer'}
+                                </p>
+                              </div>
+                              <div className="mt-1 sm:hidden">
+                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusBadgeClass(booking.status)}`}>
+                                  {booking.status}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right space-y-0.5">
+                              <p className="text-[12px] sm:text-[13px] font-black text-slate-900">₹{Number(booking.totalCost || 0)}</p>
+                              <p className="text-[9px] font-bold text-slate-400">{new Date(booking.pickupDateTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}</p>
+                            </div>
+
+                            <div className="hidden sm:flex ml-1 shrink-0 h-7 w-7 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:text-emerald-500 group-hover:bg-emerald-50 transition-all">
+                              <ChevronRight size={14} strokeWidth={3} />
+                            </div>
+                          </motion.button>
+                        ))}
+                      </div>
+
+                      {totalPages > 1 && (
+                        <div className="mt-8 flex items-center justify-between px-2">
+                          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Page {currentPage} of {totalPages}</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled={currentPage === 1}
+                              onClick={() => setCurrentPage(c => c - 1)}
+                              className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 disabled:opacity-30 transition hover:bg-slate-100 hover:text-slate-600"
+                            >
+                              <ChevronRight size={16} className="rotate-180" />
+                            </button>
+                            <button
+                              disabled={currentPage === totalPages}
+                              onClick={() => setCurrentPage(c => c + 1)}
+                              className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 disabled:opacity-30 transition hover:bg-slate-100 hover:text-slate-600"
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                      <Search size={32} className="mx-auto text-slate-200 mb-3" />
+                      <p className="text-sm font-bold text-slate-500">No matching bookings found</p>
+                      <p className="mt-1 text-xs text-slate-400">Try searching for a different name or reference</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </section>
         )}
@@ -3749,33 +4451,32 @@ const ServiceCenterDashboard = () => {
       <div className="fixed inset-x-0 bottom-0 z-40 bg-transparent px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2">
         <div className="mx-auto max-w-3xl rounded-[26px] border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_-10px_28px_rgba(15,23,42,0.1)] backdrop-blur-xl">
           <div className={`grid gap-1.5 ${isStaffUser ? 'grid-cols-3' : 'grid-cols-5'}`}>
-          {tabs.map(({ id, label, shortLabel, helper, Icon }) => {
-            const isActive = activeTab === id;
+            {tabs.map(({ id, label, shortLabel, helper, Icon }) => {
+              const isActive = activeTab === id;
 
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleTabChange(id)}
-                className={`rounded-[18px] px-1.5 py-2.5 text-center transition sm:px-2 ${
-                  isActive ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-50 text-slate-600 hover:bg-emerald-50'
-                }`}
-              >
-                <div className="flex flex-col items-center gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${isActive ? 'bg-white/15' : 'bg-slate-100 text-slate-700'}`}>
-                    <Icon size={16} />
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleTabChange(id)}
+                  className={`rounded-[18px] px-1.5 py-2.5 text-center transition sm:px-2 ${isActive ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-50 text-slate-600 hover:bg-emerald-50'
+                    }`}
+                >
+                  <div className="flex flex-col items-center gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${isActive ? 'bg-white/15' : 'bg-slate-100 text-slate-700'}`}>
+                      <Icon size={16} />
+                    </div>
+                    <div className="min-w-0 text-center sm:text-left">
+                      <p className="text-[10px] font-black uppercase tracking-[0.06em] sm:hidden">
+                        {shortLabel || label}
+                      </p>
+                      <p className="hidden truncate text-[13px] font-bold sm:block">{label}</p>
+                      <p className={`hidden truncate text-[11px] font-medium sm:block ${isActive ? 'text-emerald-50' : 'text-slate-400'}`}>{helper}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0 text-center sm:text-left">
-                    <p className="text-[10px] font-black uppercase tracking-[0.06em] sm:hidden">
-                      {shortLabel || label}
-                    </p>
-                    <p className="hidden truncate text-[13px] font-bold sm:block">{label}</p>
-                    <p className={`hidden truncate text-[11px] font-medium sm:block ${isActive ? 'text-emerald-50' : 'text-slate-400'}`}>{helper}</p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

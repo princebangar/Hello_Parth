@@ -11,7 +11,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import AdminPageHeader from "../../components/ui/AdminPageHeader";
 
-const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin`;
+const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin`;
 
 const getOwnerName = (owner) =>
   owner?.name || owner?.user_id?.name || owner?.company_name || "-";
@@ -21,7 +21,7 @@ const getOwnerMobile = (owner) =>
 
 const DeletedOwners = () => {
   const navigate = useNavigate();
-  const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken')) || "";
+  const token = localStorage.getItem("adminToken") || "";
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -113,7 +113,7 @@ const DeletedOwners = () => {
           module="Owner Management"
           page="Deleted Owners"
           title="Deleted Owners"
-          backto="/taxi/admin/owners"
+          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' owners"
         />
 
         <div className="mt-6">
@@ -239,12 +239,6 @@ const DeletedOwners = () => {
                   </table>
                 </div>
               </div>
-
-              <button
-                type="button"
-                className="absolute -right-1 top-[66%] flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-teal-500 text-white shadow-xl transition-colors hover:bg-teal-600">
-                <Menu size={24} />
-              </button>
             </div>
 
             <div className="mt-8 flex items-center justify-between">
@@ -283,4 +277,3 @@ const DeletedOwners = () => {
 };
 
 export default DeletedOwners;
-

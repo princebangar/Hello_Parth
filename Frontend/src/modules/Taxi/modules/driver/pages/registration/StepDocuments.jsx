@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
     ArrowLeft, 
     Camera, 
@@ -8,11 +8,9 @@ import {
     ShieldCheck, 
     AlertCircle,
     ChevronRight,
-    UploadCloud,
-    X,
-    RefreshCw
+    UploadCloud
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   clearDriverRegistrationSession,
@@ -22,13 +20,13 @@ import {
   persistDriverAuthSession,
   saveDriverDocuments,
   saveDriverRegistrationSession,
+  verifyDriverOnboardingLicenseDocument,
 } from '../../services/registrationService';
 import {
   flattenDriverDocumentFields,
   getDocumentPreviewUrl,
   normalizeDriverDocumentTemplates,
 } from '../../utils/documentTemplates';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 
@@ -60,6 +58,51 @@ const getDocumentIdentifyValue = (doc) =>
 const getDocumentExpiryValue = (doc) =>
   String(doc?.expiryDate || doc?.expiry_date || doc?.expiry || doc?.expiresAt || '').trim();
 
+const getDocumentBirthDateValue = (doc) =>
+  String(doc?.birthDate || doc?.birth_date || '').trim();
+
+const getDocumentRequestNumberValue = (doc) =>
+  String(doc?.requestNumber || doc?.request_no || '').trim();
+
+const getDocumentIfscValue = (doc) =>
+  String(doc?.ifsc || doc?.ifscCode || doc?.ifsc_code || '').trim().toUpperCase();
+
+const getDocumentAccountHolderNameValue = (doc) =>
+  String(
+    doc?.accountHolderName ||
+    doc?.account_holder_name ||
+    doc?.beneficiaryName ||
+    doc?.benificiary_name ||
+    '',
+  ).trim();
+
+const normalizeVerificationType = (value) => {
+  const normalized = String(value || 'none').trim().toLowerCase();
+  return ['driving_license', 'pan', 'gstin', 'rc', 'bank_account'].includes(normalized) ? normalized : 'none';
+};
+
+const templateNeedsBirthDate = (template = {}) =>
+  normalizeVerificationType(template?.verification_type) === 'driving_license';
+
+const templateSupportsRequestNumber = (template = {}) =>
+  normalizeVerificationType(template?.verification_type) === 'driving_license';
+
+const getDrivingLicenseVerificationDetails = (document = {}) =>
+  [
+    { key: 'verifiedName', label: 'Name' },
+    { key: 'verifiedDob', label: 'Date of Birth' },
+    { key: 'dlStatus', label: 'DL Status' },
+    { key: 'issuingRtoName', label: 'Issuing RTO' },
+    { key: 'relativeName', label: 'Relative Name' },
+    { key: 'requestNumber', label: 'Request Number' },
+  ]
+    .map(({ key, label }) => ({
+      key,
+      label,
+      value: String(document?.[key] || document?.[key === 'requestNumber' ? 'request_no' : ''] || '').trim(),
+    }))
+    .filter((item) => item.value);
+
 const buildTemplateMetaState = (templates = [], documents = {}) =>
   Object.fromEntries(
     templates.map((template) => {
@@ -73,6 +116,10 @@ const buildTemplateMetaState = (templates = [], documents = {}) =>
         {
           identifyNumber: getDocumentIdentifyValue(firstDocument),
           expiryDate: getDocumentExpiryValue(firstDocument),
+          birthDate: getDocumentBirthDateValue(firstDocument),
+          requestNumber: getDocumentRequestNumberValue(firstDocument),
+          ifsc: getDocumentIfscValue(firstDocument),
+          accountHolderName: getDocumentAccountHolderNameValue(firstDocument),
         },
       ];
     }),
@@ -84,6 +131,147 @@ const formatMetaLabel = (value) =>
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+
+const NATIVE_CAMERA_BRIDGE_TIMEOUT_MS = 20_000;
+const buildDocumentCameraInputId = (key = '') => `driver-document-camera-${String(key)}`;
+
+const loadImageFromDataUrl = (dataUrl) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Unable to process image'));
+    image.src = dataUrl;
+  });
+
+const optimizeImageFileForUpload = async (
+  file,
+  {
+    maxSide = 1600,
+    initialQuality = 0.82,
+    minQuality = 0.45,
+    maxDataUrlLength = 8_500_000,
+  } = {},
+) => {
+  const originalDataUrl = await fileToDataUrl(file);
+  if (!String(originalDataUrl || '').startsWith('data:image/')) {
+    throw new Error('Please upload an image file');
+  }
+
+  if (typeof document === 'undefined') {
+    return originalDataUrl;
+  }
+
+  const image = await loadImageFromDataUrl(originalDataUrl);
+  const largestSide = Math.max(image.width, image.height, 1);
+  const scale = largestSide > maxSide ? maxSide / largestSide : 1;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement('canvas');
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return originalDataUrl;
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+
+  let quality = initialQuality;
+  let compressed = canvas.toDataURL('image/jpeg', quality);
+
+  while (compressed.length > maxDataUrlLength && quality > minQuality) {
+    quality -= 0.08;
+    compressed = canvas.toDataURL('image/jpeg', quality);
+  }
+
+  return compressed;
+};
+
+const prepareImageFileForUpload = async (file) => {
+  const originalDataUrl = await fileToDataUrl(file);
+  if (!String(originalDataUrl || '').startsWith('data:image/')) {
+    throw new Error('Please upload an image file');
+  }
+
+  try {
+    return await optimizeImageFileForUpload(file);
+  } catch (error) {
+    console.warn('Image optimization skipped; uploading original image instead.', error);
+    return originalDataUrl;
+  }
+};
+
+const withBridgeTimeout = (promise, timeoutMs = NATIVE_CAMERA_BRIDGE_TIMEOUT_MS) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error('The camera is taking too long to respond. Please try again.'));
+      }, timeoutMs);
+    }),
+  ]);
+
+const isNativeCameraBridgeAvailable = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return Boolean(
+    window?.Rydon24Native?.captureInspectionPhoto
+      || window?.__nativeServiceCenterCamera
+      || window?.flutter_inappwebview?.callHandler,
+  );
+};
+
+const normalizeNativeCameraBridgeResult = (result) => {
+  if (!result) {
+    return null;
+  }
+
+  if (typeof result === 'string') {
+    const trimmed = result.trim();
+    if (trimmed.startsWith('data:image/')) {
+      return { dataUrl: trimmed, mimeType: 'image/jpeg', fileName: '' };
+    }
+    return null;
+  }
+
+  if (result.success === false) {
+    return null;
+  }
+
+  const mimeType = String(result.mimeType || result.type || 'image/jpeg').trim() || 'image/jpeg';
+  const rawBase64 = String(result.base64 || result.base64Data || result.imageBase64 || result.previewBase64 || '').trim();
+  const dataUrl = String(
+    result.dataUrl
+      || result.image
+      || result.base64Image
+      || result.previewImage
+      || (rawBase64 ? `data:${mimeType};base64,${rawBase64}` : '')
+      || '',
+  ).trim();
+
+  if (!dataUrl.startsWith('data:image/')) {
+    return null;
+  }
+
+  return {
+    dataUrl,
+    mimeType,
+    fileName: String(result.fileName || '').trim(),
+  };
+};
 
 const normalizeSignupRole = (role) =>
   String(role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
@@ -120,8 +308,9 @@ const isImageLikeFile = (file) => {
   return /\.(jpg|jpeg|png|webp|heic|heif|bmp|gif)$/i.test(String(file.name || ''));
 };
 
-const inferImageMeta = (file) => {
-  const mimeType = String(file?.type || 'image/jpeg').toLowerCase() || 'image/jpeg';
+const inferImageMeta = (file, dataUrl) => {
+  const mimeMatch = String(dataUrl || '').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+  const mimeType = String(file?.type || mimeMatch?.[1] || 'image/jpeg').toLowerCase();
   const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
   const originalName = String(file?.name || '').trim();
 
@@ -131,61 +320,18 @@ const inferImageMeta = (file) => {
   };
 };
 
-const DEFAULT_DRIVER_DOCUMENT_TEMPLATES = [
-  {
-    id: 'driving_license',
-    name: 'Driving License',
-    account_type: 'both',
-    is_required: true,
-    has_identify_number: true,
-    identify_number_key: 'driving_license_number',
-    has_expiry_date: true,
-    fields: [
-      { key: 'dl_front', label: 'Driving License (Front Side)', required: true },
-      { key: 'dl_back', label: 'Driving License (Back Side)', required: true },
-    ],
-  },
-  {
-    id: 'aadhaar_card',
-    name: 'Aadhaar Card',
-    account_type: 'both',
-    is_required: true,
-    has_identify_number: true,
-    identify_number_key: 'aadhaar_number',
-    has_expiry_date: false,
-    fields: [
-      { key: 'aadhaar_front', label: 'Aadhaar Card (Front Side)', required: true },
-      { key: 'aadhaar_back', label: 'Aadhaar Card (Back Side)', required: true },
-    ],
-  },
-  {
-    id: 'pan_card',
-    name: 'PAN Card',
-    account_type: 'both',
-    is_required: true,
-    has_identify_number: true,
-    identify_number_key: 'pan_number',
-    has_expiry_date: false,
-    fields: [
-      { key: 'pan_front', label: 'PAN Card (Front Side)', required: true },
-      { key: 'pan_back', label: 'PAN Card (Back Side)', required: true },
-    ],
-  },
-];
-
 const StepDocuments = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const session = {
-    ...getStoredDriverRegistrationSession(),
-    ...(location.state || {}),
-  };
   const routePrefix = location.pathname.startsWith('/taxi/owner')
     ? '/taxi/owner'
     : '/taxi/driver';
-  const normalizedRole = location.pathname.startsWith('/taxi/owner')
-    ? 'owner'
-    : normalizeSignupRole(session.role);
+  const session = getStoredDriverRegistrationSession();
+  const isHandlingHistoryNavigationRef = useRef(false);
+  const isMetaInitializedRef = useRef(false);
+  const normalizedRole = normalizeSignupRole(session.role);
+  const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
+  const registrationId = String(session.registrationId || '').trim();
 
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -194,10 +340,19 @@ const StepDocuments = () => {
       Object.entries(session.documents || {}).map(([key, value]) => [key, normalizeDocument(value)]),
     ),
   );
-  const [documentMeta, setDocumentMeta] = useState({});
+  const [documentMeta, setDocumentMeta] = useState(() => session.documentMeta || {});
   const [uploading, setUploading] = useState(null);
+  const [verifyingTemplateId, setVerifyingTemplateId] = useState('');
+  const [verificationMessages, setVerificationMessages] = useState({});
+  const [verificationErrors, setVerificationErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!phone || !registrationId) {
+      navigate(`${routePrefix}/reg-phone`, { replace: true });
+    }
+  }, [navigate, phone, registrationId, routePrefix]);
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -206,29 +361,9 @@ const StepDocuments = () => {
       try {
         const response = await getDriverDocumentTemplates(normalizedRole);
         const results = response?.data?.data?.results || response?.data?.results || [];
-        const normalizedRemote = normalizeDriverDocumentTemplates(results);
-
-        const mergedTemplates = [...normalizedRemote];
-        for (const defaultTemplate of DEFAULT_DRIVER_DOCUMENT_TEMPLATES) {
-          const hasMatch = mergedTemplates.some((item) => {
-            const itemId = String(item.id || item.slug || '').toLowerCase();
-            const itemName = String(item.name || '').toLowerCase();
-            return (
-              itemId.includes(defaultTemplate.id) ||
-              itemName.includes(defaultTemplate.name.toLowerCase()) ||
-              (defaultTemplate.id === 'aadhaar_card' && (itemId.includes('adhaar') || itemName.includes('adhaar') || itemId.includes('aadhaar') || itemName.includes('aadhaar'))) ||
-              (defaultTemplate.id === 'pan_card' && (itemId.includes('pan') || itemName.includes('pan'))) ||
-              (defaultTemplate.id === 'driving_license' && (itemId.includes('license') || itemName.includes('license') || itemId.includes('dl')))
-            );
-          });
-          if (!hasMatch) {
-            mergedTemplates.push(defaultTemplate);
-          }
-        }
-
-        setTemplates(mergedTemplates);
+        setTemplates(normalizeDriverDocumentTemplates(results));
       } catch {
-        setTemplates(DEFAULT_DRIVER_DOCUMENT_TEMPLATES);
+        setTemplates(normalizeDriverDocumentTemplates([]));
       } finally {
         setTemplatesLoading(false);
       }
@@ -261,16 +396,76 @@ const StepDocuments = () => {
   );
 
   useEffect(() => {
-    setDocumentMeta((current) => ({
-      ...buildTemplateMetaState(documentTemplates, docs),
-      ...current,
-    }));
+    if (documentTemplates.length > 0 && !isMetaInitializedRef.current) {
+      setDocumentMeta(buildTemplateMetaState(documentTemplates, docs));
+      isMetaInitializedRef.current = true;
+    }
   }, [documentTemplates, docs]);
 
+  useEffect(() => {
+    saveDriverRegistrationSession({
+      ...getStoredDriverRegistrationSession(),
+      ...session,
+      documents: docs,
+      documentMeta,
+    });
+  }, [docs, documentMeta]);
+
+  const buildCurrentSession = () => saveDriverRegistrationSession({
+    ...getStoredDriverRegistrationSession(),
+    ...session,
+    documents: docs,
+    documentMeta,
+  });
+
+  const handleBackNavigation = () => {
+    const shouldLeave = window.confirm(
+      'Go back to vehicle setup? Your uploaded documents will stay saved.',
+    );
+
+    if (!shouldLeave) {
+      return false;
+    }
+
+    isHandlingHistoryNavigationRef.current = true;
+    buildCurrentSession();
+    navigate(`${routePrefix}/step-vehicle`, { replace: true });
+    return true;
+  };
+
+  useEffect(() => {
+    window.history.pushState({ onboardingStep: 'documents' }, '', window.location.href);
+
+    const handlePopState = () => {
+      if (isHandlingHistoryNavigationRef.current) {
+        return;
+      }
+
+      const didLeave = handleBackNavigation();
+      if (!didLeave) {
+        window.history.pushState({ onboardingStep: 'documents' }, '', window.location.href);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [routePrefix, docs, documentMeta]);
+
   const applyTemplateMetaToDocuments = (templateId, templateDocuments, metaOverride = null) => {
-    const meta = metaOverride || documentMeta[templateId] || { identifyNumber: '', expiryDate: '' };
+    const meta = metaOverride || documentMeta[templateId] || {
+      identifyNumber: '',
+      expiryDate: '',
+      birthDate: '',
+      requestNumber: '',
+      ifsc: '',
+      accountHolderName: '',
+    };
     const identifyNumber = String(meta.identifyNumber || '').trim();
     const expiryDate = String(meta.expiryDate || '').trim();
+    const birthDate = String(meta.birthDate || '').trim();
+    const requestNumber = String(meta.requestNumber || '').trim();
+    const ifsc = String(meta.ifsc || '').trim().toUpperCase();
+    const accountHolderName = String(meta.accountHolderName || '').trim();
 
     return Object.fromEntries(
       Object.entries(templateDocuments).map(([docKey, docValue]) => [
@@ -284,6 +479,17 @@ const StepDocuments = () => {
               document_number: identifyNumber,
               expiryDate,
               expiry_date: expiryDate,
+              birthDate,
+              birth_date: birthDate,
+              requestNumber,
+              request_no: requestNumber,
+              ifsc,
+              ifscCode: ifsc,
+              ifsc_code: ifsc,
+              accountHolderName,
+              account_holder_name: accountHolderName,
+              beneficiaryName: accountHolderName,
+              benificiary_name: accountHolderName,
             }
           : docValue,
       ]),
@@ -323,70 +529,41 @@ const StepDocuments = () => {
     });
   };
 
-  const [activeCameraTarget, setActiveCameraTarget] = useState(null);
-  const [facingMode, setFacingMode] = useState('environment');
-  const [cameraLoading, setCameraLoading] = useState(false);
-  const videoRef = React.useRef(null);
-  const streamRef = React.useRef(null);
-  const fileInputRefs = React.useRef({});
-
-  const stopCameraStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      stopCameraStream();
-    };
-  }, []);
-
-  const processFileUpload = async (templateId, key, file, fileNameOverride = '') => {
+  const uploadDocumentFromSource = async ({ templateId, key, dataUrl, fileName = '', mimeType = 'image/jpeg' }) => {
     setUploading(key);
     setError('');
 
-    const localPreview = URL.createObjectURL(file);
-    const { fileName: inferredName, mimeType: inferredMime } = inferImageMeta(file);
-    const mimeType = inferredMime || 'image/jpeg';
-    const fileName = fileNameOverride || inferredName;
-
     try {
-      if (!isImageLikeFile(file) && !String(file.type || '').startsWith('image/')) {
-        throw new Error('Please upload an image file');
-      }
+      const effectiveMimeType = String(mimeType || '').trim() || 'image/jpeg';
+      const effectiveFileName = String(fileName || '').trim()
+        || `capture-${Date.now()}.${effectiveMimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg'}`;
 
       setDocs((prev) => ({
         ...prev,
         [key]: {
           ...(prev[key] || {}),
-          previewUrl: localPreview,
-          fileName,
-          mimeType,
+          previewUrl: dataUrl,
+          fileName: effectiveFileName,
+          mimeType: effectiveMimeType,
           uploaded: false,
           uploading: true,
         },
       }));
-
-      const uploadResult = await uploadService.uploadImageFile(file, 'driver-documents');
-      const secureUrl = uploadResult?.secureUrl || uploadResult?.url || '';
-      if (!secureUrl) {
-        throw new Error('Unable to upload document');
-      }
-
-      URL.revokeObjectURL(localPreview);
 
       const response = await saveDriverDocuments({
         registrationId: session.registrationId,
         phone: session.phone,
         documents: {
           [key]: {
-            secureUrl,
-            fileName,
-            mimeType,
+            dataUrl,
+            fileName: effectiveFileName,
+            mimeType: effectiveMimeType,
             identifyNumber: documentMeta[templateId]?.identifyNumber || '',
             expiryDate: documentMeta[templateId]?.expiryDate || '',
+            birthDate: documentMeta[templateId]?.birthDate || '',
+            requestNumber: documentMeta[templateId]?.requestNumber || '',
+            ifsc: documentMeta[templateId]?.ifsc || '',
+            accountHolderName: documentMeta[templateId]?.accountHolderName || '',
           },
         },
       });
@@ -394,13 +571,18 @@ const StepDocuments = () => {
 
       const uploadedDoc = payload?.documents?.[key] || payload?.session?.documents?.[key];
       const nextDoc = normalizeDocument(uploadedDoc) || {
-        previewUrl: secureUrl,
-        secureUrl,
-        fileName,
-        mimeType,
+        previewUrl: dataUrl,
+        secureUrl: dataUrl,
+        fileName: effectiveFileName,
+        mimeType: effectiveMimeType,
         uploaded: true,
       };
-      const nextDocWithMeta = applyTemplateMetaToDocuments(templateId, { [key]: nextDoc })[key];
+      const nextDocWithMeta = applyTemplateMetaToDocuments(templateId, {
+        [key]: {
+          ...(docs[key] || {}),
+          ...nextDoc,
+        },
+      })[key];
 
       setDocs((prev) => ({
         ...prev,
@@ -417,7 +599,6 @@ const StepDocuments = () => {
         },
       });
     } catch (uploadError) {
-      URL.revokeObjectURL(localPreview);
       setError(uploadError?.message || 'Unable to upload document');
       setDocs((prev) => ({
         ...prev,
@@ -437,116 +618,193 @@ const StepDocuments = () => {
     }
 
     try {
-      const { fileName } = inferImageMeta(file);
-      await processFileUpload(templateId, key, file, fileName);
-    } catch (readErr) {
-      setError(readErr?.message || 'Unable to read selected file');
+      const dataUrl = isImageLikeFile(file)
+        ? await prepareImageFileForUpload(file)
+        : await fileToDataUrl(file);
+      const inferred = inferImageMeta(file, dataUrl);
+
+      await uploadDocumentFromSource({
+        templateId,
+        key,
+        dataUrl,
+        fileName: inferred.fileName,
+        mimeType: inferred.mimeType,
+      });
+    } catch (error) {
+      setError(error?.message || 'Unable to upload document');
     }
   };
 
-  const openCameraModal = async (templateId, key, label) => {
-    if (uploading) return;
-
-    const fallbackTriggerInput = () => {
-      const targetInput = fileInputRefs.current[`camera-${key}`];
-      if (targetInput) {
-        targetInput.click();
-      }
-    };
-
-    if (navigator.mediaDevices?.getUserMedia) {
-      try {
-        setError('');
-        setCameraLoading(true);
-        stopCameraStream();
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facingMode },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
-          audio: false,
-        });
-
-        streamRef.current = stream;
-        setActiveCameraTarget({ templateId, key, label });
-        setCameraLoading(false);
-        return;
-      } catch (camErr) {
-        console.warn('Live WebRTC camera failed, falling back to file capture:', camErr);
-        stopCameraStream();
-        setCameraLoading(false);
-      }
-    }
-
-    fallbackTriggerInput();
-  };
-
-  const capturePhotoFromLiveCamera = async () => {
-    const video = videoRef.current;
-    if (!video || !activeCameraTarget) return;
-
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      setError('Failed to capture frame from camera');
+  const triggerCameraFileInput = (key) => {
+    if (typeof document === 'undefined') {
       return;
     }
 
-    ctx.drawImage(video, 0, 0, width, height);
-
-    const { templateId, key } = activeCameraTarget;
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (result) => {
-          if (!result) {
-            reject(new Error('Failed to capture frame from camera'));
-            return;
-          }
-          resolve(result);
-        },
-        'image/jpeg',
-        0.92,
-      );
-    });
-
-    const fileName = `license-${key}-${Date.now()}.jpg`;
-    const file = new File([blob], fileName, { type: 'image/jpeg' });
-
-    stopCameraStream();
-    setActiveCameraTarget(null);
-
-    await processFileUpload(templateId, key, file, fileName);
+    document.getElementById(buildDocumentCameraInputId(key))?.click();
   };
 
-  const toggleCameraFacingMode = async () => {
-    if (!activeCameraTarget) return;
-    const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
-    setFacingMode(nextFacing);
+  const handleCameraCapture = async (templateId, key, label) => {
+    if (!isNativeCameraBridgeAvailable()) {
+      triggerCameraFileInput(key);
+      return;
+    }
+
+    const payload = {
+      type: 'driver_document_capture',
+      action: 'capture',
+      key,
+      label,
+      registrationId: session.registrationId,
+      phone: session.phone,
+      source: 'driver_documents',
+    };
 
     try {
-      stopCameraStream();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: nextFacing },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
+      let normalizedResult = null;
+
+      if (typeof window?.Rydon24Native?.captureInspectionPhoto === 'function') {
+        normalizedResult = normalizeNativeCameraBridgeResult(
+          await withBridgeTimeout(window.Rydon24Native.captureInspectionPhoto(payload)),
+        );
       }
-    } catch (e) {
-      console.warn('Unable to toggle camera facing mode:', e);
+
+      if (!normalizedResult && typeof window?.__nativeServiceCenterCamera === 'function') {
+        normalizedResult = normalizeNativeCameraBridgeResult(
+          await withBridgeTimeout(window.__nativeServiceCenterCamera(payload)),
+        );
+      }
+
+      if (!normalizedResult && window?.flutter_inappwebview?.callHandler) {
+        const handlers = [
+          'captureInspectionPhoto',
+          'cameraCapture',
+          'serviceCenterInspectionPhoto',
+          'serviceCenterCamera',
+          'openCamera',
+        ];
+
+        for (const handlerName of handlers) {
+          try {
+            const result = handlerName === 'openCamera'
+              ? await withBridgeTimeout(window.flutter_inappwebview.callHandler(handlerName))
+              : await withBridgeTimeout(window.flutter_inappwebview.callHandler(handlerName, payload));
+            normalizedResult = normalizeNativeCameraBridgeResult(result);
+            if (normalizedResult?.dataUrl) {
+              break;
+            }
+          } catch {
+            // Try the next bridge handler name.
+          }
+        }
+      }
+
+      if (!normalizedResult?.dataUrl) {
+        triggerCameraFileInput(key);
+        return;
+      }
+
+      await uploadDocumentFromSource({
+        templateId,
+        key,
+        dataUrl: normalizedResult.dataUrl,
+        fileName: normalizedResult.fileName,
+        mimeType: normalizedResult.mimeType,
+      });
+    } catch (error) {
+      setError(error?.message || 'Unable to open the camera');
+      triggerCameraFileInput(key);
+    }
+  };
+
+  const handleVerifyDrivingLicense = async (template) => {
+    const templateId = String(template?.id || '').trim();
+    const templateFields = templateFieldMap[templateId] || [];
+    const primaryField = templateFields[0];
+    const documentKey = String(primaryField?.key || '').trim();
+    const meta = documentMeta[templateId] || {};
+    const identifyNumber = String(meta.identifyNumber || '').trim().toUpperCase();
+    const birthDate = String(meta.birthDate || '').trim();
+    const requestNumber = String(meta.requestNumber || '').trim();
+
+    if (!templateId || !documentKey) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: 'Driving license document is not configured properly',
+      }));
+      return;
+    }
+
+    if (!identifyNumber) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: 'Enter the driving license number first',
+      }));
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: 'Enter the birth date in YYYY-MM-DD format',
+      }));
+      return;
+    }
+
+    setVerifyingTemplateId(templateId);
+    setVerificationErrors((prev) => ({ ...prev, [templateId]: '' }));
+    setVerificationMessages((prev) => ({ ...prev, [templateId]: '' }));
+    setError('');
+
+    try {
+      const response = await verifyDriverOnboardingLicenseDocument(documentKey, {
+        registrationId: session.registrationId,
+        phone: session.phone,
+        licenseNumber: identifyNumber,
+        birthDate,
+        requestNumber,
+      });
+
+      const payload = unwrap(response);
+      const verifiedDocument = normalizeDocument(payload?.document);
+
+      if (verifiedDocument) {
+        setDocs((current) => ({
+          ...current,
+          [documentKey]: {
+            ...(current[documentKey] || {}),
+            ...verifiedDocument,
+            uploaded: current[documentKey]?.uploaded ?? verifiedDocument.uploaded ?? false,
+          },
+        }));
+      }
+
+      const nextRequestNumber = String(
+        verifiedDocument?.requestNumber ||
+        verifiedDocument?.request_no ||
+        requestNumber,
+      ).trim();
+
+      setDocumentMeta((current) => ({
+        ...current,
+        [templateId]: {
+          ...(current[templateId] || {}),
+          identifyNumber,
+          birthDate,
+          requestNumber: nextRequestNumber,
+        },
+      }));
+
+      setVerificationMessages((prev) => ({
+        ...prev,
+        [templateId]: String(payload?.message || 'Driving license verified successfully').trim(),
+      }));
+    } catch (requestError) {
+      setVerificationErrors((prev) => ({
+        ...prev,
+        [templateId]: requestError?.message || 'Unable to verify driving license',
+      }));
+    } finally {
+      setVerifyingTemplateId('');
     }
   };
 
@@ -560,7 +818,13 @@ const StepDocuments = () => {
       const meta = documentMeta[template.id] || {};
       const hasIdentifyNumber = !template.has_identify_number || Boolean(String(meta.identifyNumber || '').trim());
       const hasExpiryDate = !template.has_expiry_date || Boolean(String(meta.expiryDate || '').trim());
-      return hasIdentifyNumber && hasExpiryDate;
+      const hasBirthDate = !templateNeedsBirthDate(template) || /^\d{4}-\d{2}-\d{2}$/.test(String(meta.birthDate || '').trim());
+      const needsBankMeta = normalizeVerificationType(template.verification_type) === 'bank_account';
+      const hasBankMeta = !needsBankMeta || (
+        Boolean(String(meta.ifsc || '').trim()) &&
+        Boolean(String(meta.accountHolderName || '').trim())
+      );
+      return hasIdentifyNumber && hasExpiryDate && hasBirthDate && hasBankMeta;
     }) &&
     !uploading &&
     !templatesLoading;
@@ -598,6 +862,29 @@ const StepDocuments = () => {
         );
       }
 
+      const submittedDocumentSummary = uploadFields.map((field) => ({
+        key: field.key,
+        label: field.label || field.templateName || field.key,
+        status: submittedDocumentsWithMeta[field.key] ? 'pending' : 'missing',
+        reason: '',
+        verificationType: field.verificationType || 'none',
+        providerStatus:
+          submittedDocumentsWithMeta[field.key] && String(field.verificationType || 'none') !== 'none'
+            ? 'queued'
+            : 'not_started',
+        providerMessage:
+          submittedDocumentsWithMeta[field.key] && String(field.verificationType || 'none') !== 'none'
+            ? 'Verification will start shortly'
+            : '',
+        previewUrl: String(
+          submittedDocumentsWithMeta[field.key]?.previewUrl ||
+          submittedDocumentsWithMeta[field.key]?.secureUrl ||
+          submittedDocumentsWithMeta[field.key]?.url ||
+          '',
+        ).trim(),
+        reverificationPending: false,
+      }));
+
       const completeResponse = await completeDriverOnboarding({
         registrationId: session.registrationId,
         phone: session.phone,
@@ -607,28 +894,23 @@ const StepDocuments = () => {
 
       const token = payload?.token;
       if (token) {
-        const syncedRole =
-          normalizedRole === 'owner' ||
-          String(session.role || 'driver').toLowerCase() === 'owner'
-            ? 'owner'
-            : 'driver';
-        persistDriverAuthSession({ token, role: syncedRole });
+        const normalizedRole =
+          String(session.role || 'driver').toLowerCase() === 'owner' ? 'owner' : 'driver';
+        persistDriverAuthSession({ token, role: normalizedRole });
       }
 
       saveDriverRegistrationSession({
         ...session,
-        role: normalizedRole,
         documents: docs,
         completedRegistration: payload || null,
       });
       clearDriverRegistrationSession();
-
       navigate(`${routePrefix}/registration-status`, {
+        replace: true,
         state: {
-          ...session,
           role: normalizedRole,
-          documents: docs,
           completedRegistration: payload || null,
+          submittedDocumentSummary,
         },
       });
     } catch (submitError) {
@@ -647,7 +929,7 @@ const StepDocuments = () => {
         <header className="space-y-5">
             <div className="flex items-center justify-between">
                 <button
-                    onClick={() => navigate(`${routePrefix}/step-vehicle`, { state: { ...session, role: normalizedRole } })}
+                    onClick={handleBackNavigation}
                     className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
                 >
                     <ArrowLeft size={18} strokeWidth={2.5} />
@@ -784,28 +1066,25 @@ const StepDocuments = () => {
                                 </label>
                                 <button
                                     type="button"
-                                    disabled={isUploading || cameraLoading}
-                                    onClick={() => openCameraModal(template.id, field.key, field.label)}
+                                    disabled={isUploading}
+                                    onClick={() => handleCameraCapture(template.id, field.key, field.label)}
                                     className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-black uppercase tracking-widest transition-all ${
-                                        isUploading || cameraLoading
+                                      isUploading
                                         ? 'cursor-not-allowed border-slate-50 bg-slate-50 text-slate-300'
                                         : 'cursor-pointer border-slate-900 bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-900/10 active:scale-[0.98]'
                                     }`}
                                 >
                                     <Camera size={16} />
-                                    {cameraLoading ? 'Opening...' : 'Camera'}
+                                    Camera
                                     <input
-                                        ref={(el) => (fileInputRefs.current[`camera-${field.key}`] = el)}
-                                        type="file"
-                                        accept="image/*"
-                                        capture="environment"
-                                        disabled={isUploading}
-                                        className="sr-only pointer-events-none"
-                                        aria-label={`Capture ${field.label} from camera`}
-                                        onClick={(event) => {
-                                          event.target.value = '';
-                                        }}
-                                        onChange={(event) => handleFileChange(template.id, field.key, event)}
+                                    id={buildDocumentCameraInputId(field.key)}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    disabled={isUploading}
+                                    className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                                    aria-label={`Capture ${field.label} from camera`}
+                                    onChange={(event) => handleFileChange(template.id, field.key, event)}
                                     />
                                 </button>
                             </div>
@@ -815,7 +1094,17 @@ const StepDocuments = () => {
                   })}
                 </div>
 
-                {(template.has_identify_number || template.has_expiry_date) ? (
+                {(template.has_identify_number || template.has_expiry_date || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
+                  <div className="space-y-2 pt-2">
+                    {normalizeVerificationType(template.verification_type) !== 'none' ? (
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+                        Verification details required for API check
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {(template.has_identify_number || template.has_expiry_date || templateNeedsBirthDate(template) || templateSupportsRequestNumber(template) || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
                   <div className="space-y-4 pt-2">
                     {template.has_identify_number ? (
                       <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
@@ -830,7 +1119,7 @@ const StepDocuments = () => {
                                 <input
                                     type="text"
                                     value={documentMeta[template.id]?.identifyNumber || ''}
-                                    onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.trim().toUpperCase())}
+                                    onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.toUpperCase())}
                                     placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || 'Number'}`}
                                     className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
                                 />
@@ -839,8 +1128,55 @@ const StepDocuments = () => {
                       </div>
                     ) : null}
 
+                    {templateNeedsBirthDate(template) ? (
+                      <div
+                        onClick={(e) => {
+                          const input = e.currentTarget.querySelector('input[type="date"]');
+                          if (input) {
+                            try {
+                              input.showPicker();
+                            } catch {
+                              input.focus();
+                              input.click();
+                            }
+                          }
+                        }}
+                        className="group cursor-pointer rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <AlertCircle size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                              Birth Date
+                            </label>
+                            <input
+                              type="date"
+                              value={documentMeta[template.id]?.birthDate || ''}
+                              onChange={(event) => handleMetaChange(template.id, 'birthDate', event.target.value)}
+                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {template.has_expiry_date ? (
-                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                      <div 
+                        onClick={(e) => {
+                          const input = e.currentTarget.querySelector('input[type="date"]');
+                          if (input) {
+                            try {
+                              input.showPicker();
+                            } catch {
+                              input.focus();
+                              input.click();
+                            }
+                          }
+                        }}
+                        className="group cursor-pointer rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5"
+                      >
                         <div className="flex items-center gap-4">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                                 <AlertCircle size={20} strokeWidth={2.5} />
@@ -856,6 +1192,125 @@ const StepDocuments = () => {
                                     className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0"
                                 />
                             </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {templateSupportsRequestNumber(template) ? (
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <FileText size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                              Request Number
+                            </label>
+                            <input
+                              type="text"
+                              value={documentMeta[template.id]?.requestNumber || ''}
+                              onChange={(event) => handleMetaChange(template.id, 'requestNumber', event.target.value)}
+                              placeholder="Optional, auto-generated later if left blank"
+                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {normalizeVerificationType(template.verification_type) === 'driving_license' ? (
+                      <div className="space-y-3">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyDrivingLicense(template)}
+                            disabled={verifyingTemplateId === template.id}
+                            className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-colors ${
+                              verifyingTemplateId === template.id
+                                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                : 'bg-slate-900 text-white hover:bg-black'
+                            }`}
+                          >
+                            {verifyingTemplateId === template.id ? 'Verifying...' : 'Verify DL'}
+                          </button>
+                        </div>
+                        {verificationMessages[template.id] ? (
+                          <p className="text-[10px] font-bold text-emerald-600 px-1">{verificationMessages[template.id]}</p>
+                        ) : null}
+                        {verificationErrors[template.id] ? (
+                          <p className="text-[10px] font-bold text-amber-600 px-1">{verificationErrors[template.id]}</p>
+                        ) : null}
+                        {(() => {
+                          const primaryField = (templateFieldMap[template.id] || [])[0];
+                          const verifiedDoc = primaryField ? docs[primaryField.key] : null;
+                          const details = getDrivingLicenseVerificationDetails(verifiedDoc);
+
+                          if (details.length === 0) {
+                            return null;
+                          }
+
+                          return (
+                            <div className="rounded-[1.8rem] border border-emerald-100 bg-emerald-50/50 p-4">
+                              <div className="flex items-center gap-2 px-1">
+                                <ShieldCheck size={15} className="text-emerald-600" />
+                                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                                  Verified From DL
+                                </p>
+                              </div>
+                              <div className="mt-3 grid grid-cols-2 gap-3">
+                                {details.map((item) => (
+                                  <div key={item.key} className="rounded-2xl bg-white/90 px-3 py-2">
+                                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">{item.label}</p>
+                                    <p className="mt-1 text-[12px] font-bold text-slate-900 break-words">{item.value}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : null}
+
+                    {normalizeVerificationType(template.verification_type) === 'bank_account' ? (
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <FileText size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                              IFSC Code
+                            </label>
+                            <input
+                              type="text"
+                              value={documentMeta[template.id]?.ifsc || ''}
+                              onChange={(event) => handleMetaChange(template.id, 'ifsc', event.target.value.toUpperCase())}
+                              placeholder="Enter IFSC code"
+                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {normalizeVerificationType(template.verification_type) === 'bank_account' ? (
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <FileText size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                              Account Holder Name
+                            </label>
+                            <input
+                              type="text"
+                              value={documentMeta[template.id]?.accountHolderName || ''}
+                              onChange={(event) => handleMetaChange(template.id, 'accountHolderName', event.target.value)}
+                              placeholder="Enter account holder name"
+                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                            />
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -899,86 +1354,6 @@ const StepDocuments = () => {
                 </motion.button>
             </div>
         </div>
-
-        <AnimatePresence>
-          {activeCameraTarget && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-md font-['Plus_Jakarta_Sans']"
-            >
-              <div className="flex items-center justify-between px-6 pt-8 pb-4 border-b border-white/10">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">
-                    Document Scanner
-                  </span>
-                  <h3 className="text-lg font-black text-white">{activeCameraTarget.label}</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    stopCameraStream();
-                    setActiveCameraTarget(null);
-                  }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all active:scale-95"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="relative flex-1 flex flex-col items-center justify-center px-4 py-6">
-                <div className="relative w-full max-w-sm aspect-[4/3] rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl bg-black">
-                  <video
-                    ref={(el) => {
-                      videoRef.current = el;
-                      if (el && streamRef.current) {
-                        el.srcObject = streamRef.current;
-                        el.play().catch(() => {});
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="absolute inset-4 rounded-2xl border-2 border-dashed border-emerald-400/80 pointer-events-none flex items-center justify-center">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-white bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20">
-                      Align document inside box
-                    </span>
-                  </div>
-                </div>
-                <p className="mt-4 text-[12px] font-bold text-slate-400 text-center max-w-xs">
-                  Ensure good lighting and that all text on the document is clear and readable.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-around px-8 pb-10 pt-4 bg-black/40 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={toggleCameraFacingMode}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition-all"
-                  title="Switch Camera"
-                >
-                  <RefreshCw size={20} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={capturePhotoFromLiveCamera}
-                  className="flex h-20 w-20 items-center justify-center rounded-full bg-white text-slate-900 shadow-[0_0_30px_rgba(255,255,255,0.4)] border-4 border-white/40 active:scale-90 transition-all"
-                  title="Take Photo"
-                >
-                  <div className="h-14 w-14 rounded-full bg-emerald-500 flex items-center justify-center text-white">
-                    <Camera size={24} strokeWidth={2.5} />
-                  </div>
-                </button>
-
-                <div className="w-12 h-12" />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </main>
     </div>
   );

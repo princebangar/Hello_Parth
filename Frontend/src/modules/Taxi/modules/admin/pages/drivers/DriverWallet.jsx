@@ -51,31 +51,31 @@ const DriverWallet = () => {
             </div>
          </div>
          <div className="flex items-center gap-3">
-            <button className="bg-white border border-gray-100 text-gray-950 px-5 py-2.5 rounded-xl text-[12px] font-black flex items-center gap-2 hover:bg-gray-50 transition-all shadow-sm">
+            <button className="bg-white border border-gray-100 text-gray-950 px-5 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-2 hover:bg-gray-50 transition-all shadow-sm">
                <Download size={16} className="text-gray-400" /> Export CSV
             </button>
-            <button className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-[12px] font-black flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-xl">
+            <button className="bg-yellow-400 text-black px-5 py-2.5 rounded-xl text-[12px] font-bold flex items-center gap-2 hover:bg-yellow-500 transition-all shadow-sm">
                <Zap size={16} /> Bulk Settle Payouts
             </button>
          </div>
       </div>
 
       {/* WALLET SUMMARY */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-         <div className="bg-gray-950 p-8 rounded-[40px] text-white shadow-2xl relative overflow-hidden group">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+         <div className="bg-yellow-400 p-8 rounded-[40px] text-black shadow-sm relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-6 opacity-20 scale-[2.5] -rotate-12 translate-x-4"><Wallet size={80} strokeWidth={1} /></div>
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6 relative z-10">Total Balance Pool</p>
+            <p className="text-[10px] font-bold text-gray-700 uppercase tracking-widest mb-6 relative z-10">Total Balance Pool</p>
             <div className="relative z-10 mb-8">
                <p className="text-4xl font-black tracking-tighter leading-none mb-2">{walletStats.totalBalance}</p>
-               <p className="text-[11px] font-black text-emerald-400 flex items-center gap-1.5 leading-none">
-                  <ArrowUpRight size={14} /> +24% <span className="text-gray-600 uppercase tracking-widest">Growth (MTD)</span>
+               <p className="text-[11px] font-bold text-emerald-700 flex items-center gap-1.5 leading-none">
+                  <ArrowUpRight size={14} /> +24% <span className="text-gray-700 uppercase tracking-widest">Growth (MTD)</span>
                </p>
             </div>
          </div>
 
          <div className="bg-white p-8 rounded-[40px] border border-gray-50 shadow-sm relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-6 opacity-5 scale-[2] -rotate-12 translate-x-4"><Clock size={80} strokeWidth={1} /></div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 relative z-10">Pending Payouts</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-6 relative z-10">Pending Payouts</p>
             <div className="relative z-10">
                <p className="text-3xl font-black text-gray-950 tracking-tight leading-none mb-2">{walletStats.pendingPayouts}</p>
                <p className="text-[11px] font-bold text-amber-500 uppercase flex items-center gap-1.5 leading-none mt-4">
@@ -86,22 +86,11 @@ const DriverWallet = () => {
 
          <div className="bg-white p-8 rounded-[40px] border border-gray-50 shadow-sm relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-6 opacity-5 scale-[2] -rotate-12 translate-x-4 group-hover:scale-[2.4] transition-transform duration-1000"><CheckCircle2 size={80} strokeWidth={1} /></div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 relative z-10">Processed Today</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-6 relative z-10">Processed Today</p>
             <div className="relative z-10">
                <p className="text-3xl font-black text-gray-950 tracking-tight leading-none mb-2">{walletStats.processedToday}</p>
                <p className="text-[11px] font-bold text-emerald-600 uppercase flex items-center gap-1.5 leading-none mt-4">
                   Cleared to Bank
-               </p>
-            </div>
-         </div>
-
-         <div className="bg-white p-8 rounded-[40px] border border-rose-50 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-6 opacity-10 text-rose-500 scale-[2] -rotate-12 translate-x-4"><AlertCircle size={80} strokeWidth={1} /></div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 relative z-10">Verification Failures</p>
-            <div className="relative z-10">
-               <p className="text-3xl font-black text-rose-500 tracking-tight leading-none mb-2">{walletStats.failedTransactions}</p>
-               <p className="text-[11px] font-bold text-rose-600 uppercase flex items-center gap-1.5 leading-none mt-4">
-                  Action REQUIRED
                </p>
             </div>
          </div>
@@ -134,7 +123,18 @@ const DriverWallet = () => {
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                     {ledger.map((txn, i) => (
+                     {ledger.length === 0 ? (
+                        <tr>
+                           <td colSpan="6" className="px-6 py-20 text-center">
+                              <div className="flex flex-col items-center justify-center text-gray-400">
+                                 <Wallet size={48} className="mb-4 text-gray-300 opacity-50" />
+                                 <p className="text-[14px] font-bold text-gray-900">No transactions found</p>
+                                 <p className="text-[12px] mt-1 text-gray-500">There are no ledger records for the current criteria.</p>
+                              </div>
+                           </td>
+                        </tr>
+                     ) : (
+                     ledger.map((txn, i) => (
                         <tr key={i} className="hover:bg-gray-50/20 transition-all cursor-pointer group">
                            <td className="px-8 py-6">
                               <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{txn.id}</p>
@@ -164,12 +164,12 @@ const DriverWallet = () => {
                               </span>
                            </td>
                            <td className="px-8 py-6 text-right">
-                              <button className="p-2.5 text-gray-400 hover:text-gray-950 hover:bg-white rounded-xl transition-all shadow-sm">
+                              <button className="p-2.5 text-gray-400 hover:text-gray-950 hover:bg-gray-100 rounded-xl transition-all shadow-sm">
                                  <MoreHorizontal size={18} />
                               </button>
                            </td>
                         </tr>
-                     ))}
+                     )))}
                   </tbody>
                </table>
             </div>

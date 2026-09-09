@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Rocket, Bell, Bike, Car, Landmark, Bus } from 'lucide-react';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import { ContainerScroll } from '@/components/ui/container-scroll-animation';
 
 // Feature metadata per route
 const FEATURE_META = {
@@ -39,7 +40,7 @@ const FEATURE_META = {
   '/cab-sharing': {
     icon: <Bus size={48} strokeWidth={1.5} />,
     title: 'Cab Sharing',
-    subtitle: 'Share rides, save big — Hello Parth\'s USP',
+    subtitle: 'Share rides, save big — Appzeto 24\'s USP',
     description: 'Real-time seat booking in shared cabs. Choose your seat, split the fare, and travel smart.',
     color: 'bg-green-50',
     accent: 'text-green-600',
@@ -65,7 +66,7 @@ const ComingSoon = () => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const meta = FEATURE_META[location.pathname] || DEFAULT_META;
-  const subtitle = String(meta.subtitle || '').replace(/Hello Parth/gi, appName);
+  const subtitle = String(meta.subtitle || '').replace(/Appzeto 24/gi, appName);
 
   return (
     <div className="min-h-screen bg-white max-w-lg mx-auto flex flex-col font-sans">
@@ -116,6 +117,29 @@ const ComingSoon = () => {
           <Bell size={16} strokeWidth={3} />
           <span>Notify Me When Live</span>
         </motion.button>
+
+        {/* Scroll Animation Section */}
+        <div className="w-full mt-6 py-6 border-t border-gray-100 overflow-hidden">
+          <ContainerScroll
+            titleComponent={
+              <div className="mb-4">
+                <h2 className="text-xl font-extrabold text-slate-900 tracking-tight leading-none text-center">
+                  We're launching soon! <br />
+                  <span className="text-2xl font-black text-[#FFB300] mt-2 block leading-none">
+                    Stay tuned
+                  </span>
+                </h2>
+              </div>
+            }
+          >
+            <img
+              src="https://ui.aceternity.com/_next/image?url=%2Flinear.webp&w=3840&q=75"
+              alt="Appzeto  launch preview"
+              className="mx-auto rounded-xl object-cover h-full object-left-top w-full"
+              draggable={false}
+            />
+          </ContainerScroll>
+        </div>
 
         <button
           onClick={() => navigate('/')}

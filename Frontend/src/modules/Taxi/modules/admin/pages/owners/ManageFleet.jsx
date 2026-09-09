@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
-const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/admin';
+const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
 const MotionDiv = motion.div;
 const FILE_BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ || '';
 
@@ -87,6 +87,9 @@ const getFleetStatusReason = (item = {}) => {
   return String(match || '').trim();
 };
 
+const inputClass = 'h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400';
+const labelClass = 'mb-1.5 block text-xs font-bold text-gray-950';
+
 const ManageFleet = () => {
   const navigate = useNavigate();
   const [view, setView] = useState('list'); // 'list' | 'create' | 'edit'
@@ -115,10 +118,10 @@ const ManageFleet = () => {
     car_color: ''
   });
 
-  const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken')) || '';
+  const token = localStorage.getItem('adminToken') || '';
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  /* -- Fetch initial data -- */
+  /* ── Fetch initial data ── */
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -126,7 +129,7 @@ const ManageFleet = () => {
         fetch(`${BASE}/owner-management/manage-fleet`, { headers }),
         fetch(`${BASE}/owner-management/manage-owners`, { headers }), // Fetching owners
         fetch(`${BASE}/service-locations`, { headers }),
-        fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/common/ride_modules`, { headers })
+        fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/common/ride_modules`, { headers })
       ]);
 
       const fData = await fleetRes.json();
@@ -166,7 +169,7 @@ const ManageFleet = () => {
     }
   };
 
-  /* -- Fetch vehicle types based on Area -- */
+  /* ── Fetch vehicle types based on Area ── */
   const fetchVehicleTypes = async () => {
     try {
       const typeFilter = (formData.transport_type || 'taxi').toLowerCase();
@@ -372,7 +375,7 @@ const ManageFleet = () => {
     });
   };
 
-  /* -- Status badge -- */
+  /* ── Status badge ── */
   const StatusBadge = ({ status }) => {
     const map = {
       approved: { color: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: <CheckCircle size={12} />, label: 'Approved' },
@@ -381,39 +384,32 @@ const ManageFleet = () => {
     };
     const cfg = map[status?.toLowerCase()] || map.pending;
     return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider border ${cfg.color}`}>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${cfg.color}`}>
         {cfg.icon} {cfg.label}
       </span>
     );
   };
 
-  /* ------------------------------------
+  /* ════════════════════════════════════
        CREATE / EDIT FORM
-  ------------------------------------ */
+  ════════════════════════════════════ */
   if (view === 'create' || view === 'edit') {
     return (
       <div className="min-h-screen p-1 font-sans">
         {/* Breadcrumb */}
-        <div className="flex items-center justify-between mb-8 px-1">
-          <h1 className="text-[16px] font-black tracking-tight text-gray-800 uppercase">
-            {view === 'edit' ? 'Edit Fleet' : 'Create'}
+        <div className="flex items-center justify-between mb-6 px-1">
+          <h1 className="text-xl font-bold text-gray-950">
+            {view === 'edit' ? 'Edit Fleet' : 'Create Fleet'}
           </h1>
-          <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-            <span className="cursor-pointer hover:text-gray-700 transition-colors" onClick={() => { setView('list'); resetForm(); }}>
-              Manage Fleet
-            </span>
-            <ChevronRight size={12} className="opacity-50" />
-            <span className="text-gray-900 font-black">{view === 'edit' ? 'Edit' : 'Create'}</span>
-          </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 lg:p-8">
           <form onSubmit={handleSave}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
 
               {/* Select Owner */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   Select Fleet Owner <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -421,7 +417,7 @@ const ManageFleet = () => {
                     required
                     value={formData.owner_id}
                     onChange={(e) => setFormData({ ...formData, owner_id: e.target.value })}
-                    className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none appearance-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all font-bold"
+                    className={`${inputClass} appearance-none pr-10`}
                   >
                     <option value="">Select Owner</option>
                     {owners.length > 0 ? (
@@ -434,13 +430,13 @@ const ManageFleet = () => {
                       <option value="" disabled>No owners found</option>
                     )}
                   </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
                 </div>
               </div>
 
               {/* Select Area */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   Select Operating Area <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -448,7 +444,7 @@ const ManageFleet = () => {
                     required
                     value={formData.service_location_id}
                     onChange={(e) => setFormData({ ...formData, service_location_id: e.target.value })}
-                    className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none appearance-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all"
+                    className={`${inputClass} appearance-none pr-10`}
                   >
                     <option value="">Select Area</option>
                     {areas.map(area => (
@@ -457,13 +453,13 @@ const ManageFleet = () => {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
                 </div>
               </div>
 
               {/* Transport Type */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   Transport Type <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -471,7 +467,7 @@ const ManageFleet = () => {
                     required
                     value={formData.transport_type}
                     onChange={(e) => setFormData({ ...formData, transport_type: e.target.value })}
-                    className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none appearance-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all"
+                    className={`${inputClass} appearance-none pr-10`}
                   >
                     {transportTypes.length > 0 ? (
                       transportTypes.map(tt => (
@@ -486,13 +482,13 @@ const ManageFleet = () => {
                       </>
                     )}
                   </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
                 </div>
               </div>
 
               {/* Select Type (Vehicle Type) */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   Select Vehicle Type <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -500,7 +496,7 @@ const ManageFleet = () => {
                     required
                     value={formData.vehicle_type_id}
                     onChange={(e) => setFormData({ ...formData, vehicle_type_id: e.target.value })}
-                    className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none appearance-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all font-bold"
+                    className={`${inputClass} appearance-none pr-10`}
                   >
                     <option value="">Select vehicle type</option>
                     {vehicleTypes.length > 0 ? (
@@ -518,13 +514,13 @@ const ManageFleet = () => {
                       </>
                     )}
                   </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
                 </div>
               </div>
 
               {/* Car Brand */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   Car Brand <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -533,13 +529,13 @@ const ManageFleet = () => {
                   value={formData.car_brand}
                   onChange={(e) => setFormData({ ...formData, car_brand: e.target.value })}
                   placeholder="Enter Car Make"
-                  className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all placeholder:text-gray-300"
+                  className={inputClass}
                 />
               </div>
 
               {/* Car Model */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   Car Model <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -548,13 +544,13 @@ const ManageFleet = () => {
                   value={formData.car_model}
                   onChange={(e) => setFormData({ ...formData, car_model: e.target.value })}
                   placeholder="Enter Car Model"
-                  className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all placeholder:text-gray-300"
+                  className={inputClass}
                 />
               </div>
 
               {/* License Plate Number */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div>
+                <label className={labelClass}>
                   License Plate Number <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -563,13 +559,13 @@ const ManageFleet = () => {
                   value={formData.license_plate_number}
                   onChange={(e) => setFormData({ ...formData, license_plate_number: e.target.value })}
                   placeholder="Enter License Plate Number"
-                  className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all placeholder:text-gray-300"
+                  className={inputClass}
                 />
               </div>
 
               {/* Car Color */}
-              <div className="space-y-2 md:col-span-1">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.12em] block">
+              <div className="md:col-span-1">
+                <label className={labelClass}>
                   Car Color <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -578,24 +574,24 @@ const ManageFleet = () => {
                   value={formData.car_color}
                   onChange={(e) => setFormData({ ...formData, car_color: e.target.value })}
                   placeholder="Enter Car Color"
-                  className="w-full h-13 px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-bold outline-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all placeholder:text-gray-300"
+                  className={inputClass}
                 />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end mt-10 pt-8 border-t border-gray-50">
+            <div className="col-span-1 md:col-span-2 pt-6 flex items-center justify-end gap-3 border-t border-gray-100 mt-2">
               <button
                 type="button"
                 onClick={() => { setView('list'); resetForm(); }}
-                className="px-8 py-3 mr-3 text-[13px] font-black uppercase tracking-widest text-gray-400 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all"
+                className="h-10 px-6 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="bg-[#2D3A6E] hover:bg-gray-900 text-white px-10 py-3 rounded-xl text-[13px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
               >
                 {submitting ? <Loader2 className="animate-spin" size={16} /> : null}
                 Save
@@ -607,9 +603,9 @@ const ManageFleet = () => {
     );
   }
 
-  /* ------------------------------------
+  /* ════════════════════════════════════
        LIST VIEW
-  ------------------------------------ */
+  ════════════════════════════════════ */
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <AnimatePresence mode="wait">
@@ -627,13 +623,13 @@ const ManageFleet = () => {
             <div className="relative rounded border border-gray-200 bg-white shadow-sm">
             {/* Toolbar */}
             <div className="flex flex-col gap-5 px-5 py-5 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3 text-sm font-semibold text-slate-400">
-                <span>show</span>
+              <div className="flex items-center gap-3 text-sm font-semibold text-slate-500">
+                <span>Show</span>
                 <div className="relative">
                   <select
                     value={itemsPerPage}
                     onChange={(e) => setItemsPerPage(Number(e.target.value) || 10)}
-                    className="h-9 w-24 appearance-none rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    className="h-9 w-24 appearance-none rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
                   >
                     {[10, 25, 50, 100].map((value) => (
                       <option key={value} value={value}>
@@ -646,28 +642,28 @@ const ManageFleet = () => {
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-700"
                   />
                 </div>
-                <span>entries</span>
+                <span>Entries</span>
               </div>
 
               <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
                 <div className="relative">
                   <Search
                     size={16}
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search brand, model, plate, owner..."
-                    className="h-12 w-full rounded-xl border border-gray-300 bg-white pl-11 pr-4 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 md:w-72"
+                    className="h-10 w-full rounded border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 md:w-64"
                   />
                 </div>
                 <div className="relative">
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-12 w-full appearance-none rounded-xl border border-gray-300 bg-white px-4 pr-10 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 md:w-44"
+                    className="h-10 w-full appearance-none rounded border border-gray-300 bg-white px-3 pr-10 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 md:w-44"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -682,7 +678,7 @@ const ManageFleet = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/taxi/admin/fleet/manage/create')}
-                  className="flex h-12 items-center gap-3 rounded bg-indigo-950 px-6 text-sm font-semibold text-white transition-colors hover:bg-indigo-900"
+                  className="flex h-10 items-center gap-2 rounded-lg bg-yellow-400 px-5 text-sm font-bold text-black transition-colors hover:bg-yellow-500 shadow-sm"
                 >
                   <Plus size={16} /> Add Fleet
                 </button>
@@ -719,9 +715,9 @@ const ManageFleet = () => {
                   ) : pagedFleet.length === 0 ? (
                     <tr>
                       <td colSpan="9" className="border-b border-gray-200 px-3 py-10 text-center">
-                        <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-700">
-                          <FileSearch size={92} strokeWidth={1.7} className="mb-2 text-indigo-950" />
-                          <p className="text-xl font-medium">No Data Found</p>
+                        <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-500">
+                          <FileSearch size={48} strokeWidth={1.5} className="mb-3" />
+                          <p className="text-sm font-medium">No fleet found</p>
                         </div>
                       </td>
                     </tr>
@@ -732,38 +728,34 @@ const ManageFleet = () => {
                         className="bg-white transition-colors hover:bg-gray-50"
                       >
                         {/* Vehicle Type */}
-                        <td className="px-3 py-5 text-sm text-gray-950">
-                          <span className="text-[13px] font-black text-gray-800 uppercase">
-                            {item.vehicle_type_id?.name || item.vehicle_type_id?.type_name || item.vehicle_type || '�'}
-                          </span>
+                        <td className="px-3 py-4 text-sm font-medium text-gray-950">
+                          {item.vehicle_type_id?.name || item.vehicle_type_id?.type_name || item.vehicle_type || '—'}
                         </td>
 
                         {/* Fleet Owner */}
                         <td className="hidden">
-                          <span className="text-[12px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 uppercase tracking-wider shadow-sm shadow-indigo-50">
-                            {item.owner_id?.company_name || item.owner_id?.name || '�'}
-                          </span>
+                          {item.owner_id?.company_name || item.owner_id?.name || '—'}
                         </td>
 
                         {/* Car Brand */}
-                        <td className="px-3 py-5 text-sm text-gray-950">
-                          <span className="text-[13px] font-bold text-gray-600">{item.car_brand || '�'}</span>
+                        <td className="px-3 py-4 text-sm text-gray-950">
+                          {item.car_brand || '—'}
                         </td>
 
                         {/* Car Model */}
-                        <td className="px-3 py-5">
-                          <span className="text-[13px] font-bold text-gray-600">{item.car_model || '�'}</span>
+                        <td className="px-3 py-4 text-sm text-gray-950">
+                          {item.car_model || '—'}
                         </td>
 
                         {/* Document View */}
-                        <td className="px-3 py-5">
+                        <td className="px-3 py-4 text-sm">
                           <button
                             type="button"
                             onClick={() => handleViewDocuments(item)}
                             disabled={getFleetDocumentUrls(item?.documents).length === 0}
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition-all ${
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
                               getFleetDocumentUrls(item?.documents).length > 0
-                                ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                                ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
                                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                             }`}
                             title={
@@ -772,71 +764,69 @@ const ManageFleet = () => {
                                 : 'No documents uploaded'
                             }
                           >
-                            <Eye size={12} /> {getFleetDocumentUrls(item?.documents).length > 0 ? 'View' : 'No Docs'}
+                            <Eye size={14} /> {getFleetDocumentUrls(item?.documents).length > 0 ? 'Document View' : 'No Docs'}
                           </button>
                         </td>
 
                         {/* License Plate */}
-                        <td className="px-3 py-5">
-                          <span className="inline-block px-3 py-1 bg-gray-50 border border-gray-100 rounded-lg text-[12px] font-black text-gray-700 tracking-widest uppercase">
-                            {item.license_plate_number || '�'}
-                          </span>
+                        <td className="px-3 py-4 text-sm text-gray-950">
+                          {item.license_plate_number || '—'}
                         </td>
 
                         {/* Status */}
-                        <td className="px-3 py-5">
+                        <td className="px-3 py-4">
                           <StatusBadge status={item.status} />
                         </td>
 
                         {/* Reason */}
-                        <td className="px-3 py-5">
-                          <span className="text-[12px] text-gray-400 italic">
-                            {item.status?.toLowerCase() === 'rejected' ? (getFleetStatusReason(item) || 'Rejected without a reason') : '�'}
+                        <td className="px-3 py-4">
+                          <span className="text-xs text-gray-500">
+                            {item.status?.toLowerCase() === 'rejected' ? (getFleetStatusReason(item) || 'Rejected without a reason') : '—'}
                           </span>
                         </td>
 
                         {/* Approval */}
-                        <td className="px-3 py-5">
+                        <td className="px-3 py-4">
                           <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() => handleStatusUpdate(item, 'approved')}
                               disabled={updatingFleetId === item._id || item.status?.toLowerCase() === 'approved'}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-700 transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Approve fleet"
                             >
-                              {updatingFleetId === item._id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                              {updatingFleetId === item._id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                               Approve
                             </button>
                             <button
                               type="button"
                               onClick={() => handleStatusUpdate(item, 'rejected')}
                               disabled={updatingFleetId === item._id || item.status?.toLowerCase() === 'rejected'}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-rose-700 transition-all hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-all hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Reject fleet"
                             >
-                              {updatingFleetId === item._id ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+                              {updatingFleetId === item._id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
                               Reject
                             </button>
                           </div>
                         </td>
 
                         {/* Actions */}
-                        <td className="px-3 py-5">
+                        <td className="px-3 py-4">
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleEditClick(item)}
-                              className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all shadow-sm"
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-yellow-50 text-yellow-600 transition-colors hover:bg-yellow-100"
                               title="Edit"
                             >
-                              <Edit2 size={14} />
+                              <Edit2 size={16} />
                             </button>
                             <button
                               onClick={() => handleDelete(item._id)}
-                              className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-all shadow-sm"
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100"
                               title="Delete"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
@@ -848,16 +838,9 @@ const ManageFleet = () => {
             </div>
           </div>
 
-            <button
-              type="button"
-              className="absolute -right-1 top-[66%] flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-teal-500 text-white shadow-xl transition-colors hover:bg-teal-600"
-            >
-              <Menu size={24} />
-            </button>
-
             {/* Pagination */}
-            <div className="p-6 bg-gray-50/30 border-t border-gray-50 flex items-center justify-between">
-              <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest italic">
+            <div className="flex items-center justify-between border-t border-gray-100 p-5">
+              <span className="text-sm font-medium text-slate-400">
                 Showing {showingFrom} to {showingTo} of {totalEntries} entries
               </span>
               <div className="flex items-center gap-2">
@@ -869,7 +852,7 @@ const ManageFleet = () => {
                 >
                   Prev
                 </button>
-                <button type="button" className="rounded bg-indigo-950 px-4 py-2 text-sm font-semibold text-white">
+                <button type="button" className="rounded bg-yellow-400 px-4 py-2 text-sm font-bold text-black">
                   {safePage}
                 </button>
                 <button
@@ -891,5 +874,4 @@ const ManageFleet = () => {
 };
 
 export default ManageFleet;
-
 

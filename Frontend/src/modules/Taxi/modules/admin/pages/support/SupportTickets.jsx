@@ -127,7 +127,7 @@ const SupportTickets = () => {
           <ChevronRight size={12} />
           <span className="text-gray-700">Support Tickets</span>
         </div>
-        <h1 className="text-xl font-semibold text-gray-900">Support Tickets</h1>
+        <h1 className="text-xl text-gray-900 font-bold">Support Tickets</h1>
       </div>
 
       {error ? (
@@ -256,7 +256,7 @@ const SupportTickets = () => {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                   {selectedTicket.ticketCode}
                 </p>
-                <h3 className="mt-1 text-lg font-semibold text-gray-900">{selectedTicket.title}</h3>
+                <h3 className="mt-1 text-lg text-gray-900 font-bold">{selectedTicket.title}</h3>
                 <p className="mt-1 text-sm text-gray-500">
                   {selectedTicket.requesterName} • {selectedTicket.requesterPhone || 'N/A'} •{' '}
                   {selectedTicket.userType}

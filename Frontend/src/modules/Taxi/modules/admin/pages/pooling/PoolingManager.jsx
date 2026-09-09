@@ -12,6 +12,7 @@ import {
   Plus,
   Route,
   Save,
+  Search,
   ShieldCheck,
   Trash2,
   Users,
@@ -247,6 +248,7 @@ const PoolingManager = ({ mode: propMode }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState(buildDefaultForm);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -592,176 +594,262 @@ const PoolingManager = ({ mode: propMode }) => {
     }
   };
 
+  const filteredRoutes = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return routes;
+
+    return routes.filter((item) => {
+      const matchName = item.routeName?.toLowerCase().includes(query) || item.routeCode?.toLowerCase().includes(query);
+      const matchLocation = item.originLabel?.toLowerCase().includes(query) || item.destinationLabel?.toLowerCase().includes(query);
+      const matchStatus = item.status?.toLowerCase().includes(query);
+      const matchVehicle = item.assignedVehicles?.some((v) => v.name?.toLowerCase().includes(query) || v.vehicleType?.toLowerCase().includes(query));
+      const matchStop = item.stops?.some((s) => s.name?.toLowerCase().includes(query) || s.address?.toLowerCase().includes(query));
+      const matchPickup = item.pickupPoints?.some((s) => s.name?.toLowerCase().includes(query));
+      const matchDrop = item.dropPoints?.some((s) => s.name?.toLowerCase().includes(query));
+
+      return matchName || matchLocation || matchStatus || matchVehicle || matchStop || matchPickup || matchDrop;
+    });
+  }, [routes, searchTerm]);
+
+  const handleToggleStatus = async (routeId, currentStatus) => {
+    const nextStatus = currentStatus === 'active' ? 'paused' : 'active';
+    try {
+      await adminService.updatePoolingRoute(routeId, { status: nextStatus });
+      setRoutes((current) =>
+        current.map((item) =>
+          String(item.id || item._id) === String(routeId)
+            ? { ...item, status: nextStatus }
+            : item
+        )
+      );
+      toast.success(`Route ${nextStatus === 'active' ? 'activated' : 'paused'}`);
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
+
   if (!isEditor) {
     return (
-      <div className="min-h-screen bg-[#f6f7fb] p-6 lg:p-8">
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
+      <div className="min-h-screen bg-slate-50/50 p-2 lg:p-4">
+        <div className="mb-3">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
             <span>Operations</span>
-            <ChevronRight size={12} />
-            <span className="text-slate-700">Pooling</span>
+            <ChevronRight size={10} />
+            <span className="text-yellow-600">Pooling Routes</span>
           </div>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Pooling Routes</h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Configure pooled ride destinations, boarding points, schedules, and approved vehicle layouts.
+              <h1 className="text-xl font-black text-slate-900">Pooling Routes</h1>
+              <p className="text-xs font-medium text-slate-500">
+                Manage pooled ride destinations, stops, schedules, and assigned vehicles.
               </p>
             </div>
             <button
               type="button"
               onClick={() => navigate('/taxi/admin/pooling/create')}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#2e3c78] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f]"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-yellow-400 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-yellow-500 active:scale-95"
             >
-              <Plus size={18} />
+              <Plus size={14} />
               Add Pooling Route
             </button>
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Route size={20} />
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-2 px-3 shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                <Route size={12} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Routes</p>
-                <p className="text-2xl font-bold text-slate-900">{routes.length}</p>
+                <p className="text-[9px] font-bold text-slate-400">Total Routes</p>
+                <p className="text-base font-black text-slate-900">{routes.length}</p>
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                <CheckCircle2 size={20} />
+          <div className="rounded-xl border border-slate-200 bg-white p-2 px-3 shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                <CheckCircle2 size={12} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Active Routes</p>
-                <p className="text-2xl font-bold text-slate-900">{activeRoutes}</p>
+                <p className="text-[9px] font-bold text-slate-400">Active Routes</p>
+                <p className="text-base font-black text-slate-900">{activeRoutes}</p>
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-                <Car size={20} />
+          <div className="rounded-xl border border-slate-200 bg-white p-2 px-3 shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                <Car size={12} />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Pooling Vehicles</p>
-                <p className="text-2xl font-bold text-slate-900">{vehicles.length}</p>
+                <p className="text-[9px] font-bold text-slate-400">Fleet Active</p>
+                <p className="text-base font-black text-slate-900">{vehicles.length}</p>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <input
+              type="text"
+              placeholder="Search routes by name, location, stops, or vehicle type..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs font-medium outline-none transition-all focus:border-yellow-400 focus:ring-4 focus:ring-yellow-400/10"
+            />
           </div>
         </div>
 
         {errorMessage ? (
-          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600">
+          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600">
             {errorMessage}
           </div>
         ) : null}
 
-        <div className="grid gap-5 xl:grid-cols-2">
-          {loading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">
-              Loading pooling routes...
-            </div>
-          ) : routes.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-400">
-              No pooling routes configured yet.
-            </div>
-          ) : (
-            routes.map((item) => (
-              <div key={item.id || item._id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-lg font-black text-slate-900">{item.routeName}</p>
-                      {item.routeCode ? (
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                          {item.routeCode}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">
-                      {item.originLabel} to {item.destinationLabel}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                      item.status === 'active'
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : item.status === 'paused'
-                          ? 'bg-amber-50 text-amber-700'
-                          : 'bg-slate-100 text-slate-500'
-                    }`}
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-900 border-t-transparent"></div>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {filteredRoutes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <div className="mb-3 rounded-full bg-slate-50 p-4 text-slate-300">
+                  <Route size={32} strokeWidth={1} />
+                </div>
+                <h3 className="text-base font-black text-slate-900">No pooling routes found</h3>
+                <p className="mt-1 max-w-sm text-xs font-medium text-slate-500">
+                  {searchTerm ? 'Try adjusting your search criteria.' : 'No pooling routes configured yet. Add a route to manage stops, schedules and vehicles.'}
+                </p>
+                {!searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/taxi/admin/pooling/create')}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-yellow-400 px-3 py-1.5 text-xs font-bold text-slate-900 transition hover:bg-yellow-500"
                   >
-                    {item.status}
-                  </span>
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Fare</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">Rs {item.farePerSeat || 0}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pickup</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{item.pickupPoints?.length || 0}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Stops</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{item.stops?.length || 0}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Vehicles</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{item.assignedVehicles?.length || 0}</p>
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Assigned Pooling Vehicles
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(item.assignedVehicles || []).map((vehicle) => (
-                      <span
-                        key={vehicle.id}
-                        className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-bold text-sky-700"
-                      >
-                        {vehicle.name} · {vehicle.capacity || countBlueprintSeats(vehicle.blueprint)} seats
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5 flex items-center justify-between">
-                  <div className="text-xs font-medium text-slate-500">
-                    {(item.schedules || []).length} schedules · {(item.dropPoints || []).length} drop points
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/taxi/admin/pooling/edit/${item.id || item._id}`)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      <Edit2 size={14} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(item.id || item._id)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
-                  </div>
-                </div>
+                    Add Pooling Route
+                  </button>
+                )}
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-100">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left">
+                      <th className="px-3 py-2 !normal-case !tracking-normal !text-xs !font-bold">Route Name</th>
+                      <th className="px-3 py-2 !normal-case !tracking-normal !text-xs !font-bold">Journey</th>
+                      <th className="px-3 py-2 !normal-case !tracking-normal !text-xs !font-bold">Stops</th>
+                      <th className="px-3 py-2 !normal-case !tracking-normal !text-xs !font-bold">Vehicles</th>
+                      <th className="px-3 py-2 !normal-case !tracking-normal !text-xs !font-bold">Status</th>
+                      <th className="px-3 py-2 text-right !normal-case !tracking-normal !text-xs !font-bold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredRoutes.map((item) => (
+                      <tr key={item.id || item._id} className="transition hover:bg-slate-50/70">
+                        <td className="px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate font-black text-slate-900">{item.routeName}</p>
+                              {item.routeCode ? (
+                                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                                  {item.routeCode}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-slate-500">
+                              <IndianRupee size={8} />
+                              {item.farePerSeat || 0} / seat
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                            <div className="flex items-center gap-1">
+                              <MapPin size={10} className="text-emerald-500" />
+                              <span className="truncate max-w-[80px]">{item.originLabel}</span>
+                            </div>
+                            <ChevronRight size={10} className="text-slate-300 shrink-0" />
+                            <div className="flex items-center gap-1">
+                              <MapPin size={10} className="text-rose-500" />
+                              <span className="truncate max-w-[80px]">{item.destinationLabel}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-700">
+                              {(item.pickupPoints?.length || 0) + (item.dropPoints?.length || 0) + (item.stops?.length || 0)} Total
+                            </span>
+                            <span className="text-[9px] font-semibold text-slate-500">
+                              {item.pickupPoints?.length || 0} Pick, {item.dropPoints?.length || 0} Drop
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-700">{item.vehicleAssignments?.length || 0} Assigned</span>
+                            <span className="text-[9px] font-semibold text-slate-500">
+                              {item.schedules?.length || 0} Schedules
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+                              item.status === 'active'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+                                : 'border-slate-200 bg-slate-50 text-slate-500'
+                            }`}
+                          >
+                            {item.status === 'active' ? 'Active' : 'Paused'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              onClick={() => {
+                                setPropMode('editor');
+                                setPropEditId(item.id || item._id);
+                                navigate(`/admin/pooling/edit/${item.id || item._id}`);
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[10px] font-bold text-slate-600 transition hover:bg-slate-100"
+                              title="Edit Route"
+                            >
+                              <Edit2 size={10} /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleToggleStatus(item.id || item._id, item.status)}
+                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-1 text-[10px] font-bold transition ${
+                                item.status === 'active'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100'
+                                  : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                              }`}
+                              title={item.status === 'active' ? 'Pause Route' : 'Activate Route'}
+                            >
+                              {item.status === 'active' ? <Clock3 size={10} /> : <CheckCircle2 size={10} />}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id || item._id)}
+                              className="rounded border border-rose-100 bg-rose-50 p-1 text-rose-500 transition hover:bg-rose-100"
+                              title="Delete Route"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -930,14 +1018,14 @@ const PoolingManager = ({ mode: propMode }) => {
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-indigo-500">Section 3</p>
               <h2 className="mt-1 text-lg font-black text-slate-900">Pooling Vehicles And Layout</h2>
               <p className="mt-1 text-sm font-medium text-slate-500">
-                Choose which rental vehicles are allowed for this route. Their saved seat blueprint becomes the pooling layout for that vehicle.
+                Choose which pooling vehicles are allowed for this route. Their saved seat blueprint becomes the pooling layout for that vehicle.
               </p>
             </div>
 
             <div className="lg:col-span-2 grid gap-4 xl:grid-cols-3">
               {vehicles.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-500 xl:col-span-3">
-                  No pooling-enabled rental vehicles found. Turn on pooling in rental vehicles first.
+                  No active pooling vehicles found. Add or approve pooling vehicles first.
                 </div>
               ) : (
                 vehicles.map((vehicle) => {
@@ -1245,7 +1333,7 @@ const PoolingManager = ({ mode: propMode }) => {
               </div>
 
               <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                This page uses only rental vehicles with pooling enabled, so the saved blueprint layout stays consistent between rental setup and car pooling operations.
+                This page uses approved pooling vehicles, so the saved blueprint layout stays consistent between route setup and seat booking operations.
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">

@@ -1,26 +1,15 @@
-import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShieldCheck, Phone, MessageCircle, Shield, CheckCircle2, Navigation, AlertTriangle, Star, MapPin, Calendar, Clock3, LoaderCircle } from 'lucide-react';
-import { GoogleMap, Marker, OverlayView, Polyline } from '@react-google-maps/api';
+import { GoogleMap, OverlayView, Polyline } from '@react-google-maps/api';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
-import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../services/currentRideService';
-import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
-import toast from 'react-hot-toast';
-
-const resolveAssetUrl = (value = '') => {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  if (/^(https?:|data:image\/|blob:)/i.test(raw)) return raw;
-  if (/^\/(1_Bike|2_Auto|4_Taxi|ehcv|hcv|LCV|mcv|truck|Luxury|Premium|SUV|assets)/i.test(raw)) return raw;
-  if (raw.startsWith('/')) return `${BACKEND_ORIGIN}${raw}`;
-  return `${BACKEND_ORIGIN}/${raw.replace(/^\/+/, '')}`;
-};
+import { useBaseGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
 import { scheduleScheduledRideReminders } from '../../utils/upcomingRideReminderService';
-import RideCancellationModal from '../../components/RideCancellationModal';
+import { toHistorySafeState } from '../../../../shared/utils/historyState';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -68,6 +57,40 @@ const getOverlayCenterOffset = (width, height) => ({
   x: -(width / 2),
   y: -(height / 2),
 });
+const SEARCH_FALLBACK_POLL_DELAY_MS = 10000;
+const SEARCH_FALLBACK_POLL_INTERVAL_MS = 10000;
+
+const PinLocationMarker = ({ position, title, color, size = 34, zIndex = 1 }) => (
+  <OverlayView
+    position={position}
+    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+    zIndex={zIndex}
+    getPixelPositionOffset={() => ({
+      x: -(size / 2),
+      y: -(size - 2),
+    })}
+  >
+    <div title={title} className="pointer-events-none flex flex-col items-center">
+      <div
+        className="relative rounded-full border-2 border-white shadow-[0_8px_18px_rgba(15,23,42,0.25)]"
+        style={{ width: size, height: size, backgroundColor: color }}
+      >
+        <div className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
+      </div>
+      <div
+        style={{
+          width: 0,
+          height: 0,
+          borderLeft: `${Math.round(size * 0.18)}px solid transparent`,
+          borderRight: `${Math.round(size * 0.18)}px solid transparent`,
+          borderTop: `${Math.round(size * 0.28)}px solid ${color}`,
+          marginTop: -2,
+          filter: 'drop-shadow(0 6px 8px rgba(15,23,42,0.18))',
+        }}
+      />
+    </div>
+  </OverlayView>
+);
 
 const clampVehicleCount = (value) => {
   const numeric = Number(value);
@@ -143,7 +166,7 @@ const BlinkingVehicleMarker = ({ marker, iconUrl }) => (
 
 const DRIVER_PLACEHOLDER = { name: 'Captain', rating: '4.9', vehicle: 'Taxi', plate: 'Assigned', phone: '', eta: 2 };
 const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted', COMPLETING: 'completing' };
-const CONSUMED_SEARCH_NONCE_PREFIX = 'helloparth_consumed_search_nonce:';
+const CONSUMED_SEARCH_NONCE_PREFIX = 'Appzeto 24_consumed_search_nonce:';
 const ACTIVE_SEARCH_NONCES = new Set();
 const ACTIVE_SEARCH_NONCE_CLEANUPS = new Map();
 
@@ -185,33 +208,12 @@ const formatScheduledDateTime = (value) => {
   });
 };
 
+const buildHistoryState = (value) => toHistorySafeState(value) || {};
+
 const SearchingDriver = () => {
-  const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = useMemo(() => location.state || {}, [location.state]);
-
-  const pickupPos = useMemo(() => {
-    const coords = routeState.pickupCoords;
-    if (Array.isArray(coords) && coords.length === 2) {
-      return { lat: Number(coords[1]), lng: Number(coords[0]) };
-    }
-    if (coords && typeof coords === 'object' && coords.lat && coords.lng) {
-      return { lat: Number(coords.lat), lng: Number(coords.lng) };
-    }
-    return { lat: 22.7039, lng: 75.9048 };
-  }, [routeState.pickupCoords]);
-
-  const dropPos = useMemo(() => {
-    const coords = routeState.dropCoords;
-    if (Array.isArray(coords) && coords.length === 2) {
-      return { lat: Number(coords[1]), lng: Number(coords[0]) };
-    }
-    if (coords && typeof coords === 'object' && coords.lat && coords.lng) {
-      return { lat: Number(coords.lat), lng: Number(coords.lng) };
-    }
-    return null;
-  }, [routeState.dropCoords]);
   const [stage, setStage] = useState(STAGES.SEARCHING);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [driver, setDriver] = useState(DRIVER_PLACEHOLDER);
@@ -240,11 +242,13 @@ const SearchingDriver = () => {
   });
   const timerRef = useRef(null);
   const activeRidePollRef = useRef(null);
+  const activeRidePollStartTimeoutRef = useRef(null);
   const requestStartedRef = useRef(false);
   const cleanupSearchRef = useRef(null);
   const cleanupDelayRef = useRef(null);
   const trackingStartedRef = useRef(false);
   const driverRef = useRef(driver);
+  const cancellingRef = useRef(false);
   const routePrefix = useMemo(
     () => (location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
     [location.pathname],
@@ -261,6 +265,8 @@ const SearchingDriver = () => {
   const isBiddingRide = isDriverBidRide;
   const isScheduledRide = Boolean(routeState.scheduledAt);
   const isScheduledBiddingRide = isScheduledRide && isBiddingRide;
+  const isSearching = stage === STAGES.SEARCHING;
+  const isAccepted = stage === STAGES.ACCEPTED || stage === STAGES.COMPLETING;
   const fareIncreaseCountdownMs = Math.max(0, new Date(biddingSummary.nextFareIncreaseAt || 0).getTime() - now);
   const canIncreaseFare = !isUserIncrementRide || !biddingSummary.nextFareIncreaseAt || fareIncreaseCountdownMs <= 0;
   const formatCountdown = (milliseconds) => {
@@ -283,60 +289,34 @@ const SearchingDriver = () => {
     ));
   };
 
-  const searchingMapRef = useRef(null);
+  const { isLoaded } = useBaseGoogleMapsLoader();
 
-  const fitSearchingMapBounds = useCallback(() => {
-    const map = searchingMapRef.current;
-    if (!map || !window.google?.maps?.LatLngBounds) return;
+  const pickupPos = useMemo(
+    () => (
+      routeState.pickupCoords
+        ? { lng: routeState.pickupCoords[0], lat: routeState.pickupCoords[1] }
+        : { lat: 22.7196, lng: 75.8577 }
+    ),
+    [routeState.pickupCoords],
+  );
 
-    const bounds = new window.google.maps.LatLngBounds();
-    let hasPoints = false;
-
-    if (pickupPos?.lat && pickupPos?.lng && Number.isFinite(Number(pickupPos.lat)) && Number.isFinite(Number(pickupPos.lng))) {
-      bounds.extend(new window.google.maps.LatLng(Number(pickupPos.lat), Number(pickupPos.lng)));
-      hasPoints = true;
-    }
-
-    if (dropPos?.lat && dropPos?.lng && Number.isFinite(Number(dropPos.lat)) && Number.isFinite(Number(dropPos.lng))) {
-      bounds.extend(new window.google.maps.LatLng(Number(dropPos.lat), Number(dropPos.lng)));
-      hasPoints = true;
-    }
-
-    if (hasPoints) {
-      map.fitBounds(bounds, {
-        top: 100,
-        bottom: 380,
-        left: 48,
-        right: 48,
-      });
-    }
-  }, [pickupPos, dropPos]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    const timer = setTimeout(() => {
-      fitSearchingMapBounds();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [fitSearchingMapBounds, isLoaded]);
-  const availableVehicleIcon = useMemo(() => {
-    const raw = String(
+  const dropPos = useMemo(
+    () => (
+      routeState.dropCoords
+        ? { lng: routeState.dropCoords[0], lat: routeState.dropCoords[1] }
+        : null
+    ),
+    [routeState.dropCoords],
+  );
+  const availableVehicleIcon = useMemo(
+    () => (
       routeState.vehicleIconUrl ||
       routeState.vehicle?.vehicleIconUrl ||
-      routeState.vehicle?.map_icon ||
       routeState.vehicle?.icon ||
-      routeState.vehicle?.image ||
-      routeState.vehicle?.raw?.map_icon ||
-      routeState.vehicle?.raw?.image ||
-      ''
-    ).trim();
-
-    if (raw) {
-      return resolveAssetUrl(raw);
-    }
-
-    return getVehicleIcon(routeState.vehicleIconType || routeState.vehicle?.iconType || routeState.vehicle?.name);
-  }, [routeState.vehicle, routeState.vehicleIconType, routeState.vehicleIconUrl]);
+      getVehicleIcon(routeState.vehicleIconType || routeState.vehicle?.iconType || routeState.vehicle?.name)
+    ),
+    [routeState.vehicle?.icon, routeState.vehicle?.iconType, routeState.vehicle?.name, routeState.vehicle?.vehicleIconUrl, routeState.vehicleIconType, routeState.vehicleIconUrl],
+  );
   const availableVehicleMarkers = useMemo(
     () => buildAvailableVehicleMarkers(pickupPos, nearbyVehicleCount),
     [nearbyVehicleCount, pickupPos],
@@ -503,7 +483,7 @@ const SearchingDriver = () => {
       timerRef.current = setTimeout(() => {
         navigate(`${routePrefix}/ride/tracking`, {
           replace: true,
-          state: {
+          state: buildHistoryState({
             ...routeState,
             pickup: rideSnapshot?.pickupAddress || routeState.pickup,
             drop: rideSnapshot?.dropAddress || routeState.drop,
@@ -515,7 +495,7 @@ const SearchingDriver = () => {
             fare: rideSnapshot?.fare || routeState.fare || routeState.baseFare || routeState.vehicle?.price || 22,
             vehicleIconUrl: rideSnapshot?.vehicleIconUrl || routeState.vehicleIconUrl || routeState.vehicle?.vehicleIconUrl || routeState.vehicle?.icon || '',
             paymentMethod: routeState.paymentMethod || 'Cash',
-          },
+          }),
         });
       }, 2200);
     };
@@ -613,7 +593,10 @@ const SearchingDriver = () => {
     };
 
     const onRideCancelled = ({ reason }) => {
-      setSearchStatus(reason || 'No drivers accepted the ride request.');
+      const displayReason = reason === 'No drivers accepted the ride request' 
+        ? 'No drivers available nearby'
+        : (reason || 'No drivers accepted the ride request.');
+      setSearchStatus(displayReason);
       setStage(STAGES.SEARCHING);
     };
 
@@ -638,7 +621,9 @@ const SearchingDriver = () => {
       disposed = true;
       requestStartedRef.current = false;
       clearTimeout(timerRef.current);
+      clearTimeout(activeRidePollStartTimeoutRef.current);
       clearInterval(activeRidePollRef.current);
+      activeRidePollStartTimeoutRef.current = null;
       activeRidePollRef.current = null;
       socketService.off('rideSearchUpdate', onRideSearchUpdate);
       socketService.off('rideAccepted', onRideAccepted);
@@ -655,7 +640,7 @@ const SearchingDriver = () => {
         let userToken = getLocalUserToken();
 
         if (!userToken) {
-          navigate('/login', { replace: true, state: { from: '/taxi/user' } });
+          navigate('/taxi/user/login', { replace: true });
           return;
         }
 
@@ -665,13 +650,14 @@ const SearchingDriver = () => {
 
         const rideRequestConfig = userToken
           ? {
-              headers: {
-                Authorization: `Bearer ${userToken}`,
-              },
-            }
-          : {};
+            headers: {
+              Authorization: `Bearer ${userToken}`,
+            },
+            timeout: 15000,
+          }
+          : { timeout: 15000 };
 
-        const response = await api.post('/rides', {
+        const requestPayload = {
           pickup: routeState.pickupCoords || [75.9048, 22.7039],
           drop: routeState.dropCoords || [75.8937, 22.7533],
           pickupAddress: routeState.pickup || '',
@@ -687,13 +673,19 @@ const SearchingDriver = () => {
           serviceType: routeState.serviceType || 'ride',
           intercity: routeState.intercity || undefined,
           promo_code: routeState.promo_code || '',
+          zone_id: routeState.zone_id || routeState.zoneId || '',
           service_location_id: routeState.service_location_id || routeState.serviceLocationId || '',
           transport_type: routeState.transport_type || routeState.transportType || routeState.vehicle?.transportType || 'taxi',
           bookingMode: routeState.bookingMode || 'normal',
           userMaxBidFare: routeState.userMaxBidFare || routeState.fare || routeState.vehicle?.price || 22,
           bidStepAmount: routeState.bidStepAmount || 10,
           scheduledAt: routeState.scheduledAt || null,
-        }, rideRequestConfig);
+        };
+
+        console.log('--- TEMPORARY DEBUG LOG ---');
+        console.log('booking payload vehicleType:', selectedVehicleTypeId);
+
+        const response = await api.post('/rides', requestPayload, rideRequestConfig);
 
         if (disposed) {
           return;
@@ -717,7 +709,7 @@ const SearchingDriver = () => {
             nextFareIncreaseAt: ride?.nextFareIncreaseAt || routeState.nextFareIncreaseAt || null,
           });
           if ((ride?.pricingNegotiationMode || routeState.pricingNegotiationMode) === 'driver_bid') {
-            loadRideBids(rideId).catch(() => {});
+            loadRideBids(rideId).catch(() => { });
           }
           appendFareHistory(ride?.userMaxBidFare || ride?.fare);
         }
@@ -770,8 +762,20 @@ const SearchingDriver = () => {
         };
 
         clearInterval(activeRidePollRef.current);
-        activeRidePollRef.current = setInterval(pollActiveRide, 5000);
-        pollActiveRide();
+        activeRidePollRef.current = null;
+        const startFallbackPolling = () => {
+          if (disposed || trackingStartedRef.current) {
+            return;
+          }
+
+          pollActiveRide();
+          activeRidePollRef.current = setInterval(pollActiveRide, SEARCH_FALLBACK_POLL_INTERVAL_MS);
+        };
+        clearTimeout(activeRidePollStartTimeoutRef.current);
+        activeRidePollStartTimeoutRef.current = window.setTimeout(
+          startFallbackPolling,
+          SEARCH_FALLBACK_POLL_DELAY_MS,
+        );
 
         if (!disposed) {
           setSearchStatus(
@@ -785,16 +789,22 @@ const SearchingDriver = () => {
       } catch (error) {
         console.error('[searching-driver] Ride creation error:', error);
         if (!disposed) {
+          const errorMessage = error?.response?.data?.message || error?.message || 'Network error or server down';
+          const isNoDrivers = errorMessage.toLowerCase().includes('no driver') || errorMessage.toLowerCase().includes('not available');
+
           if (isScheduledRide && !isScheduledBiddingRide) {
             setScheduledStatus('error');
-            setScheduledError(error?.message || 'Could not schedule this ride.');
-            setSearchStatus(error?.message || 'Could not schedule this ride.');
+            setScheduledError(errorMessage);
+            setSearchStatus(errorMessage);
             return;
           }
-          setSearchStatus(error?.message || 'Could not create ride request. Redirecting...');
-          setTimeout(() => {
-             if (!disposed) navigate(userHomeRoute, { replace: true });
-          }, 3000);
+          setSearchStatus(isNoDrivers ? 'No drivers available nearby' : errorMessage);
+          
+          if (!isNoDrivers) {
+            setTimeout(() => {
+              if (!disposed) navigate(userHomeRoute, { replace: true });
+            }, 3000);
+          }
         }
       }
     })();
@@ -806,31 +816,59 @@ const SearchingDriver = () => {
     };
   }, [isScheduledBiddingRide, isScheduledRide, navigate, routePrefix, routeState, searchNonce, selectedVehicleTypeId, userHomeRoute]);
 
-  const handleCancelWithPayload = async (cancellationData = {}) => {
+  const handleCancel = useCallback(async () => {
+    if (cancellingRef.current) {
+      return;
+    }
+
+    cancellingRef.current = true;
     clearTimeout(timerRef.current);
+
     const rideId = activeRideIdRef.current;
 
     try {
       if (rideId) {
-        const response = await api.patch(`/rides/${rideId}/cancel`, cancellationData);
-        const data = response?.data?.data || response?.data || {};
-        if (data.cancellationCharge > 0 || data.isFeeApplied) {
-          toast.success(`Your ride has been cancelled. A cancellation fee of ₹${data.cancellationCharge} has been applied according to Hello Parth's cancellation policy.`);
-        } else {
-          toast.success("Your ride has been cancelled successfully.");
-        }
+        await api.patch(`/rides/${rideId}/cancel`);
       }
     } catch (_error) {
-      toast.success("Your ride has been cancelled successfully.");
+      // Navigation still proceeds even if the cancel request races with another state update.
     }
 
-    setShowCancelConfirm(false);
     navigate(userHomeRoute, { replace: true });
-  };
+  }, [navigate, userHomeRoute]);
 
-  const handleCancel = () => {
-    handleCancelWithPayload({ reason: 'User requested cancellation' });
-  };
+  useEffect(() => {
+    if (!isSearching || trackingStartedRef.current) {
+      return undefined;
+    }
+
+    const historyState = window.history.state || {};
+    const hasSearchBackGuard = Boolean(historyState?.__searchBackGuard);
+
+    if (!hasSearchBackGuard) {
+      window.history.pushState(
+        { ...historyState, __searchBackGuard: true, __searchNonce: searchNonce || Date.now() },
+        '',
+        window.location.href,
+      );
+    }
+
+    const handlePopState = () => {
+      if (trackingStartedRef.current || cancellingRef.current) {
+        return;
+      }
+
+      // Keep the current entry alive long enough to reuse the existing cancel flow.
+      window.history.go(1);
+      handleCancel();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [handleCancel, isSearching, searchNonce]);
 
   const handleAcceptBid = async (bidId) => {
     const rideId = activeRideIdRef.current;
@@ -850,18 +888,6 @@ const SearchingDriver = () => {
   };
 
   const handleIncreaseBid = async () => {
-    if (!canIncreaseFare && fareIncreaseCountdownMs > 0) {
-      const waitMins = biddingSummary.fareIncreaseWaitMinutes || 2;
-      const totalSecs = Math.max(1, Math.ceil(fareIncreaseCountdownMs / 1000));
-      const mins = Math.floor(totalSecs / 60);
-      const secs = totalSecs % 60;
-      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-      const msg = `You can increase the fare after ${waitMins} minute(s). Please wait ${timeStr} remaining.`;
-      toast.error(msg);
-      setSearchStatus(msg);
-      return;
-    }
-
     const rideId = activeRideIdRef.current;
     if (!rideId || bidActionLoading) {
       return;
@@ -891,9 +917,7 @@ const SearchingDriver = () => {
           : 'Raised your max fare by one step.',
       );
     } catch (error) {
-      const errMsg = error?.message || 'Could not increase bid ceiling.';
-      setSearchStatus(errMsg);
-      toast.error(errMsg);
+      setSearchStatus(error?.message || 'Could not increase bid ceiling.');
     } finally {
       setBidActionLoading(false);
     }
@@ -912,15 +936,12 @@ const SearchingDriver = () => {
 
     navigate(`${routePrefix}/ride/select-vehicle`, {
       replace: true,
-      state: {
+      state: buildHistoryState({
         ...routeState,
         ...nextState,
-      },
+      }),
     });
   };
-
-  const isSearching = stage === STAGES.SEARCHING;
-  const isAccepted  = stage === STAGES.ACCEPTED || stage === STAGES.COMPLETING;
 
   if (isScheduledRide && !isScheduledBiddingRide) {
     return (
@@ -930,10 +951,9 @@ const SearchingDriver = () => {
           animate={{ opacity: 1, y: 0 }}
           className="w-full rounded-[32px] border border-white/10 bg-white/5 px-6 py-8 text-center shadow-2xl"
         >
-          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] ${
-            scheduledStatus === 'scheduled' ? 'bg-emerald-600/20 text-emerald-400' :
-            scheduledStatus === 'error' ? 'bg-rose-600/20 text-rose-400' : 'bg-blue-600/20 text-blue-400'
-          }`}>
+          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] ${scheduledStatus === 'scheduled' ? 'bg-emerald-600/20 text-emerald-400' :
+              scheduledStatus === 'error' ? 'bg-rose-600/20 text-rose-400' : 'bg-blue-600/20 text-blue-400'
+            }`}>
             {scheduledStatus === 'scheduled' ? <CheckCircle2 size={26} /> : scheduledStatus === 'error' ? <AlertTriangle size={26} /> : <LoaderCircle size={26} className="animate-spin" />}
           </div>
           <h1 className="mt-5 text-[22px] font-black text-white">
@@ -970,52 +990,21 @@ const SearchingDriver = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden">
-      {/* Real Google Map Background */}
-      <div className="absolute inset-0 z-0">
+    <div className="min-h-screen bg-slate-50 w-full lg:max-w-7xl mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden lg:grid lg:grid-cols-12 lg:bg-white lg:shadow-xl">
+      
+      {/* MAP BACKGROUND (Mobile) / RIGHT COLUMN (Desktop) */}
+      <div className="absolute inset-0 z-0 lg:relative lg:col-span-7 lg:col-start-6 lg:h-full lg:rounded-r-3xl lg:overflow-hidden lg:z-0 lg:bg-slate-200">
         {HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={pickupPos}
             zoom={15}
             options={MAP_OPTIONS}
-            onLoad={(map) => {
-              searchingMapRef.current = map;
-              setTimeout(() => {
-                fitSearchingMapBounds();
-              }, 100);
-            }}
-            onUnmount={() => {
-              searchingMapRef.current = null;
-            }}
           >
-            <Marker 
-              position={pickupPos}
-              zIndex={100}
-              icon={{
-                path: 'M12,2C8.13,2,5,5.13,5,9c0,5.25,7,13,7,13s7-7.75,7-13C19,5.13,15.87,2,12,2z M12,13c-2.21,0-4-1.79-4-4s1.79-4,4-4s4,1.79,4,4S14.21,13,12,13z',
-                fillColor: '#000000',
-                fillOpacity: 1,
-                strokeWeight: 2,
-                strokeColor: '#ffffff',
-                scale: 1.6,
-                anchor: new window.google.maps.Point(12, 22)
-              }}
-            />
+            <PinLocationMarker position={pickupPos} title="Pickup" color="#000000" zIndex={100} />
 
             {dropPos && (
-              <Marker 
-                position={dropPos}
-                icon={{
-                  path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
-                  fillColor: '#f97316',
-                  fillOpacity: 1,
-                  strokeWeight: 2,
-                  strokeColor: '#ffffff',
-                  scale: 1.6,
-                  anchor: new window.google.maps.Point(12, 22)
-                }}
-              />
+              <PinLocationMarker position={dropPos} title="Drop" color="#f97316" />
             )}
 
             {isSearching && (
@@ -1032,17 +1021,17 @@ const SearchingDriver = () => {
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                 >
                   <div className="flex items-center justify-center -translate-y-[22px]">
-                     <motion.div 
-                      initial={{ opacity: 0 }} 
-                      animate={{ opacity: 1 }} 
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                       className="relative flex items-center justify-center pointer-events-none"
                     >
                       {[1, 2, 3, 4].map((i) => (
                         <motion.div
                           key={i}
-                          animate={{ 
-                            scale: [0.5, 4.5], 
-                            opacity: [0.5, 0] 
+                          animate={{
+                            scale: [0.5, 4.5],
+                            opacity: [0.5, 0]
                           }}
                           transition={{
                             repeat: Infinity,
@@ -1058,8 +1047,8 @@ const SearchingDriver = () => {
                         animate={{ rotate: 360 }}
                         transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
                         className="absolute w-[320px] h-[320px] rounded-full overflow-hidden"
-                        style={{ 
-                          background: 'conic-gradient(from 0deg, rgba(249, 115, 22, 0.5) 0deg, transparent 60deg, transparent 360deg)' 
+                        style={{
+                          background: 'conic-gradient(from 0deg, rgba(249, 115, 22, 0.5) 0deg, transparent 60deg, transparent 360deg)'
                         }}
                       />
                     </motion.div>
@@ -1069,7 +1058,7 @@ const SearchingDriver = () => {
             )}
 
             {dropPos && (
-              <Polyline 
+              <Polyline
                 path={[pickupPos, dropPos]}
                 options={{
                   strokeColor: '#0f172a',
@@ -1087,42 +1076,72 @@ const SearchingDriver = () => {
         ) : (
           <div className="w-full h-full bg-slate-50 flex flex-col items-center justify-center p-8 text-center" />
         )}
-      </div>
 
-      <div className="absolute top-16 left-4 right-16 z-20 bg-white/90 backdrop-blur-md rounded-2xl px-5 py-3 shadow-[0_8px_32px_rgba(15,23,42,0.12)] border border-white/80">
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] leading-none mb-1">Current Route</p>
-        <p className="text-[13px] font-extrabold text-slate-900 leading-tight truncate">{routeState.pickup || 'Pickup'} → {routeState.drop || 'Drop'}</p>
-      </div>
+        <div className="absolute top-8 left-4 right-16 z-20 bg-white/90 backdrop-blur-md rounded-2xl px-5 py-3 shadow-[0_8px_32px_rgba(15,23,42,0.12)] border border-white/80 lg:hidden">
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] leading-none mb-1">Current Route</p>
+          <p className="text-[13px] font-extrabold text-slate-900 leading-tight truncate">{routeState.pickup || 'Pickup'} → {routeState.drop || 'Drop'}</p>
+        </div>
 
-      <AnimatePresence>
-        {isAccepted && rideOtp && (
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0, x: -20 }}
-            animate={{ scale: 1, opacity: 1, x: 0 }}
-            className="absolute top-[120px] left-4 z-20 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.12)] rounded-[12px] p-3 min-w-[70px] border border-slate-50"
-          >
-            <p className="text-[18px] font-extrabold text-[#1d4ed8] leading-tight text-center tracking-wider">{rideOtp}</p>
-            <p className="text-[10px] font-bold text-slate-400 mt-0.5 text-center whitespace-nowrap">Start OTP</p>
-          </motion.div>
+        <AnimatePresence>
+          {isAccepted && rideOtp && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0, x: -20 }}
+              animate={{ scale: 1, opacity: 1, x: 0 }}
+              className="absolute top-[88px] left-4 z-20 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.12)] rounded-[12px] p-3 min-w-[70px] border border-slate-50 lg:hidden"
+            >
+              <p className="text-[18px] font-extrabold text-[#1d4ed8] leading-tight text-center tracking-wider">{rideOtp}</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-0.5 text-center whitespace-nowrap">Start OTP</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {(isSearching || isAccepted) && (
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowCancelConfirm(true)}
+            className="absolute top-8 right-4 z-20 w-10 h-10 bg-white/90 backdrop-blur-md rounded-[12px] shadow-[0_4px_14px_rgba(15,23,42,0.10)] border border-white/80 flex items-center justify-center lg:hidden">
+            <X size={16} className="text-slate-900" strokeWidth={2.5} />
+          </motion.button>
         )}
-      </AnimatePresence>
+      </div>
 
-      {(isSearching || isAccepted) && (
-        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowCancelConfirm(true)}
-          className="absolute top-16 right-4 z-20 w-10 h-10 bg-white/90 backdrop-blur-md rounded-[12px] shadow-[0_4px_14px_rgba(15,23,42,0.10)] border border-white/80 flex items-center justify-center">
-          <X size={16} className="text-slate-900" strokeWidth={2.5} />
-        </motion.button>
-      )}
+      {/* Bottom card (Mobile) / Left Column (Desktop) */}
+      <div className="absolute bottom-8 left-4 right-4 z-20 lg:relative lg:col-span-5 lg:col-start-1 lg:row-start-1 lg:bottom-0 lg:left-0 lg:right-0 lg:h-full lg:p-6 lg:border-r lg:border-slate-200 lg:z-10 lg:flex lg:flex-col lg:justify-center">
+        
+        {/* Desktop Header */}
+        <div className="hidden lg:flex items-center justify-between mb-8">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Status</p>
+              <h1 className="text-[24px] font-bold text-slate-900 tracking-tight leading-none">Trip Overview</h1>
+            </div>
+            {(isSearching || isAccepted) && (
+              <button onClick={() => setShowCancelConfirm(true)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+                <X size={18} className="text-slate-900" />
+              </button>
+            )}
+        </div>
 
-      {/* Bottom card */}
-      <div className="absolute bottom-8 left-4 right-4 z-20">
+        {/* Current Route Desktop */}
+        <div className="hidden lg:block bg-slate-50 border border-slate-100 rounded-[20px] p-4 mb-6">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] leading-none mb-2">Current Route</p>
+          <div className="flex flex-col gap-2">
+             <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <p className="text-[13px] font-medium text-slate-700 truncate">{routeState.pickup || 'Pickup'}</p>
+             </div>
+             <div className="w-px h-3 bg-slate-200 ml-1" />
+             <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+                <p className="text-[13px] font-medium text-slate-700 truncate">{routeState.drop || 'Drop'}</p>
+             </div>
+          </div>
+        </div>
+
         <AnimatePresence mode="wait">
 
           {/* Searching */}
           {isSearching && (
             <motion.div key="searching" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
               className="rounded-[32px] border border-white/80 bg-white/95 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.12)] px-6 pt-3 pb-6 space-y-5">
-              
+
               <div className="w-10 h-1.5 bg-slate-100 rounded-full mx-auto mb-2" />
 
               <div className="text-center space-y-1.5">
@@ -1132,10 +1151,10 @@ const SearchingDriver = () => {
 
               <div className="flex justify-center gap-2.5 py-1">
                 {[0, 1, 2, 3].map(i => (
-                  <motion.div key={i} animate={{ 
+                  <motion.div key={i} animate={{
                     scale: [1, 1.4, 1],
                     opacity: [0.3, 1, 0.3],
-                    backgroundColor: ['#e2e8f0', '#f97316', '#e2e8f0'] 
+                    backgroundColor: ['#e2e8f0', '#f97316', '#e2e8f0']
                   }} transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.2 }}
                     className="w-2.5 h-2.5 rounded-full" />
                 ))}
@@ -1152,11 +1171,7 @@ const SearchingDriver = () => {
                       type="button"
                       disabled={bidActionLoading}
                       onClick={handleIncreaseBid}
-                      className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition ${
-                        !canIncreaseFare
-                          ? 'bg-slate-300 text-slate-600 hover:bg-slate-400'
-                          : 'bg-slate-950 text-white hover:bg-slate-800'
-                      }`}
+                      className="shrink-0 rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white disabled:opacity-60"
                     >
                       +{formatCurrency(biddingSummary.bidStepAmount)}
                     </button>
@@ -1195,17 +1210,13 @@ const SearchingDriver = () => {
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">Current Offer</p>
                       <p className="mt-1 text-[18px] font-black text-slate-900">{formatCurrency(biddingSummary.userMaxBidFare)}</p>
-                   
+
                     </div>
                     <button
                       type="button"
-                      disabled={bidActionLoading}
+                      disabled={bidActionLoading || !canIncreaseFare}
                       onClick={handleIncreaseBid}
-                      className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition ${
-                        !canIncreaseFare
-                          ? 'bg-slate-300 text-slate-600 hover:bg-slate-400'
-                          : 'bg-slate-950 text-white hover:bg-slate-800'
-                      }`}
+                      className="shrink-0 rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white disabled:opacity-60"
                     >
                       +{formatCurrency(biddingSummary.bidStepAmount)}
                     </button>
@@ -1251,12 +1262,12 @@ const SearchingDriver = () => {
                 </div>
                 <div className="w-px h-8 bg-slate-200" />
                 <div className="flex items-center gap-3">
-                   <ShieldCheck size={20} className="text-blue-500" strokeWidth={2.5} />
-                   <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Top Safety</span>
+                  <ShieldCheck size={20} className="text-blue-500" strokeWidth={2.5} />
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Top Safety</span>
                 </div>
               </div>
 
-              <motion.button 
+              <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowCancelConfirm(true)}
                 className="w-full py-4.5 rounded-[22px] bg-red-50 text-[13px] font-extrabold text-red-500 uppercase tracking-[0.1em] hover:bg-red-100 transition-colors border border-red-100/50"
@@ -1295,7 +1306,7 @@ const SearchingDriver = () => {
                           <span className="text-[11px] font-black text-yellow-700">{driver.rating || "4.7"}</span>
                         </div>
                       </div>
-                      
+
                       {/* Driver Name / Display */}
                       <h2 className="text-[28px] font-black tracking-tighter text-slate-900 leading-none mb-4 uppercase">
                         {driver.plate || "MP13ZL3184"}
@@ -1312,17 +1323,17 @@ const SearchingDriver = () => {
                     {/* Premium Overlaid Avatars */}
                     <div className="relative h-20 w-24 shrink-0">
                       <div className="absolute right-0 top-0 h-20 w-20 overflow-hidden rounded-[24px] bg-[#1d2333] border-4 border-white shadow-xl flex items-center justify-center">
-                         <img 
-                          src={availableVehicleIcon || CarIcon} 
-                          className="h-12 w-12 object-contain brightness-0 invert opacity-90" 
-                          alt="Vehicle" 
+                        <img
+                          src={availableVehicleIcon || CarIcon}
+                          className="h-12 w-12 object-contain brightness-0 invert opacity-90"
+                          alt="Vehicle"
                         />
                       </div>
                       <div className="absolute -left-2 bottom-0 h-16 w-16 overflow-hidden rounded-full border-[4px] border-white shadow-2xl bg-slate-200">
-                         <img 
-                          src={`https://ui-avatars.com/api/?name=${(driver.name || "VK").replace(' ','+')}&background=cbd5e1&color=0f172a`}
-                          className="h-full w-full object-cover" 
-                          alt="Driver" 
+                        <img
+                          src={`https://ui-avatars.com/api/?name=${(driver.name || "VK").replace(' ', '+')}&background=cbd5e1&color=0f172a`}
+                          className="h-full w-full object-cover"
+                          alt="Driver"
                         />
                       </div>
                     </div>
@@ -1338,9 +1349,9 @@ const SearchingDriver = () => {
                       <Phone size={18} className="text-slate-900" strokeWidth={2.5} />
                       <span className="text-[13px] font-black text-slate-900 uppercase tracking-widest leading-none">Call</span>
                     </motion.button>
-                     <motion.button
+                    <motion.button
                       whileTap={{ scale: 0.96 }}
-                      onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { driver } })}
+                      onClick={() => navigate(`${routePrefix}/ride/chat`, { state: buildHistoryState({ driver }) })}
                       className="flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
                     >
                       <MessageCircle size={18} className="text-white" strokeWidth={2.5} />
@@ -1364,12 +1375,35 @@ const SearchingDriver = () => {
         </AnimatePresence>
       </div>
 
-      <RideCancellationModal
-        isOpen={showCancelConfirm}
-        onClose={() => setShowCancelConfirm(false)}
-        onConfirm={handleCancelWithPayload}
-        stage="searching"
-      />
+      <AnimatePresence>
+        {showCancelConfirm && (
+          <div className="z-[100] relative">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowCancelConfirm(false)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto" />
+            <motion.div initial={{ scale: 0.92, opacity: 0, y: 40 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0, y: 40 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[82%] max-w-sm bg-white rounded-[28px] p-7 z-[101] shadow-2xl text-center">
+              <div className="w-14 h-14 bg-red-50 rounded-[18px] flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={26} className="text-red-400" strokeWidth={2} />
+              </div>
+              <h3 className="text-[18px] font-bold text-slate-900 mb-1.5">Cancel ride?</h3>
+              <p className="text-[13px] font-bold text-slate-400 mb-6 leading-relaxed">
+                {"We're still searching. Stop looking?"}
+              </p>
+              <div className="space-y-2.5">
+                <motion.button whileTap={{ scale: 0.97 }} onClick={handleCancel}
+                  className="w-full bg-slate-900 text-white py-3.5 rounded-[16px] text-[13px] font-bold uppercase tracking-widest">
+                  Yes, Cancel
+                </motion.button>
+                <button onClick={() => setShowCancelConfirm(false)}
+                  className="w-full py-3.5 text-[13px] font-bold text-slate-400 uppercase tracking-widest">
+                  {isSearching ? 'Keep Searching' : 'Go Back'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

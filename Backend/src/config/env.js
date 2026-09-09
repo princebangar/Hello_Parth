@@ -134,6 +134,25 @@ export const env = {
     mongoUri: config.mongodbUri,
     jwtSecret: config.jwtAccessSecret,
     jwtExpiresIn: config.jwtAccessExpiresIn,
+    publicFrontendUrl: process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '',
+    publicBackendUrl: process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_URL || config.assetBaseUrl || '',
+    phonePeRedirectBaseUrl:
+        process.env.PHONEPE_REDIRECT_BASE_URL ||
+        process.env.PHONEPE_CALLBACK_BASE_URL ||
+        '',
+    cloudinary: {
+        cloudName: (process.env.CLOUDINARY_CLOUD_NAME || '').trim(),
+        apiKey: (process.env.CLOUDINARY_API_KEY || '').trim(),
+        apiSecret: (process.env.CLOUDINARY_API_SECRET || '').trim(),
+        folder: (process.env.CLOUDINARY_FOLDER || 'hello-parth-taxi').trim(),
+    },
+    redis: {
+        enabled: config.redisEnabled,
+        url: config.redisUrl,
+        connectTimeoutMs: Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 5000),
+        commandTimeoutMs: Number(process.env.REDIS_COMMAND_TIMEOUT_MS || 3000),
+        rateLimitEnabled: config.redisEnabled,
+    },
     firebase: {
         databaseURL: config.firebaseDatabaseUrl,
         serviceAccountPath: config.firebaseServiceAccountPath,

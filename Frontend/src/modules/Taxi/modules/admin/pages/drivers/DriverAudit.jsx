@@ -168,7 +168,12 @@ const DriverAudit = () => {
               <ShieldCheck size={42} className="text-indigo-600" />
             </div>
             <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none">{driver.name}</h3>
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-2">{driver._id}</p>
+            <div className="mt-3 flex flex-col items-center gap-1.5">
+              <span className="font-mono font-semibold text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded shadow-sm border border-indigo-100">
+                {driver.driver_code || driver.referralCode || (driver.phone ? `DRV${String(driver.phone).slice(-4)}${String(driver._id || '').slice(-6).toUpperCase()}`.replace(/\W/g, '') : 'N/A')}
+              </span>
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">ID: {driver._id}</p>
+            </div>
 
             <div className="mt-8 space-y-4 text-left border-t border-gray-50 pt-8">
               {[

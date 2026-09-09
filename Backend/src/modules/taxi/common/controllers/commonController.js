@@ -3,6 +3,7 @@ import {
     storeImageBuffer,
     deleteStoredAsset,
     extractAssetUrl,
+    storeImageFromDataUrl,
 } from '../../../../services/storage.service.js';
 import { AdminAppSetting } from '../../admin/models/AdminAppSetting.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
@@ -10,29 +11,50 @@ import { createDefaultAppSettings } from '../../admin/data/defaultAppSettings.js
 import { createDefaultBusinessSettings } from '../../admin/data/defaultBusinessSettings.js';
 import { getReferralSettings, getReferralTranslationContent } from '../../admin/services/adminService.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
+import { buildPaymentRequestContext, logPaymentDiagnostic } from '../../services/paymentDiagnostics.js';
 
 /**
- * Shared upload endpoint for taxi app/web (food-style multipart).
- * Uses the same storage.service as food (sharp → WebP → /var/www/uploads).
+ * Shared upload endpoint for taxi app/web.
+ * Supports Hello multipart uploads and Taxi App data-URL body uploads.
+ * Uses the same storage.service as food (sharp → WebP → /uploads).
  */
 export const uploadImage = asyncHandler(async (req, res) => {
-    if (!req.file?.buffer) {
-        return res.status(400).json({
-            success: false,
-            message: 'Image file is required (multipart field: image)',
-        });
-    }
-
     const folder = String(req.body?.folder || 'general').trim() || 'general';
     const scopedFolder = `taxi/${folder}`;
     const replaceUrl = extractAssetUrl(req.body?.replaceUrl);
 
-    const stored = await storeImageBuffer(req.file.buffer, scopedFolder, {
-        mimeType: req.file.mimetype || 'image/jpeg',
-        originalName: req.file.originalname,
-        replaceUrl,
-    });
+    if (req.file?.buffer) {
+        const stored = await storeImageBuffer(req.file.buffer, scopedFolder, {
+            mimeType: req.file.mimetype || 'image/jpeg',
+            originalName: req.file.originalname,
+            replaceUrl,
+        });
 
+        const url = stored.url || stored.secure_url;
+
+        return res.json({
+            success: true,
+            data: {
+                url,
+                secureUrl: url,
+                publicId: stored.public_id || stored.filename || null,
+                format: stored.format || 'webp',
+            },
+        });
+    }
+
+    const image = req.body?.image;
+    if (!image) {
+        return res.status(400).json({
+            success: false,
+            message: 'Image file is required (multipart field: image) or body.image data URL',
+        });
+    }
+
+    const stored = await storeImageFromDataUrl(image, scopedFolder, {
+        replaceUrl,
+        originalName: `content-${folder}.jpg`,
+    });
     const url = stored.url || stored.secure_url;
 
     return res.json({
@@ -141,9 +163,30 @@ export const getPublicSettingsBootstrap = asyncHandler(async (_req, res) => {
     });
 });
 
-export const acknowledgePhonePeCallback = asyncHandler(async (_req, res) => {
+export const acknowledgePhonePeCallback = asyncHandler(async (req, res) => {
+    logPaymentDiagnostic({
+        provider: 'phonepe',
+        scope: 'callback',
+        stage: 'received',
+        request: buildPaymentRequestContext(req),
+        query: req.query || {},
+        body: req.body || {},
+    });
+
     return res.json({
         success: true,
         message: 'Callback received',
+    });
+});
+
+export const acknowledgeRechargeApiCallback = asyncHandler(async (req, res) => {
+    return res.json({
+        success: true,
+        message: 'Recharge API callback received',
+        data: {
+            query: req.query || {},
+            body: req.body || {},
+            receivedAt: new Date().toISOString(),
+        },
     });
 });

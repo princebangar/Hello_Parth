@@ -24,14 +24,31 @@ const VEHICLE_TYPES = [
   { id: 'luxury', label: 'Luxury', capacity: 4, grid: [3, 2] },
 ];
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition-all focus:border-yellow-400 focus:ring-4 focus:ring-yellow-400/10';
 const labelClass = 'mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400';
 
-const PoolingVehicleForm = ({ mode: propMode }) => {
+const PoolingVehicleForm = ({
+  mode: propMode,
+  service = adminService,
+  backPath = '/admin/pooling/vehicles',
+  backLabel = 'Back to Fleet',
+  pageLabel = '',
+  initialFormData = null,
+  hidePricingFields = false,
+  lockDriverPhone = false,
+  onSaveSuccess = null,
+  createActionLabel = 'Create Vehicle',
+  editActionLabel = 'Save Changes',
+  createSuccessMessage = 'Vehicle created successfully',
+  updateSuccessMessage = 'Vehicle updated successfully',
+  helperPanel = '',
+  placeCreateActionAtEnd = false,
+}) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isViewMode = propMode === 'view';
   const isEditMode = Boolean(id) && !isViewMode;
+  const showHeaderAction = isViewMode || isEditMode || !placeCreateActionAtEnd;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   
@@ -39,8 +56,11 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
     name: '',
     vehicleModel: '',
     vehicleNumber: '',
+    driverName: '',
+    driverPhone: '',
     capacity: 4,
     adminCommissionPercentage: 0,
+    ownerCommissionPercentage: 0,
     serviceTaxPercentage: 0,
     color: '',
     vehicleType: 'sedan',
@@ -77,23 +97,37 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
       // Set default layout for Sedan
       setFormData(prev => ({
         ...prev,
-        blueprint: generateDefaultLayout('sedan')
+        ...(initialFormData || {}),
+        blueprint: initialFormData?.blueprint || generateDefaultLayout(initialFormData?.vehicleType || 'sedan')
       }));
     }
   }, [id]);
 
+  useEffect(() => {
+    if (!id && initialFormData) {
+      setFormData((prev) => ({
+        ...prev,
+        ...initialFormData,
+        blueprint: initialFormData.blueprint || prev.blueprint,
+      }));
+    }
+  }, [id, initialFormData]);
+
   const loadVehicle = async () => {
     setLoading(true);
     try {
-      const response = await adminService.getPoolingVehicles();
+      const response = await service.getPoolingVehicles();
       const vehicle = response.data.find(v => v._id === id);
       if (vehicle) {
         setFormData({
           name: vehicle.name || '',
           vehicleModel: vehicle.vehicleModel || '',
           vehicleNumber: vehicle.vehicleNumber || '',
+          driverName: vehicle.driverName || '',
+          driverPhone: vehicle.driverPhone || '',
           capacity: vehicle.capacity || 4,
           adminCommissionPercentage: Number(vehicle.adminCommissionPercentage ?? 0),
+          ownerCommissionPercentage: Number(vehicle.ownerCommissionPercentage ?? 0),
           serviceTaxPercentage: Number(vehicle.serviceTaxPercentage ?? 0),
           color: vehicle.color || '',
           vehicleType: vehicle.vehicleType || 'sedan',
@@ -152,22 +186,37 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isViewMode) return;
+
+    if (!formData.name?.trim() || !formData.vehicleModel?.trim() || !formData.vehicleNumber?.trim()) {
+      toast.error('Vehicle Name, Model, and Number Plate are required');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
         ...formData,
         adminCommissionPercentage: Math.min(100, Math.max(0, Number(formData.adminCommissionPercentage || 0))),
+        ownerCommissionPercentage: Math.min(100, Math.max(0, Number(formData.ownerCommissionPercentage || 0))),
         serviceTaxPercentage: Math.min(100, Math.max(0, Number(formData.serviceTaxPercentage || 0))),
       };
 
       if (isEditMode) {
-        await adminService.updatePoolingVehicle(id, payload);
-        toast.success('Vehicle updated successfully');
+        const result = await service.updatePoolingVehicle(id, payload);
+        toast.success(updateSuccessMessage);
+        if (typeof onSaveSuccess === 'function') {
+          await onSaveSuccess(result, payload);
+          return;
+        }
       } else {
-        await adminService.createPoolingVehicle(payload);
-        toast.success('Vehicle created successfully');
+        const result = await service.createPoolingVehicle(payload);
+        toast.success(createSuccessMessage);
+        if (typeof onSaveSuccess === 'function') {
+          await onSaveSuccess(result, payload);
+          return;
+        }
       }
-      navigate('/taxi/admin/pooling/vehicles');
+      navigate(backPath);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Save failed');
     } finally {
@@ -178,58 +227,60 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-900 border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-50/50 p-4 lg:p-6">
       <div className="mx-auto max-w-5xl">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-4">
           <button
-            onClick={() => navigate('/taxi/admin/pooling/vehicles')}
+            onClick={() => navigate(backPath)}
             className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-400 transition hover:text-slate-900"
           >
             <ArrowLeft size={16} />
-            Back to Fleet
+            {backLabel}
           </button>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-black text-slate-900">
-                {isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle'}
+              <h1 className="text-xl font-bold text-slate-900">
+                {pageLabel || (isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle')}
               </h1>
               <p className="text-sm font-medium text-slate-500">
                 {isViewMode ? 'Review vehicle details and seat layout blueprint' : 'Configure vehicle details and seat layout blueprint'}
               </p>
             </div>
-            {isViewMode ? (
-              <button
-                onClick={() => navigate(`/taxi/admin/pooling/vehicles/edit/${id}`)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95"
-              >
-                <Save size={18} />
-                Edit Vehicle
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
-              >
-                {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
-                {isEditMode ? 'Save Changes' : 'Create Vehicle'}
-              </button>
-            )}
+            {showHeaderAction ? (
+              isViewMode ? (
+                <button
+                  onClick={() => navigate(`${backPath}/edit/${id}`)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
+                >
+                  <Save size={18} />
+                  Edit Vehicle
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50"
+                >
+                  {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
+                  {isEditMode ? editActionLabel : createActionLabel}
+                </button>
+              )
+            ) : null}
           </div>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-5">
+        <div className="grid gap-4 lg:gap-6 lg:grid-cols-5">
           {/* Form Side */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
-              <h3 className="mb-6 text-lg font-black text-slate-900">Basic Information</h3>
+          <div className="lg:col-span-2 space-y-4">
+            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <h3 className="mb-4 text-lg font-black text-slate-900">Basic Information</h3>
               <div className="space-y-4">
                 <div>
                   <label className={labelClass}>Vehicle Type</label>
@@ -240,13 +291,13 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                         type="button"
                         onClick={() => handleTypeChange(type.id)}
                         disabled={isViewMode}
-                        className={`rounded-xl border p-3 text-center transition-all ${
+                        className={`rounded-xl border py-2.5 px-2 text-center transition-all ${
                           formData.vehicleType === type.id
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
+                            ? 'border-slate-900 bg-slate-900 text-yellow-400'
                             : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'
                         } ${isViewMode ? 'cursor-default opacity-80' : ''}`}
                       >
-                        <p className="text-[10px] font-black uppercase tracking-tight">{type.label}</p>
+                        <p className="text-xs font-bold truncate">{type.label}</p>
                       </button>
                     ))}
                   </div>
@@ -287,6 +338,30 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                     readOnly={isViewMode}
                   />
                 </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={labelClass}>Driver Name</label>
+                    <input
+                      type="text"
+                      value={formData.driverName}
+                      onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
+                      placeholder="e.g. Ramesh Kumar"
+                      className={inputClass}
+                      readOnly={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Driver Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.driverPhone}
+                      onChange={(e) => setFormData({ ...formData, driverPhone: e.target.value })}
+                      placeholder="e.g. 9876543210"
+                      className={inputClass}
+                      readOnly={isViewMode || lockDriverPhone}
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Capacity</label>
@@ -306,41 +381,64 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>Admin Commission %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={formData.adminCommissionPercentage}
-                      onChange={(e) => setFormData({ ...formData, adminCommissionPercentage: e.target.value })}
-                      placeholder="e.g. 12.5"
-                      className={inputClass}
-                      readOnly={isViewMode}
-                    />
+                {!hidePricingFields ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className={labelClass}>Driver Commission %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.adminCommissionPercentage}
+                        onChange={(e) => setFormData({ ...formData, adminCommissionPercentage: e.target.value })}
+                        placeholder="e.g. 12.5"
+                        className={inputClass}
+                        readOnly={isViewMode}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Owner Commission %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.ownerCommissionPercentage}
+                        onChange={(e) => setFormData({ ...formData, ownerCommissionPercentage: e.target.value })}
+                        placeholder="e.g. 8"
+                        className={inputClass}
+                        readOnly={isViewMode}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Service Tax %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.serviceTaxPercentage}
+                        onChange={(e) => setFormData({ ...formData, serviceTaxPercentage: e.target.value })}
+                        placeholder="e.g. 5"
+                        className={inputClass}
+                        readOnly={isViewMode}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className={labelClass}>Service Tax %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={formData.serviceTaxPercentage}
-                      onChange={(e) => setFormData({ ...formData, serviceTaxPercentage: e.target.value })}
-                      placeholder="e.g. 5"
-                      className={inputClass}
-                      readOnly={isViewMode}
-                    />
-                  </div>
-                </div>
+                ) : null}
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
-              <div className="mb-6 flex items-center justify-between">
+            {helperPanel ? (
+              <div className="rounded-3xl border border-teal-100 bg-teal-50 p-5 shadow-sm">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-600">Quick Note</p>
+                <p className="mt-3 text-sm font-semibold leading-6 text-teal-900">{helperPanel}</p>
+              </div>
+            ) : null}
+
+            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-black text-slate-900">Vehicle Images</h3>
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -358,31 +456,36 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                       type="file"
                       accept="image/*"
                       onChange={async (e) => {
-                        const file = e.target.files?.[0];
+                        const file = e.target.files[0];
                         if (!file) return;
-
-                        const loadingToast = toast.loading('Uploading image...');
-                        try {
-                          const res = await adminService.uploadImage(file);
-                          const url = res?.data?.url || res?.data?.secureUrl || res?.url || res?.secureUrl || '';
-                          if (!url) throw new Error('Upload failed');
-                          setFormData((prev) => ({
-                            ...prev,
-                            images: [...prev.images, url],
-                          }));
-                          toast.success('Image uploaded', { id: loadingToast });
-                        } catch (error) {
-                          toast.error('Upload failed', { id: loadingToast });
-                        } finally {
-                          e.target.value = '';
-                        }
+                        
+                        const reader = new FileReader();
+                        reader.onloadend = async () => {
+                          const base64 = reader.result;
+                          const loadingToast = toast.loading('Uploading image...');
+                          try {
+                            const res = await service.uploadImage(base64);
+                            const imageUrl = res?.data?.url || res?.data?.data?.url || res?.url || '';
+                            if (!imageUrl) {
+                              throw new Error('Upload response missing image URL');
+                            }
+                            setFormData(prev => ({
+                              ...prev,
+                              images: [...prev.images, imageUrl]
+                            }));
+                            toast.success('Image uploaded', { id: loadingToast });
+                          } catch (error) {
+                            toast.error('Upload failed', { id: loadingToast });
+                          }
+                        };
+                        reader.readAsDataURL(file);
                       }}
                       className="absolute inset-0 cursor-pointer opacity-0"
                       id="vehicle-image-upload"
                     />
                     <label 
                       htmlFor="vehicle-image-upload"
-                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2 text-xs font-black uppercase tracking-wide text-indigo-600 transition hover:bg-indigo-100"
+                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-700 transition hover:bg-slate-200"
                     >
                       <Plus size={16} />
                       Upload Image
@@ -417,16 +520,16 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
           </div>
 
           {/* Blueprint Side */}
-          <div className="lg:col-span-3 space-y-6">
-            <div className="rounded-[32px] border border-slate-100 bg-white p-8 shadow-sm">
-              <div className="mb-6 flex items-center justify-between">
+          <div className="lg:col-span-3 space-y-4">
+            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-black text-slate-900">Seat Layout Blueprint</h3>
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Interactive Top View Design</p>
                 </div>
                 <div className="flex gap-2">
                   <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1">
-                    <div className="h-2 w-2 rounded-full bg-indigo-500" />
+                    <div className="h-2 w-2 rounded-full bg-yellow-400" />
                     <span className="text-[10px] font-black uppercase text-slate-500">Seat</span>
                   </div>
                   <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1">
@@ -437,14 +540,14 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
               </div>
 
               {/* Top View Container */}
-              <div className="flex flex-col items-center justify-center py-12 bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200">
+              <div className="flex flex-col items-center justify-center py-8 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
                 {/* Windshield */}
-                <div className="mb-8 h-12 w-48 rounded-t-[60px] border-x-8 border-t-8 border-slate-300 bg-slate-200/50" />
+                <div className="mb-6 h-10 w-40 rounded-t-[40px] border-x-8 border-t-8 border-slate-300 bg-slate-200/50" />
                 
                 {/* Grid */}
-                <div className="relative p-6 rounded-[48px] bg-white shadow-2xl border-x-12 border-slate-300">
+                <div className="relative p-5 rounded-[40px] bg-white shadow-2xl border-x-[10px] border-slate-300">
                   <div 
-                    className="grid gap-6"
+                    className="grid gap-4"
                     style={{ 
                       gridTemplateColumns: `repeat(${formData.blueprint.cols}, minmax(0, 1fr))`,
                       gridTemplateRows: `repeat(${formData.blueprint.rows}, minmax(0, 1fr))`
@@ -458,7 +561,7 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                         disabled={isViewMode}
                         className={`group relative h-16 w-16 flex items-center justify-center rounded-2xl transition-all ${
                           item.type === 'seat' 
-                            ? 'bg-indigo-50 text-indigo-600 border-2 border-indigo-200 hover:bg-indigo-600 hover:text-white' 
+                            ? 'bg-black text-yellow-400 border-2 border-black hover:bg-slate-800' 
                             : item.type === 'driver'
                             ? 'bg-slate-900 text-white border-2 border-slate-900 cursor-default'
                             : 'bg-slate-100 text-slate-300 border-2 border-dashed border-slate-200 hover:bg-slate-200'
@@ -478,10 +581,10 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
                 </div>
 
                 {/* Trunk */}
-                <div className="mt-8 h-8 w-48 rounded-b-3xl border-x-8 border-b-8 border-slate-300 bg-slate-200/50" />
+                <div className="mt-6 h-6 w-40 rounded-b-2xl border-x-8 border-b-8 border-slate-300 bg-slate-200/50" />
               </div>
 
-              <div className="mt-8 rounded-2xl bg-amber-50 p-4 border border-amber-100">
+              <div className="mt-6 rounded-2xl bg-amber-50 p-4 border border-amber-100">
                 <div className="flex gap-3">
                   <Info className="text-amber-500 shrink-0" size={20} />
                   <p className="text-xs font-medium text-amber-700 leading-relaxed">
@@ -495,6 +598,19 @@ const PoolingVehicleForm = ({ mode: propMode }) => {
             </div>
           </div>
         </div>
+
+        {!isViewMode && !isEditMode && placeCreateActionAtEnd ? (
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={handleSubmit}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50"
+            >
+              {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
+              {createActionLabel}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

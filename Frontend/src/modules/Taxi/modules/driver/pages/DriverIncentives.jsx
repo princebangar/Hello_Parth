@@ -142,7 +142,7 @@ const DriverIncentives = () => {
               <Trophy size={24} style={{ color: levelData.color }} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">{levelData.name} Captain</h2>
+              <h2 className="text-lg font-bold text-gray-900">{levelData.name} Partner</h2>
               <p className="text-sm font-medium text-gray-500">Level {levelData.level}</p>
             </div>
           </div>

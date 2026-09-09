@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 const CHECK_INTERVAL_MS = 60 * 1000;
+const INITIAL_CHECK_DELAY_MS = 1500;
 
 const getCurrentEntryScript = () => {
   if (typeof document === 'undefined') {
@@ -47,12 +48,16 @@ const AppAutoUpdater = () => {
       }
     };
 
+    const initialCheckTimer = window.setTimeout(checkForUpdate, INITIAL_CHECK_DELAY_MS);
     const interval = window.setInterval(checkForUpdate, CHECK_INTERVAL_MS);
     window.addEventListener('focus', checkForUpdate);
+    window.addEventListener('pageshow', checkForUpdate);
 
     return () => {
+      window.clearTimeout(initialCheckTimer);
       window.clearInterval(interval);
       window.removeEventListener('focus', checkForUpdate);
+      window.removeEventListener('pageshow', checkForUpdate);
     };
   }, []);
 

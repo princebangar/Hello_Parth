@@ -10,13 +10,14 @@ export const getIdentityFromSocket = (socket) => {
   }
 
   const payload = verifyAccessToken(token);
-  const role = String(payload.role || '').toLowerCase();
-  const sub = payload.sub || payload.userId || payload.id || null;
+  const subjectId = String(payload.sub || payload.userId || payload.id || '').trim();
+  const role = String(payload.role || '').trim().toLowerCase();
 
   return {
     ...payload,
-    role,
-    sub,
+    sub: subjectId,
+    role: role === 'super-admin' ? 'admin' : role,
+    originalRole: payload.role,
   };
 };
 
@@ -26,10 +27,6 @@ export const attachSocketAuth = (io) => {
       socket.auth = getIdentityFromSocket(socket);
 
       if (socket.auth.role === 'user') {
-        if (!socket.auth.sub) {
-          throw new ApiError(401, 'Authorization token is invalid');
-        }
-
         const user = await User.findById(socket.auth.sub).select('active isActive deletedAt').lean();
 
         if (!user || user.deletedAt || user.isActive === false || user.active === false) {

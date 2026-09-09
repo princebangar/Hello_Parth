@@ -159,7 +159,7 @@ const OwnerBookings = () => {
                   resetForm();
                   setView('form');
                 }}
-                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+                className="inline-flex items-center gap-2 rounded-lg bg-yellow-400 px-5 py-3 text-sm font-bold text-black shadow-sm transition hover:bg-yellow-500"
               >
                 <Plus size={16} />
                 Add Booking
@@ -236,12 +236,12 @@ const OwnerBookings = () => {
           </MotionDiv>
         ) : (
           <MotionDiv key="form" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} className="space-y-6">
-            <div className="flex items-center justify-between">
-              <button type="button" onClick={() => setView('list')} className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition hover:text-slate-900">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-2xl font-black tracking-tight text-slate-900">{editingId ? 'Update Booking' : 'Create Booking'}</h2>
+              <button type="button" onClick={() => setView('list')} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900">
                 <ArrowLeft size={16} />
                 Back
               </button>
-              <h2 className="text-2xl font-black tracking-tight text-slate-900">{editingId ? 'Update Booking' : 'Create Booking'}</h2>
             </div>
 
             <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -320,7 +320,7 @@ const OwnerBookings = () => {
                   <textarea rows="4" value={formData.notes} onChange={(event) => setFormData((prev) => ({ ...prev, notes: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-300" />
                 </div>
                 <div className="md:col-span-2 flex justify-end">
-                  <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#5468a5] px-5 py-3 text-sm font-black text-white transition hover:bg-[#475993] disabled:cursor-not-allowed disabled:opacity-70">
+                  <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-70">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                     Save
                   </button>

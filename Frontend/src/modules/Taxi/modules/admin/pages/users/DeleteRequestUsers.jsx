@@ -119,20 +119,20 @@ const DeleteRequestUsers = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+    <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
+      <div className="mb-4">
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
           <span>Users</span>
           <ChevronRight size={12} />
-          <span className="text-gray-700">Delete Requests</span>
+          <span className="text-gray-700 font-medium">Delete Requests</span>
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Delete Requests</h1>
+          <h1 className="text-lg text-gray-900 font-bold">Delete Requests</h1>
           <button
             type="button"
             onClick={() => navigate('/taxi/admin/users')}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} /> Back
           </button>
@@ -154,7 +154,7 @@ const DeleteRequestUsers = () => {
                   <Trash2 size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Pending Requests</h3>
+                  <h3 className="text-sm text-gray-900 font-bold">Pending Requests</h3>
                   <p className="text-xs text-gray-400">Review customer account deletion requests</p>
                 </div>
               </div>
@@ -200,7 +200,7 @@ const DeleteRequestUsers = () => {
                             <div>
                               <button
                                 type="button"
-                                onClick={() => navigate(`/taxi/admin/users/${user._id}`)}
+                                onClick={() => navigate(`/admin/users/${user._id}`)}
                                 className="text-left text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline transition-colors"
                               >
                                 {user.name || user.user_id?.name || 'Unknown'}
@@ -226,7 +226,7 @@ const DeleteRequestUsers = () => {
                             <button
                               type="button"
                               disabled={isSubmitting}
-                              onClick={() => navigate(`/taxi/admin/users/${user._id}`)}
+                              onClick={() => navigate(`/admin/users/${user._id}`)}
                               title="View Customer Profile"
                               className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
                             >

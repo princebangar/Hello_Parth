@@ -112,11 +112,13 @@ const SupportTickets = () => {
           </motion.button>
         </div>
         {/* Tabs */}
-        <div className="flex gap-1.5 bg-slate-100/80 p-1 rounded-[14px]">
+        <div className="flex gap-1.5 bg-[#FFFDF0] border border-yellow-100/70 p-1 rounded-[14px]">
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`flex-1 py-1.5 rounded-[10px] text-[11px] font-black uppercase tracking-widest transition-all ${
-                activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'
+                activeTab === tab 
+                  ? 'bg-white text-slate-900 border border-slate-100/80 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-800'
               }`}>
               {tab}
             </button>

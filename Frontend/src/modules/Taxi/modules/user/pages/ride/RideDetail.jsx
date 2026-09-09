@@ -79,8 +79,8 @@ const RideDetail = () => {
   const details = useMemo(() => {
     const driver = ride?.driver || ride?.driverId || {};
     const timeSource = ride?.completedAt || ride?.startedAt || ride?.acceptedAt || ride?.createdAt || ride?.updatedAt;
-    const fare = Math.round(Number(ride?.fare || 0));
-    const taxes = Math.round(Math.max(fare * 0.18, 0));
+    const fare = Number(ride?.fare || 0);
+    const taxes = Math.max(Math.round(fare * 0.18), 0);
     const status = String(ride?.status || ride?.liveStatus || 'trip').toLowerCase();
     const rideCode = String(ride?.rideId || ride?._id || ride?.id || id || 'ride');
 
@@ -265,7 +265,7 @@ const RideDetail = () => {
           </div>
           <button
             type="button"
-            onClick={() => navigate(`${routePrefix}/support`)}
+            onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')}
             className="bg-white px-4 py-2 rounded-full text-[12px] font-black text-gray-900 border border-orange-100 active:scale-95 transition-all"
           >
             Support
@@ -276,14 +276,24 @@ const RideDetail = () => {
       <div className="p-6 border-t border-gray-50 flex gap-4 bg-white pb-10">
         <button
           type="button"
-          onClick={() => navigate(`${routePrefix}/ride/select-location`, {
-            state: {
-              pickup: details.pickup,
-              drop: details.drop,
-              pickupCoords: ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null,
-              dropCoords: ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null,
-            },
-          })}
+          onClick={() => {
+            const vehicleTypeStr = String(ride?.vehicleIconType || ride?.vehicle?.icon_types || ride?.driver?.vehicleType || '').toLowerCase();
+            const rebookCategory = vehicleTypeStr.includes('bike') || vehicleTypeStr.includes('scooty')
+              ? 'bike'
+              : vehicleTypeStr.includes('auto')
+                ? 'auto'
+                : 'car';
+
+            navigate(`${routePrefix}/ride/select-location`, {
+              state: {
+                pickup: details.pickup,
+                drop: details.drop,
+                pickupCoords: ride?.pickupLocation?.coordinates || ride?.pickup?.coordinates || null,
+                dropCoords: ride?.dropLocation?.coordinates || ride?.drop?.coordinates || null,
+                selectedCategory: rebookCategory,
+              },
+            });
+          }}
           className="flex-[2] bg-[#1C2833] text-white py-5 rounded-[24px] text-[14px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
         >
           <Repeat size={18} />
@@ -291,7 +301,7 @@ const RideDetail = () => {
         </button>
         <button
           type="button"
-          onClick={() => navigate(`${routePrefix}/support`)}
+          onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')}
           className="flex-1 bg-gray-50 text-gray-900 py-5 rounded-[24px] text-[14px] font-black uppercase tracking-widest border border-gray-100 flex items-center justify-center gap-2 active:scale-95 transition-all"
         >
           <HelpCircle size={18} />

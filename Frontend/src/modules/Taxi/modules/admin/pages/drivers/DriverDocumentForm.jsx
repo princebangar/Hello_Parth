@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 
 const inputClass =
-  'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
+  'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors';
 const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5';
 const selectPlaceholderClass = 'text-gray-400';
 const customVehicleFieldSentinel = '__custom__';
@@ -16,6 +16,7 @@ const initialDocumentForm = {
   image_type: '',
   has_identify_number: '',
   identify_number_key: '',
+  verification_type: 'none',
   is_editable: false,
   is_required: false,
   active: true,
@@ -54,6 +55,53 @@ const imageTypeOptions = [
   { value: 'front', label: 'Front Only' },
   { value: 'back', label: 'Back Only' },
 ];
+
+const verificationTypeOptions = [
+  { value: 'none', label: 'General Document (No API)' },
+  { value: 'driving_license', label: 'Driving License Verification' },
+  { value: 'pan', label: 'PAN Verification' },
+  { value: 'gstin', label: 'GSTIN Verification' },
+  { value: 'rc', label: 'RC Verification' },
+  { value: 'bank_account', label: 'Bank Account Verification' },
+];
+
+const documentVerificationPresets = {
+  driving_license: {
+    name: 'Driving License',
+    image_type: 'image',
+    has_expiry_date: '1',
+    has_identify_number: '1',
+    identify_number_key: 'license_no',
+  },
+  pan: {
+    name: 'PAN Card',
+    image_type: 'image',
+    has_expiry_date: '0',
+    has_identify_number: '1',
+    identify_number_key: 'pan_no',
+  },
+  gstin: {
+    name: 'GST Certificate',
+    image_type: 'image',
+    has_expiry_date: '0',
+    has_identify_number: '1',
+    identify_number_key: 'gstin',
+  },
+  rc: {
+    name: 'Vehicle RC',
+    image_type: 'image',
+    has_expiry_date: '0',
+    has_identify_number: '1',
+    identify_number_key: 'rc_no',
+  },
+  bank_account: {
+    name: 'Bank Proof',
+    image_type: 'image',
+    has_expiry_date: '0',
+    has_identify_number: '1',
+    identify_number_key: 'bank_account',
+  },
+};
 
 const vehicleFieldOptions = [
   { value: 'locationId', label: 'Operating City', field_type: 'location_select', field_group: 'common', placeholder: '', account_type: 'both' },
@@ -108,6 +156,7 @@ const fromDocumentResponse = (payload = {}) => ({
   has_identify_number:
     payload.has_identify_number === true ? '1' : payload.has_identify_number === false ? '0' : '',
   identify_number_key: payload.identify_number_key || '',
+  verification_type: payload.verification_type || 'none',
   is_editable: normalizeBooleanLike(payload.is_editable, false),
   is_required: normalizeBooleanLike(payload.is_required, false),
   active: normalizeBooleanLike(payload.active, true),
@@ -183,6 +232,12 @@ const DriverDocumentForm = () => {
       ...current,
       [key]: value,
       ...(key === 'has_identify_number' && value !== '1' ? { identify_number_key: '' } : {}),
+      ...(key === 'verification_type'
+        ? {
+            ...(value !== 'none' ? documentVerificationPresets[value] || {} : {}),
+            verification_type: value,
+          }
+        : {}),
     }));
   };
 
@@ -274,6 +329,7 @@ const DriverDocumentForm = () => {
           has_identify_number: documentForm.has_identify_number === '1',
           identify_number_key:
             documentForm.has_identify_number === '1' ? String(documentForm.identify_number_key || '').trim() : '',
+          verification_type: documentForm.verification_type || 'none',
           is_editable: Boolean(documentForm.is_editable),
           is_required: Boolean(documentForm.is_required),
           active: Boolean(documentForm.active),
@@ -303,21 +359,21 @@ const DriverDocumentForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
+    <div className="min-h-screen bg-[#F8FAFC] p-4 lg:p-6 font-sans">
       <div className="mb-6">
         <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-400">
           <span>Driver Onboarding Config</span>
           <ChevronRight size={12} />
           <span className="text-gray-700">{isEditMode ? 'Edit' : 'Create'}</span>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-xl text-gray-900 font-bold">
             {isEditMode ? 'Edit' : 'Create'} {templateType === 'vehicle_field' ? 'Vehicle Field' : 'Document'}
           </h1>
           <button
             type="button"
             onClick={() => navigate('/taxi/admin/drivers/documents')}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={16} />
             Back
@@ -349,9 +405,9 @@ const DriverDocumentForm = () => {
                 <button
                   type="button"
                   onClick={() => handleVehicleFieldChange('field_key', customVehicleFieldSentinel)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
                     isCustomVehicleField
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-yellow-400 text-black shadow-sm'
                       : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -360,9 +416,9 @@ const DriverDocumentForm = () => {
                 <button
                   type="button"
                   onClick={() => handleVehicleFieldChange('field_key', vehicleFieldOptions[0]?.value || '')}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
                     !isCustomVehicleField
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-yellow-400 text-black shadow-sm'
                       : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -516,25 +572,28 @@ const DriverDocumentForm = () => {
 
             <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
               <div className="flex flex-wrap gap-6">
-                <label className="flex items-center gap-3 text-sm text-gray-700">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400 cursor-pointer"
                     checked={vehicleFieldForm.is_editable}
                     onChange={(event) => handleVehicleFieldChange('is_editable', event.target.checked)}
                   />
                   Is Editable?
                 </label>
-                <label className="flex items-center gap-3 text-sm font-semibold text-gray-800">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400 cursor-pointer"
                     checked={vehicleFieldForm.is_required}
                     onChange={(event) => handleVehicleFieldChange('is_required', event.target.checked)}
                   />
                   Is Required?
                 </label>
-                <label className="flex items-center gap-3 text-sm text-gray-700">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400 cursor-pointer"
                     checked={vehicleFieldForm.active}
                     onChange={(event) => handleVehicleFieldChange('active', event.target.checked)}
                   />
@@ -576,6 +635,21 @@ const DriverDocumentForm = () => {
               >
                 <option value="" disabled>Select account type</option>
                 {accountTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Verification Mapping</label>
+              <select
+                value={documentForm.verification_type}
+                onChange={(event) => handleDocumentChange('verification_type', event.target.value)}
+                className={inputClass}
+              >
+                {verificationTypeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -651,25 +725,28 @@ const DriverDocumentForm = () => {
 
             <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
               <div className="flex flex-wrap gap-6">
-                <label className="flex items-center gap-3 text-sm text-gray-700">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400 cursor-pointer"
                     checked={documentForm.is_editable}
                     onChange={(event) => handleDocumentChange('is_editable', event.target.checked)}
                   />
                   Is Editable?
                 </label>
-                <label className="flex items-center gap-3 text-sm font-semibold text-gray-800">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400 cursor-pointer"
                     checked={documentForm.is_required}
                     onChange={(event) => handleDocumentChange('is_required', event.target.checked)}
                   />
                   Is Required?
                 </label>
-                <label className="flex items-center gap-3 text-sm text-gray-700">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400 cursor-pointer"
                     checked={documentForm.active}
                     onChange={(event) => handleDocumentChange('active', event.target.checked)}
                   />
@@ -678,6 +755,9 @@ const DriverDocumentForm = () => {
               </div>
               <p className="mt-3 text-xs text-gray-500">
                 When required is enabled, this document must be completed in the signup flow before registration can finish.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                Pick a verification mapping for documents like Driving License, PAN, GST, or RC so the driver app shows the matching RechargeKit verify action automatically.
               </p>
             </div>
           </div>
@@ -691,7 +771,7 @@ const DriverDocumentForm = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60"
+            className="px-6 py-2.5 bg-yellow-400 text-black rounded-lg text-sm font-bold shadow-sm hover:bg-yellow-500 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Saving...' : 'Save'}
           </button>

@@ -4,6 +4,7 @@ import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { RentalBookingRequest } from '../admin/models/RentalBookingRequest.js';
 import { ServiceLocation } from '../admin/models/ServiceLocation.js';
 import { ServiceStore } from '../admin/models/ServiceStore.js';
+import { RentalVehicleType } from '../admin/models/RentalVehicleType.js';
 import { Zone } from '../driver/models/Zone.js';
 import { emitToAdmins } from './dispatchService.js';
 

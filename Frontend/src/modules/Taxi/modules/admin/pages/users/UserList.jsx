@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Download, UserPlus, MoreHorizontal,
   ChevronRight, UserCheck, Edit2, Lock, Trash2,
-  Loader2
+  Loader2, Ban, FileText
 } from 'lucide-react';
 
 const StatusToggle = ({ status, onToggle }) => (
@@ -28,9 +28,13 @@ const GENDER_LABELS = {
 const UserList = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [referralSource, setReferralSource] = useState('all');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [employeeOptions, setEmployeeOptions] = useState([]);
   const [activeMenu, setActiveMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [users, setUsers] = useState([]);
@@ -39,12 +43,30 @@ const UserList = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [paginator, setPaginator] = useState(null);
+  const latestRequestId = useRef(0);
+  const hasLoadedUsersRef = useRef(false);
 
-  const fetchUsers = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
+  const fetchUsers = useCallback(async ({
+    nextPage = page,
+    nextLimit = itemsPerPage,
+    nextSearch = searchTerm,
+    nextReferralSource = referralSource,
+    nextEmployeeId = selectedEmployeeId,
+  } = {}) => {
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
+    const showInitialLoader = !hasLoadedUsersRef.current;
+
     try {
-      setIsLoading(true);
+      setIsLoading(showInitialLoader);
+      setIsRefreshing(!showInitialLoader);
       setError(null);
-      const resData = await adminService.getUsers(nextPage, nextLimit, String(nextSearch || '').trim());
+      const resData = await adminService.getUsers(nextPage, nextLimit, String(nextSearch || '').trim(), {
+        referralSource: nextReferralSource,
+        employeeId: nextEmployeeId,
+      });
+      if (requestId !== latestRequestId.current) return;
+
       if (resData.success) {
         const mapped = (resData.data?.results || []).map(u => ({
           id: u._id,
@@ -52,36 +74,75 @@ const UserList = () => {
           gender: GENDER_LABELS[u.gender] || 'N/A',
           email: u.email || 'N/A',
           phone: u.mobile || 'N/A',
+          profileImage: u.profileImage || '',
+          governmentIdProof: u.governmentIdProof || null,
+          acquiredByEmployeeId: u.acquiredByEmployeeId || '',
+          acquiredByEmployeeCode: u.acquiredByEmployeeCode || '',
+          acquiredByEmployeeName: u.acquiredByEmployeeName || '',
           status: u.active ? 'Active' : 'Suspended',
         }));
         setUsers(mapped);
         setPaginator(resData.data?.paginator || null);
+        hasLoadedUsersRef.current = true;
       } else {
         setError(resData.message || 'Failed to fetch users');
       }
     } catch (err) {
+      if (requestId !== latestRequestId.current) return;
       setError(err.message || 'Network error');
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequestId.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
-  };
+  }, [itemsPerPage, page, referralSource, searchTerm, selectedEmployeeId]);
 
   useEffect(() => {
-    fetchUsers({ nextPage: 1, nextLimit: itemsPerPage, nextSearch: searchTerm });
-    setPage(1);
-  }, [itemsPerPage]);
+    let mounted = true;
+
+    const loadEmployees = async () => {
+      try {
+        const resData = await adminService.getEmployees(1, 100, '');
+        if (!mounted || !resData?.success) return;
+
+        setEmployeeOptions(
+          Array.isArray(resData.data?.results)
+            ? resData.data.results.map((employee) => ({
+                id: employee._id,
+                name: employee.name || 'Unnamed employee',
+                code: employee.employeeCode || '',
+              }))
+            : [],
+        );
+      } catch (err) {
+        if (mounted) {
+          setEmployeeOptions([]);
+        }
+      }
+    };
+
+    loadEmployees();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
+    const trimmedSearch = String(searchTerm || '').trim();
     const timeoutId = window.setTimeout(() => {
-      fetchUsers({ nextPage: 1, nextLimit: itemsPerPage, nextSearch: searchTerm });
-      setPage(1);
-    }, 250);
-    return () => window.clearTimeout(timeoutId);
-  }, [searchTerm]);
+      fetchUsers({
+        nextPage: page,
+        nextLimit: itemsPerPage,
+        nextSearch: trimmedSearch,
+        nextReferralSource: referralSource,
+        nextEmployeeId: selectedEmployeeId,
+      });
+    }, trimmedSearch ? 350 : 0);
 
-  useEffect(() => {
-    fetchUsers({ nextPage: page, nextLimit: itemsPerPage, nextSearch: searchTerm });
-  }, [page]);
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchUsers, page, itemsPerPage, referralSource, searchTerm, selectedEmployeeId]);
 
   useEffect(() => {
     const closeMenu = () => setActiveMenu(null);
@@ -90,15 +151,34 @@ const UserList = () => {
   }, []);
 
   const handleToggleStatus = async (userId, currentStatus) => {
+    const newStatus = currentStatus === 'Active' ? false : true;
+    const confirmed = window.confirm(`Are you sure you want to ${newStatus ? 'activate' : 'block'} this user?`);
+    if (!confirmed) return;
     try {
-      const newStatus = currentStatus === 'Active' ? false : true;
       const resData = await adminService.updateUser(userId, { active: newStatus });
       if (resData.success) {
         setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus ? 'Active' : 'Suspended' } : u));
+        toast?.success?.(`User ${newStatus ? 'activated' : 'blocked'} successfully`) || console.log('Status updated');
       }
     } catch (err) {
       console.error('Failed to toggle status', err);
+      alert('Failed to update status');
     }
+  };
+
+  const handleBlockUser = async (user) => {
+    if (!user) return;
+    const shouldBlock = user.status === 'Active';
+    const confirmed = window.confirm(
+      shouldBlock
+        ? `Block ${user.name}? They will not be able to log in, open their profile, or register again with ${user.phone}.`
+        : `Unblock ${user.name}? They will be able to use their account again.`
+    );
+
+    if (!confirmed) return;
+
+    await handleToggleStatus(user.id, user.status);
+    setActiveMenu(null);
   };
 
   const handleAddUser = () => { navigate('/taxi/admin/users/create'); };
@@ -143,7 +223,7 @@ const UserList = () => {
 
     const rect = e.currentTarget.getBoundingClientRect();
     const menuWidth = 176;
-    const menuHeight = 170;
+    const menuHeight = 210;
     const gap = 8;
     let left = rect.right - menuWidth;
     left = Math.max(12, Math.min(left, window.innerWidth - menuWidth - 12));
@@ -175,54 +255,102 @@ const UserList = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 bg-gray-50 min-h-screen">
+    <div className="p-4 lg:p-6 bg-gray-50 min-h-screen">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
         <span>Users</span>
         <ChevronRight size={12} />
-        <span className="text-gray-700">All Users</span>
+        <span className="text-gray-700 font-medium">All Users</span>
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Passengers</h1>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <Download size={15} /> Export
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg text-gray-900 font-bold">Passengers</h1>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
+            <Download size={14} /> Export
           </button>
           <button 
             onClick={handleAddUser}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400 text-black text-sm font-semibold rounded-lg shadow-sm hover:bg-yellow-500 transition-colors"
           >
-            <UserPlus size={15} /> New User
+            <UserPlus size={14} /> New User
           </button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Search users..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-          />
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full max-w-sm">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search by name, mobile, or email..." 
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>Show</span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value) || 10);
+                setPage(1);
+              }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
+            >
+              {[10, 25, 50].map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+            <span>Entries</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span>Show</span>
-          <select
-            value={itemsPerPage}
-            onChange={(e) => setItemsPerPage(Number(e.target.value) || 10)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
-          >
-            {[10, 25, 50].map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
-          <span>entries</span>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-gray-500">Referral Source</label>
+            <select
+              value={referralSource}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setReferralSource(nextValue);
+                if (nextValue !== 'employee') {
+                  setSelectedEmployeeId('');
+                }
+                setPage(1);
+              }}
+              className="min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
+            >
+              <option value="all">All Users</option>
+              <option value="employee">Employee Referred Only</option>
+              <option value="organic">No Employee Referral</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-gray-500">Employee</label>
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => {
+                setSelectedEmployeeId(e.target.value);
+                setReferralSource('employee');
+                setPage(1);
+              }}
+              className="min-w-[260px] border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
+            >
+              <option value="">All Employees</option>
+              {employeeOptions.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}{employee.code ? ` (${employee.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -234,6 +362,12 @@ const UserList = () => {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
+        {isRefreshing && (
+          <div className="border-b border-gray-100 px-4 py-2 text-xs font-medium text-indigo-600 flex items-center gap-2">
+            <Loader2 size={13} className="animate-spin" />
+            Updating users...
+          </div>
+        )}
         <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full">
             <thead>
@@ -242,6 +376,8 @@ const UserList = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Gender</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Mobile</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Email</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">ID Proof</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Employee Referral</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-900">Status</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-900">Action</th>
               </tr>
@@ -252,12 +388,16 @@ const UserList = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 font-medium text-xs flex items-center justify-center">
-                        {user.name.split(' ').map(n => n[0]).join('')}
+                        {user.profileImage ? (
+                          <img src={user.profileImage} alt={user.name} className="h-full w-full rounded-full object-cover" />
+                        ) : (
+                          user.name.split(' ').map(n => n[0]).join('')
+                        )}
                       </div>
                       <div>
                         <button
                           type="button"
-                          onClick={() => navigate(`/taxi/admin/users/${user.id}`)}
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
                           className="text-left text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline transition-colors"
                         >
                           {user.name}
@@ -268,6 +408,34 @@ const UserList = () => {
                   <td className="px-4 py-3 text-sm text-gray-700">{user.gender}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{user.phone}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{user.email}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {user.governmentIdProof?.imageUrl ? (
+                      <a
+                        href={user.governmentIdProof.imageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <FileText size={13} />
+                        {String(user.governmentIdProof.type || 'ID').replace(/_/g, ' ')}
+                      </a>
+                    ) : (
+                      <span className="text-xs font-medium text-rose-500">Missing</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {user.acquiredByEmployeeName ? (
+                      <div className="flex flex-col">
+                        <span className="font-medium text-gray-900">{user.acquiredByEmployeeName}</span>
+                        <span className="text-xs text-gray-500">
+                          {user.acquiredByEmployeeCode || 'Employee referral'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-medium text-gray-500">Not employee referred</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <StatusToggle status={user.status} onToggle={() => handleToggleStatus(user.id, user.status)} />
                   </td>
@@ -298,12 +466,12 @@ const UserList = () => {
               >
                 Prev
               </button>
-              <span className="px-3 py-1.5 rounded bg-indigo-600 text-white text-xs font-medium">{safePage}</span>
+              <span className="px-3 py-1.5 rounded bg-black text-white text-xs font-bold">{safePage}</span>
               <button
                 type="button"
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 disabled={safePage >= totalPages}
-                className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-500 disabled:opacity-60"
+                className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-700 font-bold disabled:opacity-60 hover:bg-gray-50"
               >
                 Next
               </button>
@@ -320,18 +488,25 @@ const UserList = () => {
               style={{ top: menuPosition.top, left: menuPosition.left }}
               onClick={(e) => e.stopPropagation()}
             >
-              <button onClick={() => navigate(`/taxi/admin/users/${activeMenu}`)} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <UserCheck size={13} className="text-emerald-500" /> View Profile
+              <button onClick={() => { setActiveMenu(null); navigate(`/admin/users/${activeMenu}`); }} className="w-full text-left px-3 py-2 text-xs font-bold text-gray-700 hover:bg-yellow-50 flex items-center gap-2">
+                <UserCheck size={13} className="text-gray-500" /> View Profile
               </button>
-              <button onClick={() => handleEditUser(users.find((item) => item.id === activeMenu))} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <Edit2 size={13} className="text-blue-500" /> Edit
+              <button onClick={() => { setActiveMenu(null); handleEditUser(users.find((item) => item.id === activeMenu)); }} className="w-full text-left px-3 py-2 text-xs font-bold text-gray-700 hover:bg-yellow-50 flex items-center gap-2">
+                <Edit2 size={13} className="text-gray-500" /> Edit
               </button>
-              <button onClick={() => handleEditUser(users.find((item) => item.id === activeMenu))} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <Lock size={13} className="text-amber-500" /> Update Password
+              <button onClick={() => { setActiveMenu(null); handleEditUser(users.find((item) => item.id === activeMenu)); }} className="w-full text-left px-3 py-2 text-xs font-bold text-gray-700 hover:bg-yellow-50 flex items-center gap-2">
+                <Lock size={13} className="text-gray-500" /> Update Password
+              </button>
+              <button
+                onClick={() => { setActiveMenu(null); handleBlockUser(users.find((item) => item.id === activeMenu)); }}
+                className="w-full text-left px-3 py-2 text-xs font-bold text-gray-700 hover:bg-yellow-50 flex items-center gap-2"
+              >
+                <Ban size={13} className="text-gray-500" />
+                {users.find((item) => item.id === activeMenu)?.status === 'Active' ? 'Block User' : 'Unblock User'}
               </button>
               <div className="h-px bg-gray-100 my-1" />
-              <button onClick={() => handleDeleteUser(activeMenu)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-                <Trash2 size={13} /> Delete
+              <button onClick={() => { setActiveMenu(null); handleDeleteUser(activeMenu); }} className="w-full text-left px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
+                <Trash2 size={13} className="text-red-500" /> Delete
               </button>
             </div>
           </div>,

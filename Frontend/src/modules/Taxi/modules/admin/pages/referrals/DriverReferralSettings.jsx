@@ -17,8 +17,8 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 
-const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider';
-const inputClass = 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
+const labelClass = 'block text-sm font-semibold text-gray-700 mb-1.5';
+const inputClass = 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors';
 
 const defaultMilestone = (index = 1) => ({
   id: `milestone_${Date.now()}_${index}`,
@@ -265,7 +265,7 @@ const DriverReferralSettings = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="animate-spin text-indigo-600" size={32} />
+          <Loader2 className="animate-spin text-yellow-600" size={32} />
           <span className="text-sm text-gray-500 font-medium">Loading settings...</span>
         </div>
       </div>
@@ -273,39 +273,23 @@ const DriverReferralSettings = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
-          <span>Driver Referral Settings</span>
-          <ChevronRight size={12} />
-          <span className="text-gray-700">Driver Incentives & Milestones</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900 uppercase tracking-tight">Driver Incentives & Milestones</h1>
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <ArrowLeft size={16} /> Back
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#F8FAFC] p-4 lg:p-6 font-sans">
 
       <div className="max-w-6xl space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <div className="w-10 h-10 rounded-lg bg-yellow-50 flex items-center justify-center text-yellow-600">
                 <Gift size={20} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 uppercase">Driver Referral Earnings Setup</h3>
+                <h3 className="text-sm font-bold text-gray-900 ">Driver Referral Earnings Setup</h3>
                 <p className="text-xs text-gray-400 mt-0.5 font-medium">Configure referral rewards plus long-term milestone programs for drivers.</p>
               </div>
             </div>
             <button
               onClick={() => handleToggle(!settings.enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.enabled ? 'bg-yellow-400' : 'bg-gray-200'}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
@@ -362,9 +346,9 @@ const DriverReferralSettings = () => {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-dashed border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6">
+              <div className="rounded-2xl border border-dashed border-yellow-200 bg-gradient-to-br from-yellow-50 to-white p-6">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-white text-indigo-600 border border-indigo-100 flex items-center justify-center shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-white text-yellow-600 border border-yellow-100 flex items-center justify-center shadow-sm">
                     <Share2 size={22} />
                   </div>
                   <div>
@@ -377,12 +361,12 @@ const DriverReferralSettings = () => {
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-white border border-indigo-100 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestones</p>
+                  <div className="rounded-xl bg-white border border-yellow-100 p-4">
+                    <p className="text-[10px] font-black  text-slate-400">Milestones</p>
                     <p className="mt-2 text-2xl font-black text-slate-900">{settings.milestone_programs.length}</p>
                   </div>
-                  <div className="rounded-xl bg-white border border-indigo-100 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active features</p>
+                  <div className="rounded-xl bg-white border border-yellow-100 p-4">
+                    <p className="text-[10px] font-black  text-slate-400">Active features</p>
                     <p className="mt-2 text-2xl font-black text-slate-900">{enabledFeatureCount}</p>
                   </div>
                 </div>
@@ -392,17 +376,17 @@ const DriverReferralSettings = () => {
             <div className="rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-6 py-5 bg-slate-50 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center">
                     <Trophy size={18} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900 uppercase">Driver Milestone Program</h3>
+                    <h3 className="text-sm font-bold text-gray-900 ">Driver Milestone Program</h3>
                     <p className="text-xs text-gray-500">Create milestone payout slabs based on daily active time and sustained weekly performance.</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setSettings((current) => ({ ...current, milestone_program_enabled: !current.milestone_program_enabled }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.milestone_program_enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.milestone_program_enabled ? 'bg-yellow-400' : 'bg-gray-200'}`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.milestone_program_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -413,11 +397,11 @@ const DriverReferralSettings = () => {
                   <div key={item.id} className="rounded-2xl border border-gray-200 p-5 bg-white space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center">
                           <Clock3 size={18} />
                         </div>
                         <div>
-                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Milestone {index + 1}</p>
+                          <p className="text-[11px] font-black  text-slate-400">Milestone {index + 1}</p>
                           <p className="text-sm font-bold text-slate-900">{item.name || 'Untitled milestone'}</p>
                         </div>
                       </div>
@@ -425,7 +409,7 @@ const DriverReferralSettings = () => {
                         <button
                           type="button"
                           onClick={() => updateMilestone(index, 'enabled', !item.enabled)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${item.enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${item.enabled ? 'bg-yellow-400' : 'bg-gray-200'}`}
                         >
                           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${item.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
@@ -506,7 +490,7 @@ const DriverReferralSettings = () => {
                 <button
                   type="button"
                   onClick={addMilestone}
-                  className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-100 transition-colors"
+                  className="inline-flex items-center gap-2 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-2.5 text-xs font-black  text-yellow-700 hover:bg-yellow-100 transition-colors"
                 >
                   <Plus size={14} />
                   Add Milestone
@@ -516,11 +500,11 @@ const DriverReferralSettings = () => {
 
             <div className="rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-6 py-5 bg-slate-50 border-b border-gray-200 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center">
                   <Sparkles size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900 uppercase">Extra Driver Reward Features</h3>
+                  <h3 className="text-sm font-bold text-gray-900 ">Extra Driver Reward Features</h3>
                   <p className="text-xs text-gray-500">Popular incentive mechanics inspired by Ola, Uber, and large fleet growth programs.</p>
                 </div>
               </div>
@@ -536,7 +520,7 @@ const DriverReferralSettings = () => {
                       <button
                         type="button"
                         onClick={() => updateRewardFeature(feature.key, 'enabled', !feature.enabled)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${feature.enabled ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${feature.enabled ? 'bg-yellow-400' : 'bg-gray-200'}`}
                       >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${feature.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                       </button>
@@ -582,19 +566,19 @@ const DriverReferralSettings = () => {
             <button
               onClick={handleUpdate}
               disabled={saving}
-              className="w-fit flex items-center gap-2 px-6 py-2.5 bg-indigo-900 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-indigo-800 transition-colors shadow-sm disabled:opacity-50"
+              className="w-fit flex items-center gap-2 px-6 py-2.5 bg-yellow-400 text-black text-xs font-bold  rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Update Driver Incentive Settings
             </button>
 
             {showSuccess && (
-              <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-3 rounded-lg border border-emerald-100 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 text-yellow-600 bg-yellow-50 px-4 py-3 rounded-lg border border-yellow-200 animate-in fade-in slide-in-from-bottom-2">
                 <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
                   <ChevronRight size={12} className="rotate-45" />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-tight">Driver incentive settings updated successfully</span>
-                <button onClick={() => setShowSuccess(false)} className="ml-auto text-emerald-400 hover:text-emerald-600">
+                <span className="text-xs font-bold ">Driver incentive settings updated successfully</span>
+                <button onClick={() => setShowSuccess(false)} className="ml-auto text-yellow-600 hover:text-yellow-600">
                   <span className="text-lg">x</span>
                 </button>
               </div>

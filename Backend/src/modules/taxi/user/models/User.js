@@ -80,8 +80,8 @@ const userSchema = new mongoose.Schema(
     },
     name: {
       type: String,
+      required: true,
       trim: true,
-      default: '',
     },
     email: {
       type: String,
@@ -99,12 +99,53 @@ const userSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    governmentIdProof: {
+      type: {
+        type: String,
+        enum: ['aadhaar', 'voter_id', 'passport', 'driving_license', 'other', ''],
+        default: '',
+        trim: true,
+      },
+      imageUrl: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      backImageUrl: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      fileName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      backFileName: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      uploadedAt: {
+        type: Date,
+        default: null,
+      },
+      backUploadedAt: {
+        type: Date,
+        default: null,
+      },
+    },
     fcmTokens: {
       type: [String],
       default: [],
     },
+    // Shared `users` docs may store string (legacy taxi) or string[] (Food).
+    fcmTokenWeb: {
+      type: mongoose.Schema.Types.Mixed,
+      default: [],
+    },
     fcmTokenMobile: {
-      type: [String],
+      type: mongoose.Schema.Types.Mixed,
       default: [],
     },
     dateOfBirth: {
@@ -130,6 +171,18 @@ const userSchema = new mongoose.Schema(
       ref: 'TaxiUser',
       default: null,
       index: true,
+    },
+    acquiredByEmployeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiEmployee',
+      default: null,
+      index: true,
+    },
+    acquiredByEmployeeCode: {
+      type: String,
+      default: '',
+      trim: true,
+      uppercase: true,
     },
     referralCount: {
       type: Number,
@@ -220,6 +273,10 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ phone: 1 }, { unique: true });
+userSchema.index({ deletedAt: 1, createdAt: -1 });
+userSchema.index({ name: 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ acquiredByEmployeeCode: 1 });
 userSchema.index({ 'addresses.location': '2dsphere' });
 userSchema.index({ 'deletionRequest.status': 1, deletedAt: 1 });
 

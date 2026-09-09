@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, UserPlus, CheckCircle2, ChevronRight, Upload, X, ShieldCheck, Mail, Phone, MapPin, IndianRupee } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { createOwnerFleetDriver, getOwnerFleetDrivers, updateOwnerFleetDriver } from '../../services/registrationService';
+import { createOwnerFleetDriver, getOwnerFleetDrivers, getOwnerFleetVehicles, getOwnerFleetZones, updateOwnerFleetDriver } from '../../services/registrationService';
 
 const AddDriver = () => {
     const navigate = useNavigate();
@@ -12,7 +12,11 @@ const AddDriver = () => {
     const isEditMode = Boolean(driverId);
     const [submitting, setSubmitting] = useState(false);
     const [loadingDriver, setLoadingDriver] = useState(false);
+    const [loadingVehicles, setLoadingVehicles] = useState(false);
+    const [loadingZones, setLoadingZones] = useState(false);
     const [error, setError] = useState('');
+    const [fleetVehicles, setFleetVehicles] = useState([]);
+    const [fleetZones, setFleetZones] = useState([]);
     const [step, setStep] = useState(1); // 1: Details, 2: Documents, 3: Success
     const [formData, setFormData] = useState({
         name: '',
@@ -20,6 +24,8 @@ const AddDriver = () => {
         email: '',
         address: '',
         salary: '',
+        assignedFleetVehicleId: '',
+        zoneId: '',
         adhaarFile: null,
         licenseFile: null
     });
@@ -36,6 +42,8 @@ const AddDriver = () => {
                 email: stateDriver.email || '',
                 address: stateDriver.address || '',
                 salary: stateDriver.salary ? String(stateDriver.salary) : '',
+                assignedFleetVehicleId: stateDriver.assignedVehicle?.vehicleId || '',
+                zoneId: stateDriver.zone?.zoneId || '',
             }));
             return;
         }
@@ -61,6 +69,8 @@ const AddDriver = () => {
                     email: match.email || '',
                     address: match.city || '',
                     salary: match.salary ? String(match.salary) : '',
+                    assignedFleetVehicleId: match.assignedVehicle?.vehicleId || '',
+                    zoneId: match.zone?.zoneId || '',
                 }));
             })
             .catch((err) => {
@@ -76,6 +86,56 @@ const AddDriver = () => {
         };
     }, [driverId, isEditMode, location.state]);
 
+    useEffect(() => {
+        if (!isEditMode) return;
+
+        let active = true;
+        setLoadingVehicles(true);
+
+        getOwnerFleetVehicles()
+            .then((response) => {
+                if (!active) return;
+                const payload = response?.data?.data || response?.data || response;
+                setFleetVehicles(Array.isArray(payload?.results) ? payload.results : []);
+            })
+            .catch((err) => {
+                if (!active) return;
+                setError((current) => current || err?.message || 'Unable to load owner vehicles');
+            })
+            .finally(() => {
+                if (active) setLoadingVehicles(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [isEditMode]);
+
+    useEffect(() => {
+        if (!isEditMode) return;
+
+        let active = true;
+        setLoadingZones(true);
+
+        getOwnerFleetZones()
+            .then((response) => {
+                if (!active) return;
+                const payload = response?.data?.data || response?.data || response;
+                setFleetZones(Array.isArray(payload?.results) ? payload.results : []);
+            })
+            .catch((err) => {
+                if (!active) return;
+                setError((current) => current || err?.message || 'Unable to load owner zones');
+            })
+            .finally(() => {
+                if (active) setLoadingZones(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [isEditMode]);
+
     const handleFileUpload = (field, e) => {
         const file = e.target.files[0];
         if (file) setFormData(p => ({ ...p, [field]: file }));
@@ -87,6 +147,15 @@ const AddDriver = () => {
                 ? location.state.returnTo.trim()
                 : `${routePrefix}/manage-drivers`,
         [location.state?.returnTo]
+    );
+
+    const availableVehicles = useMemo(
+        () =>
+            fleetVehicles.filter((vehicle) => {
+                const assignedDriverId = vehicle?.assignedDriver?.id;
+                return !assignedDriverId || String(assignedDriverId) === String(driverId);
+            }),
+        [driverId, fleetVehicles]
     );
 
     const handleSubmit = async () => {
@@ -105,6 +174,8 @@ const AddDriver = () => {
                 address: formData.address,
                 city: formData.address,
                 salary: Number(formData.salary || 0),
+                assignedFleetVehicleId: formData.assignedFleetVehicleId || '',
+                zoneId: formData.zoneId || '',
             };
 
             if (isEditMode) {
@@ -212,6 +283,62 @@ const AddDriver = () => {
                                         className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
                                     />
                                 </div>
+
+                                {isEditMode ? (
+                                    <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Assigned Vehicle</label>
+                                        <select
+                                            value={formData.assignedFleetVehicleId}
+                                            onChange={(e) => setFormData((p) => ({ ...p, assignedFleetVehicleId: e.target.value }))}
+                                            disabled={loadingVehicles}
+                                            className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0"
+                                        >
+                                            <option value="">No vehicle assigned</option>
+                                            {availableVehicles.map((vehicle) => {
+                                                const optionId = String(vehicle.id || vehicle._id || '');
+                                                const optionLabel = [
+                                                    vehicle.car_brand,
+                                                    vehicle.car_model,
+                                                    vehicle.license_plate_number,
+                                                ].filter(Boolean);
+
+                                                return (
+                                                    <option key={optionId} value={optionId}>
+                                                        {optionLabel.join(' - ') || 'Unnamed vehicle'}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                        <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                                            {loadingVehicles ? 'Loading fleet vehicles...' : 'Only this owner\'s unassigned vehicles are shown here.'}
+                                        </p>
+                                    </div>
+                                ) : null}
+
+                                {isEditMode ? (
+                                    <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Assigned Zone</label>
+                                        <select
+                                            value={formData.zoneId}
+                                            onChange={(e) => setFormData((p) => ({ ...p, zoneId: e.target.value }))}
+                                            disabled={loadingZones}
+                                            className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0"
+                                        >
+                                            <option value="">No zone assigned</option>
+                                            {fleetZones.map((zone) => {
+                                                const optionId = String(zone.id || zone._id || '');
+                                                return (
+                                                    <option key={optionId} value={optionId}>
+                                                        {zone.name || 'Unnamed zone'}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                        <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                                            {loadingZones ? 'Loading zones...' : 'Only zones under this owner service location are shown here.'}
+                                        </p>
+                                    </div>
+                                ) : null}
                             </div>
 
                             <div className="fixed bottom-0 left-0 right-0 p-5 bg-white border-t border-slate-50">

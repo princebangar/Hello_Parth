@@ -106,7 +106,13 @@ const computePoolingFareBreakdown = ({ route = {}, vehicle = {}, seatCount = 0 }
   const farePerSeat = Math.max(0, Number(route?.farePerSeat || 0));
   const baseFare = Math.round(farePerSeat * safeSeatCount * 100) / 100;
   const serviceTaxPercentage = Math.max(0, Math.min(100, Number(vehicle?.serviceTaxPercentage || 0)));
+  const driverCommissionPercentage = Math.max(0, Math.min(100, Number(
+    vehicle?.driverCommissionPercentage ?? vehicle?.adminCommissionPercentage ?? 0,
+  )));
+  const ownerCommissionPercentage = Math.max(0, Math.min(100, Number(vehicle?.ownerCommissionPercentage || 0)));
   const serviceTaxAmount = Math.round((baseFare * serviceTaxPercentage) * 100) / 100 / 100;
+  const driverCommissionAmount = Math.round(((baseFare * driverCommissionPercentage) / 100) * 100) / 100;
+  const ownerCommissionAmount = Math.round(((baseFare * ownerCommissionPercentage) / 100) * 100) / 100;
   const totalFare = Math.round((baseFare + serviceTaxAmount) * 100) / 100;
 
   return {
@@ -114,7 +120,24 @@ const computePoolingFareBreakdown = ({ route = {}, vehicle = {}, seatCount = 0 }
     baseFare,
     serviceTaxPercentage,
     serviceTaxAmount,
+    driverCommissionPercentage,
+    driverCommissionAmount,
+    ownerCommissionPercentage,
+    ownerCommissionAmount,
     totalFare,
+  };
+};
+
+const withPrimaryVehicleDriver = (route) => {
+  const routeObject = typeof route?.toObject === 'function' ? route.toObject() : route;
+  const primaryVehicle = Array.isArray(routeObject?.assignedVehicleTypeIds)
+    ? routeObject.assignedVehicleTypeIds[0]
+    : null;
+
+  return {
+    ...routeObject,
+    driverName: routeObject?.driverName || primaryVehicle?.driverName || '',
+    driverPhone: routeObject?.driverPhone || primaryVehicle?.driverPhone || '',
   };
 };
 
@@ -140,6 +163,10 @@ const serializePoolingBooking = (booking) => {
     baseFare: Number(booking?.baseFare || 0),
     serviceTaxPercentage: Number(booking?.serviceTaxPercentage || 0),
     serviceTaxAmount: Number(booking?.serviceTaxAmount || 0),
+    driverCommissionPercentage: Number(booking?.driverCommissionPercentage || 0),
+    driverCommissionAmount: Number(booking?.driverCommissionAmount || 0),
+    ownerCommissionPercentage: Number(booking?.ownerCommissionPercentage || 0),
+    ownerCommissionAmount: Number(booking?.ownerCommissionAmount || 0),
     currency: booking?.currency || 'INR',
     paymentStatus: booking?.paymentStatus || 'pending',
     bookingStatus: booking?.bookingStatus || 'confirmed',
@@ -162,7 +189,7 @@ export const searchPoolingRoutes = asyncHandler(async (req, res) => {
     ],
   }).populate('assignedVehicleTypeIds');
 
-  return ok(res, routes, 'Routes fetched successfully');
+  return ok(res, routes.map(withPrimaryVehicleDriver), 'Routes fetched successfully');
 });
 
 export const getPoolingRouteDetails = asyncHandler(async (req, res) => {
@@ -322,6 +349,10 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
       baseFare: fareBreakdown.baseFare,
       serviceTaxPercentage: fareBreakdown.serviceTaxPercentage,
       serviceTaxAmount: fareBreakdown.serviceTaxAmount,
+      driverCommissionPercentage: fareBreakdown.driverCommissionPercentage,
+      driverCommissionAmount: fareBreakdown.driverCommissionAmount,
+      ownerCommissionPercentage: fareBreakdown.ownerCommissionPercentage,
+      ownerCommissionAmount: fareBreakdown.ownerCommissionAmount,
     },
     'Pooling payment order created successfully',
   );
@@ -369,7 +400,7 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
     'payment.paymentId': paymentId,
   })
     .populate('route', 'routeName originLabel destinationLabel')
-    .populate('vehicle', 'name vehicleNumber');
+    .populate('vehicle', 'name vehicleNumber driverName driverPhone');
 
   if (existingBooking) {
     return ok(res, serializePoolingBooking(existingBooking), 'Pooling booking already confirmed');
@@ -432,7 +463,7 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
     selectedSeats: { $in: selectedSeats },
   })
     .populate('route', 'routeName originLabel destinationLabel')
-    .populate('vehicle', 'name vehicleNumber');
+    .populate('vehicle', 'name vehicleNumber driverName driverPhone');
 
   if (duplicateUpcomingBooking) {
     return ok(res, serializePoolingBooking(duplicateUpcomingBooking), 'Pooling booking already confirmed');
@@ -452,6 +483,10 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
     baseFare: fareBreakdown.baseFare,
     serviceTaxPercentage: fareBreakdown.serviceTaxPercentage,
     serviceTaxAmount: fareBreakdown.serviceTaxAmount,
+    driverCommissionPercentage: fareBreakdown.driverCommissionPercentage,
+    driverCommissionAmount: fareBreakdown.driverCommissionAmount,
+    ownerCommissionPercentage: fareBreakdown.ownerCommissionPercentage,
+    ownerCommissionAmount: fareBreakdown.ownerCommissionAmount,
     currency: 'INR',
     paymentStatus: 'paid',
     bookingStatus: 'confirmed',
@@ -490,7 +525,7 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
 
   const hydratedBooking = await PoolingBooking.findById(booking._id)
     .populate('route', 'routeName originLabel destinationLabel')
-    .populate('vehicle', 'name vehicleNumber');
+    .populate('vehicle', 'name vehicleNumber driverName driverPhone');
 
   return created(res, serializePoolingBooking(hydratedBooking), 'Pooling booking confirmed successfully');
 });
@@ -507,7 +542,7 @@ export const getMyPoolingBookings = asyncHandler(async (req, res) => {
 
   const bookings = await PoolingBooking.find({ user: userId })
     .populate('route', 'routeName originLabel destinationLabel')
-    .populate('vehicle', 'name vehicleNumber')
+    .populate('vehicle', 'name vehicleNumber driverName driverPhone')
     .sort({ createdAt: -1 });
 
   return ok(res, bookings.map(serializePoolingBooking), 'My bookings fetched successfully');

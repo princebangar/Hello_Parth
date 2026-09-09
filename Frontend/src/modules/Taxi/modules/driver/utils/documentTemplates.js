@@ -19,6 +19,7 @@ export const flattenDriverDocumentFields = (templates = []) =>
       ...field,
       templateId: template.id,
       templateName: template.name,
+      verificationType: template.verification_type || 'none',
       imageType: template.image_type,
       hasExpiryDate: Boolean(template.has_expiry_date),
       hasIdentifyNumber: Boolean(template.has_identify_number),

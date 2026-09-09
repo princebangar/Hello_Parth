@@ -1,23 +1,10 @@
 import api from '../../../shared/api/axiosInstance';
-import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
-
-const unwrap = (response) => response?.data?.data || response?.data || response;
 
 export const adminService = {
   /**
    * Admin Authentication
    */
-  login: async (credentials) => {
-    const response = await api.post(`${BACKEND_ORIGIN}/api/v1/food/auth/admin/login`, credentials);
-    const payload = unwrap(response);
-    return {
-      data: {
-        token: payload?.accessToken || '',
-        admin: payload?.user || null,
-        refreshToken: payload?.refreshToken || null,
-      },
-    };
-  },
+  login: (credentials) => api.post('/admin/login', credentials),
   forgotPassword: (email) => api.post('/admin/forgot-password', { email }),
   verifyResetOtp: (data) => api.post('/admin/verify-reset-otp', data),
   resetPassword: (data) => api.post('/admin/reset-password', data),
@@ -30,13 +17,29 @@ export const adminService = {
   /**
    * User Management
    */
-  getUsers: (page = 1, limit = 50, search = '') => {
+  getUsers: (page = 1, limit = 50, search = '', filters = {}) => {
     const params = new URLSearchParams({ page, limit });
     if (String(search || '').trim()) {
       params.set('search', String(search).trim());
     }
+    if (String(filters.employeeId || '').trim()) {
+      params.set('employeeId', String(filters.employeeId).trim());
+    }
+    if (String(filters.referralSource || '').trim()) {
+      params.set('referralSource', String(filters.referralSource).trim());
+    }
     return api.get(`/admin/users?${params.toString()}`);
   },
+  getEmployees: (page = 1, limit = 50, search = '') => {
+    const params = new URLSearchParams({ page, limit });
+    if (String(search || '').trim()) {
+      params.set('search', String(search).trim());
+    }
+    return api.get(`/admin/employees?${params.toString()}`);
+  },
+  getEmployee: (id) => api.get(`/admin/employees/${id}`),
+  createEmployee: (data) => api.post('/admin/employees', data),
+  updateEmployee: (id, data) => api.patch(`/admin/employees/${id}`, data),
   
   bulkImportUsers: (payload) => api.post('/admin/users/bulk-import', payload),
 
@@ -78,7 +81,7 @@ export const adminService = {
   getReferralSettings: (type) => api.get(`/admin/referrals/settings/${type}`),
   updateReferralSettings: (type, data) => api.patch(`/admin/referrals/settings/${type}`, data),
   // Wallet Payment APIs
-  searchUsers: (query) => api.get(`/admin/users?search=${query}`),
+  searchUsers: (query) => api.get(`/admin/users?search=${encodeURIComponent(query)}`),
   searchDrivers: (query) => api.get(`/admin/drivers?search=${query}`),
   searchOwners: (query) => api.get(`/admin/owners?search=${query}`),
 
@@ -118,11 +121,21 @@ export const adminService = {
   updateServiceLocation: (id, data) => api.patch(`/admin/service-locations/${id}`, data),
   deleteServiceLocation: (id) => api.delete(`/admin/service-locations/${id}`),
   getServiceStores: () => api.get('/admin/service-stores'),
+  getPendingServiceStores: () => api.get('/admin/service-stores/pending'),
+  approvePendingServiceStore: (id) => api.patch(`/admin/service-stores/${id}/approve`),
+  rejectPendingServiceStore: (id, rejectionReason = '') =>
+    api.patch(`/admin/service-stores/${id}/reject`, { rejectionReason }),
   createServiceStore: (data) => api.post('/admin/service-stores', data),
   updateServiceStore: (id, data) => api.patch(`/admin/service-stores/${id}`, data),
+  createServiceStoreStaff: (id, data) => api.post(`/admin/service-stores/${id}/staff`, data),
+  getPendingServiceStoreStaff: () => api.get('/admin/service-stores/pending-staff'),
+  approvePendingServiceStoreStaff: (id) => api.patch(`/admin/service-stores/staff/${id}/approve`),
+  rejectPendingServiceStoreStaff: (id, rejectionReason = '') =>
+    api.patch(`/admin/service-stores/staff/${id}/reject`, { rejectionReason }),
   deleteServiceStore: (id) => api.delete(`/admin/service-stores/${id}`),
   getCountries: () => api.get('/countries'),
   getVehicleTypes: (transportType) => api.get(`/admin/types/vehicle-types/list${transportType ? `?transport_type=${transportType}` : ''}`),
+  getVehicleTypeById: (id) => api.get(`/admin/types/vehicle-types/${id}`),
   getRideModules: () => api.get('/common/ride_modules'),
   getLocationVehicleTypes: (locationId, transportType) => api.get(`/types/${locationId}?transport_type=${transportType}`),
 
@@ -231,6 +244,7 @@ export const adminService = {
   updateRentalPackageType: (id, data) => api.patch(`/admin/types/rental-packages/${id}`, data),
   deleteRentalPackageType: (id) => api.delete(`/admin/types/rental-packages/${id}`),
   getSetPrices: (params = {}) => api.get('/admin/types/set-prices', { params }),
+  getSetPriceById: (id) => api.get(`/admin/types/set-prices/${id}`),
   createSetPrice: (data) => api.post('/admin/types/set-prices', data),
   updateSetPrice: (id, data) => api.patch(`/admin/types/set-prices/${id}`, data),
   deleteSetPrice: (id) => api.delete(`/admin/types/set-prices/${id}`),
@@ -249,7 +263,10 @@ export const adminService = {
   deletePoolingRoute: (id) => api.delete(`/admin/pooling-routes/${id}`),
 
   getPoolingVehicles: () => api.get('/admin/pooling-vehicles'),
+  getPendingPoolingVehicles: (search = '') =>
+    api.get('/admin/pooling-vehicles', { params: { approve: false, search } }),
   createPoolingVehicle: (data) => api.post('/admin/pooling-vehicles', data),
+  approvePoolingVehicle: (id) => api.patch(`/admin/pooling-vehicles/${id}/approve`),
   updatePoolingVehicle: (id, data) => api.patch(`/admin/pooling-vehicles/${id}`, data),
   deletePoolingVehicle: (id) => api.delete(`/admin/pooling-vehicles/${id}`),
 
@@ -257,15 +274,15 @@ export const adminService = {
   updatePoolingBookingStatus: (id, status) => api.patch(`/admin/pooling-bookings/${id}/status`, { status }),
 
   getAdminBusBookings: (params = {}) => api.get('/admin/bus-bookings', { params }),
+  getPendingBusDrivers: () => api.get('/admin/bus-services/pending-drivers'),
+  approvePendingBusDriver: (id) => api.patch(`/admin/bus-services/pending-drivers/${id}/approve`),
+  rejectPendingBusDriver: (id, rejectionReason = '') =>
+    api.patch(`/admin/bus-services/pending-drivers/${id}/reject`, { rejectionReason }),
   getAdminBusBookingCalendar: (params = {}) => api.get('/admin/bus-bookings/calendar', { params }),
   createAdminBusBooking: (payload) => api.post('/admin/bus-bookings/manual', payload),
   cancelAdminBusBookingSeats: (id, payload = {}) => api.post(`/admin/bus-bookings/${id}/cancel`, payload),
 
-  uploadImage: (file) => {
-    const formData = new FormData();
-    formData.append('image', file, file?.name || 'upload.jpg');
-    return api.post('/admin/upload-image', formData);
-  },
+  uploadImage: (image) => api.post('/admin/upload-image', { image }),
 
   /**
    * Languages Management (Master)
@@ -337,6 +354,10 @@ export const adminService = {
   updateMapSettings: (data) => api.patch('/admin/integration-settings/map', data),
   getMailSettings: () => api.get('/admin/integration-settings/mail'),
   updateMailSettings: (data) => api.patch('/admin/integration-settings/mail', data),
+  getRechargeApiSettings: () => api.get('/admin/integration-settings/recharge-api'),
+  updateRechargeApiSettings: (data) => api.patch('/admin/integration-settings/recharge-api', data),
+  generateRechargeApiToken: () => api.post('/admin/integration-settings/recharge-api/generate-token'),
+  testRechargeApiSettings: () => api.post('/admin/integration-settings/recharge-api/test'),
 
   /**
    * Onboarding Screens Management

@@ -1,7 +1,5 @@
-import { persistTaxiUserLocation, TAXI_LOCATION_STORAGE_KEY, TAXI_LOCATION_UPDATED_EVENT, getSharedLocationLabel } from '@/shared/utils/sharedUserLocation';
-
-export const LOCATION_STORAGE_KEY = TAXI_LOCATION_STORAGE_KEY;
-export const LOCATION_UPDATED_EVENT = TAXI_LOCATION_UPDATED_EVENT;
+export const LOCATION_STORAGE_KEY = 'Appzeto 24:lastLocation';
+export const LOCATION_UPDATED_EVENT = 'Appzeto 24:location-updated';
 
 export const DEFAULT_LOCATION_LABEL = 'Choose your location';
 export const DEFAULT_LOCATION_COORDS = [78.4867, 17.385];
@@ -30,7 +28,7 @@ export const getSavedLocation = () => {
 };
 
 export const getSavedLocationLabel = () => (
-  String(getSharedLocationLabel() || getSavedLocation()?.address || '').trim() || DEFAULT_LOCATION_LABEL
+  String(getSavedLocation()?.address || '').trim() || DEFAULT_LOCATION_LABEL
 );
 
 export const getSavedLocationCoords = () => {
@@ -47,5 +45,18 @@ export const saveLocation = (nextLocation = {}) => {
     return null;
   }
 
-  return persistTaxiUserLocation(nextLocation);
+  const previous = getSavedLocation() || {};
+  const next = {
+    ...previous,
+    ...nextLocation,
+  };
+
+  try {
+    window.localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event(LOCATION_UPDATED_EVENT));
+  } catch {
+    // ignore storage failures
+  }
+
+  return next;
 };

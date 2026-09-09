@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
 import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
+import { UserThemeProvider } from './shared/context/UserThemeContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSessionData } from '@/shared/utils/userSession.js';
@@ -22,6 +23,7 @@ import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
 import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
 import './App.css';
+import './index.css';
 
 
 // Lazy loading pages for performance
@@ -684,6 +686,7 @@ function TaxiApp() {
   return (
     <>
       <SettingsProvider>
+        <UserThemeProvider>
         {RENTAL_ENABLED ? <RentalLocationTracker /> : null}
         <AppAutoUpdater />
         <ScrollToTop />
@@ -1672,6 +1675,7 @@ function TaxiApp() {
             </Routes>
           </Suspense>
         </MainLayout>
+        </UserThemeProvider>
       </SettingsProvider>
     </>
   );

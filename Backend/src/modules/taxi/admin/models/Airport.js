@@ -103,6 +103,14 @@ const airportSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    pickup_availability: {
+      type: Boolean,
+      default: true,
+    },
+    drop_availability: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true },
 );

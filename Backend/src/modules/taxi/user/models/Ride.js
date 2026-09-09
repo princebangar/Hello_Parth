@@ -52,6 +52,20 @@ const rideSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    dispatchTracking: {
+      notifiedDriverIds: {
+        type: [String],
+        default: [],
+      },
+      rejectedDriverIds: {
+        type: [String],
+        default: [],
+      },
+      lastDispatchAttemptAt: {
+        type: Date,
+        default: null,
+      },
+    },
     vehicleIconType: {
       type: String,
       default: '',
@@ -450,6 +464,14 @@ const rideSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      admin_commission_type_for_owner: {
+        type: Number,
+        default: 1,
+      },
+      admin_commission_for_owner: {
+        type: Number,
+        default: 0,
+      },
       waiting_charge: {
         type: Number,
         default: 0,
@@ -464,30 +486,6 @@ const rideSchema = new mongoose.Schema(
         type: Number,
         default: 0,
         min: 0,
-      },
-      ride_surge_enabled: {
-        type: Boolean,
-        default: false,
-      },
-      ride_surge_amount: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      fare_before_surge: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      surge_zone_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'TaxiZone',
-        default: null,
-      },
-      surge_zone_name: {
-        type: String,
-        default: '',
-        trim: true,
       },
       allowed_payment_methods: {
         type: [String],
@@ -635,102 +633,13 @@ const rideSchema = new mongoose.Schema(
         default: null,
       },
     },
-    previousCancellationFee: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    baseRideFare: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    carriedCancellationRideIds: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'TaxiRide',
-      },
-    ],
-    cancellation: {
-      cancelled_by: {
-        type: String,
-        enum: ['user', 'driver', 'admin', 'system', ''],
-        default: '',
-      },
-      canceller_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        default: null,
-      },
-      reason: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      comment: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      flaggedForAdminReview: {
-        type: Boolean,
-        default: false,
-      },
-      flagReason: {
-        type: String,
-        default: '',
-        trim: true,
-      },
-      driverArrivalDistanceMeters: {
-        type: Number,
-        default: 0,
-      },
-      driverArrivalTimeSeconds: {
-        type: Number,
-        default: 0,
-      },
-      stage: {
-        type: String,
-        enum: ['searching', 'accepted', 'arrived', 'started', ''],
-        default: '',
-      },
-      cancelled_at: {
-        type: Date,
-        default: null,
-      },
-      is_fee_applied: {
-        type: Boolean,
-        default: false,
-      },
-      fee_waived_reason: {
-        type: String,
-        default: '',
-      },
-      cancellation_charge: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      driver_compensation_amount: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      driver_penalty_amount: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      payment_status: {
-        type: String,
-        enum: ['not_applicable', 'paid_online', 'added_to_next_ride_due', 'paid_in_next_ride', 'waived'],
-        default: 'not_applicable',
-      },
-    },
   },
   { timestamps: true },
 );
 
 rideSchema.index({ userId: 1, createdAt: -1 });
 rideSchema.index({ driverId: 1, createdAt: -1 });
+rideSchema.index({ status: 1, liveStatus: 1, scheduledAt: 1, createdAt: -1 });
+rideSchema.index({ driverId: 1, scheduledAt: 1, status: 1, liveStatus: 1 });
 
 export const Ride = mongoose.models.TaxiRide || mongoose.model('TaxiRide', rideSchema);

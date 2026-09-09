@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import SupportChatPanel from '../../../shared/components/SupportChatPanel';
+import UserSupportChatPanel from '../../../shared/components/UserSupportChatPanel';
 
 const SupportChat = () => {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ const SupportChat = () => {
         <h1 className="text-lg font-black text-slate-900">Support Chat</h1>
       </header>
 
-      <SupportChatPanel
+      <UserSupportChatPanel
         mode="participant"
         preferredRole="driver"
         title="Driver Support Chat"

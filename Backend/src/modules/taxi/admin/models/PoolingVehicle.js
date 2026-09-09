@@ -2,6 +2,12 @@ import mongoose from 'mongoose';
 
 const poolingVehicleSchema = new mongoose.Schema(
   {
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Owner',
+      default: null,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
@@ -18,6 +24,20 @@ const poolingVehicleSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    driverName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    driverPhone: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    approve: {
+      type: Boolean,
+      default: true,
+    },
     color: {
       type: String,
       trim: true,
@@ -28,6 +48,12 @@ const poolingVehicleSchema = new mongoose.Schema(
       min: 1,
     },
     adminCommissionPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    ownerCommissionPercentage: {
       type: Number,
       default: 0,
       min: 0,
@@ -54,7 +80,7 @@ const poolingVehicleSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'maintenance'],
+      enum: ['pending', 'active', 'inactive', 'maintenance'],
       default: 'active',
     },
     poolingEnabled: {
@@ -66,6 +92,8 @@ const poolingVehicleSchema = new mongoose.Schema(
 );
 
 poolingVehicleSchema.index({ status: 1 });
+poolingVehicleSchema.index({ driverPhone: 1 });
+poolingVehicleSchema.index({ approve: 1, status: 1 });
 
 export const PoolingVehicle =
   mongoose.models.TaxiPoolingVehicle ||

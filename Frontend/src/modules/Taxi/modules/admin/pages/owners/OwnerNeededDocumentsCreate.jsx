@@ -3,11 +3,10 @@ import { ChevronDown, ChevronRight, Loader2, Save } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
-const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/owner-management`;
+const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/owner-management`;
 
-const inputClass =
-  'w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
-const labelClass = 'block text-sm font-semibold text-gray-900 mb-2';
+const inputClass = 'h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400';
+const labelClass = 'mb-1.5 block text-xs font-bold text-gray-950';
 
 const toBool = (value) => {
   if (value === true) return true;
@@ -21,7 +20,7 @@ const OwnerNeededDocumentsCreate = () => {
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('id');
 
-  const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken')) || '';
+  const token = localStorage.getItem('adminToken') || '';
   const [submitting, setSubmitting] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(Boolean(editId));
 
@@ -115,15 +114,12 @@ const OwnerNeededDocumentsCreate = () => {
           module="Owner Management"
           page="Owner Needed Documents"
           title="Create Owner Needed Document"
-          backto="/taxi/admin/owners/documents"
+          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' owners/documents"
         />
 
-        <div className="mt-6">
-          <div className="rounded border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-100 px-8 py-6" />
-
-            <form onSubmit={handleSubmit} className="p-8">
-            <div className="grid grid-cols-1 gap-x-10 gap-y-7 md:grid-cols-2">
+      <div className="flex justify-center px-5 pb-10 pt-4">
+        <div className="w-full max-w-3xl rounded-xl border border-gray-200 bg-white shadow-sm p-6 lg:p-8">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
               <div>
                 <label className={labelClass}>
                   Document Name <span className="text-rose-500">*</span>
@@ -193,15 +189,14 @@ const OwnerNeededDocumentsCreate = () => {
                   <ChevronDown size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
               </div>
-            </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-16">
+            <div className="col-span-1 md:col-span-2 mt-2 flex flex-wrap items-center gap-16">
               <label className="flex items-center gap-3 text-sm font-semibold text-gray-900">
                 <input
                   type="checkbox"
                   checked={formData.is_editable}
                   onChange={(e) => setFormData((prev) => ({ ...prev, is_editable: e.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-500"
                   disabled={loadingEdit}
                 />
                 Is Editable?
@@ -211,30 +206,36 @@ const OwnerNeededDocumentsCreate = () => {
                   type="checkbox"
                   checked={formData.is_required}
                   onChange={(e) => setFormData((prev) => ({ ...prev, is_required: e.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-500"
                   disabled={loadingEdit}
                 />
                 Is Required?
               </label>
             </div>
 
-            <div className="mt-10 flex items-center justify-end">
+            <div className="col-span-1 md:col-span-2 pt-6 flex items-center justify-end gap-3 border-t border-gray-100 mt-2">
+              <button
+                type="button"
+                onClick={() => navigate('/taxi/admin/owners/documents')}
+                className="h-10 px-6 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
                 disabled={submitting || loadingEdit}
-                className="inline-flex h-12 items-center gap-2 rounded bg-indigo-950 px-8 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
               >
-                {submitting ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 Save
               </button>
             </div>
           </form>
-          </div>
+        </div>
       </div>
-    </div>
+      </div>
     </div>
   );
 };
 
 export default OwnerNeededDocumentsCreate;
-

@@ -17,12 +17,15 @@ const PaymentGateways = () => {
   const [submitting, setSubmitting] = useState({});
   const [activeGateway, setActiveGateway] = useState(null);
 
+  const unwrapPayload = (response) => response?.data?.data || response?.data || {};
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const res = await adminService.getPaymentSettings();
-      setSettings(res.data?.settings || {});
-      setActiveGateway(res.data?.active_gateway || null);
+      const payload = unwrapPayload(res);
+      setSettings(payload.settings || {});
+      setActiveGateway(payload.active_gateway || null);
     } catch (err) {
       console.error('Fetch error:', err);
       toast.error('Failed to load data');
@@ -39,8 +42,9 @@ const PaymentGateways = () => {
     try {
       setSubmitting(prev => ({ ...prev, [slug]: true }));
       const response = await adminService.updatePaymentSettings(data);
-      setSettings(response?.data?.settings || {});
-      setActiveGateway(response?.data?.active_gateway || null);
+      const payload = unwrapPayload(response);
+      setSettings(payload.settings || {});
+      setActiveGateway(payload.active_gateway || null);
       toast.success(`Configuration for ${slug} updated`);
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to save configuration');
@@ -60,8 +64,9 @@ const PaymentGateways = () => {
         },
       });
 
-      setSettings(response?.data?.settings || {});
-      setActiveGateway(response?.data?.active_gateway || null);
+      const payload = unwrapPayload(response);
+      setSettings(payload.settings || {});
+      setActiveGateway(payload.active_gateway || null);
       toast.success(`${gateway.name} ${newValue === "1" ? 'enabled' : 'disabled'}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to toggle status');
@@ -111,9 +116,9 @@ const PaymentGateways = () => {
       color: 'purple',
       fields: [
         { label: 'Environment', key: 'phone_pay.environment', type: 'select', options: ['test', 'production'] },
-        { label: 'Merchant ID', key: 'phone_pay.merchant_id' },
-        { label: 'Salt Key', key: 'phone_pay.salt_key' },
-        { label: 'Salt Index', key: 'phone_pay.salt_index' }
+        { label: 'Client ID / Merchant ID', key: 'phone_pay.merchant_id' },
+        { label: 'Client Secret / Salt Key', key: 'phone_pay.salt_key' },
+        { label: 'Client Version / Salt Index', key: 'phone_pay.salt_index' }
       ]
     },
     { 
@@ -132,13 +137,13 @@ const PaymentGateways = () => {
     }
   ];
 
-  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
+  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors";
   const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <Loader2 className="animate-spin text-yellow-600" size={32} />
       </div>
     );
   }
@@ -155,7 +160,7 @@ const PaymentGateways = () => {
           <span className="text-gray-700">Payment Gateways</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Payment Gateways</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Payment Gateways</h1>
           <button onClick={() => window.history.back()} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
             <ArrowLeft size={16} /> Back
           </button>
@@ -198,14 +203,14 @@ const PaymentGateways = () => {
                     disabled={isSubmitting}
                     className="sr-only peer" 
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-400"></div>
                 </label>
               </div>
 
               {/* Card Body */}
               <div className="p-6 flex-1">
                 <div className="mb-5 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Runtime status</p>
+                  <p className="text-xs font-semibold text-slate-500">Runtime status</p>
                   <p className="mt-1 text-sm font-bold text-slate-900">
                     {isEnabled
                       ? `${gw.name} is the live gateway for the app right now.`
@@ -249,14 +254,14 @@ const PaymentGateways = () => {
 
               {/* Card Footer */}
               <div className="p-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[10px] text-gray-400 font-semibold uppercase tracking-widest px-2">
+                <div className="flex items-center gap-2 text-xs text-gray-400 font-semibold px-2">
                   <ShieldCheck size={12} className="text-gray-300" />
                   SSL Secured
                 </div>
                 <button 
                   onClick={() => handleSave(gw.name, { [gw.slug]: settings[gw.slug] })}
                   disabled={isSubmitting}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-yellow-400 text-black rounded-lg text-sm font-semibold hover:bg-yellow-500 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
                   {isSubmitting ? (
                     <><Loader2 size={16} className="animate-spin" /> Updating...</>

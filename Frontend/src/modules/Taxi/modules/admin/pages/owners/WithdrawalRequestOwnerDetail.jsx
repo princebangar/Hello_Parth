@@ -29,9 +29,9 @@ const WithdrawalRequestOwnerDetail = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken'));
+        const token = localStorage.getItem('adminToken');
         const res = await fetch(
-          `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/wallet/owners/${id}/withdrawals?limit=${itemsPerPage}`,
+          `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/wallet/owners/${id}/withdrawals?limit=${itemsPerPage}`,
           {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           },
@@ -92,7 +92,7 @@ const WithdrawalRequestOwnerDetail = () => {
           module="Owner Wallet"
           page="Withdrawal Requests"
           title="Withdrawal Details"
-          backto="/taxi/admin/owners/wallet/withdrawals"
+          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' owners/wallet/withdrawals"
         />
 
         <div className="mt-6">
@@ -104,7 +104,7 @@ const WithdrawalRequestOwnerDetail = () => {
                 <User size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">{owner?.name || 'Owner'}</h3>
+                <h3 className="text-sm text-gray-900 font-bold">{owner?.name || 'Owner'}</h3>
                 <p className="text-xs text-gray-400">
                   {owner?.mobile ? `+91${owner.mobile}` : 'No phone available'}
                 </p>
@@ -136,7 +136,7 @@ const WithdrawalRequestOwnerDetail = () => {
                 <Wallet size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Summary</h3>
+                <h3 className="text-sm text-gray-900 font-bold">Summary</h3>
                 <p className="text-xs text-gray-400">Withdrawal history overview.</p>
               </div>
             </div>
@@ -160,7 +160,7 @@ const WithdrawalRequestOwnerDetail = () => {
           <div className={adminCardClass}>
             <div className="flex flex-col gap-4 border-b border-gray-100 pb-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Transactions</h3>
+                <h3 className="text-sm text-gray-900 font-bold">Transactions</h3>
                 <p className="text-xs text-gray-400">Recent withdrawal requests for this owner.</p>
               </div>
               <div className="relative w-full md:w-72">
@@ -238,4 +238,3 @@ const WithdrawalRequestOwnerDetail = () => {
 };
 
 export default WithdrawalRequestOwnerDetail;
-

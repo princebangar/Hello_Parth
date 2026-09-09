@@ -27,6 +27,10 @@ const ignoredRoutes = new Set([
     '/taxi/driver/status',
 ]);
 
+const isIgnoredRoute = (pathname = '') =>
+    ignoredRoutes.has(pathname) ||
+    pathname.startsWith('/taxi/driver/role-signup/bus-builder');
+
 const DEFAULT_MAP_COORDS = [75.8577, 22.7196];
 
 const unwrapApiPayload = (response) => response?.data?.data || response?.data || response;
@@ -70,8 +74,51 @@ const getJobTitle = (type) => {
     return 'Taxi Ride';
 };
 
+const getPointCoordinates = (point) => {
+    const [lng, lat] = point?.coordinates || [];
+
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return {
+            lat: Number(lat),
+            lng: Number(lng),
+        };
+    }
+
+    return null;
+};
+
+const calculateDistanceMeters = (startPoint, endPoint) => {
+    const start = getPointCoordinates(startPoint);
+    const end = getPointCoordinates(endPoint);
+
+    if (!start || !end) {
+        return 0;
+    }
+
+    const earthRadiusMeters = 6371000;
+    const toRadians = (value) => (value * Math.PI) / 180;
+    const deltaLat = toRadians(end.lat - start.lat);
+    const deltaLng = toRadians(end.lng - start.lng);
+    const startLat = toRadians(start.lat);
+    const endLat = toRadians(end.lat);
+    const haversine =
+        Math.sin(deltaLat / 2) ** 2 +
+        Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
+    const arc = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+    return earthRadiusMeters * arc;
+};
+
 const formatTripDistance = (job = {}) => {
-    const estimatedMeters = Number(job.estimatedDistanceMeters || job.raw?.estimatedDistanceMeters || 0);
+    const estimatedMeters = Number(
+        job.estimatedDistanceMeters ||
+        job.raw?.estimatedDistanceMeters ||
+        calculateDistanceMeters(
+            job.pickupLocation || job.raw?.pickupLocation,
+            job.dropLocation || job.raw?.dropLocation,
+        ) ||
+        0,
+    );
 
     if (Number.isFinite(estimatedMeters) && estimatedMeters > 0) {
         return estimatedMeters < 1000
@@ -107,7 +154,7 @@ const DriverRideRequestListener = () => {
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const acceptingRideIdRef = useRef('');
     const requestRef = useRef(null);
-    const activeOnRoute = !ignoredRoutes.has(location.pathname);
+    const activeOnRoute = !isIgnoredRoute(location.pathname);
 
     useEffect(() => {
         const unlock = () => unlockRideRequestAlertSound();

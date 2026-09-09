@@ -4,13 +4,13 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getStoredDriverRegistrationSession,
-    getDriverServiceLocations,
     saveDriverPersonalDetails,
     saveDriverRegistrationSession,
 } from '../../services/registrationService';
 
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const SPECIAL_SIGNUP_ROLES = ['bus_driver', 'service_center', 'service_center_staff'];
 
 const StepPersonal = () => {
     const navigate = useNavigate();
@@ -18,50 +18,37 @@ const StepPersonal = () => {
     const routePrefix = location.pathname.startsWith('/taxi/owner')
         ? '/taxi/owner'
         : '/taxi/driver';
-    const session = {
-        ...getStoredDriverRegistrationSession(),
-        ...(location.state || {}),
-    };
+    const session = getStoredDriverRegistrationSession();
     const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
     const registrationId = session.registrationId || '';
     const role = routePrefix === '/taxi/owner'
         ? 'owner'
-        : (String(session.personalSession?.role || session.otpSession?.role || session.role || 'driver').toLowerCase() === 'owner'
-            ? 'owner'
-            : 'driver');
+        : (session.role || 'driver');
     const isOwner = role === 'owner';
 
-    const [zones, setZones] = useState([]);
     const [formData, setFormData] = useState({
         fullName: session.fullName || '',
         email: session.email || '',
         gender: session.gender || '',
-        serviceLocationId: session.serviceLocationId || session.service_location_id || '',
-        zoneName: session.zoneName || '',
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
-        const fetchZones = async () => {
-            try {
-                const data = await getDriverServiceLocations();
-                const list = data?.data?.results || data?.results || [];
-                setZones(list);
-            } catch (err) {
-                // Ignore fetch error
-            }
-        };
-        fetchZones();
-    }, []);
-
-    useEffect(() => {
         saveDriverRegistrationSession({
             ...session,
             ...formData,
-            service_location_id: formData.serviceLocationId,
         });
     }, [formData]);
+
+    useEffect(() => {
+        if (!phone || !registrationId) {
+            navigate(`${routePrefix}/login`, { replace: true });
+        }
+        if (session.roleConfirmed === false || session.needsRoleSelection === true) {
+            navigate('/taxi/driver/select-role', { replace: true });
+        }
+    }, [navigate, phone, registrationId, routePrefix, session.needsRoleSelection, session.roleConfirmed]);
 
     const handleContinue = async () => {
         const fullName = formData.fullName.trim();
@@ -96,22 +83,21 @@ const StepPersonal = () => {
                     phone,
                     ...normalizedFormData,
                 });
-                const payload = response?.data?.data || response?.data || response;
-                const serverRole = String(payload?.session?.role || '').toLowerCase();
-                const syncedRole = serverRole === 'owner' || String(role).toLowerCase() === 'owner'
-                    ? 'owner'
-                    : 'driver';
 
-                const nextState = saveDriverRegistrationSession({
+                saveDriverRegistrationSession({
                     ...session,
                     registrationId,
                     phone,
-                    role: syncedRole,
+                    role,
                     ...normalizedFormData,
-                    personalSession: payload?.session || null,
+                    personalSession: response?.data?.session || null,
                 });
 
-                navigate(`${routePrefix}/step-referral`, { state: nextState });
+                navigate(
+                    SPECIAL_SIGNUP_ROLES.includes(String(role || '').toLowerCase())
+                        ? '/taxi/driver/role-signup'
+                        : `${routePrefix}/step-referral`,
+                );
             } catch (err) {
                 setError(err?.message || 'Unable to save personal details');
             } finally {
@@ -204,30 +190,6 @@ const StepPersonal = () => {
                                     />
                                 </div>
                             </div>
-                        </div>
-
-                        <div className="space-y-3 pt-2">
-                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-2">Select Operating Zone / City</label>
-                            <select
-                                value={formData.serviceLocationId}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    const selected = zones.find((z) => String(z._id || z.id) === String(val));
-                                    setFormData((p) => ({
-                                        ...p,
-                                        serviceLocationId: val,
-                                        zoneName: selected?.name || selected?.service_location_name || '',
-                                    }));
-                                }}
-                                className="w-full rounded-2xl border-2 border-slate-50 bg-slate-50 p-4 text-[13px] font-black text-slate-900 outline-none focus:border-slate-900/10 focus:bg-white"
-                            >
-                                <option value="">-- Select Existing Zone (Optional) --</option>
-                                {zones.map((z) => (
-                                    <option key={z._id || z.id} value={z._id || z.id}>
-                                        {z.name || z.service_location_name}
-                                    </option>
-                                ))}
-                            </select>
                         </div>
 
                         <div className="space-y-3 pt-2">

@@ -17,7 +17,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import { adminService } from '../../services/adminService';
-import { uploadService } from '../../../../shared/services/uploadService';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-300 focus:ring-2 focus:ring-orange-100';
 const labelClass = 'mb-2 block text-[12px] font-bold text-slate-700';
@@ -47,6 +46,14 @@ const formatGoodsTypeForDisplay = (value) => {
   const items = normalizeGoodsTypeFor(value);
   return items.length ? items.join(', ') : 'Universal';
 };
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read icon file'));
+    reader.readAsDataURL(file);
+  });
 
 const normalizeVehicleOption = (vehicle = {}) => {
   const id = String(vehicle._id || vehicle.id || vehicle.name || vehicle.vehicle_type || '');
@@ -241,22 +248,14 @@ const GoodsTypes = ({ mode }) => {
     setErrorMessage('');
 
     try {
-      let iconUrl = formData.icon || '';
-      if (formData.iconFile) {
-        const uploadResult = await uploadService.uploadImageFile(formData.iconFile, 'goods-types');
-        iconUrl = uploadResult?.secureUrl || uploadResult?.url || '';
-        if (!iconUrl) {
-          throw new Error('Icon upload failed');
-        }
-      }
-
+      const iconData = formData.iconFile ? await readFileAsDataUrl(formData.iconFile) : formData.icon;
       const payload = {
         name: formData.name.trim(),
         goods_type_name: formData.name.trim(),
         goods_type_for: formData.goods_type_for.join(','),
         goods_types_for: formData.goods_type_for.join(','),
         active: Number(formData.active),
-        icon: iconUrl || '',
+        icon: iconData || '',
       };
 
       if (id && mode === 'edit') {
@@ -387,7 +386,7 @@ const GoodsTypes = ({ mode }) => {
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/taxi/admin/pricing/goods-types/edit/${item.id}`)}
+                          onClick={() => navigate(`/admin/pricing/goods-types/edit/${item.id}`)}
                           className="rounded-xl p-2 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
                         >
                           <Edit2 size={15} />

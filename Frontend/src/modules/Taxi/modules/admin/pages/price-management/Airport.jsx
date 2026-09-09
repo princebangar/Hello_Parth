@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Autocomplete, GoogleMap, MarkerF } from '@react-google-maps/api';
-import { useManualPolygonDrawing } from '@/shared/maps/useManualPolygonDrawing';
-import { pointsFromLatLngPath } from '@/shared/maps/polygonDrawingUtils';
+import { Autocomplete, DrawingManager, GoogleMap, MarkerF, Polygon } from '@react-google-maps/api';
 import { 
   ArrowLeft, 
   Edit2, 
+  Eraser, 
   Loader2, 
   MapPin, 
   Plus, 
@@ -20,12 +19,10 @@ import {
   Filter,
   Globe,
   Tag,
-  Info,
-  MousePointer2,
-  X,
+  Info
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
-import { DELHI_CENTER, useAppGoogleMapsLoader } from '../../utils/googleMaps';
+import { DELHI_CENTER, useDrawingGoogleMapsLoader } from '../../utils/googleMaps';
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
 const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
@@ -74,43 +71,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
     status: '',
   });
   const mapRef = useRef(null);
-  const [googleMap, setGoogleMap] = useState(null);
-  const pendingBoundaryCoordsRef = useRef(null);
-  const { isLoaded, loadError } = useAppGoogleMapsLoader();
-
-  const {
-    isDrawing: isPolygonDrawing,
-    startDrawing: startPolygonDrawingHook,
-    finishDrawing: finishPolygonDrawingHook,
-    clearDrawing: clearPolygonDrawingHook,
-    loadCoordinates,
-    processMapClick,
-    getFinishedPolygon,
-  } = useManualPolygonDrawing({
-    map: view !== 'list' ? googleMap : null,
-    enabled: view !== 'list',
-    attachNativeMapClickListener: false,
-    polygonOptions: {
-      fillColor: '#4f46e5',
-      strokeColor: '#4f46e5',
-      strokeWeight: 2,
-      fillOpacity: 0.1,
-      editable: true,
-      draggable: false,
-      clickable: true,
-      zIndex: 2,
-    },
-    onCoordinatesChange: setBoundaryCoords,
-  });
-
-  useEffect(() => {
-    if (!googleMap || view === 'list' || !pendingBoundaryCoordsRef.current) {
-      return;
-    }
-
-    loadCoordinates(pendingBoundaryCoordsRef.current);
-    pendingBoundaryCoordsRef.current = null;
-  }, [googleMap, loadCoordinates, view]);
+  const { isLoaded, loadError } = useDrawingGoogleMapsLoader();
 
   useEffect(() => {
     setView(initialMode);
@@ -123,8 +84,6 @@ const Airport = ({ mode: initialMode = "list" }) => {
     setSelectedAirportId(null);
     setFormData({ ...defaultFormData, service_location_id: serviceLocationId });
     setBoundaryCoords([]);
-    pendingBoundaryCoordsRef.current = null;
-    clearPolygonDrawingHook();
     if (serviceLocation) {
       const lat = Number(serviceLocation.latitude);
       const lng = Number(serviceLocation.longitude);
@@ -202,31 +161,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
     setMapCenter({ lat: nextLat, lng: nextLng });
   };
 
-  const syncBoundaryCoords = () => {
-    const finishedPolygon = getFinishedPolygon?.();
-    if (finishedPolygon?.getPath) {
-      const nextCoords = pointsFromLatLngPath(finishedPolygon.getPath());
-      if (nextCoords.length >= 3) {
-        setBoundaryCoords(nextCoords);
-        return nextCoords;
-      }
-    }
-
-    return boundaryCoords;
-  };
-
-  const handleMapClick = (event) => {
-    if (!event?.latLng) {
-      return;
-    }
-
-    if (isPolygonDrawing) {
-      processMapClick(event);
-      return;
-    }
-
-    updatePinnedLocation(event.latLng.lat(), event.latLng.lng());
-  };
+  const handleMapClick = (event) => updatePinnedLocation(event.latLng?.lat(), event.latLng?.lng());
   const handleMarkerDragEnd = (event) => updatePinnedLocation(event.latLng?.lat(), event.latLng?.lng());
 
   const handlePlaceChanged = () => {
@@ -246,17 +181,24 @@ const Airport = ({ mode: initialMode = "list" }) => {
       alert('Airport name and service location are required.');
       return;
     }
+    if (formData.airport_surge && Number(formData.airport_surge) < 0) {
+      alert('Airport surge fee must be greater than or equal to 0.');
+      return;
+    }
+    if (formData.support_airport_fee && Number(formData.support_airport_fee) < 0) {
+      alert('Support airport fee must be greater than or equal to 0.');
+      return;
+    }
     setSaving(true);
     try {
-      const syncedBoundaryCoords = syncBoundaryCoords();
       const payload = {
         ...formData,
         name: formData.name.trim(),
-        boundary_coordinates: syncedBoundaryCoords,
+        boundary_coordinates: boundaryCoords,
       };
       const res = selectedAirportId ? await adminService.updateAirport(selectedAirportId, payload) : await adminService.createAirport(payload);
       if (res?.success || res?.status === 200 || res?.status === 201) {
-        navigate("/admin/pricing/airport");
+        navigate("/taxi/admin/pricing/airport");
         fetchData();
         resetFormState();
       } else {
@@ -281,9 +223,6 @@ const Airport = ({ mode: initialMode = "list" }) => {
       status: airport.status || 'active',
     });
     setBoundaryCoords(Array.isArray(airport.boundary_coordinates) ? airport.boundary_coordinates : []);
-    pendingBoundaryCoordsRef.current = Array.isArray(airport.boundary_coordinates) && airport.boundary_coordinates.length >= 3
-      ? airport.boundary_coordinates
-      : null;
     if (airport.latitude && airport.longitude) setMapCenter({ lat: Number(airport.latitude), lng: Number(airport.longitude) });
   };
 
@@ -324,23 +263,12 @@ const Airport = ({ mode: initialMode = "list" }) => {
     }
   };
 
-  const startBoundaryDrawing = () => {
-    if (!googleMap) {
-      window.alert('Map is still loading. Please wait a moment and try again.');
-      return;
-    }
-
-    const started = startPolygonDrawingHook();
-    if (!started) {
-      window.alert('Could not start polygon drawing. Refresh the page and try again.');
-    }
+  const handleBoundaryComplete = (polygon) => {
+    setBoundaryCoords(polygon.getPath().getArray().map(p => ({ lat: p.lat(), lng: p.lng() })));
+    polygon.setMap(null);
   };
 
-  const clearBoundary = () => {
-    clearPolygonDrawingHook();
-    setBoundaryCoords([]);
-    pendingBoundaryCoordsRef.current = null;
-  };
+  const clearBoundary = () => { setBoundaryCoords([]); };
   const clearFilters = () => setFilters({ service_location_id: '', status: '' });
 
   return (
@@ -358,14 +286,35 @@ const Airport = ({ mode: initialMode = "list" }) => {
                 <span className="text-gray-700">Airport Management</span>
               </div>
               <div className="flex items-center justify-between">
-                <h1 className="text-xl font-semibold text-gray-900">Airport Management</h1>
+                <h1 className="text-xl text-gray-900 font-bold">Airport Management</h1>
                 <button 
+                  type="button"
                   onClick={() => navigate("create")}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm"
                 >
                   <Plus size={16} /> Add Airport
                 </button>
               </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                 <p className="text-xs font-semibold text-gray-500 mb-1">Total Airports</p>
+                 <h3 className="text-2xl font-bold text-gray-900">{airports.length}</h3>
+               </div>
+               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                 <p className="text-xs font-semibold text-gray-500 mb-1">Active Airports</p>
+                 <h3 className="text-2xl font-bold text-gray-900">{airports.filter(a => (a.status || 'active').toLowerCase() === 'active' || a.active).length}</h3>
+               </div>
+               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                 <p className="text-xs font-semibold text-gray-500 mb-1">Inactive Airports</p>
+                 <h3 className="text-2xl font-bold text-gray-900">{airports.filter(a => (a.status || '').toLowerCase() === 'inactive' || a.active === false).length}</h3>
+               </div>
+               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                 <p className="text-xs font-semibold text-gray-500 mb-1">Locations Covered</p>
+                 <h3 className="text-2xl font-bold text-gray-900">{new Set(airports.map(a => a.service_location_id?._id || a.service_location_id).filter(Boolean)).size}</h3>
+               </div>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -479,7 +428,10 @@ const Airport = ({ mode: initialMode = "list" }) => {
                               <div className="w-8 h-8 rounded bg-indigo-50 flex items-center justify-center text-indigo-600">
                                 <Plane size={14} />
                               </div>
-                              <span className="font-medium text-gray-900">{airport.name}</span>
+                              <span className="font-medium text-gray-900">
+                                {airport.name}
+                                {airport.code && <span className="ml-2 text-[10px] font-bold tracking-wider text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200 uppercase">{airport.code}</span>}
+                              </span>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-gray-600">
@@ -499,19 +451,26 @@ const Airport = ({ mode: initialMode = "list" }) => {
                             </select>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <div className="flex justify-end gap-2 text-gray-400">
-                              <button onClick={() => navigate(`edit/${airport._id || airport.id}`)} className="p-1.5 hover:text-indigo-600 transition-colors"><Edit2 size={14} /></button>
-                              <button onClick={() => handleDelete(airport._id || airport.id)} className="p-1.5 hover:text-rose-600 transition-colors"><Trash2 size={14} /></button>
+                            <div className="flex justify-end gap-2 text-gray-400 relative z-50">
+                              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`edit/${airport._id || airport.id}`); }} className="p-1.5 hover:text-[#0B1220] hover:bg-[#FFC400] rounded-lg transition-colors"><Edit2 size={14} /></button>
+                              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(airport._id || airport.id); }} className="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
                             </div>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="4" className="py-32 text-center text-gray-400">
-                          <FileSearch size={48} className="mx-auto mb-4 opacity-20" />
-                          <h3 className="text-gray-900 font-semibold">No Data Found</h3>
-                          <p className="text-xs">Try adjusting your search or add a new airport.</p>
+                        <td colSpan="4" className="py-24 text-center">
+                          <Plane size={48} className="mx-auto mb-4 text-gray-300" />
+                          <h3 className="text-gray-900 mb-1 font-bold">No Airports Available</h3>
+                          <p className="text-sm text-gray-500 mb-6">Create your first airport to enable airport pricing.</p>
+                          <button 
+                            type="button"
+                            onClick={() => navigate("create")}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm"
+                          >
+                            <Plus size={16} /> Add Airport
+                          </button>
                         </td>
                       </tr>
                     )}
@@ -534,12 +493,13 @@ const Airport = ({ mode: initialMode = "list" }) => {
                 <span className="text-gray-700">{id ? 'Edit' : 'Create'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <h1 className="text-xl font-semibold text-gray-900">{id ? 'Edit Airport' : 'Add Airport'}</h1>
+                <h1 className="text-xl text-gray-900 font-bold">{id ? 'Edit Airport' : 'Add Airport'}</h1>
                 <button 
-                  onClick={() => navigate("/admin/pricing/airport")}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/taxi/admin/pricing/airport"); setView('list'); }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm relative z-50"
                 >
-                  <ArrowLeft size={16} /> Back
+                  <ArrowLeft size={14} /> Back
                 </button>
               </div>
             </div>
@@ -552,7 +512,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
                         <Plane size={18} />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-900">Airport Details</h3>
+                        <h3 className="text-sm text-gray-900 font-bold">Airport Details</h3>
                         <p className="text-xs text-gray-400">Configure core airport terminal data</p>
                       </div>
                    </div>
@@ -578,11 +538,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
                           className={inputClass}
                         >
                           <option value="">Select Service Location</option>
-                          {serviceLocations.map(sl => (
-                            <option key={sl._id || sl.id} value={sl._id || sl.id}>
-                              {sl.name || sl.service_location_name}
-                            </option>
-                          ))}
+                          {serviceLocations.map(sl => <option key={sl._id || sl.id} value={sl._id || sl.id}>{sl.name}</option>)}
                         </select>
                       </div>
 
@@ -604,6 +560,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
                             <Globe size={12} className="inline mr-1 text-gray-400" />
                             Airport Surge Fee
                           </label>
+                          <p className="text-[10px] text-gray-400 mb-2">Extra pickup/drop charge for airport trips.</p>
                           <input
                             type="number"
                             min="0"
@@ -620,6 +577,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
                             <Globe size={12} className="inline mr-1 text-gray-400" />
                             Support Airport Fee
                           </label>
+                          <p className="text-[10px] text-gray-400 mb-2">Additional operational airport support fee.</p>
                           <input
                             type="number"
                             min="0"
@@ -654,14 +612,16 @@ const Airport = ({ mode: initialMode = "list" }) => {
 
                 <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
                    <button 
+                     type="button"
                      onClick={handleSave} disabled={saving}
-                     className="w-full py-3 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                     className="w-full py-3 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
                    >
                      {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                      {id ? 'Update Airport' : 'Save Airport'}
                    </button>
                    <button 
-                     onClick={() => navigate("/admin/pricing/airport")}
+                     type="button"
+                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/taxi/admin/pricing/airport"); setView('list'); }}
                      className="w-full py-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
                    >
                      Cancel
@@ -673,12 +633,6 @@ const Airport = ({ mode: initialMode = "list" }) => {
                 <div className="bg-white rounded-xl border border-gray-200 p-2 h-[600px] shadow-sm relative overflow-hidden">
                   {isLoaded ? (
                     <div className="w-full h-full rounded-lg overflow-hidden relative">
-                       {loadError ? (
-                         <div className="flex h-full items-center justify-center rounded-lg bg-rose-50 px-6 text-center text-sm font-medium text-rose-700">
-                           Google Maps failed to load. Check the browser API key and refresh the page.
-                         </div>
-                       ) : (
-                       <>
                        <div className="absolute inset-x-4 top-4 z-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div className="w-full md:max-w-md">
                             <div className="flex h-12 w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white/95 px-4 shadow-xl backdrop-blur-sm">
@@ -697,66 +651,37 @@ const Airport = ({ mode: initialMode = "list" }) => {
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2 self-start">
+                          {boundaryCoords.length > 0 ? (
                             <button
                               type="button"
-                              onClick={startBoundaryDrawing}
-                              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-black uppercase tracking-widest shadow-xl transition-all border active:scale-95 ${
-                                isPolygonDrawing
-                                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                                  : 'border-gray-100 bg-white text-gray-600 hover:bg-gray-50'
-                              }`}
+                              onClick={clearBoundary}
+                              className="self-start rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-xl transition-all border border-gray-100 hover:bg-rose-50 active:scale-95"
                             >
-                              <MousePointer2 size={14} />
-                              Draw Boundary
+                              Clear Boundary
                             </button>
-                            {isPolygonDrawing && boundaryCoords.length >= 3 ? (
-                              <button
-                                type="button"
-                                onClick={() => finishPolygonDrawingHook()}
-                                className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-50 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-emerald-700 shadow-xl transition-all active:scale-95"
-                              >
-                                <Save size={14} />
-                                Finish Shape
-                              </button>
-                            ) : null}
-                            {boundaryCoords.length > 0 ? (
-                              <button
-                                type="button"
-                                onClick={clearBoundary}
-                                className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-rose-600 shadow-xl transition-all border border-gray-100 hover:bg-rose-50 active:scale-95"
-                              >
-                                <X size={14} />
-                                Clear Boundary
-                              </button>
-                            ) : null}
-                          </div>
+                          ) : null}
                        </div>
                        
                        <GoogleMap
                          mapContainerStyle={MAP_CONTAINER_STYLE}
                          center={mapCenter} zoom={13}
-                         onLoad={(mapInstance) => {
-                           mapRef.current = mapInstance;
-                           setGoogleMap(mapInstance);
-                         }}
+                         onLoad={m => { mapRef.current = m; }}
                          onClick={handleMapClick}
                          options={{
                             mapTypeId: 'roadmap',
                             disableDefaultUI: false,
                             zoomControl: true,
                             mapTypeControl: true,
-                            clickableIcons: !isPolygonDrawing,
+                            clickableIcons: true,
                             streetViewControl: false,
-                            fullscreenControl: true,
-                            draggableCursor: isPolygonDrawing ? 'crosshair' : undefined,
-                            draggingCursor: isPolygonDrawing ? 'crosshair' : undefined,
+                            fullscreenControl: true
                          }}
                        >
+                         {boundaryCoords.length > 0 && <Polygon paths={boundaryCoords} options={{ fillColor: '#4f46e5', strokeColor: '#4f46e5', fillOpacity: 0.1, strokeWeight: 2 }} />}
+                         
                          <MarkerF 
                             position={{ lat: Number(formData.latitude || mapCenter.lat), lng: Number(formData.longitude || mapCenter.lng) }} 
-                            draggable={!isPolygonDrawing}
-                            onDragEnd={handleMarkerDragEnd}
+                            draggable onDragEnd={handleMarkerDragEnd}
                             icon={window.google ? {
                               path: window.google.maps.SymbolPath.CIRCLE,
                               scale: 6,
@@ -766,9 +691,19 @@ const Airport = ({ mode: initialMode = "list" }) => {
                               strokeWeight: 2
                             } : undefined}
                          />
+
+                         <DrawingManager
+                            onPolygonComplete={handleBoundaryComplete}
+                            options={{
+                              drawingControl: true,
+                              drawingControlOptions: {
+                                position: window.google ? window.google.maps.ControlPosition.RIGHT_TOP : 6,
+                                drawingModes: ['polygon']
+                              },
+                              polygonOptions: { fillColor: '#4f46e5', strokeColor: '#4f46e5', fillOpacity: 0.1, strokeWeight: 2 }
+                            }}
+                         />
                        </GoogleMap>
-                       </>
-                       )}
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg">
@@ -780,7 +715,7 @@ const Airport = ({ mode: initialMode = "list" }) => {
                 <div className="mt-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex items-start gap-3">
                    <Info size={18} className="text-indigo-600 shrink-0 mt-0.5" />
                    <p className="text-xs text-indigo-900 leading-relaxed font-medium">
-                     Click the map to place the airport pin. Use Draw Boundary to add draggable corner points, then Finish Shape. Drag points while drawing for a live preview. After finishing, edit vertices on the polygon or right-click a vertex to delete it.
+                     Use the polygon tool at the top of the map to define the precise operational boundary for this airport. This allows for automated geofencing of ride requests.
                    </p>
                 </div>
               </div>

@@ -17,12 +17,16 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['driver', 'owner'],
+      enum: ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'],
       default: 'driver',
+    },
+    roleConfirmed: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,
-      enum: ['otp_sent', 'otp_verified', 'personal_saved', 'vehicle_saved', 'documents_saved', 'completed'],
+      enum: ['otp_sent', 'otp_verified', 'personal_saved', 'role_details_saved', 'vehicle_saved', 'documents_saved', 'completed'],
       default: 'otp_sent',
     },
     otpHash: {
@@ -49,12 +53,17 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    employeeCode: {
+      type: String,
+      default: '',
+    },
     vehicle: {
       registerFor: { type: String, default: 'taxi' },
       serviceCategories: { type: [String], default: [] },
       locationId: { type: String, default: '' },
       locationName: { type: String, default: '' },
       vehicleTypeId: { type: String, default: '' },
+      rcNumber: { type: String, default: '' },
       make: { type: String, default: '' },
       model: { type: String, default: '' },
       year: { type: String, default: '' },
@@ -74,10 +83,23 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    roleDetails: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
     finalDriverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TaxiDriver',
       default: null,
+    },
+    finalEntityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    finalEntityRole: {
+      type: String,
+      enum: ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff', ''],
+      default: '',
     },
     completedAt: {
       type: Date,

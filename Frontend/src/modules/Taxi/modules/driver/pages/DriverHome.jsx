@@ -22,13 +22,12 @@ import {
     Mail,
     BarChart2
 } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { GoogleMap, Marker } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
-import LowBalanceModal from './LowBalanceModal';
 
 
-import MapGrid from '@/assets/premium_grid_map.png';
+import MapGrid from '../../../assets/premium_grid_map.png';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import IncomingRideRequest from './IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
@@ -37,21 +36,20 @@ import { uploadService } from '../../../shared/services/uploadService';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 
 // Vehicle Icons for Map
-import BikeIcon from '@/assets/icons/bike.png';
-import CarIcon from '@/assets/icons/car.png';
-import AutoIcon from '@/assets/icons/auto.png';
-import TruckIcon from '@/assets/icons/truck.png';
-import EhcvIcon from '@/assets/icons/ehcv.png';
-import HcvIcon from '@/assets/icons/hcv.png';
-import LcvIcon from '@/assets/icons/LCV.png';
-import McvIcon from '@/assets/icons/mcv.png';
-import LuxuryIcon from '@/assets/icons/Luxury.png';
-import PremiumIcon from '@/assets/icons/Premium.png';
-import SuvIcon from '@/assets/icons/SUV.png';
+import BikeIcon from '../../../assets/icons/bike.png';
+import CarIcon from '../../../assets/icons/car.png';
+import AutoIcon from '../../../assets/icons/auto.png';
+import TruckIcon from '../../../assets/icons/truck.png';
+import EhcvIcon from '../../../assets/icons/ehcv.png';
+import HcvIcon from '../../../assets/icons/hcv.png';
+import LcvIcon from '../../../assets/icons/LCV.png';
+import McvIcon from '../../../assets/icons/mcv.png';
+import LuxuryIcon from '../../../assets/icons/Luxury.png';
+import PremiumIcon from '../../../assets/icons/Premium.png';
+import SuvIcon from '../../../assets/icons/SUV.png';
 
 import { socketService } from '../../../shared/api/socket';
-import { pushDriverLocationRealtime } from '../../../shared/services/rideRealtime';
-import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../admin/utils/googleMaps';
+import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { cancelDriverScheduledRide, getCurrentDriver, getDriverDocumentTemplates, getDriverNotifications, getDriverScheduledRides, getLocalDriverToken } from '../services/registrationService';
 import { addLocalDriverNotification, getUnreadDriverNotificationCount, getVisibleDriverNotifications } from '../utils/notificationState';
 import { getScheduledRideCountdown } from '../utils/scheduledRideTime';
@@ -74,6 +72,8 @@ const DEFAULT_MAP_CENTER = {
 };
 
 const DEFAULT_MAP_COORDS = [75.8577, 22.7196];
+const ONLINE_LOCATION_EMIT_MIN_DISTANCE_METERS = 25;
+const ONLINE_LOCATION_EMIT_MIN_INTERVAL_MS = 12000;
 
 const getGeoLocationErrorMessage = (error, { purpose = 'generic' } = {}) => {
     const code = Number(error?.code);
@@ -138,11 +138,6 @@ const loadImageFromDataUrl = (dataUrl) =>
         image.src = dataUrl;
     });
 
-const dataUrlToBlob = async (dataUrl) => {
-    const response = await fetch(dataUrl);
-    return response.blob();
-};
-
 const compressSelfieForUpload = async (file) => {
     const originalDataUrl = await readFileAsDataUrl(file);
 
@@ -151,7 +146,7 @@ const compressSelfieForUpload = async (file) => {
     }
 
     const image = await loadImageFromDataUrl(originalDataUrl);
-    const maxSide = 960;
+    const maxSide = 1280;
     const largestSide = Math.max(image.width, image.height, 1);
     const scale = largestSide > maxSide ? maxSide / largestSide : 1;
     const width = Math.max(1, Math.round(image.width * scale));
@@ -181,7 +176,7 @@ const compressSelfieForUpload = async (file) => {
 
 const compressSelfieDataUrl = async (dataUrl) => {
     const image = await loadImageFromDataUrl(dataUrl);
-    const maxSide = 960;
+    const maxSide = 1280;
     const largestSide = Math.max(image.width, image.height, 1);
     const scale = largestSide > maxSide ? maxSide / largestSide : 1;
     const width = Math.max(1, Math.round(image.width * scale));
@@ -211,17 +206,13 @@ const compressSelfieDataUrl = async (dataUrl) => {
 
 const getMapIconForVehicle = (iconType = '') => {
     const raw = String(iconType || '').trim();
-    if (!raw) return CarIcon;
-    if (/^(https?:|data:image\/|blob:)/i.test(raw)) {
-        return raw;
-    }
-    if (/^\/(1_Bike|2_Auto|4_Taxi|ehcv|hcv|LCV|mcv|truck|Luxury|Premium|SUV|assets)/i.test(raw)) {
+    if (/^(https?:|data:image\/|blob:)/.test(raw)) {
         return raw;
     }
     if (raw.startsWith('/')) {
         return `${BACKEND_ORIGIN}${raw}`;
     }
-    if (/^(uploads\/|images\/)/i.test(raw)) {
+    if (/^(uploads\/|images\/)/.test(raw)) {
         return `${BACKEND_ORIGIN}/${raw}`;
     }
 
@@ -342,7 +333,7 @@ const getWalletAlertState = (wallet = {}, { ignoreRestrictions = false } = {}) =
     const warningThreshold = cashLimit > 0
         ? Math.min(cashLimit, Math.max(50, cashLimit * 0.15))
         : 0;
-    const belowMinimumBalance = balance <= minimumBalanceForOrders;
+    const belowMinimumBalance = balance < minimumBalanceForOrders;
     const cashLimitExceeded = cashLimit > 0 && remainingCashLimit <= 0;
     const rawBlocked = Boolean(wallet.isBlocked) || belowMinimumBalance || cashLimitExceeded;
     const isBlocked = ignoreRestrictions ? false : rawBlocked;
@@ -400,6 +391,8 @@ const createScheduledRidePreview = (ride) => ({
     },
 });
 
+const getJobRideId = (job = {}) => String(job?.rideId || job?.id || job?._id || job?.requestId || '').trim();
+
 const normalizeJobType = (job = {}) => {
     const value = String(job.type || job.serviceType || 'ride').toLowerCase();
     if (value === 'parcel') return 'parcel';
@@ -413,8 +406,62 @@ const getJobTitle = (type) => {
     return 'Taxi Ride';
 };
 
+const getPointCoordinates = (point) => {
+    const [lng, lat] = point?.coordinates || [];
+
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+        return {
+            lat: Number(lat),
+            lng: Number(lng),
+        };
+    }
+
+    return null;
+};
+
+const calculateDistanceMeters = (startPoint, endPoint) => {
+    const start = getPointCoordinates(startPoint);
+    const end = getPointCoordinates(endPoint);
+
+    if (!start || !end) {
+        return 0;
+    }
+
+    const earthRadiusMeters = 6371000;
+    const toRadians = (value) => (value * Math.PI) / 180;
+    const deltaLat = toRadians(end.lat - start.lat);
+    const deltaLng = toRadians(end.lng - start.lng);
+    const startLat = toRadians(start.lat);
+    const endLat = toRadians(end.lat);
+    const haversine =
+        Math.sin(deltaLat / 2) ** 2 +
+        Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
+    const arc = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+    return earthRadiusMeters * arc;
+};
+
+const calculateCoordinateDistanceMeters = (startCoordinates, endCoordinates) => {
+    if (!Array.isArray(startCoordinates) || !Array.isArray(endCoordinates)) {
+        return Number.POSITIVE_INFINITY;
+    }
+
+    return calculateDistanceMeters(
+        { coordinates: startCoordinates },
+        { coordinates: endCoordinates },
+    );
+};
+
 const formatTripDistance = (job = {}) => {
-    const estimatedMeters = Number(job.estimatedDistanceMeters || job.raw?.estimatedDistanceMeters || 0);
+    const estimatedMeters = Number(
+        job.estimatedDistanceMeters ||
+        job.raw?.estimatedDistanceMeters ||
+        calculateDistanceMeters(
+            job.pickupLocation || job.raw?.pickupLocation,
+            job.dropLocation || job.raw?.dropLocation,
+        ) ||
+        0,
+    );
 
     if (Number.isFinite(estimatedMeters) && estimatedMeters > 0) {
         return estimatedMeters < 1000
@@ -493,10 +540,9 @@ const getDocumentExpiryValue = (document = {}) => (
 );
 
 const getDocumentReviewStatus = (document = {}) => String(
-    document?.status
-    || document?.verificationStatus
-    || document?.approvalStatus
+    document?.approvalStatus
     || document?.reviewStatus
+    || document?.status
     || '',
 ).trim().toLowerCase();
 
@@ -579,7 +625,6 @@ const mapStyles = [
 
 const DriverHome = () => {
     const navigate = useNavigate();
-    const location = useLocation();
     const { settings } = useSettings();
     const appName = settings.general?.app_name || 'App';
     const appLogo = settings.general?.logo || settings.customization?.logo;
@@ -587,7 +632,6 @@ const DriverHome = () => {
     const [isOwnerManagedDriver, setIsOwnerManagedDriver] = useState(() => isOwnerManagedDriverProfile(storedDriverInfo));
     const [isOnline, setIsOnline] = useState(false);
     const [showRequest, setShowRequest] = useState(false);
-    const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
 
     const [currentRequest, setCurrentRequest] = useState(null);
     const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary());
@@ -595,16 +639,6 @@ const DriverHome = () => {
     const [map, setMap] = useState(null);
     const [driverCoords, setDriverCoords] = useState(() => readStoredDriverCoords());
     const [statusMessage, setStatusMessage] = useState('');
-
-    useEffect(() => {
-        if (location.state?.statusMessage) {
-            setStatusMessage(location.state.statusMessage);
-            const timer = setTimeout(() => {
-                setStatusMessage('');
-            }, 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [location.state]);
     const [socketStatus, setSocketStatus] = useState('offline');
     const [notificationCount, setNotificationCount] = useState(0);
     const [scheduledRideCount, setScheduledRideCount] = useState(0);
@@ -647,20 +681,71 @@ const DriverHome = () => {
     const acceptingRideIdRef = useRef('');
     const currentRequestRef = useRef(null);
     const recoveryTimeoutsRef = useRef([]);
+    const acceptRecoveryTimeoutsRef = useRef([]);
     const recoveryInFlightRef = useRef(false);
     const lastDutyToggleAtRef = useRef(0);
+    const isHandlingHistoryNavigationRef = useRef(false);
+    const lastOnlineLocationEmitRef = useRef({
+        coordinates: null,
+        emittedAt: 0,
+    });
     const driverPosition = useMemo(() => toLatLng(driverCoords || DEFAULT_MAP_COORDS), [driverCoords]);
     const mapVehicleIcon = useMemo(
-        () => getMapIconForVehicle(vehicleIconUrl || storedDriverInfo?.vehicleIconUrl || storedDriverInfo?.map_icon || storedDriverInfo?.image || vehicleIconType),
-        [vehicleIconType, vehicleIconUrl, storedDriverInfo],
+        () => getMapIconForVehicle(vehicleIconUrl || vehicleIconType),
+        [vehicleIconType, vehicleIconUrl],
     );
 
     const walletAlertState = useMemo(
         () => getWalletAlertState(walletSummary, { ignoreRestrictions: isOwnerManagedDriver }),
         [walletSummary, isOwnerManagedDriver],
     );
+    const walletNotice = useMemo(() => {
+        if (walletAlertState.isBlocked) {
+            return {
+                title: walletAlertState.belowMinimumBalance ? 'Top up to go online' : 'Cash limit reached',
+                message: walletAlertState.belowMinimumBalance
+                    ? `Keep your wallet at or above Rs ${Math.max(0, walletAlertState.minimumBalanceForOrders)} to receive orders.`
+                    : 'Add money to keep receiving ride requests.',
+                tone: 'danger',
+            };
+        }
 
-    const { isLoaded } = useAppGoogleMapsLoader();
+        if (walletAlertState.isWarning) {
+            return {
+                title: 'Wallet running low',
+                message: 'Top up soon to keep receiving orders smoothly.',
+                tone: 'warning',
+            };
+        }
+
+        return null;
+    }, [walletAlertState]);
+
+    const { isLoaded } = useBaseGoogleMapsLoader();
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return undefined;
+        }
+
+        window.history.pushState({ driverHome: true }, '', window.location.href);
+
+        const handlePopState = () => {
+            if (isHandlingHistoryNavigationRef.current) {
+                isHandlingHistoryNavigationRef.current = false;
+                return;
+            }
+
+            isHandlingHistoryNavigationRef.current = true;
+            window.history.pushState({ driverHome: true }, '', window.location.href);
+        };
+
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, []);
 
     const refreshNotificationCount = useCallback(async () => {
         try {
@@ -756,76 +841,6 @@ const DriverHome = () => {
         };
     }, [loadScheduledRides, refreshNotificationCount]);
 
-    // Auto-fetch driver GPS location on App Mount and when app re-opens / tab focuses
-    useEffect(() => {
-        const fetchDriverLocationAuto = async () => {
-            try {
-                const coords = await getCurrentCoords({ purpose: 'auto' });
-                setDriverCoords(coords);
-                driverCoordsRef.current = coords;
-                if (isOnline) {
-                    socketService.emit('driver_location_update', {
-                        coordinates: coords,
-                        latitude: coords[1],
-                        longitude: coords[0]
-                    });
-                }
-            } catch (err) {
-                console.warn('Driver auto location fetch warning:', err);
-            }
-        };
-
-        fetchDriverLocationAuto();
-
-        const handleReopen = () => {
-            if (document.visibilityState === 'visible') {
-                fetchDriverLocationAuto();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleReopen);
-        window.addEventListener('focus', handleReopen);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleReopen);
-            window.removeEventListener('focus', handleReopen);
-        };
-    }, [isOnline]);
-
-    // Live continuous GPS watcher for Taxi Driver (runs in background & syncs Socket + Firebase Realtime DB)
-    useEffect(() => {
-        if (!isOnline || typeof navigator === 'undefined' || !navigator.geolocation) {
-            return undefined;
-        }
-
-        const watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-                const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
-                const coords = [lng, lat];
-                setDriverCoords(coords);
-                driverCoordsRef.current = coords;
-
-                // 1. Emit via Socket.IO
-                socketService.emit('driver_location_update', {
-                    coordinates: coords,
-                    latitude: lat,
-                    longitude: lng,
-                    heading: heading || 0,
-                    speed: speed || 0
-                });
-
-                // 2. Emit via Firebase Realtime if ride active
-                if (currentRequestRef.current?.rideId) {
-                    pushDriverLocationRealtime(currentRequestRef.current.rideId, { lat, lng }, { heading, speed });
-                }
-            },
-            (err) => console.warn('Taxi driver live location watch warning:', err),
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-        );
-
-        return () => navigator.geolocation.clearWatch(watchId);
-    }, [isOnline]);
-
     useEffect(() => {
         if (scheduledRides.length === 0) {
             return undefined;
@@ -841,14 +856,33 @@ const DriverHome = () => {
     }, [scheduledRides.length]);
 
     useEffect(() => {
-        if (isOwnerManagedDriver) {
-            setShowLowBalanceModal(false);
-        }
-    }, [isOwnerManagedDriver]);
-
-    useEffect(() => {
         currentRequestRef.current = currentRequest;
     }, [currentRequest]);
+
+    const emitOnlineLocationUpdate = useCallback((coordinates, { force = false } = {}) => {
+        if (!Array.isArray(coordinates) || coordinates.length < 2) {
+            return false;
+        }
+
+        const now = Date.now();
+        const lastEmission = lastOnlineLocationEmitRef.current;
+        const movedDistance = calculateCoordinateDistanceMeters(lastEmission.coordinates, coordinates);
+        const shouldEmit = force ||
+            !Array.isArray(lastEmission.coordinates) ||
+            movedDistance >= ONLINE_LOCATION_EMIT_MIN_DISTANCE_METERS ||
+            now - Number(lastEmission.emittedAt || 0) >= ONLINE_LOCATION_EMIT_MIN_INTERVAL_MS;
+
+        if (!shouldEmit) {
+            return false;
+        }
+
+        socketService.emit('locationUpdate', { coordinates });
+        lastOnlineLocationEmitRef.current = {
+            coordinates,
+            emittedAt: now,
+        };
+        return true;
+    }, []);
 
     useEffect(() => {
         const syncLocalDriverPreferences = () => {
@@ -893,6 +927,13 @@ const DriverHome = () => {
 
     useEffect(() => clearRecoveryBurst, [clearRecoveryBurst]);
 
+    const clearAcceptRecovery = useCallback(() => {
+        acceptRecoveryTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+        acceptRecoveryTimeoutsRef.current = [];
+    }, []);
+
+    useEffect(() => clearAcceptRecovery, [clearAcceptRecovery]);
+
 
     const fetchActiveJob = useCallback(async (type = 'ride') => {
         const normalizedType = String(type || 'ride').toLowerCase();
@@ -906,9 +947,13 @@ const DriverHome = () => {
     }, []);
 
     const openActiveJob = useCallback((job) => {
-        if (!job?.rideId) {
+        const currentRideId = getJobRideId(job);
+
+        if (!currentRideId) {
             return false;
         }
+
+        clearAcceptRecovery();
 
         const currentType = normalizeJobType(job);
 
@@ -916,7 +961,7 @@ const DriverHome = () => {
             replace: true,
             state: {
                 type: currentType,
-                rideId: job.rideId,
+                rideId: currentRideId,
                 otp: job.otp || '',
                 request: {
                     type: currentType,
@@ -926,8 +971,8 @@ const DriverHome = () => {
                     pickup: job.pickupAddress || formatPoint(job.pickupLocation, 'Pickup Location'),
                     drop: job.dropAddress || formatPoint(job.dropLocation, 'Drop Location'),
                     distance: formatTripDistance(job),
-                    requestId: job.rideId,
-                    rideId: job.rideId,
+                    requestId: currentRideId,
+                    rideId: currentRideId,
                     otp: job.otp || '',
                     raw: job,
                 },
@@ -936,7 +981,30 @@ const DriverHome = () => {
         });
 
         return true;
-    }, [navigate]);
+    }, [clearAcceptRecovery, navigate]);
+
+    const scheduleAcceptRecovery = useCallback((type = 'ride') => {
+        clearAcceptRecovery();
+
+        [700, 1500, 3000, 5000].forEach((delay) => {
+            const timeoutId = window.setTimeout(async () => {
+                if (!acceptingRideIdRef.current) {
+                    return;
+                }
+
+                try {
+                    const activeJob = await fetchActiveJob(type);
+                    if (getJobRideId(activeJob)) {
+                        openActiveJob(activeJob);
+                    }
+                } catch {
+                    // Let later retries continue if the active job is not visible yet.
+                }
+            }, delay);
+
+            acceptRecoveryTimeoutsRef.current.push(timeoutId);
+        });
+    }, [clearAcceptRecovery, fetchActiveJob, openActiveJob]);
 
     const onLoad = useCallback(function callback(map) {
         setMap(map);
@@ -1044,24 +1112,6 @@ const DriverHome = () => {
         return driver;
     }, []);
 
-    useEffect(() => {
-        const socket = socketService.connect({ role: 'driver' });
-        const onTipReceived = (data) => {
-            if (data?.tipAmount) {
-                toast.success(`🎉 Tip Received: Rs ${data.tipAmount} from passenger!`, { duration: 6000 });
-                refreshTodaySummary().catch(() => {});
-            }
-        };
-        if (socket) {
-            socketService.on('ride:tip:received', onTipReceived);
-        }
-        return () => {
-            if (socket) {
-                socketService.off('ride:tip:received', onTipReceived);
-            }
-        };
-    }, [refreshTodaySummary]);
-
     const expiredDocumentNames = useMemo(() => {
         const flattenedTemplates = Array.isArray(documentTemplates)
             ? documentTemplates.flatMap((template) =>
@@ -1137,15 +1187,13 @@ const DriverHome = () => {
                 const ridePayload =
                     activeRide.status === 'fulfilled' ? activeRide.value : null;
 
-                const currentJob = deliveryPayload?.rideId
+                const currentJob = getJobRideId(deliveryPayload)
                     ? deliveryPayload
-                    : ridePayload?.rideId
+                    : getJobRideId(ridePayload)
                         ? ridePayload
                         : null;
 
-                if (currentJob?.rideId) {
-                    const currentType = normalizeJobType(currentJob);
-
+                if (getJobRideId(currentJob)) {
                     openActiveJob(currentJob);
                     return;
                 }
@@ -1220,10 +1268,9 @@ const DriverHome = () => {
         }
 
         if (walletAlertState.isBlocked) {
-            setShowLowBalanceModal(true);
             setStatusMessage(
                 walletAlertState.belowMinimumBalance
-                    ? 'Minimum wallet balance is not maintained. Please top up to go online.'
+                    ? `Keep your wallet at or above Rs ${Math.max(0, walletAlertState.minimumBalanceForOrders)} to go online.`
                     : 'Cash limit exceeded. Please top up your wallet to go online.',
             );
             return;
@@ -1301,7 +1348,7 @@ const DriverHome = () => {
                 },
                 coordinates: finalCoords,
             });
-            socketService.emit('locationUpdate', { coordinates: finalCoords });
+            emitOnlineLocationUpdate(finalCoords, { force: true });
             
             setStatusMessage(
                 routeBookingPreferences.enabled
@@ -1321,7 +1368,7 @@ const DriverHome = () => {
         } finally {
             setIsTogglingDuty(false);
         }
-    }, [expiredDocumentNames, refreshTodaySummary, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
+    }, [emitOnlineLocationUpdate, expiredDocumentNames, refreshTodaySummary, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
 
     const goOffline = useCallback(async () => {
         setIsTogglingDuty(true);
@@ -1376,10 +1423,9 @@ const DriverHome = () => {
         }
 
         if (walletAlertState.isBlocked) {
-            setShowLowBalanceModal(true);
             setStatusMessage(
                 walletAlertState.belowMinimumBalance
-                    ? 'Minimum wallet balance is not maintained. Please top up to go online.'
+                    ? `Keep your wallet at or above Rs ${Math.max(0, walletAlertState.minimumBalanceForOrders)} to go online.`
                     : 'Cash limit exceeded. Please top up your wallet to go online.',
             );
             return;
@@ -1427,16 +1473,10 @@ const DriverHome = () => {
 
         try {
             setStatusMessage('Processing selfie...');
-            const compressedDataUrl = await compressSelfieDataUrl(sourceDataUrl);
-            const imageBlob = await dataUrlToBlob(compressedDataUrl);
-            const imageFile = new File([imageBlob], `selfie-${Date.now()}.jpg`, {
-                type: imageBlob.type || 'image/jpeg',
-            });
+            const base64Image = await compressSelfieDataUrl(sourceDataUrl);
 
             setStatusMessage('Uploading selfie...');
-            const uploadResult = await uploadService.uploadImageFile(imageFile, 'driver-online-selfies', {
-                replaceUrl: onlineSelfie?.imageUrl || undefined,
-            });
+            const uploadResult = await uploadService.uploadImage(base64Image, 'driver-online-selfies');
             const selfieUrl = uploadResult?.url || uploadResult?.secureUrl || '';
 
             if (!selfieUrl) {
@@ -1566,7 +1606,7 @@ const DriverHome = () => {
             }
 
             if (nextCoords) {
-                socketService.emit('locationUpdate', { coordinates: nextCoords });
+                emitOnlineLocationUpdate(nextCoords, { force: true });
             }
 
             try {
@@ -1576,13 +1616,13 @@ const DriverHome = () => {
                 ]);
                 const deliveryPayload = activeDelivery.status === 'fulfilled' ? activeDelivery.value : null;
                 const ridePayload = activeRide.status === 'fulfilled' ? activeRide.value : null;
-                const currentJob = deliveryPayload?.rideId
+                const currentJob = getJobRideId(deliveryPayload)
                     ? deliveryPayload
-                    : ridePayload?.rideId
+                    : getJobRideId(ridePayload)
                         ? ridePayload
                         : null;
 
-                if (currentJob?.rideId) {
+                if (getJobRideId(currentJob)) {
                     openActiveJob(currentJob);
                     return;
                 }
@@ -1598,7 +1638,7 @@ const DriverHome = () => {
         } finally {
             recoveryInFlightRef.current = false;
         }
-    }, [fetchActiveJob, isHydratingDriver, isOnline, isTogglingDuty, openActiveJob, updateDriverLocation]);
+    }, [emitOnlineLocationUpdate, fetchActiveJob, isHydratingDriver, isOnline, isTogglingDuty, openActiveJob, updateDriverLocation]);
 
     const scheduleRecoveryBurst = useCallback(({ reason = 'resume' } = {}) => {
         if (!isOnline || isHydratingDriver || isTogglingDuty) {
@@ -1635,7 +1675,7 @@ const DriverHome = () => {
             setSocketStatus(socket.connected ? 'connected' : 'reconnecting');
 
             if (driverCoordsRef.current) {
-                socketService.emit('locationUpdate', { coordinates: driverCoordsRef.current });
+                emitOnlineLocationUpdate(driverCoordsRef.current, { force: true });
                 console.info('[driver-home] emitted initial locationUpdate from effect', driverCoordsRef.current);
             }
 
@@ -1680,6 +1720,7 @@ const DriverHome = () => {
             const onRideRequestClosed = ({ rideId, reason, message }) => {
                 console.info('[driver-home] rideRequestClosed received', { rideId, reason, message });
                 if (acceptingRideIdRef.current && acceptingRideIdRef.current === rideId) {
+                    clearAcceptRecovery();
                     return;
                 }
                 const activeRequest = currentRequestRef.current;
@@ -1687,6 +1728,13 @@ const DriverHome = () => {
                     setShowRequest(false);
                     setCurrentRequest(null);
                     stopRideRequestAlertSound();
+                    if (reason === 'user-cancelled') {
+                        setStatusMessage(message || 'User cancelled the ride.');
+                    } else if (reason === 'deleted-by-admin') {
+                        setStatusMessage('Ride was cancelled by admin.');
+                    } else if (reason === 'unmatched') {
+                        setStatusMessage('Ride request expired without a match.');
+                    }
                 }
             };
 
@@ -1698,6 +1746,7 @@ const DriverHome = () => {
                     setCurrentRequest(null);
                     stopRideRequestAlertSound();
                 }
+                clearAcceptRecovery();
                 acceptingRideIdRef.current = '';
                 setAcceptingRideId('');
             };
@@ -1765,6 +1814,7 @@ const DriverHome = () => {
 
                 setShowRequest(false);
                 stopRideRequestAlertSound();
+                clearAcceptRecovery();
                 acceptingRideIdRef.current = '';
                 setAcceptingRideId('');
                 if (isScheduledRideForFuture(scheduledAt)) {
@@ -1807,14 +1857,12 @@ const DriverHome = () => {
                         setShowRequest(false);
                         setCurrentRequest(null);
                         stopRideRequestAlertSound();
-                        setShowLowBalanceModal(true);
                         setStatusMessage(
                             nextWalletAlertState.belowMinimumBalance
-                                ? 'Minimum wallet balance is not maintained. Top up to receive new ride requests.'
+                                ? 'Wallet balance must be above Rs 0 to receive new ride requests.'
                                 : 'Cash limit exceeded. Top up to receive new ride requests.',
                         );
                     } else if (nextWalletAlertState.isWarning) {
-                        setShowLowBalanceModal(true);
                         setStatusMessage('Available cash limit is getting low. Top up soon.');
                     }
                 }
@@ -1855,8 +1903,10 @@ const DriverHome = () => {
                             },
                             coordinates,
                         });
-                        socketService.emit('locationUpdate', { coordinates });
-                        console.info('[driver-home] periodic locationUpdate emitted', coordinates);
+                        const emitted = emitOnlineLocationUpdate(coordinates);
+                        if (emitted) {
+                            console.info('[driver-home] periodic locationUpdate emitted', coordinates);
+                        }
                     })
                     .catch((error) => {
                         console.warn('[driver-home] periodic location update skipped', error?.message || error);
@@ -1886,7 +1936,7 @@ const DriverHome = () => {
             socketService.disconnect();
         }
         return undefined;
-    }, [clearRecoveryBurst, fetchActiveJob, isOnline, isOwnerManagedDriver, loadScheduledRides, navigate, scheduleRecoveryBurst]);
+    }, [clearAcceptRecovery, clearRecoveryBurst, emitOnlineLocationUpdate, fetchActiveJob, isOnline, isOwnerManagedDriver, loadScheduledRides, navigate, scheduleRecoveryBurst]);
 
     useEffect(() => {
         if (!isOnline) {
@@ -1967,11 +2017,31 @@ const DriverHome = () => {
             return;
         }
 
+        const acceptedRequestType = currentRequest.type || 'ride';
         acceptingRideIdRef.current = currentRequest.rideId;
         setAcceptingRideId(currentRequest.rideId);
         setStatusMessage('Accepting ride...');
         stopRideRequestAlertSound();
+        setShowRequest(false);
         socketService.emit('acceptRide', { rideId: currentRequest.rideId });
+        scheduleAcceptRecovery(acceptedRequestType);
+        navigate('/taxi/driver/active-trip', {
+            state: {
+                type: acceptedRequestType,
+                rideId: currentRequest.rideId,
+                otp: currentRequest?.raw?.otp || currentRequest?.otp || '',
+                request: {
+                    ...currentRequest,
+                    requestId: currentRequest.requestId || currentRequest.rideId,
+                    rideId: currentRequest.rideId,
+                    raw: {
+                        ...(currentRequest.raw || {}),
+                        rideId: currentRequest.rideId,
+                    },
+                },
+                currentDriverCoords: driverCoordsRef.current || readStoredDriverCoords() || null,
+            },
+        });
     };
 
     const handleDecline = () => {
@@ -2020,17 +2090,6 @@ const DriverHome = () => {
                 }
                 onClose={() => setSelectedScheduledRide(null)}
                 onDecline={() => setSelectedScheduledRide(null)}
-            />
-
-            <LowBalanceModal 
-                isOpen={showLowBalanceModal}
-                onClose={() => setShowLowBalanceModal(false)}
-                balance={walletAlertState.balance}
-                cashLimit={walletAlertState.cashLimit}
-                minimumBalance={walletAlertState.minimumBalanceForOrders}
-                isBlocked={walletAlertState.isBlocked}
-                belowMinimumBalance={walletAlertState.belowMinimumBalance}
-                cashLimitExceeded={walletAlertState.cashLimitExceeded}
             />
 
             <AnimatePresence>
@@ -2336,6 +2395,46 @@ const DriverHome = () => {
                     </div>
                 </div>
             </div>
+
+            {walletNotice ? (
+                <div className="fixed left-4 right-4 top-[6.5rem] z-40 mx-auto max-w-md pointer-events-auto">
+                    <div className={`flex items-center gap-3 rounded-[1.35rem] border bg-white/95 px-3.5 py-3 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-md ${
+                        walletNotice.tone === 'danger' ? 'border-rose-100' : 'border-amber-100'
+                    }`}>
+                        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${
+                            walletNotice.tone === 'danger'
+                                ? 'bg-rose-50 text-rose-600'
+                                : 'bg-amber-50 text-amber-600'
+                        }`}>
+                            <Wallet size={18} strokeWidth={2.6} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-black tracking-tight text-slate-950">
+                                    {walletNotice.title}
+                                </p>
+                                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                    walletNotice.tone === 'danger'
+                                        ? 'bg-rose-50 text-rose-600'
+                                        : 'bg-amber-50 text-amber-600'
+                                }`}>
+                                    Rs {Number(walletSummary.balance || 0).toFixed(0)}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-[12px] font-semibold leading-snug text-slate-500">
+                                {walletNotice.message}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/taxi/driver/wallet')}
+                            className="shrink-0 rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white shadow-sm active:scale-95"
+                        >
+                            Top up
+                        </button>
+                    </div>
+                </div>
+            ) : null}
 
             {/* --- MAP BACKGROUND --- */}
             <div className="absolute inset-0 z-0 w-full h-full">

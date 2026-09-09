@@ -4,11 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
-const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin`;
+const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin`;
 
-const inputClass =
-  'w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors';
-const labelClass = 'block text-sm font-semibold text-gray-900 mb-2';
+const inputClass = 'h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400';
+const labelClass = 'mb-1.5 block text-xs font-bold text-gray-950';
 
 const getOwnerLabel = (owner) => owner?.company_name || owner?.name || owner?.email || owner?.mobile || owner?._id || 'Owner';
 
@@ -16,7 +15,7 @@ const getVehicleTypeLabel = (vt) => vt?.name || vt?.type_name || vt?.title || vt
 
 const ManageFleetCreate = () => {
   const navigate = useNavigate();
-  const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken')) || '';
+  const token = localStorage.getItem('adminToken') || '';
   const authHeaders = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token]);
   const { transportTypes } = useTaxiTransportTypes();
 
@@ -146,15 +145,12 @@ const ManageFleetCreate = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <div className="px-5 pt-3">
-        <AdminPageHeader module="Fleet Management" page="Manage Fleet" title="Create Fleet" backto="/taxi/admin/fleet/manage" />
+        <AdminPageHeader module="Fleet Management" page="Manage Fleet" title="Create Fleet" back param($m) $m.Value -replace '/admin/', '/taxi/admin/' fleet/manage" />
       </div>
 
-      <div className="px-5 pb-10">
-        <div className="rounded border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-8 py-6" />
-
-          <form onSubmit={handleSubmit} className="p-8">
-            <div className="grid grid-cols-1 gap-x-10 gap-y-7 md:grid-cols-2">
+      <div className="flex justify-center px-5 pb-10 pt-4">
+        <div className="w-full max-w-3xl bg-white rounded-xl border border-gray-200 shadow-sm p-6 lg:p-8">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
               <div>
                 <label className={labelClass}>
                   Transport Type <span className="text-rose-500">*</span>
@@ -273,15 +269,20 @@ const ManageFleetCreate = () => {
                   placeholder="Enter Car Color"
                 />
               </div>
-            </div>
-
-            <div className="mt-10 flex items-center justify-end">
+            <div className="col-span-1 md:col-span-2 pt-6 flex items-center justify-end gap-3 border-t border-gray-100 mt-2">
+              <button
+                type="button"
+                onClick={() => navigate('/taxi/admin/fleet/manage')}
+                className="h-10 px-6 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
                 disabled={submitting || isBootLoading}
-                className="inline-flex h-12 items-center gap-2 rounded bg-indigo-950 px-8 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
               >
-                {submitting ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 Save
               </button>
             </div>
@@ -293,4 +294,3 @@ const ManageFleetCreate = () => {
 };
 
 export default ManageFleetCreate;
-

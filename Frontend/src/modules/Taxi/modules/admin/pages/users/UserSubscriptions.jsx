@@ -39,26 +39,26 @@ const UserSubscriptions = () => {
             <ChevronRight size={12} />
             <span className="text-gray-700">Subscription Management</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Customer Subscription Management</h1>
+          <h1 className="text-xl font-bold text-gray-900">Customer Subscription Management</h1>
         </div>
         <button
           type="button"
           onClick={() => navigate('/taxi/admin/users/subscriptions/create')}
-          className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-indigo-700"
+          className="inline-flex items-center gap-2 rounded-lg bg-yellow-400 px-4 py-2.5 text-sm font-bold text-black shadow-sm transition hover:bg-yellow-500"
         >
           <Plus size={16} />
           Add Subscription
         </button>
       </div>
 
-      <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-100">
-        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
+      <div className="rounded-xl bg-white p-5 border border-gray-200 shadow-sm">
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-2.5">
           <Search size={16} className="text-slate-400" />
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="Search customer subscription plans..."
-            className="w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+            className="w-full bg-transparent text-sm font-bold text-gray-900 outline-none placeholder:text-gray-400"
           />
         </div>
 
@@ -72,7 +72,7 @@ const UserSubscriptions = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                <tr className="border-b border-gray-200 text-left text-xs font-bold text-gray-600">
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3">Vehicle Type</th>
                   <th className="px-4 py-3">Benefit</th>
@@ -82,24 +82,24 @@ const UserSubscriptions = () => {
               </thead>
               <tbody>
                 {filteredPlans.map((item) => (
-                  <tr key={item._id || item.id} className="border-b border-slate-50">
-                    <td className="px-4 py-4">
+                  <tr key={item._id || item.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-50 text-gray-900 border border-yellow-100">
                           <Ticket size={18} />
                         </div>
                         <div>
-                          <p className="text-sm font-black text-slate-900">{item.name}</p>
-                          <p className="text-xs font-semibold text-slate-500">{item.description || 'Customer ride pass'}</p>
+                          <p className="text-sm font-bold text-gray-900">{item.name}</p>
+                          <p className="text-xs font-medium text-gray-500">{item.description || 'Customer ride pass'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm font-semibold text-slate-600">{item.vehicle_type?.name || 'N/A'}</td>
-                    <td className="px-4 py-4 text-sm font-semibold text-slate-600">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-600">{item.vehicle_type?.name || 'N/A'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-600">
                       {item.benefit_type === 'unlimited' ? 'Unlimited rides' : `${item.ride_limit} rides`}
                     </td>
-                    <td className="px-4 py-4 text-sm font-semibold text-slate-600">{item.duration} days</td>
-                    <td className="px-4 py-4 text-sm font-black text-slate-900">₹{Number(item.amount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-600">{item.duration} days</td>
+                    <td className="px-4 py-3 text-sm font-bold text-gray-900">₹{Number(item.amount || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

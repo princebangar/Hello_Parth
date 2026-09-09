@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Edit2, FileSearch, Loader2, Plus, Trash2 } f
 import { useNavigate } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 
-const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/owner-management`;
+const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/owner-management`;
 
 const getDocTypeLabel = (value) => {
   const v = String(value || '').toLowerCase();
@@ -16,7 +16,7 @@ const getDocTypeLabel = (value) => {
 
 const OwnerNeededDocuments = () => {
   const navigate = useNavigate();
-  const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken')) || '';
+  const token = localStorage.getItem('adminToken') || '';
 
   const [isLoading, setIsLoading] = useState(true);
   const [documents, setDocuments] = useState([]);
@@ -82,13 +82,13 @@ const OwnerNeededDocuments = () => {
         <div className="mt-6">
         <div className="relative rounded border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-5 px-5 py-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 text-sm font-semibold text-slate-400">
-              <span>show</span>
+            <div className="flex items-center gap-3 text-sm font-semibold text-slate-500">
+              <span>Show</span>
               <div className="relative">
                 <select
                   value={itemsPerPage}
                   onChange={(event) => setItemsPerPage(Number(event.target.value) || 10)}
-                  className="h-9 w-24 appearance-none rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="h-9 w-24 appearance-none rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
                 >
                   {[10, 25, 50, 100].map((value) => (
                     <option key={value} value={value}>
@@ -98,13 +98,13 @@ const OwnerNeededDocuments = () => {
                 </select>
                 <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-700" />
               </div>
-              <span>entries</span>
+              <span>Entries</span>
             </div>
 
             <button
               type="button"
               onClick={() => navigate('/taxi/admin/owners/documents/create')}
-              className="flex h-12 items-center gap-3 rounded bg-indigo-950 px-6 text-sm font-semibold text-white transition-colors hover:bg-indigo-900"
+              className="flex h-10 items-center gap-2 rounded-lg bg-yellow-400 px-5 text-sm font-bold text-black shadow-sm transition-colors hover:bg-yellow-500"
             >
               <Plus size={16} /> Add Owner Needed Documents
             </button>
@@ -134,20 +134,20 @@ const OwnerNeededDocuments = () => {
                     </tr>
                   ) : pagedDocs.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="border-b border-gray-200 px-3 py-12 text-center">
-                        <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-700">
-                          <FileSearch size={92} strokeWidth={1.7} className="mb-2 text-indigo-950" />
-                          <p className="text-xl font-medium">No Data Found</p>
+                      <td colSpan="5" className="border-b border-gray-200 px-3 py-10 text-center">
+                        <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-500">
+                          <FileSearch size={48} strokeWidth={1.5} className="mb-3" />
+                          <p className="text-sm font-medium">No documents found</p>
                         </div>
                       </td>
                     </tr>
                   ) : (
                     pagedDocs.map((doc) => (
                       <tr key={doc._id} className="bg-white transition-colors hover:bg-gray-50">
-                        <td className="px-3 py-5 text-sm text-gray-950">{doc?.name || '-'}</td>
-                        <td className="px-3 py-5 text-sm text-gray-950">{getDocTypeLabel(doc?.image_type)}</td>
-                        <td className="px-3 py-5 text-sm text-gray-950">{doc?.has_expiry_date ? 'Yes' : 'No'}</td>
-                        <td className="px-3 py-5">
+                        <td className="px-3 py-4 text-sm text-gray-950">{doc?.name || '-'}</td>
+                        <td className="px-3 py-4 text-sm text-gray-950">{getDocTypeLabel(doc?.image_type)}</td>
+                        <td className="px-3 py-4 text-sm text-gray-950">{doc?.has_expiry_date ? 'Yes' : 'No'}</td>
+                        <td className="px-3 py-4">
                           <span
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                               doc?.active === false ? 'bg-gray-100 text-gray-700' : 'bg-emerald-50 text-emerald-700'
@@ -156,12 +156,12 @@ const OwnerNeededDocuments = () => {
                             {doc?.active === false ? 'Inactive' : 'Active'}
                           </span>
                         </td>
-                        <td className="px-3 py-5">
+                        <td className="px-3 py-4">
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => navigate(`/taxi/admin/owners/documents/create?id=${doc._id}`)}
-                              className="inline-flex h-9 w-10 items-center justify-center rounded bg-amber-50 text-amber-600 transition-colors hover:bg-amber-100"
+                              onClick={() => navigate(`/admin/owners/documents/create?id=${doc._id}`)}
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-yellow-50 text-yellow-600 transition-colors hover:bg-yellow-100"
                               title="Edit"
                             >
                               <Edit2 size={16} />
@@ -169,7 +169,7 @@ const OwnerNeededDocuments = () => {
                             <button
                               type="button"
                               onClick={() => handleDelete(doc._id)}
-                              className="inline-flex h-9 w-10 items-center justify-center rounded bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100"
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100"
                               title="Delete"
                             >
                               <Trash2 size={16} />
@@ -184,7 +184,7 @@ const OwnerNeededDocuments = () => {
             </div>
           </div>
 
-          <div className="mt-8 flex items-center justify-between px-5 pb-6">
+          <div className="flex items-center justify-between border-t border-gray-100 px-5 py-5">
             <p className="text-sm font-medium text-slate-400">
               Showing {showingFrom} to {showingTo} of {totalEntries} entries
             </p>
@@ -197,7 +197,7 @@ const OwnerNeededDocuments = () => {
               >
                 Prev
               </button>
-              <button type="button" className="rounded bg-indigo-950 px-4 py-2 text-sm font-semibold text-white">
+              <button type="button" className="rounded bg-yellow-400 px-4 py-2 text-sm font-bold text-black">
                 {safePage}
               </button>
               <button
@@ -218,4 +218,3 @@ const OwnerNeededDocuments = () => {
 };
 
 export default OwnerNeededDocuments;
-

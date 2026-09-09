@@ -14,8 +14,8 @@ const DriverRatingDetail = () => {
       setIsLoading(true);
       setError('');
       try {
-        const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken'));
-        const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/driver-ratings/${id}`, {
+        const token = localStorage.getItem('adminToken');
+        const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/driver-ratings/${id}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         const data = await res.json();
@@ -69,7 +69,7 @@ const DriverRatingDetail = () => {
           <span className="text-gray-700">View Rating</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">View Rating</h1>
+          <h1 className="text-xl text-gray-900 font-bold">View Rating</h1>
           <button
             onClick={() => navigate('/taxi/admin/drivers/ratings')}
             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -86,7 +86,7 @@ const DriverRatingDetail = () => {
               <img src={driver.image} alt={driver.name} className="w-full h-full object-cover" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{driver.name}</h2>
+              <h2 className="text-lg text-gray-900 font-bold">{driver.name}</h2>
               <div className="flex items-center gap-1 text-amber-400">
                 {[1, 2, 3, 4, 5].map((s) => (
                   <Star key={s} size={14} className={s <= Math.round(driver.rating) ? 'fill-current' : 'text-gray-200'} />
@@ -160,4 +160,3 @@ const DriverRatingDetail = () => {
 };
 
 export default DriverRatingDetail;
-

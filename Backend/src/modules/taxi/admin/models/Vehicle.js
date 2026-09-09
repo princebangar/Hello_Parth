@@ -16,6 +16,13 @@ const VEHICLE_ICON_TYPES = [
   'suv',
 ];
 
+const VEHICLE_CATEGORIES = [
+  '',
+  'bike',
+  'car',
+  'auto',
+];
+
 const DELIVERY_CATEGORY_TYPES = [
   '',
   'trucks',
@@ -67,14 +74,15 @@ const vehicleSchema = new mongoose.Schema(
       default: 'car',
       trim: true,
     },
+    category: {
+      type: String,
+      enum: VEHICLE_CATEGORIES,
+      default: '',
+      trim: true,
+    },
     capacity: {
       type: Number,
       default: 0,
-    },
-    ride_surge_amount: {
-      type: Number,
-      default: 0,
-      min: 0,
     },
     size: {
       type: String,
@@ -121,6 +129,31 @@ const vehicleSchema = new mongoose.Schema(
         type: Number,
         default: DELIVERY_DISTANCE_PRICING_DEFAULTS.time_price,
       },
+    },
+    service_tax: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    admin_commission_type_from_driver: {
+      type: Number,
+      enum: [1, 2],
+      default: 1,
+    },
+    admin_commission_from_driver: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    admin_commission_type_for_owner: {
+      type: Number,
+      enum: [1, 2],
+      default: 1,
+    },
+    admin_commission_for_owner: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     image: {
       type: String,

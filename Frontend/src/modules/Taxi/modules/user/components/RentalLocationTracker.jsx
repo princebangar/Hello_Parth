@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getLocalUserToken } from '../services/authService';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
+  clearCurrentRide,
   getCurrentRide,
   saveCurrentRide,
 } from '../services/currentRideService';
@@ -130,6 +131,7 @@ const RentalLocationTracker = () => {
 
         const currentRide = getCurrentRide();
         if (isRentalRide(currentRide)) {
+          clearCurrentRide();
           setActiveRentalRide(null);
         }
       } catch {
@@ -197,8 +199,15 @@ const RentalLocationTracker = () => {
           point: nextPoint || lastSent.point,
           offStatus: isStatusOnlyUpdate ? payload.status : '',
         };
-      } catch {
+      } catch (error) {
         // Avoid interrupting the ride flow if tracking calls fail.
+        if (error?.response?.status === 409 || error?.response?.status === 404) {
+          const current = getCurrentRide();
+          if (isRentalRide(current) && current.rideId === currentRide.rideId) {
+            clearCurrentRide();
+            setActiveRentalRide(null);
+          }
+        }
       }
     };
 

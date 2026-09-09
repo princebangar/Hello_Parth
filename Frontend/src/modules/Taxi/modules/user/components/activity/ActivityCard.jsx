@@ -41,7 +41,7 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
           <div className="flex items-start gap-2 sm:gap-3">
             <div className="min-w-0 flex-1">
               <h4 className="line-clamp-2 break-words text-[14px] font-semibold leading-tight text-slate-900 sm:text-[15px]">{title}</h4>
-              <p className="mt-1 line-clamp-2 break-words text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:text-[11px]">
+              <p className="mt-1 line-clamp-2 break-words text-[10px] font-semibold tracking-[0.12em] text-slate-400 sm:text-[11px]">
                 {eyebrow || driverName}
               </p>
               <p className="mt-2 line-clamp-2 text-[12px] text-slate-600">{address}</p>
@@ -50,11 +50,11 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-400">
+            <div className="flex items-center gap-1 text-[10px] font-semibold leading-none text-slate-400">
               <Calendar size={11} strokeWidth={2.4} />
               <span>{date}</span>
             </div>
-            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-400">
+            <div className="flex items-center gap-1 text-[10px] font-semibold leading-none text-slate-400">
               <Clock size={11} strokeWidth={2.4} />
               <span>{time}</span>
             </div>
@@ -67,7 +67,7 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
                     : 'bg-amber-50 text-amber-700 border-amber-100'
               }`}
             >
-              {status.toUpperCase()}
+              {String(status || '').charAt(0).toUpperCase() + String(status || '').slice(1).toLowerCase()}
             </span>
           </div>
         </div>

@@ -346,7 +346,7 @@ const UserBulkUpload = () => {
         `Imported ${createdCount}, skipped ${skippedCount}, errors ${errorCount}`,
         { id: toastId },
       );
-      navigate("/admin/users");
+      navigate("/taxi/admin/users");
     } catch (err) {
       toast.error(err.message || "Failed to import users");
     } finally {
@@ -355,20 +355,20 @@ const UserBulkUpload = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8">
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+    <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
+      <div className="mb-4">
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
           <span>Users</span>
           <ChevronRight size={12} />
-          <span className="text-gray-700">Bulk Upload</span>
+          <span className="text-gray-700 font-medium">Bulk Upload</span>
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Bulk Upload</h1>
+          <h1 className="text-lg text-gray-900 font-bold">Bulk Upload</h1>
           <button
             type="button"
-            onClick={() => navigate("/admin/users")}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            onClick={() => navigate("/taxi/admin/users")}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
             <ArrowLeft size={16} /> Back
           </button>
         </div>
@@ -383,7 +383,7 @@ const UserBulkUpload = () => {
                   <UploadCloud size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">
+                  <h3 className="text-sm text-gray-900 font-bold">
                     Upload Customer File
                   </h3>
                   <p className="text-xs text-gray-400">
@@ -395,7 +395,7 @@ const UserBulkUpload = () => {
               <button
                 type="button"
                 onClick={() => navigate("/user-import/create")}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700">
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-yellow-400 px-4 py-2 text-sm font-semibold text-black shadow-sm transition-colors hover:bg-yellow-500">
                 <UploadCloud size={16} /> Select Files
               </button>
             </div>

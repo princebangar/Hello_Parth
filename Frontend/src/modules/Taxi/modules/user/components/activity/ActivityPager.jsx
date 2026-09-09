@@ -12,18 +12,18 @@ const ActivityPager = ({ pagination, onPrevious, onNext }) => {
           type="button"
           onClick={onPrevious}
           disabled={!pagination.hasPrevPage}
-          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-bold tracking-[0.12em] text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
         >
           Previous
         </button>
-        <div className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+        <div className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-bold tracking-[0.12em] text-slate-500">
           Page {pagination.page} / {pagination.totalPages}
         </div>
         <button
           type="button"
           onClick={onNext}
           disabled={!pagination.hasNextPage}
-          className="flex-1 rounded-xl border border-slate-900 bg-slate-900 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-45"
+          className="flex-1 rounded-xl border border-slate-900 bg-slate-900 px-4 py-3 text-[11px] font-bold tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-45"
         >
           Next
         </button>

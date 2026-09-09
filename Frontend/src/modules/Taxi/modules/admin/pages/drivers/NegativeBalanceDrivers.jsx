@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Eye, FileSearch, MoreHorizontal, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const BASE = () => `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/wallet/drivers/negative-balance`;
+const BASE = () => `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/wallet/drivers/negative-balance`;
 
 const NegativeBalanceDrivers = () => {
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ const NegativeBalanceDrivers = () => {
   const fetchRows = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
     setLoading(true);
     try {
-      const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken'));
+      const token = localStorage.getItem('adminToken');
       const params = new URLSearchParams({
         page: String(nextPage),
         limit: String(nextLimit),
@@ -81,9 +81,9 @@ const NegativeBalanceDrivers = () => {
           <span className="text-gray-700">Negative Balance Drivers</span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Negative Balance Drivers</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Negative Balance Drivers</h1>
           <div className="text-sm text-gray-500">
-            Total Outstanding: <span className="font-semibold text-rose-600">? {Number(summary.total_outstanding || 0).toFixed(2)}</span>
+            Total Outstanding: <span className="font-semibold text-rose-600">₹ {Number(summary.total_outstanding || 0).toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -119,10 +119,10 @@ const NegativeBalanceDrivers = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50">
+          <table className="w-full text-left">            <thead className="bg-gray-50">
               <tr className="text-xs font-semibold text-gray-500">
                 <th className="px-6 py-4">Name</th>
+                <th className="px-6 py-4">Driver Code</th>
                 <th className="px-6 py-4">Service Location</th>
                 <th className="px-6 py-4">Email</th>
                 <th className="px-6 py-4">Mobile Number</th>
@@ -134,13 +134,13 @@ const NegativeBalanceDrivers = () => {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-gray-400">
+                  <td colSpan={8} className="px-6 py-16 text-center text-sm text-gray-400">
                     Loading...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center">
+                  <td colSpan={8} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-400">
                       <FileSearch size={44} strokeWidth={1.5} />
                       <p className="text-sm font-medium">No Data Found</p>
@@ -151,6 +151,11 @@ const NegativeBalanceDrivers = () => {
                 rows.map((item) => (
                   <tr key={item._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm text-gray-800">{item.name || 'Unknown'}</td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      <span className="font-mono font-semibold text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded shadow-sm border border-indigo-100">
+                        {item.driver_code || item.referralCode || (item.mobile ? `DRV${String(item.mobile).slice(-4)}${String(item._id || '').slice(-6).toUpperCase()}`.replace(/\W/g, '') : 'N/A')}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{item.service_location_name || '-'}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{item.email || '-'}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{item.mobile || '-'}</td>
@@ -177,7 +182,7 @@ const NegativeBalanceDrivers = () => {
                         >
                           <MoreHorizontal size={16} />
                         </button>
-
+ 
                         {activeMenuId === item._id ? (
                           <div
                             className="absolute right-0 top-full mt-2 w-44 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50"
@@ -187,7 +192,7 @@ const NegativeBalanceDrivers = () => {
                               type="button"
                               onClick={() => {
                                 setActiveMenuId(null);
-                                navigate(`/taxi/admin/drivers/${item._id}`);
+                                navigate(`/admin/drivers/${item._id}`);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
                             >
@@ -235,4 +240,3 @@ const NegativeBalanceDrivers = () => {
 };
 
 export default NegativeBalanceDrivers;
-

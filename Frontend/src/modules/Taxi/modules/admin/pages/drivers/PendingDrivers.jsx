@@ -20,14 +20,15 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { adminService } from '../../services/adminService';
 
-const ACTION_MENU_WIDTH = 238;
+const ACTION_MENU_WIDTH = 220;
 const ACTION_MENU_GAP = 8;
 const ACTION_MENU_MAX_HEIGHT = 300;
 
 const PendingDrivers = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ dateRange: '', vehicleType: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [pendingDrivers, setPendingDrivers] = useState([]);
   const [error, setError] = useState('');
@@ -36,6 +37,7 @@ const PendingDrivers = () => {
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, driverId: null, password: '', isSubmitting: false });
   const [page, setPage] = useState(1);
   const [paginator, setPaginator] = useState(null);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const openActionMenu = (driverId, anchorEl) => {
     const rect = anchorEl.getBoundingClientRect();
@@ -78,11 +80,11 @@ const PendingDrivers = () => {
     if (action !== 'view' && action !== 'edit' && action !== 'password' && !window.confirm(confirmMsg)) return;
 
     if (action === 'view') {
-      navigate(`/taxi/admin/drivers/${driverId}`, { state: { from: '/taxi/admin/drivers/pending' } });
+      navigate(`/admin/drivers/${driverId}`, { state: { from: '/admin/drivers/pending' } });
       return;
     }
     if (action === 'edit') {
-      navigate(`/taxi/admin/drivers/edit/${driverId}`, { state: { from: '/taxi/admin/drivers/pending' } });
+      navigate(`/admin/drivers/edit/${driverId}`, { state: { from: '/admin/drivers/pending' } });
       return;
     }
 
@@ -116,21 +118,6 @@ const PendingDrivers = () => {
     }
   };
 
-  const isDriverApproved = (driver) => {
-    if (!driver) return false;
-
-    const approveRaw = driver.approve ?? '';
-    const approveNormalized = String(approveRaw).toLowerCase();
-    const status = String(driver.status || '').toLowerCase();
-
-    return (
-      approveRaw === true ||
-      approveRaw === 1 ||
-      ['true', '1', 'yes', 'approved'].includes(approveNormalized) ||
-      ['approved', 'active', 'verified'].includes(status)
-    );
-  };
-
   const fetchPendingDrivers = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
     setIsLoading(true);
     setError('');
@@ -146,6 +133,7 @@ const PendingDrivers = () => {
         .map((d) => ({
           id: d._id,
           name: d.name || 'Unknown',
+          driverCode: d.driver_code || d.referralCode || (d.phone ? `DRV${String(d.phone).slice(-4)}${String(d._id || d.id || '').slice(-6).toUpperCase()}`.replace(/\W/g, '') : 'N/A'),
           serviceLocation: d.service_location_name || d.city || 'India',
           phone: d.phone || d.mobile || 'N/A',
           transport: d.transport_type || d.register_for || d.transport_type || 'N/A',
@@ -209,12 +197,11 @@ const PendingDrivers = () => {
     return date.toLocaleString('en-IN', {
       day: '2-digit',
       month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
+      year: 'numeric'
     });
   };
 
-  const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors";
+  const inputClass = "w-full sm:w-[320px] border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors";
   const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
   const totalPages = Math.max(1, Number(paginator?.last_page || 1));
   const safePage = Math.min(Math.max(1, page), totalPages);
@@ -225,122 +212,150 @@ const PendingDrivers = () => {
   const showingTo = totalEntries === 0 ? 0 : Math.min(startIndex + pendingDrivers.length, totalEntries);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8 font-sans text-gray-900">
+    <div className="min-h-screen bg-[#F8FAFC] p-3 lg:p-4 font-sans text-gray-900">
       {error && (
-        <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600">
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
           {error}
         </div>
       )}
       
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
+      <div className="mb-3">
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-0.5">
           <span>Drivers</span>
-          <ChevronRight size={12} />
-          <span className="text-gray-700">Pending Drivers</span>
+          <ChevronRight size={10} />
+          <span className="text-gray-700 font-medium">Pending Drivers</span>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-gray-900">Pending Drivers</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-base text-gray-900 font-bold">Pending Drivers</h1>
           <button
             onClick={() => navigate('/taxi/admin/drivers/create')}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-black font-semibold bg-yellow-400 rounded-md shadow-sm hover:bg-yellow-500 transition-colors"
           >
-            <Plus size={16} /> Add Drivers
+            <Plus size={14} /> Add Drivers
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 items-end">
-          <div>
-            <label className={labelClass}>
-              <Search size={12} className="inline mr-1 text-gray-400" />
-              Search
-            </label>
-            <input
-              className={inputClass}
-              placeholder="Search by name, phone, or location"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      <div className="bg-white rounded-lg border border-gray-200 p-3 mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative w-full sm:w-auto">
+             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+             <input
+               className="w-full sm:w-[280px] pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400"
+               placeholder="Search by name, phone, or location"
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+             />
           </div>
-          <div className="flex items-center gap-2">
-            <label className={labelClass}>Show</label>
-            <select
-              value={itemsPerPage}
-              onChange={(e) => setItemsPerPage(parseInt(e.target.value, 10))}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+          
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>Show</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(parseInt(e.target.value, 10))}
+                className="border border-gray-200 rounded-md px-1.5 py-1 text-xs text-gray-700 font-semibold focus:outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-colors ml-auto sm:ml-0"
             >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
+              <Filter size={14} /> Filters
+            </button>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 rounded-lg hover:bg-orange-600 transition-colors">
-            <Filter size={16} /> Filters
-          </button>
         </div>
+        
+        {/* Filters Panel */}
+        {showFilters && (
+          <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Date Range</label>
+              <select 
+                value={filters.dateRange}
+                onChange={(e) => setFilters({...filters, dateRange: e.target.value})}
+                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
+              >
+                <option value="">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Vehicle Type</label>
+              <select 
+                value={filters.vehicleType}
+                onChange={(e) => setFilters({...filters, vehicleType: e.target.value})}
+                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
+              >
+                <option value="">All Types</option>
+                <option value="sedan">Sedan</option>
+                <option value="suv">SUV</option>
+                <option value="hatchback">Hatchback</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-visible">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse whitespace-nowrap">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
-                <th className="px-6 py-4">Name</th>
-                <th className="px-4 py-4">Service Location</th>
-                <th className="px-4 py-4">Mobile Number</th>
-                <th className="px-4 py-4">Transport Type</th>
-                <th className="px-4 py-4 text-center">Document View</th>
-                <th className="px-4 py-4 text-center">Approved Status</th>
-                <th className="px-4 py-4 text-center">Declined Reason</th>
-                <th className="px-4 py-4 text-center">Rating</th>
-                <th className="px-4 py-4 text-center">Registered at</th>
-                <th className="px-6 py-4 text-right">Action</th>
+              <tr className="bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Code</th>
+                <th className="px-3 py-2">Location</th>
+                <th className="px-3 py-2">Mobile</th>
+                <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2 text-center">Docs</th>
+                <th className="px-3 py-2 text-center">Status</th>
+                <th className="px-3 py-2">Registered</th>
+                <th className="px-3 py-2 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+            <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="10" className="px-6 py-12 text-center text-gray-400">Loading pending drivers...</td>
+                  <td colSpan="9" className="px-3 py-6 text-center text-gray-400">Loading pending drivers...</td>
                 </tr>
               ) : pendingDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="px-6 py-12 text-center text-gray-400">No pending drivers found.</td>
+                  <td colSpan="9" className="px-3 py-6 text-center text-gray-400">No pending drivers found.</td>
                 </tr>
               ) : (
                 pendingDrivers.map((driver) => (
-                  <tr key={driver.id} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-6 py-4 text-gray-900">{driver.name}</td>
-                    <td className="px-4 py-4">{driver.serviceLocation}</td>
-                    <td className="px-4 py-4 font-medium text-gray-800">{driver.phone}</td>
-                    <td className="px-4 py-4">{driver.transport}</td>
-                    <td className="px-4 py-4 text-center">
+                  <tr key={driver.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-1.5 font-medium text-gray-900">{driver.name}</td>
+                    <td className="px-3 py-1.5">
+                      <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                        {driver.driverCode}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-600">{driver.serviceLocation}</td>
+                    <td className="px-3 py-1.5 font-medium">{driver.phone}</td>
+                    <td className="px-3 py-1.5 text-gray-600">{driver.transport}</td>
+                    <td className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => navigate(`/taxi/admin/drivers/${driver.id}?tab=Documents`, { state: { from: '/taxi/admin/drivers/pending' } })}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        onClick={() => navigate(`/admin/drivers/${driver.id}?tab=Documents`, { state: { from: '/admin/drivers/pending' } })}
+                        className="inline-flex items-center justify-center w-6 h-6 rounded border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-black transition-colors"
+                        title="View Documents"
                       >
-                        <FileText size={16} />
+                        <FileText size={12} />
                       </button>
                     </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-600">
+                    <td className="px-3 py-1.5 text-center">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-yellow-100 text-yellow-800 uppercase border border-yellow-200">
                         {driver.status || 'PENDING'}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-center text-gray-400 italic">{driver.reason}</td>
-                    <td className="px-4 py-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <Star
-                            key={i}
-                            size={14}
-                            className={i <= Math.round(driver.rating || 0) ? 'text-yellow-400' : 'text-gray-300'}
-                          />
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-center text-gray-600">{formatDate(driver.registeredAt)}</td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-3 py-1.5 text-[10px] text-gray-500">{formatDate(driver.registeredAt)}</td>
+                    <td className="px-3 py-1.5 text-right">
                       <div className="relative inline-block">
                         <button
                           onClick={(e) => {
@@ -351,9 +366,9 @@ const PendingDrivers = () => {
                             }
                             openActionMenu(driver.id, e.currentTarget);
                           }}
-                          className="w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
                         >
-                          <MoreVertical size={16} />
+                          <MoreVertical size={14} />
                         </button>
                       </div>
                     </td>
@@ -364,19 +379,19 @@ const PendingDrivers = () => {
           </table>
         </div>
 
-        <div className="p-4 flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 bg-gray-50/50">
+        <div className="p-3 flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 bg-gray-50/50">
           <span>Showing {showingFrom} to {showingTo} of {totalEntries} entries</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
-              className="px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-900 disabled:opacity-60"
+              className="px-2 py-1 font-semibold hover:text-black disabled:opacity-50"
               disabled={safePage <= 1}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
             >
               Prev
             </button>
-            <button className="px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-semibold">{safePage}</button>
+            <button className="px-2.5 py-1 rounded bg-yellow-400 text-black font-bold">{safePage}</button>
             <button
-              className="px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-900 disabled:opacity-60"
+              className="px-2 py-1 font-semibold hover:text-black disabled:opacity-50"
               disabled={safePage >= totalPages}
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             >
@@ -389,26 +404,26 @@ const PendingDrivers = () => {
       {/* PASSWORD MODAL */}
       <AnimatePresence>
         {passwordModal.isOpen && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/50 backdrop-blur-sm">
-             <div className="bg-white rounded-[32px] w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100 p-8 space-y-6">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+             <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden border border-gray-100 p-6 space-y-5">
                 <div className="flex items-center justify-between">
                    <div>
-                     <h3 className="text-xl font-black text-gray-950 uppercase tracking-tight">Security Update</h3>
-                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Update Driver Password</p>
+                     <h3 className="text-lg font-bold text-gray-900">Update Password</h3>
+                     <p className="text-xs text-gray-500">Enter new password for driver</p>
                    </div>
                    <button onClick={() => setPasswordModal({ isOpen: false, driverId: null, password: '', isSubmitting: false })} className="text-gray-400 hover:text-gray-900 transition-colors">
-                      <XCircle size={24} />
+                      <XCircle size={20} />
                    </button>
                 </div>
                 <div className="space-y-4">
-                   <div className="relative group">
-                      <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-colors">
-                         <Lock size={18} />
+                   <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                         <Lock size={16} />
                       </div>
                       <input 
                         type="text" 
                         placeholder="New password"
-                        className="w-full pl-14 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-[14px] font-bold text-gray-900 outline-none focus:bg-white focus:border-indigo-200 transition-all shadow-inner"
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-colors"
                         value={passwordModal.password}
                         onChange={(e) => setPasswordModal(prev => ({ ...prev, password: e.target.value }))}
                       />
@@ -417,9 +432,9 @@ const PendingDrivers = () => {
                 <button 
                   onClick={() => handleAction('password', passwordModal.driverId)}
                   disabled={passwordModal.isSubmitting || !passwordModal.password}
-                  className="w-full py-4 bg-gray-950 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest hover:translate-y-[-2px] transition-all shadow-xl disabled:opacity-50"
+                  className="w-full py-2 bg-yellow-400 text-black rounded-lg text-sm font-bold shadow-sm hover:bg-yellow-500 transition-colors disabled:opacity-50"
                 >
-                  {passwordModal.isSubmitting ? 'Updating...' : 'COMMIT NEW PASSWORD'}
+                  {passwordModal.isSubmitting ? 'Updating...' : 'Update Password'}
                 </button>
              </div>
           </div>
@@ -430,34 +445,34 @@ const PendingDrivers = () => {
         <>
           <div className="fixed inset-0 z-[9998] bg-transparent" onClick={closeMenu} />
           <div
-            className="fixed z-[9999] bg-white border border-gray-200 shadow-2xl rounded-xl p-2 text-left overflow-y-auto"
+            className="fixed z-[9999] bg-white border border-gray-200 shadow-xl rounded-xl p-1.5 text-left overflow-y-auto transform origin-top-right transition-all"
             style={{
               width: ACTION_MENU_WIDTH,
               maxHeight: `min(${ACTION_MENU_MAX_HEIGHT}px, calc(100vh - 24px))`,
               ...menuPosition,
             }}
           >
-            <button onClick={() => handleAction('approve', activeMenu)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-emerald-50 text-emerald-600 rounded-lg transition-colors text-sm font-semibold">
-              <CheckCircle2 size={16} /> Approve
+            <button onClick={() => handleAction('approve', activeMenu)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium">
+              <CheckCircle2 size={15} className="text-green-600" /> Approve Driver
             </button>
-            <button onClick={() => handleAction('edit', activeMenu)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-amber-50 text-amber-500 rounded-lg transition-colors text-sm font-semibold">
-              <Edit2 size={16} /> Edit
+            <button onClick={() => handleAction('edit', activeMenu)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium">
+              <Edit2 size={15} className="text-yellow-600" /> Edit Details
             </button>
             <button
               onClick={() => {
                 closeMenu();
                 setPasswordModal({ isOpen: true, driverId: activeMenu, password: '', isSubmitting: false });
               }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-gray-600 rounded-lg transition-colors text-sm font-semibold"
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium"
             >
-              
+              <Key size={15} className="text-blue-600" /> Reset Password
             </button>
-            <button onClick={() => handleAction('view', activeMenu)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 text-indigo-600 rounded-lg transition-colors text-sm font-semibold">
-              <Eye size={16} /> View Profile
+            <button onClick={() => handleAction('view', activeMenu)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium">
+              <Eye size={15} className="text-gray-500" /> View Profile
             </button>
-            <div className="h-px bg-gray-50 my-1 mx-2" />
-            <button onClick={() => handleAction('delete', activeMenu)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-rose-50 text-rose-500 rounded-lg transition-colors text-sm font-semibold">
-              <Trash2 size={16} /> Delete
+            <div className="h-px bg-gray-100 my-1 mx-1" />
+            <button onClick={() => handleAction('delete', activeMenu)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-red-50 hover:text-red-700 text-gray-700 rounded-lg transition-colors text-sm font-medium">
+              <Trash2 size={15} className="text-red-600" /> Delete Request
             </button>
           </div>
         </>,
@@ -469,4 +484,3 @@ const PendingDrivers = () => {
 };
 
 export default PendingDrivers;
-

@@ -13,6 +13,7 @@ const adminThirdPartySettingSchema = new mongoose.Schema(
     mail: { type: mongoose.Schema.Types.Mixed, default: {} },
     sms: { type: mongoose.Schema.Types.Mixed, default: {} }, // Changed to Object
     payment: { type: mongoose.Schema.Types.Mixed, default: {} }, // Changed to Object
+    recharge_api: { type: mongoose.Schema.Types.Mixed, default: {} },
     notification_channels: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   {

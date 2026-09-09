@@ -1,14 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/axiosInstance';
+import { BACKEND_ORIGIN } from '../api/runtimeConfig';
 
-let activeFaviconObjectUrl = '';
+// Favicon object URL tracking removed
+const SETTINGS_CACHE_KEY = 'appSettingsCache:v1';
 const DEFAULT_ADMIN_THEME_COLOR = '#405189';
 const DEFAULT_LANDING_THEME_COLOR = '#0ab39c';
 const DEFAULT_SIDEBAR_TEXT_COLOR = '#cbd5e1';
+
+export const normalizeAssetUrl = (url = '') => {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${BACKEND_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const DEFAULT_SETTINGS_CONTEXT = {
   settings: {
     general: {
-      app_name: '',
+      app_name: 'Hello Parth Taxi',
       logo: '',
       favicon: '',
     },
@@ -29,11 +40,43 @@ const DEFAULT_SETTINGS_CONTEXT = {
       user_fare_increase_wait_minutes: '2',
     },
     paymentGateway: null,
+    userHomeSettings: {},
   },
   loading: true,
-  refreshSettings: () => {},
+  hasBootstrapSettings: false,
+  refreshSettings: () => { },
 };
 const SettingsContext = createContext(DEFAULT_SETTINGS_CONTEXT);
+
+const normalizeBooleanSetting = (value, fallback = '0') => {
+  if (typeof value === 'boolean') {
+    return value ? '1' : '0';
+  }
+
+  if (typeof value === 'number') {
+    return value === 1 ? '1' : '0';
+  }
+
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) {
+    return '1';
+  }
+
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) {
+    return '0';
+  }
+
+  return fallback;
+};
+
+const normalizeTransportRideSettings = (settings = {}) => ({
+  ...settings,
+  enable_bus_service: normalizeBooleanSetting(settings?.enable_bus_service, '0'),
+});
 
 const normalizeHexColor = (value, fallback = '') => {
   const trimmed = String(value || '').trim();
@@ -101,77 +144,93 @@ const getFaviconType = (faviconUrl = '') => {
   return 'image/png';
 };
 
-const dataUrlToBlob = (dataUrl = '') => {
-  const [meta, content] = dataUrl.split(',');
-  const mimeMatch = meta.match(/data:(.*?)(;base64)?$/i);
-  const mime = mimeMatch?.[1] || 'image/png';
-  const binary = window.atob(content || '');
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return new Blob([bytes], { type: mime });
-};
-
 const buildFaviconHref = (faviconUrl = '') => {
   if (!faviconUrl) {
-    if (activeFaviconObjectUrl) {
-      URL.revokeObjectURL(activeFaviconObjectUrl);
-      activeFaviconObjectUrl = '';
-    }
     return '';
   }
 
   if (faviconUrl.startsWith('data:')) {
-    if (activeFaviconObjectUrl) {
-      URL.revokeObjectURL(activeFaviconObjectUrl);
-    }
-    activeFaviconObjectUrl = URL.createObjectURL(dataUrlToBlob(faviconUrl));
-    return activeFaviconObjectUrl;
+    return faviconUrl;
   }
 
-  if (activeFaviconObjectUrl) {
-    URL.revokeObjectURL(activeFaviconObjectUrl);
-    activeFaviconObjectUrl = '';
-  }
-
-  return `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+  const normalized = normalizeAssetUrl(faviconUrl);
+  return `${normalized}${normalized.includes('?') ? '&' : '?'}v=${Date.now()}`;
 };
 
-const normalizeAppDisplayName = (value) => {
-  const raw = String(value || '').trim();
-  if (!raw) return 'Hello Parth';
-  const lower = raw.toLowerCase();
-  if (lower === 'helloparth' || lower.includes('helloparth') || lower === 'app') {
-    return 'Hello Parth';
+const buildSettingsState = (payload = {}) => ({
+  general: {
+    ...(payload?.general || {}),
+    logo: normalizeAssetUrl(payload?.general?.logo),
+    favicon: normalizeAssetUrl(payload?.general?.favicon),
+  },
+  customization: payload?.customization || {},
+  transportRide: normalizeTransportRideSettings(payload?.transportRide || {}),
+  bidRide: payload?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
+  paymentGateway: payload?.paymentGateway || null,
+  userHomeSettings: payload?.userHomeSettings || {},
+});
+
+const readCachedSettings = () => {
+  if (typeof window === 'undefined') {
+    return null;
   }
-  return raw;
+
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    return buildSettingsState(parsed);
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedSettings = (settings) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings));
+  } catch {
+    // Cache writes are best-effort only.
+  }
 };
 
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS_CONTEXT.settings);
+  const cachedSettings = readCachedSettings();
+  const [settings, setSettings] = useState(cachedSettings || DEFAULT_SETTINGS_CONTEXT.settings);
   const [loading, setLoading] = useState(true);
+  const [hasBootstrapSettings, setHasBootstrapSettings] = useState(Boolean(cachedSettings));
+  const [modules, setModules] = useState([]);
 
   const fetchSettings = async () => {
     try {
-      const bootstrapResponse = await api.get('/common/settings');
-      const bootstrapData = bootstrapResponse?.data?.data || bootstrapResponse?.data || {};
-      const general = {
-        ...(bootstrapData.general || {}),
-        app_name: normalizeAppDisplayName(bootstrapData.general?.app_name),
-      };
+      const response = await api.get('/users/bootstrap');
+      const data = response?.data?.data || response?.data || {};
 
-      setSettings({
-        general,
-        customization: bootstrapData.customization || {},
-        transportRide: bootstrapData.transportRide || { enable_bus_service: '0' },
-        bidRide: bootstrapData.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
-        paymentGateway: bootstrapData.paymentGateway || null,
+      const nextSettings = buildSettingsState({
+        general: data.settings?.general || {},
+        customization: data.settings?.customization || {},
+        transportRide: data.settings?.transportRide || {},
+        bidRide: data.settings?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
+        paymentGateway: data.settings?.paymentGateway || null,
+        userHomeSettings: data.settings?.userHomeSettings || {},
       });
+
+      setSettings(nextSettings);
+      setModules(data.modules || []);
+      setHasBootstrapSettings(true);
+      writeCachedSettings(nextSettings);
     } catch (err) {
-      console.error('Failed to fetch settings:', err);
+      console.error('[SettingsContext] Failed to fetch bootstrap settings:', err);
     } finally {
       setLoading(false);
     }
@@ -182,28 +241,42 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    document.title = normalizeAppDisplayName(settings.general?.app_name);
+    const refreshOnResume = () => {
+      fetchSettings();
+    };
 
-    const favicon = settings.general?.favicon || settings.customization?.favicon || '/hello-parth-logo.png';
-    const href = buildFaviconHref(favicon);
-    const type = getFaviconType(favicon);
-
-    const iconLink = ensureHeadLink("link[rel='icon']", 'icon');
-    const shortcutIconLink = ensureHeadLink("link[rel='shortcut icon']", 'shortcut icon');
-    const appleTouchIconLink = ensureHeadLink("link[rel='apple-touch-icon']", 'apple-touch-icon');
-
-    [iconLink, shortcutIconLink, appleTouchIconLink].forEach((link) => {
-      link.href = href;
-      link.type = type;
-      link.sizes = '64x64';
-    });
+    window.addEventListener('pageshow', refreshOnResume);
+    window.addEventListener('online', refreshOnResume);
+    window.addEventListener('focus', refreshOnResume);
 
     return () => {
-      if (activeFaviconObjectUrl) {
-        URL.revokeObjectURL(activeFaviconObjectUrl);
-        activeFaviconObjectUrl = '';
-      }
+      window.removeEventListener('pageshow', refreshOnResume);
+      window.removeEventListener('online', refreshOnResume);
+      window.removeEventListener('focus', refreshOnResume);
     };
+  }, []);
+
+  useEffect(() => {
+    const appName = settings.general?.app_name || 'Hello Parth Taxi';
+    document.title = appName;
+
+    const favicon = settings.general?.favicon || settings.customization?.favicon;
+    if (favicon) {
+      const href = buildFaviconHref(favicon);
+      const type = getFaviconType(favicon);
+
+      const iconLink = ensureHeadLink("link[rel='icon']", 'icon');
+      const shortcutIconLink = ensureHeadLink("link[rel='shortcut icon']", 'shortcut icon');
+      const appleTouchIconLink = ensureHeadLink("link[rel='apple-touch-icon']", 'apple-touch-icon');
+
+      [iconLink, shortcutIconLink, appleTouchIconLink].forEach((link) => {
+        link.href = href;
+        link.type = type;
+        link.sizes = '64x64';
+      });
+    }
+
+    return () => { };
   }, [settings.general?.app_name, settings.general?.favicon, settings.customization?.favicon]);
 
   useEffect(() => {
@@ -236,7 +309,7 @@ export const SettingsProvider = ({ children }) => {
   const refreshSettings = () => fetchSettings();
 
   return (
-    <SettingsContext.Provider value={{ settings, loading, refreshSettings }}>
+    <SettingsContext.Provider value={{ settings, modules, loading, hasBootstrapSettings, refreshSettings }}>
       {children}
     </SettingsContext.Provider>
   );

@@ -16,20 +16,6 @@ const VAPID_KEY = String(import.meta.env.VITE_FIREBASE_VAPID_KEY || '').trim();
 
 let messagingSupportPromise = null;
 
-const isDriverPendingApprovalScreen = () => {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  const pathname = String(window.location.pathname || '').toLowerCase();
-  return (
-    pathname === '/taxi/driver/registration-status' ||
-    pathname === '/taxi/driver/status' ||
-    pathname === '/taxi/owner/registration-status' ||
-    pathname === '/taxi/owner/status'
-  );
-};
-
 const hasFirebaseConfig = () =>
   Object.values(FIREBASE_CONFIG).every((value) => String(value || '').trim());
 
@@ -38,6 +24,66 @@ const hasBrowserSupport = () =>
   typeof navigator !== 'undefined' &&
   'serviceWorker' in navigator &&
   typeof Notification !== 'undefined';
+
+const isNativeContainer = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  // Primary flag set by main.jsx WebView detection.
+  if (window.__isAppzeto24WebView) {
+    return true;
+  }
+
+  // Fallback: detect Flutter / native bridge globals independently in case
+  // main.jsx detection missed this WebView variant.
+  if (
+    typeof window.flutter_inappwebview !== 'undefined' ||
+    typeof window.Flutter !== 'undefined' ||
+    typeof window.__Appzeto24_native !== 'undefined' ||
+      typeof window.AndroidBridge !== 'undefined' ||
+      typeof window.Android !== 'undefined'
+  ) {
+  window.__isAppzeto24WebView = true;
+  return true;
+}
+
+return false;
+};
+
+const getPushPlatform = () => {
+  if (typeof navigator !== 'undefined') {
+    const ua = String(navigator.userAgent || '');
+    // When inside a mobile WebView or mobile browser, the token should be
+    // registered as 'mobile' so the backend stores it in fcmTokenMobile.
+    if (/Android|iPhone|iPad|iPod/i.test(ua) && isNativeContainer()) {
+      return 'mobile';
+    }
+  }
+  return 'web';
+};
+
+const getRoleFromPathname = () => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const pathname = String(window.location.pathname || '').toLowerCase();
+
+  if (pathname.includes('/taxi/owner')) {
+    return 'driver';
+  }
+
+  if (pathname.includes('/taxi/driver') || pathname.includes('/driver')) {
+    return 'driver';
+  }
+
+  if (pathname.includes('/taxi/user') || pathname.includes('/user')) {
+    return 'user';
+  }
+
+  return '';
+};
 
 const getStoredRegistration = () => {
   try {
@@ -71,13 +117,23 @@ const getMessagingSupport = async () => {
 };
 
 const getAuthenticatedRoles = () => {
+  const preferredRole = getRoleFromPathname();
+
+  if (preferredRole === 'user') {
+    return getLocalUserToken() ? ['user'] : [];
+  }
+
+  if (preferredRole === 'driver') {
+    return getLocalDriverToken() ? ['driver'] : [];
+  }
+
   const roles = [];
 
   if (getLocalUserToken()) {
     roles.push('user');
   }
 
-  if (getLocalDriverToken() && !isDriverPendingApprovalScreen()) {
+  if (getLocalDriverToken()) {
     roles.push('driver');
   }
 
@@ -98,23 +154,36 @@ const createServiceWorkerUrl = () => {
 };
 
 const saveTokenForRole = async (role, token) => {
-  if (role === 'driver') {
-    await saveDriverFcmToken(token, 'web');
-    return;
-  }
+  const platform = getPushPlatform();
+  const saveFn = role === 'driver' ? saveDriverFcmToken : (t, p) => userAuthService.saveFcmToken(t, p);
 
-  await userAuthService.saveFcmToken(token, 'web');
+  // Save to the primary platform field.
+  await saveFn(token, platform);
+
+  // When inside a WebView, the primary platform is 'mobile' (fcmTokenMobile).
+  // Also save to 'web' (fcmTokenWeb) so both fields have a valid token and
+  // push notifications can be delivered through either channel.
+  if (platform === 'mobile') {
+    await saveFn(token, 'web').catch(() => { });
+  }
 };
 
-const shouldSkipRegistration = (role, token) => {
+const shouldSkipRegistration = (role, token, platform) => {
   const stored = getStoredRegistration();
-  return stored?.role === role && stored?.token === token;
+  return stored?.role === role && stored?.token === token && stored?.platform === platform;
 };
 
 const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
   if (!hasBrowserSupport()) {
     return { ok: false, reason: 'browser-unsupported' };
   }
+
+  // NOTE: We intentionally do NOT bail when isNativeContainer() is true.
+  // The Flutter WebView APK does not reliably send the native FCM token via
+  // the JS bridge or a direct API call, so we let the browser FCM SDK run
+  // inside the WebView as well. getPushPlatform() returns 'mobile' when in
+  // a WebView, so the token is saved to fcmTokenMobile. If Flutter later
+  // sends a native token through the bridge, it will overwrite this value.
 
   if (!hasFirebaseConfig() || !VAPID_KEY) {
     return { ok: false, reason: 'firebase-web-config-missing' };
@@ -152,32 +221,27 @@ const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
 
   const serviceWorkerRegistration = await navigator.serviceWorker.register(createServiceWorkerUrl());
   const messaging = getMessaging(app);
-
-  let token = null;
-  try {
-    token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration,
-    });
-  } catch (fcmErr) {
-    console.warn('[FCM Web Push] Token retrieval skipped/failed (VAPID key mismatch or 403 Forbidden):', fcmErr?.message || fcmErr);
-    return { ok: false, reason: 'fcm-token-error', error: fcmErr };
-  }
+  const token = await getToken(messaging, {
+    vapidKey: VAPID_KEY,
+    serviceWorkerRegistration,
+  });
 
   if (!token) {
     return { ok: false, reason: 'missing-token' };
   }
 
-  const rolesToSave = roles.filter((role) => !shouldSkipRegistration(role, token));
+  const platform = getPushPlatform();
+  const rolesToSave = roles.filter((role) => !shouldSkipRegistration(role, token, platform));
   await Promise.all(rolesToSave.map((role) => saveTokenForRole(role, token)));
 
   roles.forEach((role) => {
-    persistRegistration({ role, token, platform: 'web' });
+    persistRegistration({ role, token, platform });
   });
 
   return {
     ok: true,
     token,
+    platform,
     roles,
     skippedRoles: roles.filter((role) => !rolesToSave.includes(role)),
   };
@@ -187,11 +251,12 @@ export const installBrowserFcmRegistration = () => {
   window.__registerBrowserFcmToken = (options) => registerBrowserFcmToken(options);
 
   const retryPassiveRegistration = () => {
-    registerBrowserFcmToken({ interactive: false }).catch(() => {});
+    registerBrowserFcmToken({ interactive: false }).catch(() => { });
   };
 
   window.addEventListener('focus', retryPassiveRegistration);
   window.addEventListener('pageshow', retryPassiveRegistration);
+  window.addEventListener('app:auth-ready', retryPassiveRegistration);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       retryPassiveRegistration();

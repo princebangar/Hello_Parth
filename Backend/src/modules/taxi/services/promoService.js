@@ -3,7 +3,6 @@ import { ApiError } from '../../../utils/ApiError.js';
 import { PromoCode } from '../admin/promotions/models/PromoCode.js';
 import { PromoRedemption } from '../admin/promotions/models/PromoRedemption.js';
 import { PromoUserCounter } from '../admin/promotions/models/PromoUserCounter.js';
-import { Ride } from '../user/models/Ride.js';
 
 const normalizeText = (value) => String(value ?? '').trim();
 
@@ -33,46 +32,6 @@ const getPromoServiceLocationIds = (promo) => {
       : [];
 
   return [...new Set(locationIds.map((value) => String(value || '').trim()).filter(Boolean))];
-};
-
-const getPromoAudienceType = (promo) => {
-  const normalized = normalizeText(promo?.audience_type).toLowerCase().replace(/\s+/g, '_');
-  if (['all', 'specific_user', 'new_users'].includes(normalized)) {
-    return normalized;
-  }
-
-  if (promo?.user_specific === true) {
-    return 'specific_user';
-  }
-
-  return 'all';
-};
-
-const isUserEligibleForPromoAudience = async ({ promo, userId }) => {
-  const audienceType = getPromoAudienceType(promo);
-
-  if (audienceType === 'specific_user') {
-    if (!userId) {
-      return { eligible: false, reason: 'USER_REQUIRED', message: 'User is required for this promo code' };
-    }
-    if (String(promo.user_id || '') !== String(userId)) {
-      return { eligible: false, reason: 'USER_MISMATCH', message: 'Promo code is not valid for this user' };
-    }
-    return { eligible: true, audienceType };
-  }
-
-  if (audienceType === 'new_users') {
-    if (!userId) {
-      return { eligible: false, reason: 'USER_REQUIRED', message: 'User is required for this promo code' };
-    }
-
-    const hasAnyRide = await Ride.exists({ userId: toObjectIdOrThrow(userId, 'user id') });
-    if (hasAnyRide) {
-      return { eligible: false, reason: 'NEW_USERS_ONLY', message: 'Promo code is only valid for new users' };
-    }
-  }
-
-  return { eligible: true, audienceType };
 };
 
 export const computePromoDiscount = ({ fare, promo, userCounter }) => {
@@ -160,9 +119,13 @@ export const validatePromoForContext = async ({
     return { eligible: false, reason: 'TRANSPORT_TYPE_MISMATCH', message: 'Promo code is not valid for this transport type' };
   }
 
-  const audienceEligibility = await isUserEligibleForPromoAudience({ promo, userId });
-  if (!audienceEligibility.eligible) {
-    return audienceEligibility;
+  if (promo.user_specific === true) {
+    if (!userId) {
+      return { eligible: false, reason: 'USER_REQUIRED', message: 'User is required for this promo code' };
+    }
+    if (String(promo.user_id || '') !== String(userId)) {
+      return { eligible: false, reason: 'USER_MISMATCH', message: 'Promo code is not valid for this user' };
+    }
   }
 
   const minimumTripAmount = Math.max(0, Number(promo.minimum_trip_amount || 0));
@@ -206,8 +169,7 @@ export const validatePromoForContext = async ({
       service_location_id: promo.service_location_id,
       service_location_ids: promoServiceLocationIds,
       transport_type: promo.transport_type,
-      user_specific: getPromoAudienceType(promo) === 'specific_user',
-      audience_type: audienceEligibility.audienceType,
+      user_specific: promo.user_specific === true,
       user_id: promo.user_id || '',
       minimum_trip_amount: Number(promo.minimum_trip_amount || 0),
       maximum_discount_amount: Number(promo.maximum_discount_amount || 0),
@@ -232,7 +194,6 @@ export const applyPromoToRideInTransaction = async ({
   fare,
   service_location_id,
   transport_type = 'taxi',
-  surgeAmount = 0,
 }) => {
   const normalizedCode = normalizePromoCode(code);
   if (!normalizedCode) {
@@ -274,9 +235,8 @@ export const applyPromoToRideInTransaction = async ({
     throw new ApiError(400, 'Promo code is not valid for this transport type');
   }
 
-  const audienceEligibility = await isUserEligibleForPromoAudience({ promo, userId });
-  if (!audienceEligibility.eligible) {
-    throw new ApiError(400, audienceEligibility.message);
+  if (promo.user_specific === true && String(promo.user_id || '') !== String(userId)) {
+    throw new ApiError(400, 'Promo code is not valid for this user');
   }
 
   const safeFare = Number(fare);
@@ -384,7 +344,7 @@ export const applyPromoToRideInTransaction = async ({
     transport_type: transportType,
     applied_at: new Date(),
   };
-  ride.fare = breakdown.fare_after_discount + Math.max(0, Number(surgeAmount || 0));
+  ride.fare = breakdown.fare_after_discount;
 
   await ride.save({ session });
 
@@ -418,54 +378,27 @@ export const listAvailablePromosForUser = async ({
   };
 
   if (userId) {
-    query.$and.push({
-      $or: [
-        { audience_type: 'all' },
-        { audience_type: { $exists: false }, user_specific: { $ne: true } },
-        { audience_type: 'specific_user', user_id: String(userId) },
-        { audience_type: { $exists: false }, user_specific: true, user_id: String(userId) },
-        { audience_type: 'new_users' },
-      ],
-    });
+    query.$and.push({ $or: [{ user_specific: { $ne: true } }, { user_id: String(userId) }] });
   } else {
-    query.$and.push({
-      $or: [
-        { audience_type: 'all' },
-        { audience_type: { $exists: false }, user_specific: { $ne: true } },
-      ],
-    });
+    query.user_specific = { $ne: true };
   }
 
   const promos = await PromoCode.find(query).sort({ createdAt: -1 }).limit(safeLimit).lean();
-  const userObjectId = userId && mongoose.isValidObjectId(userId) ? toObjectIdOrThrow(userId, 'user id') : null;
-  const hasAnyRide = userObjectId ? Boolean(await Ride.exists({ userId: userObjectId })) : false;
 
-  return promos
-    .filter((promo) => {
-      const audienceType = getPromoAudienceType(promo);
-      if (audienceType === 'new_users') {
-        return userObjectId ? !hasAnyRide : false;
-      }
-      if (audienceType === 'specific_user') {
-        return userId ? String(promo.user_id || '') === String(userId) : false;
-      }
-      return true;
-    })
-    .map((promo) => ({
-      _id: promo._id,
-      code: promo.code,
-      transport_type: promo.transport_type,
-      service_location_id: promo.service_location_id,
-      service_location_ids: getPromoServiceLocationIds(promo),
-      user_specific: getPromoAudienceType(promo) === 'specific_user',
-      audience_type: getPromoAudienceType(promo),
-      minimum_trip_amount: Number(promo.minimum_trip_amount || 0),
-      maximum_discount_amount: Number(promo.maximum_discount_amount || 0),
-      cumulative_max_discount_amount: Number(promo.cumulative_max_discount_amount || 0),
-      discount_percentage: Number(promo.discount_percentage || 0),
-      uses_per_user: Number(promo.uses_per_user || 1),
-      max_uses_total: Number(promo.max_uses_total || 0),
-      from_date: promo.from_date,
-      to_date: promo.to_date,
-    }));
+  return promos.map((promo) => ({
+    _id: promo._id,
+    code: promo.code,
+    transport_type: promo.transport_type,
+    service_location_id: promo.service_location_id,
+    service_location_ids: getPromoServiceLocationIds(promo),
+    user_specific: promo.user_specific === true,
+    minimum_trip_amount: Number(promo.minimum_trip_amount || 0),
+    maximum_discount_amount: Number(promo.maximum_discount_amount || 0),
+    cumulative_max_discount_amount: Number(promo.cumulative_max_discount_amount || 0),
+    discount_percentage: Number(promo.discount_percentage || 0),
+    uses_per_user: Number(promo.uses_per_user || 1),
+    max_uses_total: Number(promo.max_uses_total || 0),
+    from_date: promo.from_date,
+    to_date: promo.to_date,
+  }));
 };

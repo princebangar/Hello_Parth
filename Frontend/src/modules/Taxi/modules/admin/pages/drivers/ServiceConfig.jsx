@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Search, Filter, Edit, Trash, Check, X, Shield, Globe, Car, Bike, Info, LayoutGrid,
   Trash2, ChevronRight, MapPin, CheckCircle2, AlertCircle, ToggleLeft, ToggleRight,
-  Settings2, Package, Zap, ArrowRight, Edit3, MoreHorizontal, Rocket,
+  Settings2, Package, Zap, ArrowRight, Edit3, MoreHorizontal, Rocket
 } from 'lucide-react';
-import { getUnifiedAdminToken } from '../../services/adminSession';
 
 // ─── Tiny helpers ──────────────────────────────────────────────────────────────
 const Tog = ({ on, onToggle }) => (
@@ -78,11 +77,11 @@ const ServiceConfig = () => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const token = getUnifiedAdminToken() || '';
+        const token = localStorage.getItem('adminToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
         
         const [locRes, rideRes] = await Promise.all([
-          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/admin/service-locations', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/taxi/common/ride_modules', { headers: { 'Authorization': `Bearer ${token}` } })
+          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/service-locations', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/common/ride_modules', { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
 
         const locData = await locRes.json();
@@ -124,8 +123,8 @@ const ServiceConfig = () => {
     const fetchVehicles = async () => {
       if (!selLocId) return;
       try {
-        const token = getUnifiedAdminToken() || '';
-        const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/types/${selLocId}`, {
+        const token = localStorage.getItem('adminToken') || '';
+        const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/types/${selLocId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -622,4 +621,3 @@ const ServiceConfig = () => {
 };
 
 export default ServiceConfig;
-

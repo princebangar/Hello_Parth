@@ -23,9 +23,9 @@ const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_ZOOM = 12;
 
 const GEO_NAV_ITEMS = [
-  { label: 'Heat Map', path: '/taxi/admin/geo/heatmap' },
-  { label: "God's Eye", path: '/taxi/admin/geo/gods-eye' },
-  { label: 'Peak Zone', path: '/taxi/admin/geo/peak-zone' }
+  { label: 'Heat Map', path: '/admin/geo/heatmap' },
+  { label: "God's Eye", path: '/admin/geo/gods-eye' },
+  { label: 'Peak Zone', path: '/admin/geo/peak-zone' }
 ];
 
 const mapOptions = {
@@ -375,7 +375,7 @@ const GeoFencing = () => {
           <h3 className="text-2xl font-black text-gray-900 tracking-tight">Google Maps is ready to plug in</h3>
           <p className="mt-3 text-sm leading-6 text-gray-500">
             This page now uses the Google Maps loader and your admin zones API. Add a real browser key in
-            [frontend/.env](/z:/projects/hello-parth-taxi/frontend/.env) to render the live map on `/admin/geo/gods-eye`.
+            [frontend/.env](/z:/projects/appzeto-taxi/frontend/.env) to render the live map on `/admin/geo/gods-eye`.
           </p>
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
@@ -503,7 +503,7 @@ const GeoFencing = () => {
                 </Autocomplete>
               ) : (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800 shadow-sm">
-                  Set `VITE_GOOGLE_MAPS_API_KEY` in [frontend/.env](/z:/projects/hello-parth-taxi/frontend/.env) to load the live map here.
+                  Set `VITE_GOOGLE_MAPS_API_KEY` in [frontend/.env](/z:/projects/appzeto-taxi/frontend/.env) to load the live map here.
                 </div>
               )}
             </div>
@@ -720,7 +720,7 @@ const GeoFencing = () => {
               </Autocomplete>
             ) : (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800 shadow-sm">
-                Set `VITE_GOOGLE_MAPS_API_KEY` in [frontend/.env](/z:/projects/hello-parth-taxi/frontend/.env) to load the live map here.
+                Set `VITE_GOOGLE_MAPS_API_KEY` in [frontend/.env](/z:/projects/appzeto-taxi/frontend/.env) to load the live map here.
               </div>
             )}
           </div>

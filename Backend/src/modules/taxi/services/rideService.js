@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 import { ApiError } from '../../../utils/ApiError.js';
+import { getOrLoadCachedValue } from '../../../utils/cache.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from '../constants/index.js';
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 import { SetPrice } from '../admin/models/SetPrice.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
-import { Zone } from '../driver/models/Zone.js';
 import { WalletTransaction } from '../driver/models/WalletTransaction.js';
 import { incrementDriverTodaySummaryForCompletedRide } from '../driver/services/driverTodaySummaryService.js';
 import { applyDriverWalletAdjustment, ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
@@ -19,7 +19,6 @@ import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
-import { emitToRoom, getDriverRoom } from './dispatchService.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -677,17 +676,17 @@ const serializeRideBid = (bid) => ({
   updatedAt: bid.updatedAt || null,
   driver: bid.driverId && typeof bid.driverId === 'object'
     ? {
-      id: String(bid.driverId._id),
-      name: bid.driverId.name || '',
-      phone: bid.driverId.phone || '',
-      profileImage: bid.driverId.profileImage || '',
-      vehicleType: bid.driverId.vehicleType || '',
-      vehicleNumber: bid.driverId.vehicleNumber || '',
-      vehicleColor: bid.driverId.vehicleColor || '',
-      vehicleMake: bid.driverId.vehicleMake || '',
-      vehicleModel: bid.driverId.vehicleModel || '',
-      rating: bid.driverId.rating || '',
-    }
+        id: String(bid.driverId._id),
+        name: bid.driverId.name || '',
+        phone: bid.driverId.phone || '',
+        profileImage: bid.driverId.profileImage || '',
+        vehicleType: bid.driverId.vehicleType || '',
+        vehicleNumber: bid.driverId.vehicleNumber || '',
+        vehicleColor: bid.driverId.vehicleColor || '',
+        vehicleMake: bid.driverId.vehicleMake || '',
+        vehicleModel: bid.driverId.vehicleModel || '',
+        rating: bid.driverId.rating || '',
+      }
     : null,
 });
 
@@ -708,27 +707,51 @@ export const normalizeAllowedRidePaymentMethods = (paymentTypes = []) => {
   return unique.length ? unique : ['cash', 'online'];
 };
 
-export const resolveSetPriceForRide = async ({ serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
+const SET_PRICE_CACHE_TTL_MS = 30_000;
+
+export const resolveSetPriceForRide = async ({ zoneId = null, serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
   if (!vehicleTypeId) {
     return null;
   }
 
   const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
   const filters = [
-    {
-      vehicle_type: vehicleTypeId,
-      active: 1,
-      status: 'active',
-      ...(serviceLocationId ? { service_location_id: serviceLocationId } : {}),
-      transport_type: normalizedTransportType,
-    },
-    {
-      vehicle_type: vehicleTypeId,
-      active: 1,
-      status: 'active',
-      ...(serviceLocationId ? { service_location_id: serviceLocationId } : {}),
-      transport_type: 'both',
-    },
+    ...(zoneId
+      ? [
+          {
+            vehicle_type: vehicleTypeId,
+            active: 1,
+            status: 'active',
+            zone_id: zoneId,
+            transport_type: normalizedTransportType,
+          },
+          {
+            vehicle_type: vehicleTypeId,
+            active: 1,
+            status: 'active',
+            zone_id: zoneId,
+            transport_type: 'both',
+          },
+        ]
+      : []),
+    ...(serviceLocationId
+      ? [
+          {
+            vehicle_type: vehicleTypeId,
+            active: 1,
+            status: 'active',
+            service_location_id: serviceLocationId,
+            transport_type: normalizedTransportType,
+          },
+          {
+            vehicle_type: vehicleTypeId,
+            active: 1,
+            status: 'active',
+            service_location_id: serviceLocationId,
+            transport_type: 'both',
+          },
+        ]
+      : []),
     {
       vehicle_type: vehicleTypeId,
       active: 1,
@@ -743,18 +766,34 @@ export const resolveSetPriceForRide = async ({ serviceLocationId = null, transpo
     },
   ];
 
-  for (const filter of filters) {
-    const match = await SetPrice.findOne(filter).sort({ updatedAt: -1, createdAt: -1 }).lean();
-    if (match) {
-      return match;
-    }
-  }
+  const cacheKey = [
+    'cache:set_price',
+    String(zoneId || 'none'),
+    String(serviceLocationId || 'none'),
+    normalizedTransportType,
+    String(vehicleTypeId),
+  ].join(':');
 
-  return null;
+  return getOrLoadCachedValue(
+    cacheKey,
+    {
+      ttlMs: SET_PRICE_CACHE_TTL_MS,
+      load: async () => {
+        for (const filter of filters) {
+          const match = await SetPrice.findOne(filter).sort({ updatedAt: -1, createdAt: -1 }).lean();
+          if (match) {
+            return match;
+          }
+        }
+
+        return null;
+      },
+    },
+  );
 };
 
-export const getAllowedRidePaymentMethodsForPricing = async ({ serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
-  const pricingRule = await resolveSetPriceForRide({ serviceLocationId, transportType, vehicleTypeId });
+export const getAllowedRidePaymentMethodsForPricing = async ({ zoneId = null, serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
+  const pricingRule = await resolveSetPriceForRide({ zoneId, serviceLocationId, transportType, vehicleTypeId });
 
   return {
     pricingRule,
@@ -776,22 +815,27 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
   const vehicleTypeIds = normalizeVehicleTypeIds(ride.dispatchVehicleTypeIds || [], ride.vehicleTypeId);
 
   if (vehicleTypeIds.length === 0) {
-    return {};
+    const fallbackKeys = [
+      ride?.vehicleIconType,
+      ride?.vehicleType,
+      String(ride?.vehicleIconType || '').replace(/\s+/g, '_'),
+      String(ride?.vehicleType || '').replace(/\s+/g, '_'),
+    ]
+      .map(normalizeVehicleKey)
+      .filter(Boolean);
+    const clauses = [
+      ...([...(new Set(fallbackKeys))].length
+        ? [
+            { vehicleType: { $in: [...(new Set(fallbackKeys))] } },
+            { vehicleIconType: { $in: [...(new Set(fallbackKeys))] } },
+          ]
+        : []),
+    ];
+
+    return clauses.length > 1 ? { $or: clauses } : clauses[0] || {};
   }
 
-  const vehicles = await Vehicle.find({ _id: { $in: vehicleTypeIds } }).select('name vehicle_type icon_types').lean();
-  const vehicleTypeKeys = normalizeVehicleKeys(vehicles);
-  const clauses = [
-    { vehicleTypeId: { $in: vehicleTypeIds } },
-    ...(vehicleTypeKeys.length
-      ? [
-        { vehicleType: { $in: vehicleTypeKeys } },
-        { vehicleIconType: { $in: vehicleTypeKeys } },
-      ]
-      : []),
-  ];
-
-  return clauses.length > 1 ? { $or: clauses } : clauses[0];
+  return { vehicleTypeId: { $in: vehicleTypeIds } };
 };
 
 const syncDeliveryWithRide = async (ride) => {
@@ -848,6 +892,7 @@ export const createRideRecord = async ({
   parcel,
   intercity,
   promo_code,
+  zone_id,
   service_location_id,
   transport_type,
   scheduledAt,
@@ -879,17 +924,22 @@ export const createRideRecord = async ({
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
   const primaryVehicle = primaryVehicleTypeId
-    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type').lean()
+    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
   const resolvedVehicleIconUrl = String(
-    vehicleIconUrl || primaryVehicle?.map_icon || primaryVehicle?.icon || primaryVehicle?.image || '',
+    vehicleIconUrl || primaryVehicle?.image || primaryVehicle?.map_icon || primaryVehicle?.icon || '',
   ).trim();
   const normalizedTransportType = normalizeRideTransportType(transport_type);
+  const resolvedZoneId =
+    zone_id && mongoose.Types.ObjectId.isValid(zone_id)
+      ? new mongoose.Types.ObjectId(zone_id)
+      : null;
   const resolvedServiceLocationId =
     service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
       ? new mongoose.Types.ObjectId(service_location_id)
       : null;
   const { pricingRule, allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
+    zoneId: resolvedZoneId,
     serviceLocationId: resolvedServiceLocationId,
     transportType: normalizedTransportType,
     vehicleTypeId: primaryVehicleTypeId,
@@ -916,10 +966,10 @@ export const createRideRecord = async ({
   const effectiveBookingMode = pricingNegotiationMode === 'driver_bid' ? 'bidding' : 'normal';
   const configuredBidStepAmount = pricingNegotiationMode !== 'none'
     ? normalizeBidStepAmount(
-      isOutstationBiddingFlow
-        ? bidRideSettings.bidding_amount_increase_or_decrease
-        : bidRideSettings.user_bidding_amount_increase_or_decrease,
-    )
+        isOutstationBiddingFlow
+          ? bidRideSettings.bidding_amount_increase_or_decrease
+          : bidRideSettings.user_bidding_amount_increase_or_decrease,
+      )
     : normalizeBidStepAmount(bidStepAmount);
   const effectiveBidStepAmount = configuredBidStepAmount || normalizeBidStepAmount(bidStepAmount);
   const bidRideRange = resolveBidRideRange({
@@ -929,20 +979,20 @@ export const createRideRecord = async ({
   });
   const effectiveUserMaxBidFare = pricingNegotiationMode === 'driver_bid'
     ? clampBidAmountWithinRange({
-      amount: userMaxBidFare,
-      minFare: bidRideRange.userBidFloorFare,
-      maxFare: Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare),
-      baseFare: safeFare,
-      bidStepAmount: effectiveBidStepAmount,
-    })
-    : pricingNegotiationMode === 'user_increment_only'
-      ? clampBidAmountWithinRange({
-        amount: safeFare,
+        amount: userMaxBidFare,
         minFare: bidRideRange.userBidFloorFare,
-        maxFare: bidRideRange.userBidCeilingFare,
+        maxFare: Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare),
         baseFare: safeFare,
         bidStepAmount: effectiveBidStepAmount,
       })
+    : pricingNegotiationMode === 'user_increment_only'
+      ? clampBidAmountWithinRange({
+          amount: safeFare,
+          minFare: bidRideRange.userBidFloorFare,
+          maxFare: bidRideRange.userBidCeilingFare,
+          baseFare: safeFare,
+          bidStepAmount: effectiveBidStepAmount,
+        })
       : safeFare;
   const effectiveBidFloorFare = pricingNegotiationMode === 'driver_bid'
     ? bidRideRange.driverBidFloorFare
@@ -954,77 +1004,41 @@ export const createRideRecord = async ({
     : pricingNegotiationMode === 'user_increment_only'
       ? bidRideRange.userBidCeilingFare
       : safeFare;
-  const pickupPoint = normalizePoint(pickupCoords, 'pickupCoords');
-  const surgeZone = normalizedTransportType !== 'delivery'
-    ? await Zone.findOne({
-      ...(resolvedServiceLocationId ? { service_location_id: resolvedServiceLocationId } : {}),
-      active: true,
-      geometry: {
-        $geoIntersects: {
-          $geometry: {
-            type: 'Point',
-            coordinates: pickupPoint,
-          },
-        },
-      },
-    })
-      .select('_id name ride_surge_enabled')
-      .lean()
-    : null;
-  const rideSurgeAmount = Boolean(surgeZone?.ride_surge_enabled)
-    ? Math.max(0, Number(pricingRule?.ride_surge_amount || 0))
-    : 0;
-  const effectiveStartingFareWithoutSurge = pricingNegotiationMode === 'user_increment_only'
-    ? Math.max(0, effectiveUserMaxBidFare - rideSurgeAmount)
-    : Math.max(0, safeFare - rideSurgeAmount);
-  const effectiveStartingFare = effectiveStartingFareWithoutSurge + rideSurgeAmount;
-  const effectiveBidFloorFareWithSurge = effectiveBidFloorFare + rideSurgeAmount;
-  const effectiveUserMaxBidFareWithSurge = effectiveUserMaxBidFare + rideSurgeAmount;
-  const effectiveBidCeilingMaxFareWithSurge = effectiveBidCeilingMaxFare + rideSurgeAmount;
+  const effectiveStartingFare = pricingNegotiationMode === 'user_increment_only'
+    ? effectiveUserMaxBidFare
+    : safeFare;
   const nextFareIncreaseAt = pricingNegotiationMode === 'user_increment_only'
     ? new Date(Date.now() + fareIncreaseWaitMinutes * 60 * 1000)
     : null;
+  const parcelCommissionFallback =
+    normalizedServiceType === 'parcel'
+      ? {
+          admin_commission_type_from_driver: Number(primaryVehicle?.admin_commission_type_from_driver ?? 1),
+          admin_commission_from_driver: Number(primaryVehicle?.admin_commission_from_driver ?? 0),
+          admin_commission_type_for_owner: Number(primaryVehicle?.admin_commission_type_for_owner ?? 1),
+          admin_commission_for_owner: Number(primaryVehicle?.admin_commission_for_owner ?? 0),
+        }
+      : null;
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
-    admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? 1),
-    admin_commission_from_driver: Number(pricingRule?.admin_commission_from_driver ?? 0),
+    admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? parcelCommissionFallback?.admin_commission_type_from_driver ?? 1),
+    admin_commission_from_driver: Number(pricingRule?.admin_commission_from_driver ?? parcelCommissionFallback?.admin_commission_from_driver ?? 0),
+    admin_commission_type_for_owner: Number(pricingRule?.admin_commission_type_for_owner ?? parcelCommissionFallback?.admin_commission_type_for_owner ?? 1),
+    admin_commission_for_owner: Number(pricingRule?.admin_commission_for_owner ?? parcelCommissionFallback?.admin_commission_for_owner ?? 0),
     waiting_charge: Number(pricingRule?.waiting_charge ?? 0),
     free_waiting_before: Number(pricingRule?.free_waiting_before ?? 0),
     free_waiting_after: Number(pricingRule?.free_waiting_after ?? 0),
-    ride_surge_enabled: Boolean(surgeZone?.ride_surge_enabled) && rideSurgeAmount > 0,
-    ride_surge_amount: rideSurgeAmount,
-    fare_before_surge: effectiveStartingFareWithoutSurge,
-    surge_zone_id: surgeZone?._id || null,
-    surge_zone_name: surgeZone?.name || '',
     allowed_payment_methods: allowedPaymentMethods,
     resolvedAt: pricingRule ? new Date() : null,
   };
 
   const promoCode = typeof promo_code === 'string' ? promo_code.trim() : '';
   const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
-
-  // Fetch pending cancellation dues for user
-  const pendingDueRides = await Ride.find({
-    userId,
-    'cancellation.payment_status': 'added_to_next_ride_due',
-    'cancellation.cancellation_charge': { $gt: 0 },
-  }).select('_id cancellation').lean();
-
-  const previousCancellationFee = Math.round(pendingDueRides.reduce(
-    (sum, r) => sum + Number(r.cancellation?.cancellation_charge || 0),
-    0,
-  ));
-  const carriedCancellationRideIds = pendingDueRides.map((r) => r._id);
-  // IMPORTANT: Frontend already includes previousCancellationFee in the fare it sends.
-  // So totalStartingFare = effectiveStartingFare (which is based on safeFare from frontend)
-  // We do NOT add previousCancellationFee again to avoid double-counting.
-  const totalStartingFare = effectiveStartingFare;
-
   const applicableSubscription = primaryVehicleTypeId
     ? await resolveApplicableUserSubscription({
-      userId,
-      vehicleTypeId: primaryVehicleTypeId,
-    })
+        userId,
+        vehicleTypeId: primaryVehicleTypeId,
+      })
     : null;
   const isSubscriptionCovered = Boolean(applicableSubscription?._id);
   const subscriptionBenefitType = String(applicableSubscription?.benefit_type || '').trim().toLowerCase() === 'unlimited'
@@ -1037,33 +1051,33 @@ export const createRideRecord = async ({
     : Math.max(0, subscriptionRideLimit - subscriptionRidesUsed);
   const effectiveDriverPaymentCollection = isSubscriptionCovered
     ? {
-      provider: 'subscription',
-      providerId: String(applicableSubscription._id),
-      providerOrderId: '',
-      providerPaymentId: '',
-      providerMode: 'subscription_wallet',
-      source: 'user_subscription',
-      status: 'paid',
-      amount: totalStartingFare,
-      currency: 'INR',
-      linkUrl: '',
-      paidAt: new Date(),
-      updatedAt: new Date(),
-    }
+        provider: 'subscription',
+        providerId: String(applicableSubscription._id),
+        providerOrderId: '',
+        providerPaymentId: '',
+        providerMode: 'subscription_wallet',
+        source: 'user_subscription',
+        status: 'paid',
+        amount: safeFare,
+        currency: 'INR',
+        linkUrl: '',
+        paidAt: new Date(),
+        updatedAt: new Date(),
+      }
     : undefined;
   const effectivePaymentMethod = isSubscriptionCovered ? 'online' : resolvedRequestedPaymentMethod;
   const effectiveSubscriptionUsage = isSubscriptionCovered
     ? {
-      covered: true,
-      subscriptionId: applicableSubscription._id,
-      planId: applicableSubscription.planId || null,
-      planName: applicableSubscription.name || '',
-      vehicleTypeId: applicableSubscription.vehicle_type_id || primaryVehicleTypeId,
-      benefitType: subscriptionBenefitType,
-      fareCovered: effectiveStartingFare,
-      ridesUsedBefore: subscriptionRidesUsed,
-      ridesRemainingBefore: subscriptionRidesRemaining,
-    }
+        covered: true,
+        subscriptionId: applicableSubscription._id,
+        planId: applicableSubscription.planId || null,
+        planName: applicableSubscription.name || '',
+        vehicleTypeId: applicableSubscription.vehicle_type_id || primaryVehicleTypeId,
+        benefitType: subscriptionBenefitType,
+        fareCovered: safeFare,
+        ridesUsedBefore: subscriptionRidesUsed,
+        ridesRemainingBefore: subscriptionRidesRemaining,
+      }
     : undefined;
 
   if (scheduledAt && !normalizedScheduledAt) {
@@ -1086,18 +1100,15 @@ export const createRideRecord = async ({
       pickupAddress: normalizeAddress(pickupAddress),
       dropLocation: toPoint(dropCoords, 'drop'),
       dropAddress: normalizeAddress(dropAddress),
-      fare: totalStartingFare,
-      baseFare: effectiveStartingFare,
-      baseRideFare: Math.max(0, effectiveStartingFare - previousCancellationFee),
-      previousCancellationFee,
-      carriedCancellationRideIds,
+      fare: effectiveStartingFare,
+      baseFare: safeFare,
       bookingMode: effectiveBookingMode,
       pricingNegotiationMode,
       biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
       bidStepAmount: effectiveBidStepAmount,
-      bidFloorFare: effectiveBidFloorFareWithSurge,
-      userMaxBidFare: effectiveUserMaxBidFareWithSurge,
-      bidCeilingMaxFare: effectiveBidCeilingMaxFareWithSurge,
+      bidFloorFare: effectiveBidFloorFare,
+      userMaxBidFare: effectiveUserMaxBidFare,
+      bidCeilingMaxFare: effectiveBidCeilingMaxFare,
       fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
       nextFareIncreaseAt,
       estimatedDistanceMeters: safeEstimatedDistanceMeters,
@@ -1115,8 +1126,6 @@ export const createRideRecord = async ({
       status: RIDE_STATUS.SEARCHING,
       liveStatus: RIDE_LIVE_STATUS.SEARCHING,
     });
-
-
 
     user.currentRideId = ride._id;
     await user.save();
@@ -1146,18 +1155,15 @@ export const createRideRecord = async ({
             pickupAddress: normalizeAddress(pickupAddress),
             dropLocation: toPoint(dropCoords, 'drop'),
             dropAddress: normalizeAddress(dropAddress),
-            fare: totalStartingFare,
-            baseFare: effectiveStartingFare,
-            baseRideFare: Math.max(0, effectiveStartingFare - previousCancellationFee),
-            previousCancellationFee,
-            carriedCancellationRideIds,
+            fare: effectiveStartingFare,
+            baseFare: safeFare,
             bookingMode: effectiveBookingMode,
             pricingNegotiationMode,
             biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
             bidStepAmount: effectiveBidStepAmount,
-            bidFloorFare: effectiveBidFloorFareWithSurge,
-            userMaxBidFare: effectiveUserMaxBidFareWithSurge,
-            bidCeilingMaxFare: effectiveBidCeilingMaxFareWithSurge,
+            bidFloorFare: effectiveBidFloorFare,
+            userMaxBidFare: effectiveUserMaxBidFare,
+            bidCeilingMaxFare: effectiveBidCeilingMaxFare,
             fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
             nextFareIncreaseAt,
             estimatedDistanceMeters: safeEstimatedDistanceMeters,
@@ -1192,7 +1198,6 @@ export const createRideRecord = async ({
         fare: safeFare,
         service_location_id,
         transport_type: transport_type || 'taxi',
-        surgeAmount: rideSurgeAmount,
       });
 
       await session.commitTransaction();
@@ -1250,8 +1255,6 @@ export const serializeRideRealtime = (ride) => ({
   liveStatus: ride.liveStatus,
   fare: ride.fare,
   baseFare: Number(ride.baseFare || ride.fare || 0),
-  baseRideFare: Number(ride.baseRideFare || (ride.fare - (ride.previousCancellationFee || 0)) || ride.baseFare || 0),
-  previousCancellationFee: Number(ride.previousCancellationFee || 0),
   bookingMode: ride.bookingMode || 'normal',
   pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
   biddingStatus: ride.biddingStatus || 'none',
@@ -1267,40 +1270,40 @@ export const serializeRideRealtime = (ride) => ({
   paymentMethod: ride.paymentMethod,
   subscriptionUsage: ride.subscriptionUsage?.covered
     ? {
-      covered: true,
-      subscriptionId: ride.subscriptionUsage.subscriptionId ? String(ride.subscriptionUsage.subscriptionId) : '',
-      planId: ride.subscriptionUsage.planId ? String(ride.subscriptionUsage.planId) : '',
-      planName: ride.subscriptionUsage.planName || '',
-      vehicleTypeId: ride.subscriptionUsage.vehicleTypeId ? String(ride.subscriptionUsage.vehicleTypeId) : '',
-      benefitType: ride.subscriptionUsage.benefitType || '',
-      fareCovered: Number(ride.subscriptionUsage.fareCovered || 0),
-      ridesUsedBefore: Number(ride.subscriptionUsage.ridesUsedBefore || 0),
-      ridesRemainingBefore: ride.subscriptionUsage.ridesRemainingBefore === null
-        ? null
-        : Number(ride.subscriptionUsage.ridesRemainingBefore || 0),
-      ridesUsedAfter: ride.subscriptionUsage.ridesUsedAfter === null
-        ? null
-        : Number(ride.subscriptionUsage.ridesUsedAfter || 0),
-      ridesRemainingAfter: ride.subscriptionUsage.ridesRemainingAfter === null
-        ? null
-        : Number(ride.subscriptionUsage.ridesRemainingAfter || 0),
-    }
+        covered: true,
+        subscriptionId: ride.subscriptionUsage.subscriptionId ? String(ride.subscriptionUsage.subscriptionId) : '',
+        planId: ride.subscriptionUsage.planId ? String(ride.subscriptionUsage.planId) : '',
+        planName: ride.subscriptionUsage.planName || '',
+        vehicleTypeId: ride.subscriptionUsage.vehicleTypeId ? String(ride.subscriptionUsage.vehicleTypeId) : '',
+        benefitType: ride.subscriptionUsage.benefitType || '',
+        fareCovered: Number(ride.subscriptionUsage.fareCovered || 0),
+        ridesUsedBefore: Number(ride.subscriptionUsage.ridesUsedBefore || 0),
+        ridesRemainingBefore: ride.subscriptionUsage.ridesRemainingBefore === null
+          ? null
+          : Number(ride.subscriptionUsage.ridesRemainingBefore || 0),
+        ridesUsedAfter: ride.subscriptionUsage.ridesUsedAfter === null
+          ? null
+          : Number(ride.subscriptionUsage.ridesUsedAfter || 0),
+        ridesRemainingAfter: ride.subscriptionUsage.ridesRemainingAfter === null
+          ? null
+          : Number(ride.subscriptionUsage.ridesRemainingAfter || 0),
+      }
     : null,
   driverPaymentCollection: ride.driverPaymentCollection
     ? {
-      provider: ride.driverPaymentCollection.provider || '',
-      providerId: ride.driverPaymentCollection.providerId || '',
-      providerOrderId: ride.driverPaymentCollection.providerOrderId || '',
-      providerPaymentId: ride.driverPaymentCollection.providerPaymentId || '',
-      providerMode: ride.driverPaymentCollection.providerMode || '',
-      source: ride.driverPaymentCollection.source || '',
-      status: ride.driverPaymentCollection.status || 'pending',
-      amount: Number(ride.driverPaymentCollection.amount || 0),
-      currency: ride.driverPaymentCollection.currency || 'INR',
-      linkUrl: ride.driverPaymentCollection.linkUrl || '',
-      paidAt: ride.driverPaymentCollection.paidAt || null,
-      updatedAt: ride.driverPaymentCollection.updatedAt || null,
-    }
+        provider: ride.driverPaymentCollection.provider || '',
+        providerId: ride.driverPaymentCollection.providerId || '',
+        providerOrderId: ride.driverPaymentCollection.providerOrderId || '',
+        providerPaymentId: ride.driverPaymentCollection.providerPaymentId || '',
+        providerMode: ride.driverPaymentCollection.providerMode || '',
+        source: ride.driverPaymentCollection.source || '',
+        status: ride.driverPaymentCollection.status || 'pending',
+        amount: Number(ride.driverPaymentCollection.amount || 0),
+        currency: ride.driverPaymentCollection.currency || 'INR',
+        linkUrl: ride.driverPaymentCollection.linkUrl || '',
+        paidAt: ride.driverPaymentCollection.paidAt || null,
+        updatedAt: ride.driverPaymentCollection.updatedAt || null,
+      }
     : null,
   otp: ride.otp || '',
   parcel: ride.deliveryId?.parcel || ride.parcel || null,
@@ -1310,20 +1313,17 @@ export const serializeRideRealtime = (ride) => ({
   promo: ride.promo?.code ? ride.promo : null,
   pricingSnapshot: ride.pricingSnapshot
     ? {
-      setPriceId: ride.pricingSnapshot.setPriceId || null,
-      admin_commission_type_from_driver: Number(ride.pricingSnapshot.admin_commission_type_from_driver ?? 1),
-      admin_commission_from_driver: Number(ride.pricingSnapshot.admin_commission_from_driver ?? 0),
-      waiting_charge: Number(ride.pricingSnapshot.waiting_charge ?? 0),
-      free_waiting_before: Number(ride.pricingSnapshot.free_waiting_before ?? 0),
-      free_waiting_after: Number(ride.pricingSnapshot.free_waiting_after ?? 0),
-      ride_surge_enabled: Boolean(ride.pricingSnapshot.ride_surge_enabled),
-      ride_surge_amount: Number(ride.pricingSnapshot.ride_surge_amount ?? 0),
-      fare_before_surge: Number(ride.pricingSnapshot.fare_before_surge ?? 0),
-      surge_zone_id: ride.pricingSnapshot.surge_zone_id ? String(ride.pricingSnapshot.surge_zone_id) : null,
-      surge_zone_name: ride.pricingSnapshot.surge_zone_name || '',
-      allowed_payment_methods: normalizeAllowedRidePaymentMethods(ride.pricingSnapshot.allowed_payment_methods),
-      resolvedAt: ride.pricingSnapshot.resolvedAt || null,
-    }
+        setPriceId: ride.pricingSnapshot.setPriceId || null,
+        admin_commission_type_from_driver: Number(ride.pricingSnapshot.admin_commission_type_from_driver ?? 1),
+        admin_commission_from_driver: Number(ride.pricingSnapshot.admin_commission_from_driver ?? 0),
+        admin_commission_type_for_owner: Number(ride.pricingSnapshot.admin_commission_type_for_owner ?? 1),
+        admin_commission_for_owner: Number(ride.pricingSnapshot.admin_commission_for_owner ?? 0),
+        waiting_charge: Number(ride.pricingSnapshot.waiting_charge ?? 0),
+        free_waiting_before: Number(ride.pricingSnapshot.free_waiting_before ?? 0),
+        free_waiting_after: Number(ride.pricingSnapshot.free_waiting_after ?? 0),
+        allowed_payment_methods: normalizeAllowedRidePaymentMethods(ride.pricingSnapshot.allowed_payment_methods),
+        resolvedAt: ride.pricingSnapshot.resolvedAt || null,
+      }
     : null,
   vehicleIconType: ride.vehicleIconType || '',
   vehicleIconUrl: ride.vehicleIconUrl || '',
@@ -1339,12 +1339,12 @@ export const serializeRideRealtime = (ride) => ({
   feedback: ride.feedback || null,
   lastDriverLocation: ride.lastDriverLocation?.coordinates?.length
     ? {
-      type: ride.lastDriverLocation.type,
-      coordinates: ride.lastDriverLocation.coordinates,
-      heading: ride.lastDriverLocation.heading,
-      speed: ride.lastDriverLocation.speed,
-      updatedAt: ride.lastDriverLocation.updatedAt,
-    }
+        type: ride.lastDriverLocation.type,
+        coordinates: ride.lastDriverLocation.coordinates,
+        heading: ride.lastDriverLocation.heading,
+        speed: ride.lastDriverLocation.speed,
+        updatedAt: ride.lastDriverLocation.updatedAt,
+      }
     : null,
   user: ride.userId,
   driver: ride.driverId,
@@ -1450,8 +1450,6 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'liveStatus',
       'fare',
       'baseFare',
-      'baseRideFare',
-      'previousCancellationFee',
       'bookingMode',
       'biddingStatus',
       'bidStepAmount',
@@ -1500,49 +1498,47 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
 
   return {
     results: rides.map((ride) => ({
-      rideId: String(ride._id),
-      deliveryId: ride.deliveryId?._id ? String(ride.deliveryId._id) : ride.deliveryId ? String(ride.deliveryId) : null,
-      type: ride.serviceType || 'ride',
-      serviceType: ride.serviceType || 'ride',
-      status: ride.status,
-      liveStatus: ride.liveStatus,
-      fare: ride.fare,
-      baseFare: Number(ride.baseFare || ride.fare || 0),
-      baseRideFare: Number(ride.baseRideFare || (Number(ride.fare || 0) - Number(ride.previousCancellationFee || 0))),
-      previousCancellationFee: Number(ride.previousCancellationFee || 0),
-      bookingMode: ride.bookingMode || 'normal',
-      biddingStatus: ride.biddingStatus || 'none',
-      bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
-      bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
-      userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
-      bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
-      acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
-      estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
-      estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
-      paymentMethod: ride.paymentMethod,
-      otp: ride.otp || '',
-      parcel: ride.deliveryId?.parcel || ride.parcel || null,
-      intercity: ride.intercity || null,
-      pricingSnapshot: ride.pricingSnapshot || null,
-      commissionAmount: ride.commissionAmount,
-      driverEarnings: ride.driverEarnings,
-      vehicleIconType: ride.vehicleIconType,
-      // Keep history responses light; giant data URLs can stall the activity screen.
-      vehicleIconUrl: String(ride.vehicleIconUrl || '').startsWith('data:') ? '' : (ride.vehicleIconUrl || ''),
-      pickupLocation: ride.pickupLocation,
-      pickupAddress: ride.pickupAddress || '',
-      dropLocation: ride.dropLocation,
-      dropAddress: ride.dropAddress || '',
-      scheduledAt: ride.scheduledAt || null,
-      acceptedAt: ride.acceptedAt,
-      arrivedAt: ride.arrivedAt,
-      startedAt: ride.startedAt,
-      completedAt: ride.completedAt,
-      feedback: ride.feedback || null,
-      createdAt: ride.createdAt,
-      updatedAt: ride.updatedAt,
-      user: role === 'driver' ? (ride.userId || null) : null,
-      driver: role === 'user' ? (ride.driverId || null) : null,
+    rideId: String(ride._id),
+    deliveryId: ride.deliveryId?._id ? String(ride.deliveryId._id) : ride.deliveryId ? String(ride.deliveryId) : null,
+    type: ride.serviceType || 'ride',
+    serviceType: ride.serviceType || 'ride',
+    status: ride.status,
+    liveStatus: ride.liveStatus,
+    fare: ride.fare,
+    baseFare: Number(ride.baseFare || ride.fare || 0),
+    bookingMode: ride.bookingMode || 'normal',
+    biddingStatus: ride.biddingStatus || 'none',
+    bidStepAmount: Number(ride.bidStepAmount || DEFAULT_BID_STEP_AMOUNT),
+    bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
+    userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+    bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
+    acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
+    estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
+    estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
+    paymentMethod: ride.paymentMethod,
+    otp: ride.otp || '',
+    parcel: ride.deliveryId?.parcel || ride.parcel || null,
+    intercity: ride.intercity || null,
+    pricingSnapshot: ride.pricingSnapshot || null,
+    commissionAmount: ride.commissionAmount,
+    driverEarnings: ride.driverEarnings,
+    vehicleIconType: ride.vehicleIconType,
+    // Keep history responses light; giant data URLs can stall the activity screen.
+    vehicleIconUrl: String(ride.vehicleIconUrl || '').startsWith('data:') ? '' : (ride.vehicleIconUrl || ''),
+    pickupLocation: ride.pickupLocation,
+    pickupAddress: ride.pickupAddress || '',
+    dropLocation: ride.dropLocation,
+    dropAddress: ride.dropAddress || '',
+    scheduledAt: ride.scheduledAt || null,
+    acceptedAt: ride.acceptedAt,
+    arrivedAt: ride.arrivedAt,
+    startedAt: ride.startedAt,
+    completedAt: ride.completedAt,
+    feedback: ride.feedback || null,
+    createdAt: ride.createdAt,
+    updatedAt: ride.updatedAt,
+    user: role === 'driver' ? (ride.userId || null) : null,
+    driver: role === 'user' ? (ride.driverId || null) : null,
     })),
     pagination: {
       page: safePage,
@@ -1700,23 +1696,6 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
   if (nextStatus === RIDE_LIVE_STATUS.COMPLETED) {
     ride.completedAt = new Date();
-
-    const arrivedAt = ride.arrivedAt;
-    const startedAt = ride.startedAt;
-    const waitingChargeRate = Number(ride.pricingSnapshot?.waiting_charge ?? 0);
-    const freeWaitingBefore = Number(ride.pricingSnapshot?.free_waiting_before ?? 0);
-
-    if (arrivedAt && startedAt && waitingChargeRate > 0) {
-      const arrivedTime = new Date(arrivedAt).getTime();
-      const startedTime = new Date(startedAt).getTime();
-      const waitingSeconds = Math.max(0, Math.floor((startedTime - arrivedTime) / 1000));
-      const chargeableMinutes = Math.max(0, Math.ceil(waitingSeconds / 60) - freeWaitingBefore);
-      const waitingChargeTotal = Math.round(chargeableMinutes * waitingChargeRate * 100) / 100;
-
-      if (waitingChargeTotal > 0) {
-        ride.fare = Number(ride.fare || 0) + waitingChargeTotal;
-      }
-    }
   }
 
   await ride.save();
@@ -1796,25 +1775,36 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
 
 export const updateRideDriverLocation = async ({ rideId, driverId, coordinates, heading = null, speed = null }) => {
   const normalizedCoords = normalizePoint(coordinates, 'coordinates');
-  const ride = await Ride.findOne({ _id: rideId, driverId });
-
-  if (!ride) {
-    throw new ApiError(404, 'Assigned ride not found');
-  }
-
-  ride.lastDriverLocation = {
+  const nextDriverLocation = {
     type: 'Point',
     coordinates: normalizedCoords,
     heading: Number.isFinite(Number(heading)) ? Number(heading) : null,
     speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
     updatedAt: new Date(),
   };
+  const ride = await Ride.findOneAndUpdate(
+    { _id: rideId, driverId },
+    {
+      $set: {
+        lastDriverLocation: nextDriverLocation,
+      },
+    },
+    {
+      returnDocument: 'after',
+      projection: {
+        _id: 1,
+        lastDriverLocation: 1,
+      },
+    },
+  ).lean();
 
-  await ride.save();
+  if (!ride) {
+    throw new ApiError(404, 'Assigned ride not found');
+  }
 
   return {
     rideId: String(ride._id),
-    coordinates: normalizedCoords,
+    coordinates: ride.lastDriverLocation?.coordinates || normalizedCoords,
     heading: ride.lastDriverLocation.heading,
     speed: ride.lastDriverLocation.speed,
     updatedAt: ride.lastDriverLocation.updatedAt,
@@ -1947,7 +1937,7 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
         },
       },
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       },
     );
@@ -1992,7 +1982,7 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
       },
     },
     {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     },
   );
@@ -2180,33 +2170,5 @@ export const submitRideFeedback = async ({ rideId, userId, rating, comment = '',
 
   await Promise.all([ride.save(), driver.save()]);
 
-  if (numericTip > 0) {
-    try {
-      await applyDriverWalletAdjustment({
-        driverId: ride.driverId,
-        rideId: ride._id,
-        amount: numericTip,
-        type: 'ride_tip',
-        description: `Tip of Rs ${numericTip} received from rider (cash)`,
-        metadata: { source: 'ride_tip', tipAmount: numericTip, paymentMode: 'cash' },
-      });
-    } catch (walletErr) {
-      console.warn('Failed to credit tip to driver wallet:', walletErr?.message);
-    }
-
-    try {
-      emitToRoom(getDriverRoom(ride.driverId), 'ride:tip:received', {
-        rideId: String(ride._id),
-        tipAmount: numericTip,
-        rating: numericRating,
-        comment: String(comment || '').trim(),
-        message: `You received a tip of Rs ${numericTip} from passenger!`,
-      });
-    } catch (socketErr) {
-      console.warn('Failed to emit tip socket event:', socketErr?.message);
-    }
-  }
-
   return populateRideRealtime(ride._id);
 };
-

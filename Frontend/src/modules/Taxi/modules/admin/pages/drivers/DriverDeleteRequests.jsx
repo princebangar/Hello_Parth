@@ -100,97 +100,112 @@ const DriverDeleteRequests = () => {
   }
 
   return (
-    <div className="space-y-8 p-1 animate-in fade-in duration-700 font-sans text-gray-950">
-      <div className="flex items-start justify-between">
+    <div className="min-h-screen bg-[#F8FAFC] p-3 lg:p-4 font-sans text-gray-900 space-y-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 mb-2 leading-none uppercase tracking-tighter">Delete Request Drivers</h1>
-          <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
-            <span className="text-gray-950 uppercase tracking-widest leading-none">Driver Management</span>
-            <ChevronRight size={14} />
-            <span className="uppercase tracking-widest leading-none">Delete Requests</span>
+          <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-0.5">
+            <span>Driver Management</span>
+            <ChevronRight size={10} />
+            <span className="text-gray-700 font-medium">Delete Requests</span>
           </div>
+          <h1 className="text-base font-bold text-gray-900">Delete requests</h1>
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-600">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
           {error}
         </div>
       ) : null}
 
-      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3 text-[13px] font-black uppercase tracking-widest text-gray-400">
-            Total Requests: {drivers.length}
+      <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-yellow-50 rounded-lg text-yellow-600">
+               <AlertCircle size={18} />
+             </div>
+             <div>
+               <h2 className="text-sm font-bold text-gray-900">Delete requests</h2>
+               <p className="text-xs text-gray-500">{drivers.length} pending requests</p>
+             </div>
           </div>
 
-          <div className="relative w-full md:w-96 group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-rose-500 transition-colors" size={18} />
+          <div className="relative w-full md:w-96">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
             <input
               type="text"
-              placeholder="Search requests..."
+              placeholder="Search by driver name, mobile number or request ID"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-[20px] text-[13px] font-bold focus:bg-white focus:border-rose-100 outline-none transition-all shadow-inner"
+              className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400 transition-colors"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden min-h-[420px]">
-        <div className="overflow-x-auto no-scrollbar">
-          <table className="w-full text-left">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse whitespace-nowrap">
             <thead>
-              <tr className="bg-gray-50/50 border-b border-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                <th className="px-8 py-6">Driver</th>
-                <th className="px-6 py-6">Mobile</th>
-                <th className="px-6 py-6">Reason</th>
-                <th className="px-6 py-6">Requested At</th>
-                <th className="px-8 py-6 text-right">Action</th>
+              <tr className="bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2">Driver</th>
+                <th className="px-3 py-2">Mobile</th>
+                <th className="px-3 py-2">Reason</th>
+                <th className="px-3 py-2">Requested at</th>
+                <th className="px-3 py-2 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
               {filteredDrivers.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-8 py-24 text-center opacity-40">
-                    <div className="flex flex-col items-center gap-4 text-center">
-                      <UserX size={64} strokeWidth={1} />
-                      <p className="text-[14px] font-black uppercase tracking-widest text-gray-950">No Driver Delete Requests Found</p>
+                  <td colSpan="5" className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <UserX size={32} className="text-gray-300 mb-2" />
+                      <p className="text-sm font-bold text-gray-900">No delete requests</p>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        There are currently no driver account deletion requests.<br/>
+                        New requests will automatically appear here.
+                      </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filteredDrivers.map((item) => (
-                  <tr key={item._id} className="group hover:bg-rose-50/10 transition-all duration-300">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gray-950 text-white flex items-center justify-center font-black text-[12px] shadow-lg">
+                  <tr key={item._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-[10px] border border-gray-200">
                           {(item.name || 'D')[0]}
                         </div>
                         <div>
-                          <p className="text-[14px] font-black text-gray-950 tracking-tight leading-none uppercase">{item.name || 'Unknown'}</p>
-                          <p className="text-[11px] font-bold text-gray-400 mt-1">{item.email || 'No email'}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-medium text-gray-900">{item.name || 'Unknown'}</p>
+                            <span className="font-mono text-[9px] font-semibold px-1 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                              {item.driver_code || item.referralCode || ((item.mobile || item.phone) ? `DRV${String(item.mobile || item.phone).slice(-4)}${String(item._id || '').slice(-6).toUpperCase()}`.replace(/\W/g, '') : 'N/A')}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 mt-0.5">{item.email || 'No email'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-6 text-[14px] font-bold text-gray-950">{item.mobile || item.phone || 'N/A'}</td>
-                    <td className="px-6 py-6 text-[12px] font-semibold text-gray-500 max-w-[260px]">{item.deletionRequest?.reason || 'N/A'}</td>
-                    <td className="px-6 py-6 text-[12px] font-bold text-gray-400">{formatDate(item.deletionRequest?.requestedAt)}</td>
-                    <td className="px-8 py-6 text-right">
+                    <td className="px-3 py-2 font-medium">{item.mobile || item.phone || 'N/A'}</td>
+                    <td className="px-3 py-2 text-gray-600 truncate max-w-[200px]" title={item.deletionRequest?.reason}>{item.deletionRequest?.reason || 'N/A'}</td>
+                    <td className="px-3 py-2 text-[10px] text-gray-500">{formatDate(item.deletionRequest?.requestedAt)}</td>
+                    <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           disabled={isSubmitting}
                           onClick={() => handleApprove(item._id)}
-                          className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center gap-2 border border-emerald-100 disabled:opacity-50"
+                          className="px-2.5 py-1 bg-green-50 text-green-700 rounded-md text-[10px] font-semibold hover:bg-green-100 transition-colors border border-green-200 disabled:opacity-50 flex items-center gap-1"
                         >
-                          <CheckCircle2 size={14} /> Approve
+                          <CheckCircle2 size={12} /> Approve
                         </button>
                         <button
                           disabled={isSubmitting}
                           onClick={() => handleReject(item._id)}
-                          className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center gap-2 border border-rose-100 disabled:opacity-50"
+                          className="px-2.5 py-1 bg-red-50 text-red-700 rounded-md text-[10px] font-semibold hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-50 flex items-center gap-1"
                         >
-                          <XCircle size={14} /> Reject
+                          <XCircle size={12} /> Reject
                         </button>
                       </div>
                     </td>
@@ -201,27 +216,35 @@ const DriverDeleteRequests = () => {
           </table>
         </div>
 
-        <div className="p-8 bg-gray-50/20 border-t border-gray-50 flex items-center justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest">
-          <p>Pending Queue: {filteredDrivers.length} requests</p>
+        <div className="p-3 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-sm">
+          <div>
+            <p className="font-semibold text-gray-900 text-xs">Pending queue</p>
+            <p className="text-[11px] text-gray-500">{filteredDrivers.length} requests waiting for review</p>
+          </div>
           <button
             type="button"
             onClick={() => navigate('/taxi/admin/drivers')}
-            className="px-4 py-2 border border-gray-100 rounded-xl hover:text-gray-950 transition-all font-black text-gray-400"
+            className="px-3 py-1.5 border border-gray-200 rounded-md text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Back To Drivers
+            &larr; Back to Drivers
           </button>
         </div>
       </div>
 
-      <div className="bg-rose-950 rounded-[40px] p-8 text-white relative overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 p-8 opacity-10 -rotate-12 translate-x-4">
-          <AlertCircle size={100} strokeWidth={1} />
-        </div>
-        <div className="relative z-10 max-w-2xl">
-          <h4 className="text-[14px] font-black uppercase tracking-[0.15em] mb-3 text-rose-400">Deletion Review Protocol</h4>
-          <p className="text-[12px] font-bold text-rose-200/80 leading-relaxed italic">
-            "Approving a request deactivates the driver account and removes it from active ride operations. Rejecting keeps the driver account active and unchanged."
-          </p>
+      <div className="rounded-xl p-4 text-xs relative overflow-hidden" style={{ backgroundColor: '#FFF8E1', borderColor: '#F4C542', borderWidth: '1px' }}>
+        <div className="flex items-start gap-3 relative z-10">
+          <div className="text-yellow-600 shrink-0 mt-0.5">
+            <AlertCircle size={16} />
+          </div>
+          <div>
+            <h4 className="font-bold text-gray-900 mb-1">Delete review protocol</h4>
+            <p className="text-gray-700 mb-1">
+              Approving a request permanently deactivates the driver's account and removes access to the platform.
+            </p>
+            <p className="text-gray-700">
+              Rejecting a request keeps the account active. Please review all submitted information before taking action.
+            </p>
+          </div>
         </div>
       </div>
     </div>

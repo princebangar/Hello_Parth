@@ -13,8 +13,8 @@ const DriverRatings = () => {
     const fetchRatings = async () => {
       setIsLoading(true);
       try {
-        const token = (localStorage.getItem('admin_accessToken') || localStorage.getItem('adminToken'));
-        const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/taxi/admin/driver-ratings`, {
+        const token = localStorage.getItem('adminToken');
+        const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/driver-ratings`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         const data = await res.json();
@@ -51,7 +51,7 @@ const DriverRatings = () => {
           <span className="text-gray-700">Driver Rating</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">Driver Rating</h1>
+          <h1 className="text-xl text-gray-900 font-bold">Driver Rating</h1>
         </div>
       </div>
 
@@ -122,7 +122,7 @@ const DriverRatings = () => {
                         {activeMenu === driver.id && (
                           <div className="absolute right-0 mt-2 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                             <button
-                              onClick={() => navigate(`/taxi/admin/drivers/ratings/${driver.id}`)}
+                              onClick={() => navigate(`/admin/drivers/ratings/${driver.id}`)}
                               className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                             >
                               <Eye size={14} className="text-gray-400" /> View
@@ -143,4 +143,3 @@ const DriverRatings = () => {
 };
 
 export default DriverRatings;
-
