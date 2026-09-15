@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "leaflet/dist/leaflet.css";
 
-@custom-variant dark (&:where(html[data-theme="dark"] *));
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Light tokens — reapplied when returning from Taxi so dark vars never stick */
 html[data-theme="light"] {

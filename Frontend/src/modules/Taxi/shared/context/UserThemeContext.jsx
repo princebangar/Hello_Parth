@@ -1,35 +1,43 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { applyTheme, getFoodUserTheme, saveFoodUserTheme, THEME_CHANGE_EVENT } from '@/shared/utils/theme';
 
 const UserThemeContext = createContext({
-  theme: 'dark',
+  theme: 'light',
   toggleTheme: () => {},
 });
 
 export const UserThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('userAppTheme');
-      return saved === 'light' ? 'light' : 'dark';
-    }
-    return 'dark';
-  });
+  const [theme, setTheme] = useState(() => getFoodUserTheme());
 
   const toggleTheme = () => {
     setTheme((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('userAppTheme', next);
+      saveFoodUserTheme(next);
       return next;
     });
   };
 
   useEffect(() => {
+    const handleThemeChange = (e) => {
+      if (e?.detail?.theme) {
+        setTheme(e.detail.theme);
+      } else {
+        setTheme(getFoodUserTheme());
+      }
+    };
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof document !== 'undefined') {
       document.body.style.backgroundColor = theme === 'dark' ? '#07111f' : '#f6f7fb';
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      applyTheme(theme);
+      return () => {
+        document.body.style.backgroundColor = '';
+      };
     }
   }, [theme]);
 

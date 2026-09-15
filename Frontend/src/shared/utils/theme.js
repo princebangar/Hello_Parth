@@ -1,9 +1,10 @@
 export const FOOD_USER_THEME_KEY = "foodUserTheme";
 export const APP_THEME_KEY = "appTheme";
 export const USER_THEME_KEY = "userTheme";
+export const TAXI_USER_THEME_KEY = "userAppTheme";
 export const THEME_CHANGE_EVENT = "helloparth:theme-change";
 
-const USER_THEME_STORAGE_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, USER_THEME_KEY];
+const USER_THEME_STORAGE_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, USER_THEME_KEY, TAXI_USER_THEME_KEY];
 
 const THEME_CSS_VARS = [
   "--background",
