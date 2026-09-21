@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, CheckCircle2, ChevronRight, MessageSquare, Sun, Moon } from 'lucide-react';
 import { userAuthService } from '../../services/authService';
+import { persistTaxiUserLogin } from '@/shared/utils/moduleAuth';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { useUserTheme } from '../../../../shared/context/UserThemeContext';
 import yellowTaxiLoginBg from '../../../../assets/images/yellow_taxi_login_bg.png';
@@ -166,10 +167,7 @@ const VerifyOTP = () => {
       setSuccess(true);
 
       if (payload.exists) {
-        localStorage.setItem('token', payload.token || '');
-        localStorage.setItem('userToken', payload.token || '');
-        localStorage.setItem('role', 'user');
-        localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+        persistTaxiUserLogin(payload);
         notifyAuthReady();
         syncPushTokens();
         sessionStorage.removeItem(PENDING_OTP_PHONE_KEY);

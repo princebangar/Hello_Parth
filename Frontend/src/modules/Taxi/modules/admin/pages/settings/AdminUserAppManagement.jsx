@@ -646,7 +646,7 @@ const AdminUserAppManagement = ({ tab: initialTab }) => {
                         {uploading ? (
                           <div className="flex flex-col items-center justify-center gap-2">
                             <div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                            <span className="text-xs font-bold text-yellow-600 font-bold">Uploading to Cloudinary...</span>
+                            <span className="text-xs font-bold text-yellow-600 font-bold">Uploading...</span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center gap-1.5">
@@ -846,7 +846,7 @@ const AdminUserAppManagement = ({ tab: initialTab }) => {
                             {uploading ? (
                               <div className="flex flex-col items-center justify-center gap-2">
                                 <div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                                <span className="text-xs font-bold text-yellow-600 font-bold">Uploading to Cloudinary...</span>
+                                <span className="text-xs font-bold text-yellow-600 font-bold">Uploading...</span>
                               </div>
                             ) : (
                               <div className="flex flex-col items-center justify-center gap-1.5">

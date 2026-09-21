@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Camera, Smartphone, LifeBuoy, Gift, Trash2, Sun, Moon, ArrowLeft, ChevronRight } from 'lucide-react';
 import { clearLocalUserSession, userAuthService } from '../../services/authService';
+import { persistTaxiUserLogin } from '@/shared/utils/moduleAuth';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { useUserTheme } from '../../../../shared/context/UserThemeContext';
 import { uploadService } from '../../../../shared/services/uploadService';
@@ -222,10 +223,7 @@ const Signup = () => {
       });
       const payload = response?.data || {};
 
-      localStorage.setItem('token', payload.token || '');
-      localStorage.setItem('userToken', payload.token || '');
-      localStorage.setItem('role', 'user');
-      localStorage.setItem('userInfo', JSON.stringify(payload.user || {}));
+      persistTaxiUserLogin(payload);
       notifyAuthReady();
       syncPushTokens();
 

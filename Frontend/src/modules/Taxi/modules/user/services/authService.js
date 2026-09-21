@@ -50,6 +50,7 @@ export const clearLocalUserSession = () => {
   localStorage.removeItem('userInfo');
   localStorage.removeItem('user_accessToken');
   localStorage.removeItem('user_refreshToken');
+  localStorage.removeItem('user_authenticated');
   localStorage.removeItem('user');
 
   const fallbackToken = localStorage.getItem('token');

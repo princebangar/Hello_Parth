@@ -164,6 +164,17 @@ export function clearModuleAuth(module) {
   if (module === "user") {
     clearUserSession();
     sessionStorage.removeItem("userAuthData");
+    // Food and Taxi share one user account (see unifiedUserSession on the
+    // backend) — logging out of Food must also drop Taxi's own session keys.
+    localStorage.removeItem("userToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("userInfo");
+    if (String(localStorage.getItem("role") || "").toLowerCase() === "user") {
+      localStorage.removeItem("role");
+    }
+    if (String(localStorage.getItem("chatRole") || "").toLowerCase() === "user") {
+      localStorage.removeItem("chatRole");
+    }
   }
   
   if (module === "restaurant") {

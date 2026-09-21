@@ -1693,7 +1693,7 @@ export const registerUser = async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: createUserSession(user),
+    data: await createUserSession(user),
   });
 };
 
@@ -1817,7 +1817,7 @@ export const signupUser = async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: createUserSession(user),
+    data: await createUserSession(user),
   });
 };
 
@@ -1851,7 +1851,7 @@ export const loginUser = async (req, res) => {
 
   res.json({
     success: true,
-    data: createUserSession(user),
+    data: await createUserSession(user),
   });
 };
 
@@ -1878,7 +1878,7 @@ export const verifyUserPhoneForOtpLogin = async (req, res) => {
     success: true,
     data: {
       exists: true,
-      ...createUserSession(user),
+      ...(await createUserSession(user)),
     },
   });
 };

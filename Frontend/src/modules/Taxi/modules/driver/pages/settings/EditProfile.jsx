@@ -130,7 +130,7 @@ const EditProfile = () => {
             </AnimatePresence>
 
             <main className="space-y-6 max-w-sm mx-auto">
-                {/* Profile Image with Cloudinary Upload */}
+                {/* Profile Image Upload */}
                 <div className="flex flex-col items-center gap-4 mb-8">
                     <div className="relative group">
                         <div className="w-24 h-24 bg-slate-900 rounded-[2rem] flex items-center justify-center shadow-lg relative overflow-hidden">
