@@ -40,7 +40,6 @@ import {
   createUser,
   createZone,
   bulkImportUsers,
-  approveUserDeletionRequest,
   approveDriverDeletionRequest,
   deleteAppModule,
   deleteBusService,
@@ -153,13 +152,11 @@ import {
   getUser,
   getUsers,
   getDeletedUsers,
-  getUserDeletionRequests,
   restoreDeletedUser,
   permanentlyDeleteDeletedUser,
   restoreDeletedDriver,
   permanentlyDeleteDeletedDriver,
   getRideRequests,
-  rejectUserDeletionRequest,
   rejectDriverDeletionRequest,
   rejectBusDriverSignup,
   rejectServiceCenterStaffSignup,
@@ -273,9 +270,6 @@ adminRouter.post('/admin/users', createUser);
 adminRouter.get('/admin/users/deleted', getDeletedUsers);
 adminRouter.patch('/admin/users/deleted/:id/restore', restoreDeletedUser);
 adminRouter.delete('/admin/users/deleted/:id', permanentlyDeleteDeletedUser);
-adminRouter.get('/admin/users/delete-requests', getUserDeletionRequests);
-adminRouter.patch('/admin/users/delete-requests/:id/approve', approveUserDeletionRequest);
-adminRouter.patch('/admin/users/delete-requests/:id/reject', rejectUserDeletionRequest);
 adminRouter.get('/admin/users/:id', getUser);
 adminRouter.get('/admin/employees/:id', getEmployee);
 adminRouter.patch('/admin/employees/:id', updateEmployee);

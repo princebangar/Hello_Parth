@@ -48,9 +48,6 @@ export const adminService = {
   updateUser: (id, userData) => api.patch(`/admin/users/${id}`, userData),
   
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
-  getUserDeleteRequests: () => api.get('/admin/users/delete-requests'),
-  approveUserDeleteRequest: (id) => api.patch(`/admin/users/delete-requests/${id}/approve`),
-  rejectUserDeleteRequest: (id, adminNote = '') => api.patch(`/admin/users/delete-requests/${id}/reject`, { adminNote }),
 
   /**
    * Driver Management

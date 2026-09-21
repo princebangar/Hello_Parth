@@ -61,7 +61,6 @@ import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/in
 import {
   cancelRideByAdmin,
   emitToDriver,
-  notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
 import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '../../services/rentalTrackingService.js';
 import { sendEmail } from '../../services/mailService.js';
@@ -4090,86 +4089,6 @@ export const permanentlyDeleteDeletedUser = async (id) => {
     throw new ApiError(404, 'Deleted user not found');
   }
   return true;
-};
-
-export const listUserDeletionRequests = async ({ page = 1, limit = 50, status = 'pending' } = {}) => {
-  const safePage = Number(page) || 1;
-  const safeLimit = Number(limit) || 50;
-  const requestedStatus = String(status || 'pending').toLowerCase();
-  const start = (safePage - 1) * safeLimit;
-  const statusQuery =
-    requestedStatus === 'all'
-      ? { $in: ['pending', 'approved', 'rejected'] }
-      : requestedStatus;
-  const query = {
-    'deletionRequest.status': statusQuery,
-    deletedAt: null,
-  };
-
-  const [users, total] = await Promise.all([
-    User.find(query)
-      .sort({ 'deletionRequest.requestedAt': -1, createdAt: -1 })
-      .skip(start)
-      .limit(safeLimit)
-      .lean(),
-    User.countDocuments(query),
-  ]);
-
-  return {
-    results: users.map(serializeUser),
-    paginator: {
-      current_page: safePage,
-      per_page: safeLimit,
-      total,
-      last_page: Math.max(1, Math.ceil(total / safeLimit)),
-    },
-  };
-};
-
-export const approveUserDeletionRequest = async (id, adminId) => {
-  const now = new Date();
-  const user = await User.findOneAndUpdate(
-    { _id: id, deletedAt: null, 'deletionRequest.status': 'pending' },
-    {
-      $set: {
-        deletedAt: now,
-        active: false,
-        isActive: false,
-        deletion_reason: 'user_delete_request',
-        'deletionRequest.status': 'approved',
-        'deletionRequest.reviewedAt': now,
-        'deletionRequest.reviewedBy': adminId || null,
-        'deletionRequest.adminNote': '',
-      },
-    },
-    { returnDocument: 'after', runValidators: true },
-  );
-
-  if (!user) throw new ApiError(404, 'Pending user deletion request not found');
-  notifyUserAccountDeleted(user._id);
-  return serializeUser(user.toObject());
-};
-
-export const rejectUserDeletionRequest = async (id, payload = {}, adminId) => {
-  const now = new Date();
-  const adminNote = String(payload.adminNote || payload.note || '').trim();
-  const user = await User.findOneAndUpdate(
-    { _id: id, deletedAt: null, 'deletionRequest.status': 'pending' },
-    {
-      $set: {
-        active: true,
-        isActive: true,
-        'deletionRequest.status': 'rejected',
-        'deletionRequest.reviewedAt': now,
-        'deletionRequest.reviewedBy': adminId || null,
-        'deletionRequest.adminNote': adminNote,
-      },
-    },
-    { returnDocument: 'after', runValidators: true },
-  );
-
-  if (!user) throw new ApiError(404, 'Pending user deletion request not found');
-  return serializeUser(user.toObject());
 };
 
 export const getUserById = async (id) => {

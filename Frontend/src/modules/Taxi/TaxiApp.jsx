@@ -181,7 +181,6 @@ const AdminWalletPayment = lazy(() => import('./modules/admin/pages/wallet/Walle
 const AdminUserList = lazy(() => import('./modules/admin/pages/users/UserList'));
 const AdminUserCreate = lazy(() => import('./modules/admin/pages/users/UserCreate'));
 const AdminUserDetails = lazy(() => import('./modules/admin/pages/users/UserDetails'));
-const AdminDeleteRequestUsers = lazy(() => import('./modules/admin/pages/users/DeleteRequestUsers'));
 const AdminUserBulkUpload = lazy(() => import('./modules/admin/pages/users/UserBulkUpload'));
 const AdminUserImportCreate = lazy(() => import('./modules/admin/pages/users/UserImportCreate'));
 const AdminUserSubscriptions = lazy(() => import('./modules/admin/pages/users/UserSubscriptions'));
@@ -1161,10 +1160,6 @@ function TaxiApp() {
                 <Route path="users/subscriptions" element={<AdminUserSubscriptions />} />
                 <Route path="users/subscriptions/create" element={<AdminUserSubscriptionCreate />} />
                 <Route path="users/:id" element={<AdminUserDetails />} />
-                <Route
-                  path="users/delete-requests"
-                  element={<AdminDeleteRequestUsers />}
-                />
                 <Route
                   path="users/bulk-upload"
                   element={<AdminUserBulkUpload />}

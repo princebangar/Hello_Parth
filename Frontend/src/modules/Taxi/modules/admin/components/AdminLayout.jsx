@@ -860,7 +860,6 @@ const AdminLayout = () => {
             subItems: [
               { label: 'User List', path: '/taxi/admin/users', permission: 'users.view' },
               { label: 'Subscription Management', path: '/taxi/admin/users/subscriptions', permission: 'users.view' },
-              { label: 'Delete Request Users', path: '/taxi/admin/users/delete-requests', permission: 'users.view' },
               { label: 'User Bulk Upload', path: '/taxi/admin/users/bulk-upload', permission: 'users.view' },
             ],
           },

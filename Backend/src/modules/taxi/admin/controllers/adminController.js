@@ -407,28 +407,6 @@ export const permanentlyDeleteDeletedUser = asyncHandler(async (req, res) => {
   ok(res, { deleted: true });
 });
 
-export const getUserDeletionRequests = asyncHandler(async (req, res) =>
-  ok(res, await adminService.listUserDeletionRequests(req.query)),
-);
-
-export const approveUserDeletionRequest = asyncHandler(async (req, res) =>
-  ok(
-    res,
-    await adminService.approveUserDeletionRequest(req.params.id, req.auth?.sub),
-  ),
-);
-
-export const rejectUserDeletionRequest = asyncHandler(async (req, res) =>
-  ok(
-    res,
-    await adminService.rejectUserDeletionRequest(
-      req.params.id,
-      req.body,
-      req.auth?.sub,
-    ),
-  ),
-);
-
 export const getUserRequests = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUserRequests(req.params.id)),
 );

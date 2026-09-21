@@ -38,6 +38,18 @@ export async function softDeleteSharedUser(userId, { reason = 'user_delete_reque
     logger?.warn?.({ err }, '[accountDeletion] Failed to clear food refresh tokens on delete');
   }
 
+  // Best-effort: force-logout any live taxi session over the socket, same as
+  // the old admin-approval flow used to. Dynamic import avoids a core -> taxi
+  // module dependency at load time.
+  try {
+    const { notifyUserAccountDeleted } = await import(
+      '../../modules/taxi/services/dispatchService.js'
+    );
+    notifyUserAccountDeleted(String(userId));
+  } catch (err) {
+    logger?.warn?.({ err }, '[accountDeletion] Failed to notify taxi socket of account deletion');
+  }
+
   return updated;
 }
 
