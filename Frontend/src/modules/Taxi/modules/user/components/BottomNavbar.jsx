@@ -41,9 +41,12 @@ const BottomNavbar = () => {
   if (showNavSkeleton) {
     return (
       <nav className="user-bottom-nav pointer-events-none">
-        <div className={`flex items-center justify-around overflow-visible rounded-[32px] border px-2 py-2 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl pointer-events-auto relative ${
-          isDark ? 'border-white/10 bg-slate-950/80' : 'border-slate-200 bg-white/80'
-        }`}>
+        <div
+          className={`flex items-center justify-around overflow-visible rounded-[32px] border px-2 py-2 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl pointer-events-auto relative ${
+            isDark ? 'border-white/10' : 'border-slate-200'
+          }`}
+          style={{ backgroundColor: isDark ? 'rgba(2, 6, 23, 0.8)' : 'rgba(255, 255, 255, 0.8)' }}
+        >
           {Array.from({ length: 5 }).map((_, index) => (
             <div key={index} className="flex flex-1 flex-col items-center justify-center py-1.5">
               <div className={`h-[21px] w-[21px] animate-pulse rounded-full ${isDark ? 'bg-zinc-800' : 'bg-slate-200'}`} />
@@ -57,11 +60,17 @@ const BottomNavbar = () => {
 
   return (
     <nav className="user-bottom-nav pointer-events-none">
-      <div className={`flex items-center justify-around overflow-visible rounded-[32px] border px-2 py-2.5 shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-xl pointer-events-auto relative ${
-        isDark
-          ? 'border-white/10 bg-slate-950/80 shadow-[0_20px_50px_rgba(0,0,0,0.55)]'
-          : 'border-slate-200/80 bg-white/80 shadow-[0_12px_40px_rgba(15,23,42,0.08)]'
-      }`}>
+      {/* Inline background (not a bg-white/80 Tailwind class) so the app-wide
+          .user-app-theme !important overrides don't flatten this glass-blur
+          pill into a solid colour. */}
+      <div
+        className={`flex items-center justify-around overflow-visible rounded-[32px] border px-2 py-2.5 backdrop-blur-xl pointer-events-auto relative ${
+          isDark
+            ? 'border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.55)]'
+            : 'border-slate-200/80 shadow-[0_12px_40px_rgba(15,23,42,0.08)]'
+        }`}
+        style={{ backgroundColor: isDark ? 'rgba(2, 6, 23, 0.8)' : 'rgba(255, 255, 255, 0.8)' }}
+      >
         {navItems.map(({ icon: Icon, imageIcon, label, path }) => {
           const isActive =
             path === '/taxi/user'
@@ -76,16 +85,18 @@ const BottomNavbar = () => {
               className="flex-1 flex flex-col items-center justify-center py-1 relative z-10 outline-none tap-highlight-transparent group"
             >
               <div className="relative flex flex-col items-center">
-                {/* Active Sliding Background Pill */}
+                {/* Active Sliding Background Pill — same spring config as the
+                    icon below so the pill and icon/text settle together
+                    instead of the pill visibly arriving first. */}
                 <AnimatePresence>
                   {isActive && (
                     <motion.div
                       layoutId="active-pill"
                       transition={{
                         type: 'spring',
-                        stiffness: 400,
-                        damping: 32,
-                        mass: 1
+                        stiffness: 500,
+                        damping: 34,
+                        mass: 0.8
                       }}
                       className="absolute -inset-y-2 -inset-x-4 bg-[#FFC400] rounded-[20px] shadow-[0_8px_20px_rgba(255,196,0,0.35)]"
                     />
@@ -94,14 +105,15 @@ const BottomNavbar = () => {
 
                 {/* Icon Container with Transition */}
                 <motion.div
-                  animate={{ 
+                  animate={{
                     scale: isActive ? 1.15 : 1,
                     y: isActive ? -1 : 0
                   }}
                   transition={{
                     type: 'spring',
-                    stiffness: 400,
-                    damping: 30
+                    stiffness: 500,
+                    damping: 34,
+                    mass: 0.8
                   }}
                   className="relative z-20"
                 >
@@ -109,18 +121,18 @@ const BottomNavbar = () => {
                     <img
                       src={imageIcon}
                       alt=""
-                      className={`h-[21px] w-[21px] object-contain transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-80'}`}
+                      className={`h-[21px] w-[21px] object-contain transition-opacity duration-150 ${isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-80'}`}
                       draggable={false}
                     />
                   ) : (
                     <Icon
                       size={20}
                       strokeWidth={isActive ? 2.8 : 2}
-                      className={`transition-colors duration-300 ${
-                        isActive 
-                          ? 'text-slate-950 font-extrabold' 
+                      className={`transition-colors duration-150 ${
+                        isActive
+                          ? 'text-slate-950 font-extrabold'
                           : isDark
-                            ? 'text-zinc-400 group-hover:text-zinc-200' 
+                            ? 'text-zinc-400 group-hover:text-zinc-200'
                             : 'text-slate-500 group-hover:text-slate-700'
                       }`}
                     />
@@ -128,20 +140,23 @@ const BottomNavbar = () => {
                 </motion.div>
 
                 {/* Label with Transition */}
-                <motion.span 
-                  animate={{ 
+                <motion.span
+                  animate={{
                     opacity: isActive ? 1 : 0.6,
                     y: isActive ? 2 : 1,
                     scale: isActive ? 1 : 0.95
                   }}
                   transition={{
-                    duration: 0.2
+                    type: 'spring',
+                    stiffness: 500,
+                    damping: 34,
+                    mass: 0.8
                   }}
-                  className={`relative z-20 mt-1 font-['Outfit'] text-[9.5px] font-extrabold uppercase tracking-[0.14em] transition-colors duration-300 ${
-                    isActive 
-                      ? 'text-slate-950' 
+                  className={`relative z-20 mt-1 font-['Outfit'] text-[9.5px] font-extrabold uppercase tracking-[0.14em] transition-colors duration-150 ${
+                    isActive
+                      ? 'text-slate-950'
                       : isDark
-                        ? 'text-zinc-400 group-hover:text-zinc-200' 
+                        ? 'text-zinc-400 group-hover:text-zinc-200'
                         : 'text-slate-500 group-hover:text-slate-700'
                   }`}
                 >

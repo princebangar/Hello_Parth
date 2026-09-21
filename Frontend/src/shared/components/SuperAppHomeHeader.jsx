@@ -45,10 +45,10 @@ function readHelloParthLocation() {
   }
 }
 
-function BurgerIcon({ isActive }) {
+function BurgerIcon({ isActive, className = 'w-8 h-8' }) {
   if (isActive) {
     return (
-      <svg className="w-8 h-8 filter drop-shadow-sm" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg className={`${className} filter drop-shadow-sm shrink-0`} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 30C12 18 20 12 32 12C44 12 52 18 52 30H12Z" fill="#F4A261" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M10 32C10 32 14 36 21 36C28 36 30 32 35 32C40 32 43 36 48 36C53 36 54 32 54 32" fill="#2A9D8F" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M10 36L14 40L50 40L54 36" fill="#E9C46A" stroke="#2D1B00" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -58,20 +58,20 @@ function BurgerIcon({ isActive }) {
     );
   }
   return (
-    <svg className="w-8 h-8 opacity-65 text-white" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 30C12 18 20 12 32 12C44 12 52 18 52 30H12Z" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M10 32C10 32 14 36 21 36C28 36 30 32 35 32C40 32 43 36 48 36C53 36 54 32 54 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M10 36L14 40L50 40L54 36" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <rect x="14" y="40" width="36" height="6" rx="3" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M16 46C16 52 22 54 32 54C42 54 48 52 48 46H16Z" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg className={`${className} opacity-70 text-white shrink-0`} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 30C12 18 20 12 32 12C44 12 52 18 52 30H12Z" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M10 32C10 32 14 36 21 36C28 36 30 32 35 32C40 32 43 36 48 36C53 36 54 32 54 32" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M10 36L14 40L50 40L54 36" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <rect x="14" y="40" width="36" height="6" rx="3" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M16 46C16 52 22 54 32 54C42 54 48 52 48 46H16Z" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-function TaxiIcon({ isActive }) {
+function TaxiIcon({ isActive, className = 'w-8 h-8' }) {
   if (isActive) {
     return (
-      <svg className="w-8 h-8 filter drop-shadow-sm" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg className={`${className} filter drop-shadow-sm shrink-0`} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="22" y="10" width="20" height="7" rx="2" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
         <rect x="26" y="11.5" width="12" height="4" rx="1" fill="#FBBF24" />
         <path d="M14 24H50L46 17H18L14 24Z" fill="#2563EB" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
@@ -88,12 +88,12 @@ function TaxiIcon({ isActive }) {
     );
   }
   return (
-    <svg className="w-8 h-8 opacity-70 text-white" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="22" y="10" width="20" height="7" rx="2" stroke="currentColor" strokeWidth="2.5" />
-      <path d="M14 24H50L46 17H18L14 24Z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-      <path d="M12 24H52C54.2 24 56 25.8 56 28V38C56 40.2 54.2 42 52 42H12C9.8 42 8 40.2 8 38V28C8 25.8 9.8 24 12 24Z" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-      <circle cx="18" cy="42" r="5" stroke="currentColor" strokeWidth="2.5" />
-      <circle cx="46" cy="42" r="5" stroke="currentColor" strokeWidth="2.5" />
+    <svg className={`${className} opacity-70 text-white shrink-0`} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="22" y="10" width="20" height="7" rx="2" stroke="currentColor" strokeWidth="3" />
+      <path d="M14 24H50L46 17H18L14 24Z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M12 24H52C54.2 24 56 25.8 56 28V38C56 40.2 54.2 42 52 42H12C9.8 42 8 40.2 8 38V28C8 25.8 9.8 24 12 24Z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+      <circle cx="18" cy="42" r="5" stroke="currentColor" strokeWidth="3" />
+      <circle cx="46" cy="42" r="5" stroke="currentColor" strokeWidth="3" />
     </svg>
   );
 }
@@ -250,40 +250,42 @@ export default function SuperAppHomeHeader({
   }, [handleLocationClick, isTaxi, navigate]);
 
   const tabsRow = (
-    <div className={`relative z-20 px-3 pb-0 ${tabsOnly && !embedded ? 'pt-2' : ''}`}>
-      <div className="flex w-full items-stretch gap-1">
+    <div className={`relative z-20 px-4 ${tabsOnly && !embedded ? 'pt-1 pb-3' : 'pb-3'}`}>
+      <div className="relative flex w-full items-center gap-0.5 rounded-full bg-black/25 p-1 backdrop-blur-md ring-1 ring-white/10">
         {VERTICALS.map((vertical) => {
           const isActive = vertical.id === activeVertical;
           const tabTheme = getVerticalTheme(vertical.id);
-          const inactiveTabClass = currentVertical.inactiveTabBg;
           return (
-            <div key={vertical.id} className={`flex-1 relative flex flex-col items-stretch ${isActive ? 'z-20' : 'z-10'}`}>
-              <button
-                type="button"
-                onClick={() => handleVerticalTabClick(vertical.id)}
-                onMouseEnter={() => {
-                  if (vertical.id === 'taxi') prefetchTaxiUser();
-                  if (vertical.id === 'food') prefetchFoodUser();
-                }}
-                onFocus={() => {
-                  if (vertical.id === 'taxi') prefetchTaxiUser();
-                  if (vertical.id === 'food') prefetchFoodUser();
-                }}
-                style={isActive ? { '--active-tab-bg': tabTheme.activeTab } : undefined}
-                className={`w-full min-h-[74px] flex flex-col items-center justify-center px-2 transition-all duration-200 rounded-t-[1.75rem] pt-2.5 pb-2.5 ${
-                  isActive
-                    ? `${vertical.activeTabBg} curvy-active-tab shadow-sm`
-                    : `${inactiveTabClass}`
-                }`}
-              >
-                <div className="mb-1.5 flex items-center justify-center">
-                  {vertical.id === 'food' ? <BurgerIcon isActive={isActive} /> : <TaxiIcon isActive={isActive} />}
-                </div>
-                <span className={`text-[10px] font-bold leading-none ${isActive ? 'text-white' : 'text-white/75'}`}>
-                  {vertical.name}
+            <button
+              key={vertical.id}
+              type="button"
+              onClick={() => handleVerticalTabClick(vertical.id)}
+              onMouseEnter={() => {
+                if (vertical.id === 'taxi') prefetchTaxiUser();
+                if (vertical.id === 'food') prefetchFoodUser();
+              }}
+              onFocus={() => {
+                if (vertical.id === 'taxi') prefetchTaxiUser();
+                if (vertical.id === 'food') prefetchFoodUser();
+              }}
+              className="relative z-10 flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full transition-colors duration-150"
+            >
+              <span
+                aria-hidden="true"
+                className={`absolute inset-0 rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-opacity duration-150 ${isActive ? 'opacity-100' : 'opacity-0'}`}
+                style={{ backgroundColor: tabTheme.activeTab }}
+              />
+              <span className="relative z-10 flex items-center gap-1.5">
+                {vertical.id === 'food' ? (
+                  <BurgerIcon isActive={isActive} className="w-[18px] h-[18px]" />
+                ) : (
+                  <TaxiIcon isActive={isActive} className="w-[18px] h-[18px]" />
+                )}
+                <span className={`text-[12.5px] font-bold leading-none whitespace-nowrap transition-colors duration-150 ${isActive ? 'text-white' : 'text-white/85'}`}>
+                  {vertical.name.replace('Hello Parth ', '')}
                 </span>
-              </button>
-            </div>
+              </span>
+            </button>
           );
         })}
       </div>

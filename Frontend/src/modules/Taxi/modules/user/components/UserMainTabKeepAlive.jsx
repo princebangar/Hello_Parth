@@ -1,16 +1,42 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import BottomNavbar from './BottomNavbar';
+import { useUserTheme } from '../../../shared/context/UserThemeContext';
+// Eager (not lazy): this is the default landing tab — bundling it with
+// TaxiApp's own chunk skips a second chunk-fetch + Suspense flash on first
+// visit, instead of waiting on its own separate lazy import.
+import UserHome from '../pages/Home';
 
-const UserHome = lazy(() => import('../pages/Home'));
 const Activity = lazy(() => import('../pages/Activity'));
 const Profile = lazy(() => import('../pages/Profile'));
 const Support = lazy(() => import('../pages/ride/Support'));
 const BusHome = lazy(() => import('../pages/bus/BusHome'));
 
-const SoftFallback = () => (
-  <div className="min-h-[40vh] bg-transparent" aria-hidden="true" />
-);
+/** Generic skeleton shown while a tab's own chunk is still downloading —
+ *  a plain transparent box let the (often mismatched) colour behind it
+ *  show through as a blank flash. This at least reads as "loading". */
+const SoftFallback = () => {
+  const { theme } = useUserTheme();
+  const isDark = theme === 'dark';
+  // Light mode needs a visibly darker grey here — the page background is
+  // already near-white, so a pale skeleton block was blending straight
+  // into it (looked like "nothing loaded", not "loading").
+  const soft = isDark ? 'bg-zinc-800/70' : 'bg-slate-300/80';
+  const softer = isDark ? 'bg-zinc-800/40' : 'bg-slate-300/50';
+  return (
+    <div className={`min-h-[70vh] px-4 pt-6 pb-24 space-y-4 ${isDark ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`} aria-hidden="true">
+      <div className={`h-6 w-32 rounded-full animate-pulse ${soft}`} />
+      <div className={`h-24 w-full rounded-[20px] animate-pulse ${softer}`} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className={`h-20 rounded-[16px] animate-pulse ${soft}`} />
+        <div className={`h-20 rounded-[16px] animate-pulse ${soft}`} />
+      </div>
+      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
+      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
+      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
+    </div>
+  );
+};
 
 const resolveMainTab = (pathname = '') => {
   const path = String(pathname || '').replace(/\/$/, '') || '/';

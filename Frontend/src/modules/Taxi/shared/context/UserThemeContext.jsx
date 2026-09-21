@@ -33,7 +33,7 @@ export const UserThemeProvider = ({ children }) => {
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.body.style.backgroundColor = theme === 'dark' ? '#07111f' : '#f6f7fb';
+      document.body.style.backgroundColor = theme === 'dark' ? '#0B172A' : '#EFF5FD';
       applyTheme(theme);
       return () => {
         document.body.style.backgroundColor = '';

@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
 import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
-import { UserThemeProvider } from './shared/context/UserThemeContext';
+import { UserThemeProvider, useUserTheme } from './shared/context/UserThemeContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSessionData } from '@/shared/utils/userSession.js';
@@ -361,6 +361,7 @@ const AdminSectionPlaceholder = () => {
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
+  const { theme } = useUserTheme();
   const staticPages = ['/taxi', '/taxi/about', '/taxi/contact', '/taxi/faq', '/taxi/services', '/taxi/privacy', '/taxi/terms', '/taxi/refund', '/taxi/cancellation', '/taxi/blog', '/taxi/links'];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
@@ -380,9 +381,19 @@ const MainLayout = ({ children }) => {
     );
   }
 
+  // Match the real theme immediately — this is what's visible behind the
+  // route's Suspense fallback while its chunk/data is still loading, so a
+  // hardcoded light background here was the actual source of the white
+  // flash between the dark app shell and the dark page content.
+  //
+  // `user-app-theme <dark|light>` activates index.css's --user-* CSS
+  // variables and its !important light/dark overrides for the whole taxi
+  // user app. Without it, every page silently falls back to whatever raw
+  // Tailwind classes were hardcoded inline — which is why light theme
+  // looked broken (unstyled dark-mode text/colors) everywhere.
   return (
-    <div className="redigo-app min-h-screen bg-[#0B172A]">
-      <main className="max-w-lg mx-auto bg-[#EFF5FD] min-h-screen relative overflow-x-hidden shadow-2xl">
+    <div className={`redigo-app user-app-theme ${theme} min-h-screen ${theme === 'dark' ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`}>
+      <main className={`max-w-lg mx-auto min-h-screen relative overflow-x-hidden shadow-2xl ${theme === 'dark' ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`}>
         {children}
       </main>
     </div>
@@ -675,6 +686,26 @@ const DriverEntryRedirect = () => {
   );
 };
 
+/** Generic skeleton for the top-level route Suspense — covers every lazy
+ *  page in the app (admin/driver/user). A plain transparent fallback would
+ *  otherwise flash blank while that route's own chunk is still downloading. */
+const RouteSoftFallback = () => {
+  const { theme } = useUserTheme();
+  const isDark = theme === 'dark';
+  // Light mode needs a visibly darker grey — the page background is already
+  // near-white, so a pale skeleton block blended straight into it.
+  const soft = isDark ? 'bg-zinc-800/70' : 'bg-slate-300/80';
+  const softer = isDark ? 'bg-zinc-800/40' : 'bg-slate-300/50';
+  return (
+    <div className={`min-h-screen px-4 pt-6 pb-24 space-y-4 ${isDark ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`} aria-hidden="true">
+      <div className={`h-6 w-32 rounded-full animate-pulse ${soft}`} />
+      <div className={`h-24 w-full rounded-[20px] animate-pulse ${softer}`} />
+      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
+      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
+    </div>
+  );
+};
+
 function TaxiApp() {
   useEffect(() => {
     installNativeFcmBridge();
@@ -691,7 +722,7 @@ function TaxiApp() {
         <UserAccountInvalidationListener />
         <UserUpcomingRideReminderBootstrap />
         <MainLayout>
-          <Suspense fallback={<div className="min-h-screen bg-transparent" aria-hidden="true" />}>
+          <Suspense fallback={<RouteSoftFallback />}>
             <Toaster position="top-right" closeButton />
             <Routes>
               {/* Static / Public routes */}

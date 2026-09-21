@@ -207,7 +207,9 @@ const writeCachedSettings = (settings) => {
 export const SettingsProvider = ({ children }) => {
   const cachedSettings = readCachedSettings();
   const [settings, setSettings] = useState(cachedSettings || DEFAULT_SETTINGS_CONTEXT.settings);
-  const [loading, setLoading] = useState(true);
+  // Cached settings already have something to show — don't flash a loading
+  // state on remount just because a background refresh is about to run.
+  const [loading, setLoading] = useState(!cachedSettings);
   const [hasBootstrapSettings, setHasBootstrapSettings] = useState(Boolean(cachedSettings));
   const [modules, setModules] = useState([]);
 

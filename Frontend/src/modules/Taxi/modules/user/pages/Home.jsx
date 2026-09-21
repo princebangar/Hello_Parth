@@ -1657,7 +1657,11 @@ const Home = () => {
       {/* 1. MOBILE LAYOUT: Google Map component + Sticky Search Bar + HomeContent */}
       <div className="block lg:hidden">
         <div className="user-home">
-          {/* Map Background Layer */}
+          {/* Solid top app bar — location + Food/Taxi switcher. Own space, not
+              floated over the map, so nothing overlaps. */}
+          <SuperAppHomeHeader activeVertical="taxi" />
+
+          {/* Map — sits below the app bar, fully visible, own box. */}
           <div className="map-header">
             {showDeferredSections ? (
               <LocationMapSection />
@@ -1665,13 +1669,7 @@ const Home = () => {
               <div className={`h-full w-full animate-pulse ${isDark ? 'bg-[#0f172a]' : 'bg-slate-200'}`} />
             )}
 
-            {/* Floating Greeting on Map */}
-            <div className="absolute top-4 left-0 right-0 z-20">
-              <SuperAppHomeHeader activeVertical="taxi" />
-              <HeaderGreeting floating={true} hideSearch={true} />
-            </div>
-
-            {/* Pickup Address Pill: positioned absolute overlaying map bottom */}
+            {/* Pickup Address Pill: overlays the map's own bottom edge only */}
             <div
               onClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'pickup', flow: 'ride' } })}
               className={`pickup-address-pill flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_20px_rgba(0,0,0,0.18)] border transition-colors duration-300 cursor-pointer ${isDark ? 'bg-[#111827] border-zinc-800 text-white hover:bg-zinc-800' : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
@@ -1686,7 +1684,7 @@ const Home = () => {
               </span>
             </div>
           </div>
-          {/* Content Sheet overlaying the sticky map */}
+          {/* Content Sheet — flows directly after the map, no overlap */}
           <div className="home-sheet space-y-3">
             {/* Sticky Search Bar */}
             <motion.div

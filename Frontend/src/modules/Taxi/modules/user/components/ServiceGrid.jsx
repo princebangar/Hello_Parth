@@ -5,6 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, normalizeAssetUrl } from '../../../shared/context/SettingsContext';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
+import { getPageCache, setPageCache, registerPageCacheLifecycle } from '@/shared/utils/pageCache';
+
+registerPageCacheLifecycle();
+
+const SERVICE_MODULES_CACHE_KEY = 'taxi_home_service_modules';
 
 const getDynamicImageSrc = (item = {}, fallbackImage) => {
   const rawImage = item.uploadedImage || item.imageUrl || item.image || item.thumbnail || item.icon || null;
@@ -472,8 +477,9 @@ const ServiceGrid = ({
 }) => {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const [modules, setModules] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedModules = getPageCache(SERVICE_MODULES_CACHE_KEY);
+  const [modules, setModules] = useState(cachedModules || []);
+  const [loading, setLoading] = useState(!cachedModules);
   const [localShowAllModal, localSetShowAllModal] = useState(false);
 
   const showAllModal = isAllServicesOpen !== undefined
@@ -549,12 +555,15 @@ const ServiceGrid = ({
   useEffect(() => {
     let isMounted = true;
     const fetchModules = async () => {
+      // Cached list is already showing (if any) — don't flash a loading
+      // state back on for a silent background refresh.
+      if (!cachedModules) setLoading(true);
       try {
-        setLoading(true);
         const response = await userService.getAppModules({ limit: 100 });
         const list = response?.data?.data?.results || response?.data?.results || response?.data || [];
         if (isMounted) {
           setModules(list);
+          setPageCache(SERVICE_MODULES_CACHE_KEY, list);
         }
       } catch (error) {
         console.error('[ServiceGrid] Failed to fetch modules dynamically:', error);
@@ -568,6 +577,7 @@ const ServiceGrid = ({
     return () => {
       isMounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getServiceKey = (service, index) => {

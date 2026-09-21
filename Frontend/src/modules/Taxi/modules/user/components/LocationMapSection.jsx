@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { LoaderCircle, Navigation } from 'lucide-react';
+import { MapPin, Navigation } from 'lucide-react';
 import { GoogleMap } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { getSavedLocation, saveLocation, LOCATION_UPDATED_EVENT } from '../services/locationStore';
@@ -112,6 +112,7 @@ const LocationMapSection = () => {
   };
   const [isDragging, setIsDragging] = useState(false);
   const [map, setMap] = useState(null);
+  const [tilesLoaded, setTilesLoaded] = useState(false);
   const isDraggingRef = useRef(false);
   const requestedLocationRef = useRef(false);
   const { isLoaded, loadError } = useBaseGoogleMapsLoader();
@@ -341,11 +342,34 @@ const LocationMapSection = () => {
               </div>
             )}
 
-            {HAS_VALID_GOOGLE_MAPS_KEY && !loadError && !isLoaded && (
-              <div className="flex h-full w-full items-center justify-center">
-                <div className={`flex items-center gap-2 rounded-[16px] px-4 py-3 shadow-sm ${isDark ? 'bg-zinc-900/90 text-white' : 'bg-white/90 text-slate-800'}`}>
-                  <LoaderCircle size={18} className="animate-spin text-slate-500" />
-                  <span className={`text-[12px] font-medium ${isDark ? 'text-zinc-200' : 'text-slate-700'}`}>Loading map</span>
+            {/* Skeleton overlay — stays up (on top of the map) until Google's
+                own tiles have actually painted, not just until the SDK
+                script has loaded. The map div itself renders white/blank
+                for a beat between those two moments otherwise. */}
+            {HAS_VALID_GOOGLE_MAPS_KEY && !loadError && !tilesLoaded && (
+              <div className={`absolute inset-0 z-30 flex h-full w-full items-center justify-center overflow-hidden transition-opacity duration-300 ${isDark ? 'bg-[#0f172a]' : 'bg-slate-300'}`}>
+                {/* Skeleton "streets" so the placeholder reads as a map, not a blank block.
+                    Darker greys in light mode — the base itself is already pale. */}
+                <div className="absolute inset-0 opacity-60" aria-hidden="true">
+                  <div className={`absolute left-[15%] top-0 h-full w-[3px] -skew-x-12 ${isDark ? 'bg-zinc-700' : 'bg-slate-400'}`} />
+                  <div className={`absolute left-[62%] top-0 h-full w-[5px] skew-x-6 ${isDark ? 'bg-zinc-700' : 'bg-slate-400'}`} />
+                  <div className={`absolute top-[30%] left-0 h-[4px] w-full -skew-y-3 ${isDark ? 'bg-zinc-700' : 'bg-slate-400'}`} />
+                  <div className={`absolute top-[70%] left-0 h-[3px] w-full skew-y-2 ${isDark ? 'bg-zinc-700' : 'bg-slate-400'}`} />
+                </div>
+                <motion.div
+                  className={`absolute inset-0 ${isDark ? 'bg-zinc-800/40' : 'bg-slate-400/25'}`}
+                  animate={{ opacity: [0.2, 0.5, 0.2] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  aria-hidden="true"
+                />
+                <div className="relative flex flex-col items-center gap-1.5">
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <MapPin size={26} className={isDark ? 'text-zinc-500' : 'text-slate-600'} strokeWidth={2} />
+                  </motion.div>
+                  <span className={`text-[11px] font-semibold ${isDark ? 'text-zinc-400' : 'text-slate-700'}`}>Loading map…</span>
                 </div>
               </div>
             )}
@@ -356,6 +380,7 @@ const LocationMapSection = () => {
                 center={{ lat: centerCoords.lat, lng: centerCoords.lon }}
                 zoom={DEFAULT_ZOOM}
                 onLoad={(nextMap) => setMap(nextMap)}
+                onTilesLoaded={() => setTilesLoaded(true)}
                 onDragStart={() => {
                   isDraggingRef.current = true;
                   setIsDragging(true);
