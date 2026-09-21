@@ -14,6 +14,7 @@ import { env } from '../../../../config/env.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
+import { softDeleteSharedUser } from '../../../../core/users/accountDeletion.service.js';
 import {
   consumeUserSignupSession,
   requireVerifiedUserSignupSession,
@@ -2047,35 +2048,22 @@ export const requestAccountDeletion = async (req, res) => {
     throw new ApiError(400, 'Account is already inactive');
   }
 
-  if (user.deletionRequest?.status === 'pending') {
-    res.json({
-      success: true,
-      data: {
-        deletionRequestStatus: 'pending',
-        requestedAt: user.deletionRequest.requestedAt || null,
-      },
-      message: 'Deletion request is already pending admin review',
-    });
-    return;
+  // Instant, self-serve delete — no admin approval. Food and Taxi share one
+  // `users` document, so this deletes the whole account either way.
+  const deleted = await softDeleteSharedUser(userId, {
+    reason: reason.slice(0, 300),
+  });
+
+  if (!deleted) {
+    throw new ApiError(404, 'User not found');
   }
 
-  user.deletionRequest = {
-    status: 'pending',
-    reason: reason.slice(0, 300),
-    requestedAt: new Date(),
-    reviewedAt: null,
-    reviewedBy: null,
-    adminNote: '',
-  };
-
-  await user.save();
-
-  res.status(201).json({
+  res.status(200).json({
     success: true,
     data: {
-      deletionRequestStatus: user.deletionRequest.status,
-      requestedAt: user.deletionRequest.requestedAt,
+      deletedAt: deleted.deletedAt,
     },
+    message: 'Account deleted successfully',
   });
 };
 

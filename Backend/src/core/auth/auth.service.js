@@ -13,6 +13,8 @@ import { createOrUpdateOtp, verifyOtp } from "../otp/otp.service.js";
 import { signAccessToken, signRefreshToken } from "./token.util.js";
 import { buildUnifiedUserSession } from "./unifiedUserSession.js";
 import { FoodRefreshToken } from "../refreshTokens/refreshToken.model.js";
+import { softDeleteSharedUser, recoverSharedUser } from "../users/accountDeletion.service.js";
+import jwt from "jsonwebtoken";
 import { ValidationError, AuthError } from "./errors.js";
 import { config } from "../../config/env.js";
 import { logger } from "../../utils/logger.js";
@@ -25,6 +27,32 @@ const ROLES = {
   RESTAURANT: "RESTAURANT",
   DELIVERY_PARTNER: "DELIVERY_PARTNER",
   ADMIN: "ADMIN",
+};
+
+// Short-lived proof-of-phone-ownership token for the deleted-account
+// recover/start-fresh choice — not a login token, never accepted by
+// authMiddleware's role checks (no matching ROLES.* value).
+const RECOVERY_TOKEN_TTL = "10m";
+const RECOVERY_PURPOSE = "account_recovery";
+
+const signRecoveryToken = (userId, phone) =>
+  jwt.sign(
+    { userId: String(userId), phone, purpose: RECOVERY_PURPOSE },
+    config.jwtAccessSecret,
+    { expiresIn: RECOVERY_TOKEN_TTL },
+  );
+
+const verifyRecoveryToken = (token) => {
+  let payload;
+  try {
+    payload = jwt.verify(String(token || ""), config.jwtAccessSecret);
+  } catch {
+    throw new AuthError("Recovery session expired. Please verify your phone again.");
+  }
+  if (payload.purpose !== RECOVERY_PURPOSE) {
+    throw new AuthError("Invalid recovery token");
+  }
+  return payload;
 };
 
 const DEFAULT_CREDENTIALS = {
@@ -108,7 +136,18 @@ export const verifyUserOtpAndLogin = async (
   logger.info(
     `[Auth Verify] User lookup done in ${Date.now() - loginStart}ms phone=${phone}`,
   );
-  
+
+  // Previously soft-deleted account (Food or Taxi side) — don't silently
+  // reactivate or auto-signup. Hand back a short-lived recovery token so the
+  // frontend can ask "recover your old account or start fresh?".
+  if (userDoc?.deletedAt) {
+    return {
+      deletedAccountFound: true,
+      phone,
+      recoveryToken: signRecoveryToken(userDoc._id, phone),
+    };
+  }
+
   // Ensure user exists and mark as verified on successful OTP.
   // Check if user is new or hasn't provided a name yet
   const needsNamePrompt = !userDoc || !userDoc.name || String(userDoc.name).trim() === "" || String(userDoc.name).toLowerCase() === "null";
@@ -948,6 +987,103 @@ export const resetAdminPasswordWithOtp = async (email, otp, newPassword) => {
   }
 
   return { success: true, message: "Password reset successfully." };
+};
+
+/**
+ * Instant, self-serve soft delete — no admin approval. Food and Taxi share
+ * one `users` document (see core/users/accountDeletion.service.js), so this
+ * affects the whole account regardless of which app the user deleted from.
+ */
+export const deleteAccount = async (userId, role) => {
+  if (!userId || !role) {
+    throw new AuthError("Invalid token payload");
+  }
+
+  if (role !== ROLES.USER) {
+    throw new ValidationError(
+      "Account deletion is not supported for this account type yet.",
+    );
+  }
+
+  const deleted = await softDeleteSharedUser(userId, {
+    reason: "user_delete_request",
+  });
+
+  if (!deleted) {
+    throw new AuthError("Account not found or already deleted");
+  }
+
+  return { success: true, deletedAt: deleted.deletedAt };
+};
+
+/** Shared by normal login, recover-account and start-fresh — same session shape as verifyUserOtpAndLogin. */
+const finalizeUserLoginSession = async (userDoc, { isNewUser = false } = {}) => {
+  const user = userDoc.toObject ? userDoc.toObject() : userDoc;
+  const unifiedSession = buildUnifiedUserSession(userDoc);
+  const { accessToken, refreshToken } = unifiedSession;
+
+  const ttlMs = ms(config.jwtRefreshExpiresIn || "7d");
+  try {
+    await withTimeout(
+      FoodRefreshToken.create({
+        userId: user._id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + ttlMs),
+      }),
+      1500,
+      "FoodRefreshToken.create",
+    );
+  } catch (err) {
+    logger.warn(`[Auth] Refresh token persistence skipped: ${err.message}`);
+  }
+
+  return { accessToken, refreshToken, user, isNewUser, taxiAuth: unifiedSession.taxiAuth };
+};
+
+/** Recovers a soft-deleted account exactly as it was left, then logs the user in. */
+export const recoverAccount = async (recoveryToken) => {
+  const { userId } = verifyRecoveryToken(recoveryToken);
+  const recovered = await recoverSharedUser(userId);
+
+  if (!recovered) {
+    throw new AuthError("Account not found or already active");
+  }
+
+  return finalizeUserLoginSession(recovered, { isNewUser: false });
+};
+
+/**
+ * Starts a brand-new account on the same phone number after a deletion.
+ * The OLD account is NOT reused or wiped in place — its phone is freed up
+ * (renamed) and it's left exactly as it was, still linked to its old orders/
+ * rides/payments for admin records. A genuinely new document (new _id, zero
+ * history) is created with the real phone number. This mirrors the original
+ * RedGo-V2 implementation this project's Food module was merged from.
+ */
+export const startFreshAccount = async (recoveryToken, { name } = {}) => {
+  const { userId } = verifyRecoveryToken(recoveryToken);
+  const trimmedName = String(name || "").trim();
+
+  if (!trimmedName) {
+    throw new ValidationError("Name is required");
+  }
+
+  const oldUser = await FoodUser.findOne({ _id: userId, deletedAt: { $ne: null } });
+  if (!oldUser) {
+    throw new AuthError("Account not found or already active");
+  }
+
+  const realPhone = oldUser.phone;
+  oldUser.phone = `${realPhone}_deleted_${Date.now()}`;
+  await oldUser.save();
+
+  const created = await FoodUser.create({
+    phone: realPhone,
+    name: trimmedName,
+    isVerified: true,
+  });
+
+  return finalizeUserLoginSession(created, { isNewUser: true });
 };
 
 export const refreshAccessToken = async (token) => {

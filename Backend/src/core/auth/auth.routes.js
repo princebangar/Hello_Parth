@@ -10,6 +10,9 @@ import {
     verifyDeliveryOtpController,
     logoutController,
     getMeController,
+    deleteAccountController,
+    recoverAccountController,
+    startFreshAccountController,
     updateAdminProfileController,
     changeAdminPasswordController,
     requestAdminForgotPasswordOtpController,
@@ -57,6 +60,13 @@ router.post('/logout', logoutController);
 
 // Authenticated user profile (requires Bearer token)
 router.get('/me', authMiddleware, getMeController);
+
+// Instant self-serve account deletion (Food + Taxi share one user account)
+router.delete('/delete-account', authMiddleware, deleteAccountController);
+
+// Deleted-account login choice: recover old data, or start fresh on the same phone.
+router.post('/user/recover-account', authRateLimiter, recoverAccountController);
+router.post('/user/start-fresh', authRateLimiter, startFreshAccountController);
 
 // Admin-only: profile update & change password (Bearer + ADMIN role)
 router.patch('/admin/profile', authMiddleware, requireAdmin, updateAdminProfileController);

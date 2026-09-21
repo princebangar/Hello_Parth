@@ -20,6 +20,8 @@ const AUTH = {
   LOGOUT_ALL: "/food/auth/logout-all",
   DELETE_ACCOUNT: "/food/auth/delete-account",
   CHECK_BALANCE: "/food/auth/delete-account/check-balance",
+  RECOVER_ACCOUNT: "/food/auth/user/recover-account",
+  START_FRESH: "/food/auth/user/start-fresh",
   ME: "/food/auth/me",
 };
 
@@ -105,6 +107,33 @@ export function verifyUserOtp(
     ...(fcmToken ? { fcmToken, platform } : {}),
     ...(confirmAction ? { confirmAction } : {}),
   });
+}
+
+/**
+ * Recover a previously soft-deleted account exactly as it was left.
+ * @param {string} recoveryToken - short-lived token returned by verifyUserOtp
+ *   when the phone belongs to a deleted account (`deletedAccountFound`).
+ */
+export function recoverAccount(recoveryToken) {
+  if (!recoveryToken) {
+    return Promise.reject(new Error("Recovery token is required"));
+  }
+  return apiClient.post(AUTH.RECOVER_ACCOUNT, { recoveryToken });
+}
+
+/**
+ * Start fresh on the same phone number after a previous deletion — wipes the
+ * old profile (name/email/photo/addresses) and reactivates the account.
+ */
+export function startFreshAccount(recoveryToken, name) {
+  if (!recoveryToken) {
+    return Promise.reject(new Error("Recovery token is required"));
+  }
+  const trimmedName = String(name || "").trim();
+  if (!trimmedName) {
+    return Promise.reject(new Error("Name is required"));
+  }
+  return apiClient.post(AUTH.START_FRESH, { recoveryToken, name: trimmedName });
 }
 
 /**

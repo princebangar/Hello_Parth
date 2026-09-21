@@ -19,11 +19,11 @@ const REASONS = [
 ];
 
 const CONSEQUENCES = [
-  'An admin will review your deletion request',
-  'Your account stays active until the request is approved',
-  'After approval, ride history, addresses, and preferences may be removed',
-  'Active bookings may be cancelled after approval',
-  'Rejected requests keep your account unchanged',
+  'Your account is deleted immediately — for both Food and Taxi',
+  'You will be logged out on this and all other devices',
+  'Your profile, addresses, and preferences will be removed',
+  'Order and ride history is kept for admin records only',
+  'You can recover your account later by logging in with the same number',
 ];
 
 const DeleteAccount = () => {
@@ -43,7 +43,7 @@ const DeleteAccount = () => {
       clearCurrentRide();
       socketService.disconnect();
       clearLocalUserSession();
-      setSuccess('Your account deletion request has been sent to admin for review. Logging you out...');
+      setSuccess('Your account has been deleted. Logging you out...');
       setLoading(false);
       setShowConfirm(false);
       navigate('/login', { replace: true });
@@ -99,8 +99,8 @@ const DeleteAccount = () => {
               <AlertTriangle size={18} className="text-red-500" strokeWidth={2} />
             </div>
             <div>
-              <p className="text-[14px] font-black text-red-700 leading-tight">Delete acccount</p>
-              <p className="text-[11px] font-bold text-red-400">Admin approval is required</p>
+              <p className="text-[14px] font-black text-red-700 leading-tight">Delete account</p>
+              <p className="text-[11px] font-bold text-red-400">This happens immediately</p>
             </div>
           </div>
           <ul className="space-y-2">
@@ -158,13 +158,13 @@ const DeleteAccount = () => {
               <div className="w-16 h-16 bg-red-50 rounded-[20px] flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle size={30} className="text-red-500" strokeWidth={2} />
               </div>
-              <h3 className="text-[18px] font-black text-slate-900 mb-2">Send deletion request?</h3>
-              <p className="text-[13px] font-bold text-slate-500 mb-1 leading-relaxed">Admin will review this request before your account is deleted.</p>
-              <p className="text-[12px] font-bold text-red-400 mb-6">Your account remains active until approval.</p>
+              <h3 className="text-[18px] font-black text-slate-900 mb-2">Delete your account?</h3>
+              <p className="text-[13px] font-bold text-slate-500 mb-1 leading-relaxed">This deletes your Food and Taxi account right away and logs you out everywhere.</p>
+              <p className="text-[12px] font-bold text-red-400 mb-6">This cannot be undone from here — you'd need to log in again to recover it.</p>
               <div className="space-y-2.5">
                 <MotionButton whileTap={{ scale: 0.97 }} onClick={handleDelete} disabled={loading}
                   className="w-full bg-red-500 text-white py-3.5 rounded-[16px] text-[13px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
-                  {loading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Yes, Send Request'}
+                  {loading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Yes, Delete My Account'}
                 </MotionButton>
                 <button onClick={() => setShowConfirm(false)}
                   className="w-full py-3.5 text-[13px] font-black text-slate-400 uppercase tracking-widest">

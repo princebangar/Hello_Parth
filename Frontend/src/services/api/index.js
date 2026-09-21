@@ -131,6 +131,8 @@ export const authAPI = {
   logoutFromAllDevices: (module = "user") => authService.logoutFromAllDevices(module),
   deleteAccount: (module = "user") => authService.deleteAccount(module),
   checkBalance: (module = "user") => authService.checkAccountBalance(module),
+  recoverAccount: (recoveryToken) => authService.recoverAccount(recoveryToken),
+  startFreshAccount: (recoveryToken, name) => authService.startFreshAccount(recoveryToken, name),
   sendUnifiedOTP: (phone) => {
     if (!phone) return Promise.reject(new Error("Phone is required"));
     return authService.requestUserOtp(phone);

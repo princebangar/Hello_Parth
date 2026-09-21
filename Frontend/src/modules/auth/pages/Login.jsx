@@ -14,12 +14,13 @@ export default function UnifiedOTPFastLogin() {
   const FCM_FETCH_TIMEOUT_MS = 12000
   const [phoneNumber, setPhoneNumber] = useState("")
   const [otp, setOtp] = useState("")
-  const [step, setStep] = useState(1) // 1: Phone, 2: OTP, 3: Name
+  const [step, setStep] = useState(1) // 1: Phone, 2: OTP, 3: Name (new user), 4: Recover choice, 5: Name (start fresh)
   const [loading, setLoading] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
   const [name, setName] = useState("")
   const [pendingAuthData, setPendingAuthData] = useState(null)
+  const [deletedAccountRecovery, setDeletedAccountRecovery] = useState(null) // { recoveryToken, phone }
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -80,6 +81,7 @@ export default function UnifiedOTPFastLogin() {
 
     if (step > 1) {
       setStep(1)
+      setDeletedAccountRecovery(null)
       return
     }
 
@@ -263,6 +265,7 @@ export default function UnifiedOTPFastLogin() {
     setOtp("")
     setName("")
     setPendingAuthData(null)
+    setDeletedAccountRecovery(null)
     setResendTimer(0)
   }
 
@@ -326,6 +329,13 @@ export default function UnifiedOTPFastLogin() {
       )
       console.log("[Auth] OTP verify response:", response?.data || response)
       const data = response?.data?.data || response?.data || {}
+
+      if (data.deletedAccountFound) {
+        setDeletedAccountRecovery({ recoveryToken: data.recoveryToken, phone: data.phone || phoneNumber })
+        setStep(4)
+        toast.success("We found a previous account on this number.")
+        return
+      }
 
       if (!data.accessToken || !data.user) {
         throw new Error("Invalid response from server")
@@ -437,6 +447,74 @@ export default function UnifiedOTPFastLogin() {
         err?.response?.data?.error ||
         err?.message ||
         "Failed to save your name."
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+      submitting.current = false
+    }
+  }
+
+  const goToPostLoginRoute = () => {
+    consumeLoginReturnTo()
+    const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
+    const fromHint = String(location.state?.from || "").split("?")[0]
+    navigate(
+      postLoginTo.startsWith("/taxi/") || fromHint.startsWith("/taxi/")
+        ? "/taxi/user"
+        : resolveConsumerPostLoginRoute(),
+      { replace: true },
+    )
+  }
+
+  const handleRecoverAccount = async () => {
+    if (!deletedAccountRecovery?.recoveryToken || submitting.current) return
+    submitting.current = true
+    setLoading(true)
+    try {
+      const response = await authAPI.recoverAccount(deletedAccountRecovery.recoveryToken)
+      const data = response?.data?.data || response?.data || {}
+      setUnifiedAuthData(data)
+      toast.success("Welcome back! Your account has been recovered.")
+      goToPostLoginRoute()
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to recover account."
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+      submitting.current = false
+    }
+  }
+
+  const handleStartFreshChoice = () => {
+    setName("")
+    setStep(5)
+  }
+
+  const handleConfirmStartFresh = async (e) => {
+    e.preventDefault()
+    const trimmedName = String(name || "").trim()
+    if (trimmedName.length < 2) {
+      toast.error("Please enter your full name")
+      return
+    }
+    if (!deletedAccountRecovery?.recoveryToken) {
+      toast.error("Session expired. Please verify OTP again.")
+      setStep(1)
+      setOtp("")
+      setDeletedAccountRecovery(null)
+      return
+    }
+    if (submitting.current) return
+    submitting.current = true
+    setLoading(true)
+    try {
+      const response = await authAPI.startFreshAccount(deletedAccountRecovery.recoveryToken, trimmedName)
+      const data = response?.data?.data || response?.data || {}
+      setUnifiedAuthData(data)
+      toast.success("Account created!")
+      goToPostLoginRoute()
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to create account."
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -561,14 +639,22 @@ export default function UnifiedOTPFastLogin() {
 
               <div className="text-center mb-8">
                 <h2 className="text-[32px] leading-tight font-black text-[#1A1A1A] tracking-tight mb-2">
-                  {step === 3
-                    ? "Complete your profile"
-                    : step === 2
-                      ? "Verify OTP"
-                      : "Welcome to Hello Parth"}
+                  {step === 5
+                    ? "Start fresh"
+                    : step === 4
+                      ? "Welcome back"
+                      : step === 3
+                        ? "Complete your profile"
+                        : step === 2
+                          ? "Verify OTP"
+                          : "Welcome to Hello Parth"}
                 </h2>
                 <p className="text-[#1A1A1A] text-[15px] font-medium max-w-[28ch] mx-auto">
-                  {step === 3 ? (
+                  {step === 5 ? (
+                    <>Enter your name to create<br />a brand-new account.</>
+                  ) : step === 4 ? (
+                    <>We found a previous account<br />on this phone number.</>
+                  ) : step === 3 ? (
                     <>Enter your name to finish signup<br />for Food & Taxi.</>
                   ) : step === 2 ? (
                     <>Enter the 4-digit code we sent<br />to your phone.</>
@@ -584,7 +670,11 @@ export default function UnifiedOTPFastLogin() {
                     ? handleSendOTP
                     : step === 2
                       ? handleVerifyOTP
-                      : handleCompleteProfile
+                      : step === 5
+                        ? handleConfirmStartFresh
+                        : step === 4
+                          ? (e) => e.preventDefault()
+                          : handleCompleteProfile
                 }
                 className="w-full flex flex-col space-y-6"
               >
@@ -694,6 +784,28 @@ export default function UnifiedOTPFastLogin() {
                         )}
                       </div>
                     </div>
+                  ) : step === 4 ? (
+                    <div className="space-y-4 w-full">
+                      <p className="text-center text-[14px] text-gray-700 font-medium px-2">
+                        +91 {deletedAccountRecovery?.phone || phoneNumber} had an account here before that was deleted.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRecoverAccount}
+                        disabled={loading}
+                        className="w-full h-[56px] rounded-full font-semibold text-[16px] bg-[#1A1A1A] text-white shadow-lg active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
+                      >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Recover my old account"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStartFreshChoice}
+                        disabled={loading}
+                        className="w-full h-[56px] rounded-full font-semibold text-[16px] border border-gray-300 bg-white text-slate-900 disabled:opacity-60"
+                      >
+                        Start fresh (new account)
+                      </button>
+                    </div>
                   ) : (
                     <div className="space-y-5">
                       <div className="flex items-center justify-between p-3 bg-white rounded-full border border-gray-200 shadow-sm px-5">
@@ -738,37 +850,39 @@ export default function UnifiedOTPFastLogin() {
                     <Link to="/privacy" className="font-bold text-slate-900 hover:underline">Privacy Policy</Link>.
                   </p>
 
-                  <button
-                    type="submit"
-                    disabled={
-                      loading ||
-                      (step === 1 && String(phoneNumber).length < 10) ||
-                      (step === 2 && otp.length !== 4) ||
-                      (step === 3 && String(name).trim().length < 2)
-                    }
-                    className={`w-full h-[60px] rounded-full font-semibold text-[17px] transition-all flex items-center justify-center gap-3 ${loading ||
-                      (step === 1 && String(phoneNumber).length < 10) ||
-                      (step === 2 && otp.length !== 4) ||
-                      (step === 3 && String(name).trim().length < 2)
-                      ? "bg-[#E5E7EB] text-[#6B7280] cursor-not-allowed shadow-inner"
-                      : "bg-[#1A1A1A] text-white shadow-lg active:scale-[0.98]"
-                      }`}
-                  >
-                    {loading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        {step === 1 ? "Continue securely" : step === 2 ? "Verify & Login" : "Complete Profile"}
-                        <ArrowRight className={`w-5 h-5 ${loading ||
-                          (step === 1 && String(phoneNumber).length < 10) ||
-                          (step === 2 && otp.length !== 4) ||
-                          (step === 3 && String(name).trim().length < 2)
-                          ? 'text-[#9CA3AF]'
-                          : 'text-[#F38F24]'
-                          }`} />
-                      </>
-                    )}
-                  </button>
+                  {step !== 4 && (
+                    <button
+                      type="submit"
+                      disabled={
+                        loading ||
+                        (step === 1 && String(phoneNumber).length < 10) ||
+                        (step === 2 && otp.length !== 4) ||
+                        ((step === 3 || step === 5) && String(name).trim().length < 2)
+                      }
+                      className={`w-full h-[60px] rounded-full font-semibold text-[17px] transition-all flex items-center justify-center gap-3 ${loading ||
+                        (step === 1 && String(phoneNumber).length < 10) ||
+                        (step === 2 && otp.length !== 4) ||
+                        ((step === 3 || step === 5) && String(name).trim().length < 2)
+                        ? "bg-[#E5E7EB] text-[#6B7280] cursor-not-allowed shadow-inner"
+                        : "bg-[#1A1A1A] text-white shadow-lg active:scale-[0.98]"
+                        }`}
+                    >
+                      {loading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          {step === 1 ? "Continue securely" : step === 2 ? "Verify & Login" : step === 5 ? "Create Account" : "Complete Profile"}
+                          <ArrowRight className={`w-5 h-5 ${loading ||
+                            (step === 1 && String(phoneNumber).length < 10) ||
+                            (step === 2 && otp.length !== 4) ||
+                            ((step === 3 || step === 5) && String(name).trim().length < 2)
+                            ? 'text-[#9CA3AF]'
+                            : 'text-[#F38F24]'
+                            }`} />
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {step === 1 && !loading && (
                     <button

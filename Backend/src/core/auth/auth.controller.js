@@ -9,6 +9,9 @@ import {
   verifyDeliveryOtpAndLogin,
   logout,
   getProfile,
+  deleteAccount,
+  recoverAccount,
+  startFreshAccount,
   updateAdminProfile,
   changeAdminPassword,
   requestAdminForgotPasswordOtp,
@@ -155,6 +158,42 @@ export const getMeController = async (req, res, next) => {
     const { userId, role } = req.user;
     const result = await getProfile(userId, role);
     return sendResponse(res, 200, "Profile retrieved successfully", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteAccountController = async (req, res, next) => {
+  try {
+    const { userId, role } = req.user;
+    const result = await deleteAccount(userId, role);
+    return sendResponse(res, 200, "Account deleted successfully", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const recoverAccountController = async (req, res, next) => {
+  try {
+    const { recoveryToken } = req.body || {};
+    if (!recoveryToken) {
+      return sendResponse(res, 400, "Recovery token is required", null);
+    }
+    const result = await recoverAccount(recoveryToken);
+    return sendResponse(res, 200, "Account recovered successfully", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const startFreshAccountController = async (req, res, next) => {
+  try {
+    const { recoveryToken, name } = req.body || {};
+    if (!recoveryToken) {
+      return sendResponse(res, 400, "Recovery token is required", null);
+    }
+    const result = await startFreshAccount(recoveryToken, { name });
+    return sendResponse(res, 201, "Account created successfully", result);
   } catch (error) {
     next(error);
   }
