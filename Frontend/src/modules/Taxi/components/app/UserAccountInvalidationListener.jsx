@@ -28,7 +28,7 @@ const UserAccountInvalidationListener = () => {
     const handleLogout = (loginState = null) => {
       clearUserSession();
       socketService.disconnect();
-      navigate('/taxi/user/login', { replace: true, state: loginState });
+      navigate('/login', { replace: true, state: loginState });
     };
 
     const handleAuthStale = (event) => {

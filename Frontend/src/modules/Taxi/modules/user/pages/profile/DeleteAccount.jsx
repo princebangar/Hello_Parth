@@ -46,7 +46,7 @@ const DeleteAccount = () => {
       setSuccess('Your account deletion request has been sent to admin for review. Logging you out...');
       setLoading(false);
       setShowConfirm(false);
-      navigate('/taxi/user/login', { replace: true });
+      navigate('/login', { replace: true });
     } catch (requestError) {
       setError(requestError?.message || 'Something went wrong. Please try again.');
       setLoading(false);

@@ -170,7 +170,6 @@ const AddDriver = lazy(() => import('./modules/driver/pages/settings/AddDriver')
 
 // Admin Module Pages
 const AdminLayout = lazy(() => import('./modules/admin/components/AdminLayout'));
-const AdminLogin = lazy(() => import('./modules/admin/pages/auth/AdminLogin'));
 const AdminDashboard = lazy(() => import('./modules/admin/pages/dashboard/MainDashboard'));
 const AdminCancellationAnalytics = lazy(() => import('./modules/admin/pages/CancellationAnalytics'));
 const AdminEarnings = lazy(() => import('./modules/admin/pages/dashboard/AdminEarnings'));

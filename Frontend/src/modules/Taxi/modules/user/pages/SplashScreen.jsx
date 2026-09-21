@@ -162,7 +162,7 @@ const SplashScreen = () => {
       if (token) {
         navigate('/taxi/user', { replace: true });
       } else {
-        navigate('/taxi/user/login', { replace: true });
+        navigate('/login', { replace: true, state: { from: '/taxi/user' } });
       }
     }, 2500);
 

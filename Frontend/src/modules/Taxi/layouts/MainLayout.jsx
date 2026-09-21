@@ -35,11 +35,7 @@ const MainLayout = ({ children }) => {
 
   const isUserPath = !isAdminPath && !isStaticPath;
   const isSplashPath = location.pathname === '/taxi/user/splash';
-  const isAuthPath = 
-    location.pathname === '/taxi/user/login' ||
-    location.pathname === '/taxi/user/signup' ||
-    location.pathname === '/taxi/user/verify-otp' ||
-    location.pathname === '/login';
+  const isAuthPath = location.pathname === '/login';
 
   if (isSplashPath || isAuthPath) {
     return (
