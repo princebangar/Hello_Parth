@@ -6,6 +6,13 @@ export default function UserLogoutConfirmDialog({
   onClose,
   onConfirm,
   isLoggingOut = false,
+  // Food's own red accent, kept as the default so Food's usage needs no
+  // changes. Taxi passes its own (blue) values — same dialog, same layout,
+  // just a different brand colour, per how the two apps otherwise share
+  // this component.
+  iconBgClassName = "bg-red-50 dark:bg-red-950/30",
+  iconClassName = "text-[#FF3131]",
+  confirmButtonClassName = "bg-[#FF3131] hover:bg-[#E02626] shadow-red-500/20",
 }) {
   if (!open) return null;
 
@@ -18,8 +25,8 @@ export default function UserLogoutConfirmDialog({
           className="w-full max-w-sm rounded-2xl bg-white/75 dark:bg-[#1a1a1a]/75 backdrop-blur-md shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden p-6 text-center"
         >
           <div className="flex flex-col items-center mb-4">
-            <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center mb-3">
-              <Power className="h-7 w-7 text-[#FF3131]" />
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${iconBgClassName}`}>
+              <Power className={`h-7 w-7 ${iconClassName}`} />
             </div>
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Log out?</h3>
           </div>
@@ -41,7 +48,7 @@ export default function UserLogoutConfirmDialog({
               type="button"
               onClick={onConfirm}
               disabled={isLoggingOut}
-              className="flex-1 h-12 rounded-xl bg-[#FF3131] hover:bg-[#E02626] text-white text-md font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-all outline-none"
+              className={`flex-1 h-12 rounded-xl text-white text-md font-bold shadow-lg active:scale-95 transition-all outline-none ${confirmButtonClassName}`}
             >
               {isLoggingOut ? "Logging out..." : "Yes"}
             </button>

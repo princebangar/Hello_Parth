@@ -92,7 +92,7 @@ const WithdrawalRequestOwnerDetail = () => {
           module="Owner Wallet"
           page="Withdrawal Requests"
           title="Withdrawal Details"
-          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' owners/wallet/withdrawals"
+          back="/taxi/admin/owners/wallet/withdrawals"
         />
 
         <div className="mt-6">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Home, Clock, Map, User } from 'lucide-react';
 import { useSettings, normalizeAssetUrl } from '../../../shared/context/SettingsContext';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
@@ -85,23 +85,17 @@ const BottomNavbar = () => {
               className="flex-1 flex flex-col items-center justify-center py-1 relative z-10 outline-none tap-highlight-transparent group"
             >
               <div className="relative flex flex-col items-center">
-                {/* Active Sliding Background Pill — same spring config as the
-                    icon below so the pill and icon/text settle together
-                    instead of the pill visibly arriving first. */}
-                <AnimatePresence>
-                  {isActive && (
-                    <motion.div
-                      layoutId="active-pill"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 500,
-                        damping: 34,
-                        mass: 0.8
-                      }}
-                      className="absolute -inset-y-2 -inset-x-4 bg-[#FFC400] rounded-[20px] shadow-[0_8px_20px_rgba(255,196,0,0.35)]"
-                    />
-                  )}
-                </AnimatePresence>
+                {/* Active background pill — always in the DOM, just faded
+                    in/out per button (no shared layoutId slide between
+                    buttons). A cross-button layoutId animation could
+                    momentarily elevate the moving pill above the icon/text
+                    of the tab it was animating into, hiding them mid-swipe. */}
+                <motion.div
+                  animate={{ opacity: isActive ? 1 : 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute -inset-y-2 -inset-x-4 bg-[#FFC400] rounded-[20px] shadow-[0_8px_20px_rgba(255,196,0,0.35)] z-0"
+                  aria-hidden="true"
+                />
 
                 {/* Icon Container with Transition */}
                 <motion.div
@@ -125,16 +119,15 @@ const BottomNavbar = () => {
                       draggable={false}
                     />
                   ) : (
+                    // Inline colour — the active pill is always bright yellow
+                    // regardless of app theme, so its icon must always be
+                    // dark; a `text-slate-950` class gets force-overridden
+                    // by the global theme CSS otherwise (washed-out icon).
                     <Icon
                       size={20}
                       strokeWidth={isActive ? 2.8 : 2}
-                      className={`transition-colors duration-150 ${
-                        isActive
-                          ? 'text-slate-950 font-extrabold'
-                          : isDark
-                            ? 'text-zinc-400 group-hover:text-zinc-200'
-                            : 'text-slate-500 group-hover:text-slate-700'
-                      }`}
+                      className={`transition-colors duration-150 font-extrabold ${!isActive ? 'group-hover:opacity-80' : ''}`}
+                      style={{ color: isActive ? '#020617' : (isDark ? '#a1a1aa' : '#64748b') }}
                     />
                   )}
                 </motion.div>
@@ -152,29 +145,19 @@ const BottomNavbar = () => {
                     damping: 34,
                     mass: 0.8
                   }}
-                  className={`relative z-20 mt-1 font-['Outfit'] text-[9.5px] font-extrabold uppercase tracking-[0.14em] transition-colors duration-150 ${
-                    isActive
-                      ? 'text-slate-950'
-                      : isDark
-                        ? 'text-zinc-400 group-hover:text-zinc-200'
-                        : 'text-slate-500 group-hover:text-slate-700'
-                  }`}
+                  className="relative z-20 mt-1 font-['Outfit'] text-[9.5px] font-extrabold uppercase tracking-[0.14em] transition-colors duration-150"
+                  style={{ color: isActive ? '#020617' : (isDark ? '#a1a1aa' : '#64748b') }}
                 >
                   {label}
                 </motion.span>
                 
                 {/* Subtle Bottom Glow for Active Tab */}
-                {isActive && (
-                  <motion.div
-                    layoutId="active-glow"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 400,
-                      damping: 32
-                    }}
-                    className="absolute -bottom-2.5 w-4 h-1.5 bg-slate-950/20 rounded-full blur-[2px]"
-                  />
-                )}
+                <motion.div
+                  animate={{ opacity: isActive ? 1 : 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute -bottom-2.5 w-4 h-1.5 bg-slate-950/20 rounded-full blur-[2px]"
+                  aria-hidden="true"
+                />
               </div>
             </button>
           );

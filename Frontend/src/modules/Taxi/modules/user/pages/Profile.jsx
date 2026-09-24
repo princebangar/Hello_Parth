@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useNavigationType } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  User, Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
-  MapPin, Star, Package, Wrench, Gift, Trash2, Check, BusFront, 
-  Settings, CreditCard, Heart, Map, MessageSquare, History, Phone, Sun, Moon
+import {
+  Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
+  MapPin, Star, Package, Gift, Check, BusFront,
+  CreditCard, History, Phone, Palette, Settings
 } from 'lucide-react';
 // ... removed BottomNavbar import ...
 
@@ -13,6 +13,8 @@ import { clearCurrentRide } from '../services/currentRideService';
 import { socketService } from '../../../shared/api/socket';
 import api from '../../../shared/api/axiosInstance';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
+import UserAppearanceDialog from '@/shared/components/UserAppearanceDialog.jsx';
+import UserLogoutConfirmDialog from '@/shared/components/UserLogoutConfirmDialog.jsx';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -29,56 +31,109 @@ const pickNumber = (...values) => {
   return 0;
 };
 
+// Grouped into headed sections like Food's profile (small accent bar + label
+// above each group) — the first group stays unlabeled, matching Food's own
+// top cluster of account-level items.
 const menuSections = [
   {
-    title: 'Personal',
+    heading: null,
     items: [
-      { icon: User, title: 'Profile Settings', sub: 'Manage your personal info', path: '/taxi/user/profile/settings', bg: 'bg-indigo-50', color: 'text-indigo-600' },
-      { icon: MapPin, title: 'Saved Addresses', sub: 'Home, office & others', path: '/taxi/user/profile/addresses', bg: 'bg-emerald-50', color: 'text-emerald-600' },
-      { icon: History, title: 'My Rides', sub: 'Rides, parcels & trips', path: '/taxi/user/activity', bg: 'bg-blue-50', color: 'text-blue-600' },
-    ]
+      { icon: MapPin, title: 'Saved Addresses', sub: 'Home, office & others', path: '/taxi/user/profile/addresses', bg: 'bg-emerald-50 dark:bg-emerald-950/30', color: 'text-emerald-600 dark:text-emerald-400' },
+      // amber-400 (Tailwind's usual dark-mode partner for amber-600) reads
+      // distinctly yellow rather than orange — amber-500 keeps this the
+      // same "orange" family in both themes instead of shifting hue.
+      { icon: Wallet, title: 'My Wallet', sub: 'Balance & transactions', path: '/taxi/user/wallet', bg: 'bg-amber-50 dark:bg-amber-950/30', color: 'text-amber-600 dark:text-amber-500' },
+      // Same shared appearance picker Food uses — no `path`, handled via id.
+      { id: 'appearance', icon: Palette, title: 'Appearance', sub: 'Light', bg: 'bg-yellow-50 dark:bg-yellow-950/30', color: 'text-yellow-600 dark:text-yellow-400' },
+    ],
   },
   {
-    title: 'Financial & Rewards',
+    heading: 'My Activity',
     items: [
-      { icon: Wallet, title: 'My Wallet', sub: 'Balance & transactions', path: '/taxi/user/wallet', bg: 'bg-amber-50', color: 'text-amber-600' },
-      { icon: Package, title: 'Subscriptions', sub: 'Ride plans & credits', path: '/taxi/user/profile/subscriptions', bg: 'bg-indigo-50', color: 'text-indigo-600' },
-      { icon: Gift, title: 'Refer & Earn', sub: 'Invite friends & get rewards', path: '/taxi/user/referral', bg: 'bg-rose-50', color: 'text-rose-600' },
-      { icon: BusFront, title: 'Bus Tickets', sub: 'Manage bus bookings', path: '/taxi/user/profile/bus-bookings', bg: 'bg-orange-50', color: 'text-orange-600' },
-    ]
+      { icon: History, title: 'My Rides', sub: 'Rides, parcels & trips', path: '/taxi/user/activity', bg: 'bg-blue-50 dark:bg-blue-950/30', color: 'text-blue-600 dark:text-blue-400' },
+      { icon: BusFront, title: 'Bus Tickets', sub: 'Manage bus bookings', path: '/taxi/user/profile/bus-bookings', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-600 dark:text-orange-400' },
+      { icon: Package, title: 'Subscriptions', sub: 'Ride plans & credits', path: '/taxi/user/profile/subscriptions', bg: 'bg-indigo-50 dark:bg-indigo-950/30', color: 'text-indigo-600 dark:text-indigo-400' },
+    ],
   },
   {
-    title: 'Preferences',
+    heading: 'Rewards',
     items: [
-      { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50', color: 'text-purple-600' },
-      { icon: Shield, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos', bg: 'bg-sky-50', color: 'text-sky-600' },
-      { icon: HelpCircle, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets', bg: 'bg-slate-50', color: 'text-slate-600' },
-    ]
+      { icon: Gift, title: 'Refer & Earn', sub: 'Invite friends & get rewards', path: '/taxi/user/referral', bg: 'bg-rose-50 dark:bg-rose-950/30', color: 'text-rose-600 dark:text-rose-400' },
+    ],
   },
   {
-    title: 'Legal',
+    heading: 'More',
     items: [
-      { icon: FileText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/terms', bg: 'bg-orange-50', color: 'text-orange-600' },
-      { icon: Shield, title: 'Privacy Policy', sub: 'How your data is handled', path: '/privacy', bg: 'bg-emerald-50', color: 'text-emerald-600' },
-      { icon: CreditCard, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/refund', bg: 'bg-indigo-50', color: 'text-indigo-600' },
-    ]
-  }
+      { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50 dark:bg-purple-950/30', color: 'text-purple-600 dark:text-purple-400' },
+      { icon: Shield, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos', bg: 'bg-sky-50 dark:bg-sky-950/30', color: 'text-sky-600 dark:text-sky-400' },
+      { icon: HelpCircle, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets', bg: 'bg-slate-50 dark:bg-slate-800/50', color: 'text-slate-600 dark:text-slate-400' },
+      { icon: FileText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/terms', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-600 dark:text-orange-400' },
+      { icon: Shield, title: 'Privacy Policy', sub: 'How your data is handled', path: '/privacy', bg: 'bg-emerald-50 dark:bg-emerald-950/30', color: 'text-emerald-600 dark:text-emerald-400' },
+      { icon: CreditCard, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/refund', bg: 'bg-indigo-50 dark:bg-indigo-950/30', color: 'text-indigo-600 dark:text-indigo-400' },
+      // Settings hub (Edit Profile + Delete Account) — same spot Food puts
+      // it: directly above Log out.
+      { icon: Settings, title: 'Settings', sub: 'Edit profile & account', path: '/taxi/user/profile/settings', bg: 'bg-slate-50 dark:bg-slate-800/50', color: 'text-slate-600 dark:text-slate-400' },
+      // Fixed navy — no `dark:` pair — so it stays the same colour in both
+      // themes, same list-row style as every other item (matches Food's
+      // flat "Log out" row instead of a standalone CTA button).
+      { id: 'logout', icon: LogOut, title: 'Log out', sub: 'Sign out of your account', bg: 'bg-blue-600/10', color: 'text-blue-600' },
+    ],
+  },
 ];
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useUserTheme();
+  const navType = useNavigationType();
+  const { theme } = useUserTheme();
   const isDark = theme === 'dark';
-  const [profile, setProfile] = useState({
-    name: '',
-    phone: '',
-    profileImage: '',
-    stats: {
-      trips: 0,
-      rating: 4.9,
-      wallet: 0
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // Seed from what login already stored, so name/phone show immediately
+  // instead of a blank "Account Active" placeholder until the network
+  // fetch below resolves — the fetch still runs to refresh stats.
+  const [profile, setProfile] = useState(() => {
+    let stored = {};
+    try {
+      stored = JSON.parse(localStorage.getItem('userInfo') || '{}');
+    } catch {
+      stored = {};
     }
+    return {
+      name: stored?.name || '',
+      phone: stored?.phone || '',
+      profileImage: stored?.profileImage || '',
+      stats: {
+        trips: 0,
+        rating: 4.9,
+        wallet: 0
+      }
+    };
   });
+
+  // Settings/Edit-profile aren't kept-alive tabs, so navigating into them
+  // fully unmounts Profile — coming back with the browser/back-button
+  // remounts it fresh at scroll 0 unless we restore it ourselves. Same
+  // pattern Food's own Profile page uses.
+  useEffect(() => {
+    if (navType === 'POP') {
+      const savedScroll = sessionStorage.getItem('taxiProfileScrollPos');
+      if (savedScroll) {
+        setTimeout(() => window.scrollTo(0, parseInt(savedScroll, 10)), 50);
+      }
+    } else {
+      window.scrollTo(0, 0);
+    }
+
+    const handleScroll = () => {
+      sessionStorage.setItem('taxiProfileScrollPos', window.scrollY.toString());
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [navType]);
 
   useEffect(() => {
     const token = getLocalUserToken();
@@ -181,10 +236,17 @@ const Profile = () => {
   }, [navigate]);
 
   const handleLogout = () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
     clearCurrentRide();
     socketService.disconnect();
     clearLocalUserSession();
     navigate('/login', { replace: true });
+  };
+
+  const handleLogoutClick = () => {
+    if (isLoggingOut) return;
+    setLogoutConfirmOpen(true);
   };
 
   const initials = (profile.name || 'User')
@@ -214,12 +276,18 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen max-w-lg mx-auto pb-[130px] relative overflow-x-hidden transition-colors duration-300 user-app-theme">
-      {/* Premium Header Background */}
-      <div 
+    <div className="min-h-screen max-w-lg mx-auto pb-[130px] relative overflow-x-hidden user-app-theme">
+      {/* Premium Header Background — no border-bottom here: it's a fixed
+          h-80 (320px) layer sitting *behind* the hero card (z-0 vs the
+          card's own opaque background), so as soon as any content above it
+          pushed the card's bottom edge past that fixed height, the line
+          started showing at the card's left/right edges where the card
+          doesn't cover it — an artifact of a hard-coded line at a height
+          decoupled from the actual content. The gradient below already
+          fades the background out, so the crisp line was never needed. */}
+      <div
         style={{
           background: 'var(--user-profile-header-bg)',
-          borderBottom: '1px solid var(--user-border)'
         }}
         className="absolute top-0 inset-x-0 h-80 overflow-hidden transition-all duration-300"
       >
@@ -233,42 +301,14 @@ const Profile = () => {
 
       <div className="relative z-10">
         {/* Header Section */}
-        <div className="px-6 pt-12 pb-8">
+        <div className="px-4 pt-8 pb-8">
           <div className="flex items-center justify-between mb-8">
             <h1 className="font-['Outfit'] text-2xl font-extrabold text-[var(--user-text-primary)] tracking-tight">Profile</h1>
-            <div className="flex items-center gap-3">
-              <MotionButton
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleTheme}
-                className="h-10 w-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors duration-300 border shadow-sm"
-                style={{
-                  backgroundColor: 'var(--user-card-bg)',
-                  borderColor: 'var(--user-border)',
-                  color: 'var(--user-text-primary)'
-                }}
-              >
-                {isDark ? <Sun size={20} className="text-yellow-400 fill-yellow-400" /> : <Moon size={20} />}
-              </MotionButton>
-              <MotionButton
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => navigate('/taxi/user/profile/settings')}
-                className="h-10 w-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors duration-300 border shadow-sm"
-                style={{
-                  backgroundColor: 'var(--user-card-bg)',
-                  borderColor: 'var(--user-border)',
-                  color: 'var(--user-text-primary)'
-                }}
-              >
-                <Settings size={20} />
-              </MotionButton>
-            </div>
           </div>
 
           {/* Profile Hero Card */}
           <MotionDiv
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={false}
             animate={{ opacity: 1, scale: 1 }}
             className="rounded-[32px] p-6 shadow-md border transition-all duration-300 animate-fade-in"
             style={{
@@ -293,7 +333,14 @@ const Profile = () => {
                     <span className="text-2xl font-black text-white opacity-40">{initials || 'U'}</span>
                   )}
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
+                {/* Border colour matches the card behind it (not a flat
+                    `border-white`) so the badge reads as cut into the
+                    corner — a hardcoded white ring here showed up as a
+                    stray bright line against the dark-theme card. */}
+                <div
+                  style={{ borderColor: isDark ? 'var(--user-card-bg)' : '#FFFDF0' }}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg border-2 flex items-center justify-center shadow-sm"
+                >
                   <Check size={14} className="text-white" strokeWidth={4} />
                 </div>
               </div>
@@ -301,13 +348,26 @@ const Profile = () => {
                 <h2 className="font-['Outfit'] text-[22px] font-extrabold truncate capitalize leading-tight">
                   {profile.name}
                 </h2>
-                <p 
+                <p
                   style={{ color: 'var(--user-text-secondary)' }}
                   className="text-[14px] font-bold mt-1 flex items-center gap-1.5"
                 >
                    <Phone size={14} className="opacity-60" />
                    {profile.phone ? `+91 ${profile.phone}` : 'Account Active'}
                 </p>
+                {/* Same spot/label as Food's "Edit profile" link — opens the
+                    edit form directly (same destination the old standalone
+                    "Profile Settings" menu row used to open), independent
+                    of the "Settings" hub item further down the list. */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/taxi/user/profile/edit')}
+                  style={{ color: 'var(--user-text-secondary)' }}
+                  className="inline-flex items-center gap-0.5 text-[13px] font-bold mt-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                >
+                  Edit profile
+                  <ChevronRight size={13} strokeWidth={3} />
+                </button>
               </div>
             </div>
 
@@ -358,103 +418,95 @@ const Profile = () => {
           </MotionDiv>
         </div>
 
-        {/* Menu Sections */}
-        <motion.div 
+        {/* Menu Sections — `initial={false}` skips the mount fade/stagger
+            entirely. It's not just decorative: since each section only has
+            text (no background of its own), while it's mid-fade the parent's
+            background (not yet settled) shows through behind it — on a
+            theme switch that read as sections being "half updated". */}
+        <motion.div
           variants={containerVariants}
-          initial="hidden"
+          initial={false}
           animate="visible"
-          className="px-6 space-y-8"
+          className="px-4 space-y-5"
         >
           {menuSections.map((section, sIdx) => (
-            <motion.div key={sIdx} variants={itemVariants} className="space-y-4">
-              <h3 
-                style={{ color: 'var(--user-text-secondary)' }}
-                className="font-['Outfit'] text-[12px] font-black tracking-[0.25em] ml-1"
-              >
-                {section.title}
-              </h3>
-              
-              <div 
-                style={{
-                  backgroundColor: 'var(--user-card-bg)',
-                  borderColor: 'var(--user-border)',
-                }}
-                className="rounded-[32px] border shadow-sm overflow-hidden divide-y divide-slate-200/50 dark:divide-zinc-800/60 transition-colors duration-300"
-              >
+            <div key={section.heading || `section-${sIdx}`} className="space-y-3">
+              {section.heading && (
+                <div className="flex items-center gap-2 px-1">
+                  <div style={{ backgroundColor: 'var(--user-accent)' }} className="w-1 h-4 rounded" />
+                  <h3
+                    style={{ color: 'var(--user-text-primary)' }}
+                    className="text-[13px] font-bold uppercase tracking-wider"
+                  >
+                    {section.heading}
+                  </h3>
+                </div>
+              )}
+              <div className="space-y-3">
                 {section.items.map((item, iIdx) => (
                   <MotionButton
                     key={iIdx}
-                    whileTap={{ backgroundColor: isDark ? '#121824' : '#F8FAFC' }}
-                    onClick={() => navigate(item.path)}
-                    className="w-full flex items-center gap-5 px-6 py-5 text-left transition-colors cursor-pointer"
+                    variants={itemVariants}
+                    initial={false}
+                    whileHover={{ x: 4, scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      if (item.id === 'appearance') return setAppearanceOpen(true);
+                      if (item.id === 'logout') return handleLogoutClick();
+                      return navigate(item.path);
+                    }}
+                    style={{
+                      backgroundColor: 'var(--user-card-bg)',
+                      borderColor: 'var(--user-border)',
+                    }}
+                    className="w-full flex items-center gap-5 px-6 py-5 rounded-[24px] border shadow-sm text-left cursor-pointer"
                   >
-                    <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0 ${
-                      isDark ? 'bg-slate-950 border border-slate-800' : item.bg
-                    }`}>
-                      <item.icon size={20} className={isDark ? 'text-yellow-400' : item.color} strokeWidth={2.5} />
+                    <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0 ${item.bg}`}>
+                      <item.icon size={20} className={item.color} strokeWidth={2.5} />
                     </div>
                     <div className="flex-1">
                       <p className="text-[15px] font-bold leading-tight tracking-tight">{item.title}</p>
-                      <p 
+                      <p
                         style={{ color: 'var(--user-text-secondary)' }}
-                        className="text-[12px] font-semibold mt-0.5"
+                        className="text-[12px] font-semibold mt-0.5 capitalize"
                       >
-                        {item.sub}
+                        {item.id === 'appearance' ? theme : item.sub}
                       </p>
                     </div>
-                    <div 
+                    <div
                       style={{
                         backgroundColor: 'var(--user-bg)',
                         color: 'var(--user-text-secondary)'
                       }}
-                      className="h-8 w-8 rounded-full flex items-center justify-center transition-colors duration-300"
+                      className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
                     >
                       <ChevronRight size={18} strokeWidth={3} />
                     </div>
                   </MotionButton>
                 ))}
               </div>
-            </motion.div>
+            </div>
           ))}
 
-          {/* Dangerous Zone */}
-          <motion.div variants={itemVariants} className="pt-4 pb-36 space-y-4">
-             <MotionButton
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => navigate('/taxi/user/profile/delete-account')}
-              className={`w-full flex items-center gap-4 px-6 py-4 rounded-[24px] border transition-colors cursor-pointer ${
-                isDark ? 'bg-slate-900 border-red-900/30 text-red-400 hover:bg-red-950/20' : 'bg-white border-red-100 text-red-650 hover:bg-red-50/50'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-red-500/10 text-red-500 border border-red-500/10">
-                <Trash2 size={18} strokeWidth={2.5} />
-              </div>
-              <p className="text-[14px] font-bold">Delete account</p>
-            </MotionButton>
-
-            <MotionButton
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleLogout}
-              className={`w-full h-16 rounded-[24px] flex items-center justify-center gap-3 text-[15px] font-black transition-all duration-300 cursor-pointer border ${
-                isDark
-                  ? 'bg-yellow-400 hover:bg-yellow-500 text-slate-950 border-yellow-400 shadow-lg shadow-yellow-400/5'
-                  : 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900 shadow-md shadow-slate-900/10'
-              }`}
-            >
-              <LogOut size={18} strokeWidth={3} />
-              Sign Out Securely
-            </MotionButton>
-
-            <div className="text-center pt-6">
-              <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em]">
-                Version 2.4.1 • Built with Love
-              </p>
-            </div>
-          </motion.div>
         </motion.div>
       </div>
+
+      <UserAppearanceDialog open={appearanceOpen} onOpenChange={setAppearanceOpen} />
+
+      {/* Same shared logout confirmation Food uses — Taxi just recolours the
+          icon/confirm button to its own blue instead of Food's red. */}
+      <UserLogoutConfirmDialog
+        open={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => {
+          setLogoutConfirmOpen(false);
+          handleLogout();
+        }}
+        isLoggingOut={isLoggingOut}
+        iconBgClassName="bg-blue-600/10"
+        iconClassName="text-blue-600"
+        confirmButtonClassName="bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
+      />
     </div>
   );
 };

@@ -73,17 +73,17 @@ function TaxiIcon({ isActive, className = 'w-8 h-8' }) {
     return (
       <svg className={`${className} filter drop-shadow-sm shrink-0`} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="22" y="10" width="20" height="7" rx="2" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
-        <rect x="26" y="11.5" width="12" height="4" rx="1" fill="#FBBF24" />
-        <path d="M14 24H50L46 17H18L14 24Z" fill="#2563EB" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
-        <path d="M12 24H52C54.2 24 56 25.8 56 28V38C56 40.2 54.2 42 52 42H12C9.8 42 8 40.2 8 38V28C8 25.8 9.8 24 12 24Z" fill="#3B82F6" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
-        <path d="M18 28H46" stroke="#93C5FD" strokeWidth="2" strokeLinecap="round" />
-        <rect x="20" y="30" width="10" height="6" rx="1" fill="#DBEAFE" stroke="#0F172A" strokeWidth="1.5" />
-        <rect x="34" y="30" width="10" height="6" rx="1" fill="#DBEAFE" stroke="#0F172A" strokeWidth="1.5" />
+        <rect x="26" y="11.5" width="12" height="4" rx="1" fill="#FDE68A" />
+        <path d="M14 24H50L46 17H18L14 24Z" fill="#FFC400" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
+        <path d="M12 24H52C54.2 24 56 25.8 56 28V38C56 40.2 54.2 42 52 42H12C9.8 42 8 40.2 8 38V28C8 25.8 9.8 24 12 24Z" fill="#FFC400" stroke="#0F172A" strokeWidth="2.5" strokeLinejoin="round" />
+        <path d="M18 28H46" stroke="#FDE68A" strokeWidth="2" strokeLinecap="round" />
+        <rect x="20" y="30" width="10" height="6" rx="1" fill="#FEF9E7" stroke="#0F172A" strokeWidth="1.5" />
+        <rect x="34" y="30" width="10" height="6" rx="1" fill="#FEF9E7" stroke="#0F172A" strokeWidth="1.5" />
         <circle cx="18" cy="42" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
         <circle cx="46" cy="42" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
         <circle cx="18" cy="42" r="2" fill="#E2E8F0" />
         <circle cx="46" cy="42" r="2" fill="#E2E8F0" />
-        <rect x="28" y="44" width="8" height="3" rx="1" fill="#64748B" />
+        <rect x="28" y="44" width="8" height="3" rx="1" fill="#B45309" />
       </svg>
     );
   }
@@ -268,20 +268,23 @@ export default function SuperAppHomeHeader({
                 if (vertical.id === 'taxi') prefetchTaxiUser();
                 if (vertical.id === 'food') prefetchFoodUser();
               }}
-              className="relative z-10 flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full transition-colors duration-150"
+              className="relative z-10 flex h-12 flex-1 items-center justify-center gap-2 rounded-full transition-colors duration-150"
             >
               <span
                 aria-hidden="true"
                 className={`absolute inset-0 rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-opacity duration-150 ${isActive ? 'opacity-100' : 'opacity-0'}`}
                 style={{ backgroundColor: tabTheme.activeTab }}
               />
-              <span className="relative z-10 flex items-center gap-1.5">
+              <span className="relative z-10 flex items-center gap-2">
                 {vertical.id === 'food' ? (
-                  <BurgerIcon isActive={isActive} className="w-[18px] h-[18px]" />
+                  <BurgerIcon isActive={isActive} className="w-6 h-6" />
                 ) : (
-                  <TaxiIcon isActive={isActive} className="w-[18px] h-[18px]" />
+                  <TaxiIcon isActive={isActive} className="w-6 h-6" />
                 )}
-                <span className={`text-[12.5px] font-bold leading-none whitespace-nowrap transition-colors duration-150 ${isActive ? 'text-white' : 'text-white/85'}`}>
+                <span
+                  className="text-[15px] font-bold leading-none whitespace-nowrap transition-colors duration-150"
+                  style={{ color: isActive ? '#ffffff' : 'rgba(255,255,255,0.85)' }}
+                >
                   {vertical.name.replace('Hello Parth ', '')}
                 </span>
               </span>
@@ -298,7 +301,7 @@ export default function SuperAppHomeHeader({
 
   return (
     <div
-      className="relative z-10 w-full transition-colors duration-500 ease-in-out"
+      className="relative z-10 w-full"
       style={{ backgroundColor: verticalTheme.theme }}
     >
       {!tabsOnly && (
@@ -309,7 +312,11 @@ export default function SuperAppHomeHeader({
           onClick={onLocationClick}
         >
           <MapPin className="h-5 w-5 flex-shrink-0" strokeWidth={1.5} style={{ color: verticalTheme.accent, fill: verticalTheme.accent }} />
-          <div className="flex flex-col min-w-0 text-white">
+          {/* Inline white — this header's background is always the brand's
+              dark colour, independent of app light/dark theme, so a plain
+              `text-white` class gets force-overridden by the global theme
+              CSS (invisible text in light mode) otherwise. */}
+          <div className="flex flex-col min-w-0" style={{ color: '#ffffff' }}>
             <div className="flex items-center gap-0.5 min-w-0">
               <span className="text-[14px] font-bold truncate drop-shadow-sm">
                 {displayTitle}
@@ -327,12 +334,13 @@ export default function SuperAppHomeHeader({
         <div className="flex items-center gap-2.5 flex-shrink-0">
           <button
             type="button"
-            className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white shadow-sm hover:bg-gray-50 transition-all"
+            className="h-10 w-10 relative flex items-center justify-center rounded-full shadow-sm hover:bg-gray-50 transition-all"
             onClick={() => navigate(walletPath)}
             aria-label="Wallet"
+            style={{ backgroundColor: '#ffffff' }}
           >
-            <div className="w-5 h-5 border-2 border-gray-800 rounded flex items-center justify-center">
-              <span className="text-gray-800 text-[10px] font-bold font-serif">₹</span>
+            <div className="w-5 h-5 border-2 rounded flex items-center justify-center" style={{ borderColor: '#1f2937' }}>
+              <span className="text-[10px] font-bold font-serif" style={{ color: '#1f2937' }}>₹</span>
             </div>
           </button>
         </div>

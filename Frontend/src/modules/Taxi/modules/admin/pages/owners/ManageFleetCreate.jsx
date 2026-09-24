@@ -145,7 +145,7 @@ const ManageFleetCreate = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-950">
       <div className="px-5 pt-3">
-        <AdminPageHeader module="Fleet Management" page="Manage Fleet" title="Create Fleet" back param($m) $m.Value -replace '/admin/', '/taxi/admin/' fleet/manage" />
+        <AdminPageHeader module="Fleet Management" page="Manage Fleet" title="Create Fleet" back="/taxi/admin/fleet/manage" />
       </div>
 
       <div className="flex justify-center px-5 pb-10 pt-4">

@@ -1,42 +1,64 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import BottomNavbar from './BottomNavbar';
-import { useUserTheme } from '../../../shared/context/UserThemeContext';
+import RouteSkeleton from '../../shared/components/RouteSkeleton';
 // Eager (not lazy): this is the default landing tab — bundling it with
 // TaxiApp's own chunk skips a second chunk-fetch + Suspense flash on first
 // visit, instead of waiting on its own separate lazy import.
 import UserHome from '../pages/Home';
 
-const Activity = lazy(() => import('../pages/Activity'));
-const Profile = lazy(() => import('../pages/Profile'));
-const Support = lazy(() => import('../pages/ride/Support'));
-const BusHome = lazy(() => import('../pages/bus/BusHome'));
+// Named import functions (not inlined into lazy() below) so the loading
+// tracker can call the exact same import() and share the browser's module
+// cache — it resolves instantly once lazy() has already fetched the chunk,
+// and doesn't trigger a second network request the first time either.
+const importActivity = () => import('../pages/Activity');
+const importProfile = () => import('../pages/Profile');
+const importSupport = () => import('../pages/ride/Support');
+const importBusHome = () => import('../pages/bus/BusHome');
 
-/** Generic skeleton shown while a tab's own chunk is still downloading —
- *  a plain transparent box let the (often mismatched) colour behind it
- *  show through as a blank flash. This at least reads as "loading". */
-const SoftFallback = () => {
-  const { theme } = useUserTheme();
-  const isDark = theme === 'dark';
-  // Light mode needs a visibly darker grey here — the page background is
-  // already near-white, so a pale skeleton block was blending straight
-  // into it (looked like "nothing loaded", not "loading").
-  const soft = isDark ? 'bg-zinc-800/70' : 'bg-slate-300/80';
-  const softer = isDark ? 'bg-zinc-800/40' : 'bg-slate-300/50';
-  return (
-    <div className={`min-h-[70vh] px-4 pt-6 pb-24 space-y-4 ${isDark ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`} aria-hidden="true">
-      <div className={`h-6 w-32 rounded-full animate-pulse ${soft}`} />
-      <div className={`h-24 w-full rounded-[20px] animate-pulse ${softer}`} />
-      <div className="grid grid-cols-2 gap-3">
-        <div className={`h-20 rounded-[16px] animate-pulse ${soft}`} />
-        <div className={`h-20 rounded-[16px] animate-pulse ${soft}`} />
-      </div>
-      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
-      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
-      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
-    </div>
-  );
+const Activity = lazy(importActivity);
+const Profile = lazy(importProfile);
+const Support = lazy(importSupport);
+const BusHome = lazy(importBusHome);
+
+const TAB_IMPORTERS = {
+  activity: importActivity,
+  profile: importProfile,
+  support: importSupport,
+  bus: importBusHome,
 };
+
+// Shared full-viewport skeleton (RouteSkeleton) — same one used for the
+// top-level route Suspense in TaxiApp.jsx, so every tab shows the same
+// "global" loading skeleton instead of each having its own half-filled one.
+const SoftFallback = RouteSkeleton;
+
+/** Tracks whether the active tab's own chunk has finished loading — 'ride'
+ *  (Home) is bundled in eagerly so it's ready from the start. Lets the nav
+ *  bar stay hidden while a tab's skeleton is showing (matching Food, which
+ *  hides its bottom nav during its own initial-load skeleton) instead of
+ *  floating over a screen that isn't ready yet. Once a tab has loaded once
+ *  it stays marked ready, so revisiting it never re-hides the nav. */
+function useTabReady(activeTab) {
+  const [readyTabs, setReadyTabs] = useState(() => new Set(['ride']));
+
+  useEffect(() => {
+    const importer = TAB_IMPORTERS[activeTab];
+    if (!importer || readyTabs.has(activeTab)) return undefined;
+
+    let cancelled = false;
+    importer().then(() => {
+      if (!cancelled) {
+        setReadyTabs((prev) => (prev.has(activeTab) ? prev : new Set(prev).add(activeTab)));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, readyTabs]);
+
+  return activeTab ? readyTabs.has(activeTab) : false;
+}
 
 const resolveMainTab = (pathname = '') => {
   const path = String(pathname || '').replace(/\/$/, '') || '/';
@@ -49,75 +71,91 @@ const resolveMainTab = (pathname = '') => {
 };
 
 /**
- * Keeps taxi bottom-nav tabs mounted after first visit so switches are instant
- * (no remount flash, no duplicate Suspense spinner).
+ * Renders only the active bottom-nav tab — the other four are fully
+ * unmounted, not just hidden. They used to all stay mounted (display:none)
+ * so switching felt instant, but every one of them independently subscribes
+ * to the theme context; React re-renders EVERY subscriber on a theme
+ * change regardless of visibility, and Home.jsx especially is large enough
+ * that re-rendering it in the background (while it's not even on screen)
+ * measurably delayed the visible tab's own theme update — the "half
+ * changed, then catches up a second later" bug. Only ever mounting the one
+ * tab you're looking at removes that contention entirely.
  */
 export default function UserMainTabKeepAlive() {
   const { pathname } = useLocation();
   const activeTab = useMemo(() => resolveMainTab(pathname), [pathname]);
-  const [visited, setVisited] = useState(() => new Set(activeTab ? [activeTab] : []));
+  const isTabReady = useTabReady(activeTab);
 
+  // Warm the *other* three tabs' chunks on idle, once, so tapping any
+  // bottom-nav tab for the first time is instant instead of waiting on a
+  // fresh chunk fetch — this is what made switching tabs feel like it took
+  // "a second" to go in.
   useEffect(() => {
-    if (!activeTab) return;
-    setVisited((prev) => {
-      if (prev.has(activeTab)) return prev;
-      const next = new Set(prev);
-      next.add(activeTab);
-      return next;
-    });
-  }, [activeTab]);
+    const warm = () => {
+      importActivity().catch(() => {});
+      importProfile().catch(() => {});
+      importSupport().catch(() => {});
+      importBusHome().catch(() => {});
+    };
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(warm, { timeout: 2000 })
+      : window.setTimeout(warm, 500);
+    return () => {
+      if (window.cancelIdleCallback && typeof idle === 'number') {
+        window.cancelIdleCallback(idle);
+      } else {
+        window.clearTimeout(idle);
+      }
+    };
+  }, []);
 
   if (!activeTab) {
     return null;
   }
 
-  const paneStyle = (tab) => ({
-    display: activeTab === tab ? 'block' : 'none',
-  });
-
   return (
     <div className="taxi-user-main-tabs relative min-h-screen">
-      {visited.has('ride') ? (
-        <div style={paneStyle('ride')} className="taxi-main-tab-pane" data-tab="ride">
+      {activeTab === 'ride' && (
+        <div className="taxi-main-tab-pane" data-tab="ride">
           <Suspense fallback={<SoftFallback />}>
             <UserHome hideBottomNav />
           </Suspense>
         </div>
-      ) : null}
+      )}
 
-      {visited.has('activity') ? (
-        <div style={paneStyle('activity')} className="taxi-main-tab-pane" data-tab="activity">
+      {activeTab === 'activity' && (
+        <div className="taxi-main-tab-pane" data-tab="activity">
           <Suspense fallback={<SoftFallback />}>
             <Activity embedded />
           </Suspense>
         </div>
-      ) : null}
+      )}
 
-      {visited.has('bus') ? (
-        <div style={paneStyle('bus')} className="taxi-main-tab-pane" data-tab="bus">
+      {activeTab === 'bus' && (
+        <div className="taxi-main-tab-pane" data-tab="bus">
           <Suspense fallback={<SoftFallback />}>
             <BusHome embedded />
           </Suspense>
         </div>
-      ) : null}
+      )}
 
-      {visited.has('support') ? (
-        <div style={paneStyle('support')} className="taxi-main-tab-pane" data-tab="support">
+      {activeTab === 'support' && (
+        <div className="taxi-main-tab-pane" data-tab="support">
           <Suspense fallback={<SoftFallback />}>
             <Support embedded />
           </Suspense>
         </div>
-      ) : null}
+      )}
 
-      {visited.has('profile') ? (
-        <div style={paneStyle('profile')} className="taxi-main-tab-pane" data-tab="profile">
+      {activeTab === 'profile' && (
+        <div className="taxi-main-tab-pane" data-tab="profile">
           <Suspense fallback={<SoftFallback />}>
             <Profile embedded />
           </Suspense>
         </div>
-      ) : null}
+      )}
 
-      <BottomNavbar />
+      {isTabReady && <BottomNavbar />}
     </div>
   );
 }

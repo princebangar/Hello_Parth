@@ -166,7 +166,13 @@ const LocationMapSection = () => {
 
     if (shouldRefreshCurrentLocation && !requestedLocationRef.current) {
       requestedLocationRef.current = true;
-      requestLocation();
+      // Silent when we already have a saved fix to show (just background-
+      // refreshing a stale one) — every remount of this component (e.g.
+      // switching back to Taxi from Food) re-ran this same effect and
+      // unconditionally flipped the UI to "loading" even though the map
+      // already had a perfectly good pin to show while it quietly re-checked.
+      const hasSavedFix = typeof saved?.lat === 'number' && typeof saved?.lon === 'number';
+      requestLocation({ silent: hasSavedFix });
     }
   }, []);
 
@@ -177,13 +183,13 @@ const LocationMapSection = () => {
     }
   }, [coords, map]);
 
-  const requestLocation = () => {
+  const requestLocation = ({ silent = false } = {}) => {
     if (!navigator.geolocation) {
-      setStatus('error');
+      if (!silent) setStatus('error');
       return;
     }
 
-    setStatus('loading');
+    if (!silent) setStatus('loading');
 
     const handleSuccess = (position) => {
       const next = {
@@ -215,14 +221,16 @@ const LocationMapSection = () => {
       handleSuccess,
       (error) => {
         if (error?.code === 1) {
-          setStatus('denied');
+          if (!silent) setStatus('denied');
           return;
         }
         // Try fallback with low-accuracy for fast IP-based tracking
         navigator.geolocation.getCurrentPosition(
           handleSuccess,
           () => {
-            setStatus('error');
+            // A silent background refresh failing shouldn't blow away an
+            // already-good "ready" state with an error one.
+            if (!silent) setStatus('error');
           },
           { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
         );

@@ -68,7 +68,7 @@ const FleetNeededDocumentsCreate = () => {
           module="Fleet Management"
           page="Fleet Needed Documents"
           title="Create Fleet Needed Document"
-          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' fleet/documents"
+          back="/taxi/admin/fleet/documents"
         />
       </div>
 

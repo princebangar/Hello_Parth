@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Moon, Sun, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -10,9 +10,13 @@ import {
 
 export default function UserAppearanceDialog({ open, onOpenChange }) {
   const [theme, setTheme] = useState(() => getFoodUserTheme());
+  // Picking a theme should feel instant — no lingering blurred backdrop
+  // while it fades out. A plain dismiss (backdrop tap / X) still animates.
+  const instantCloseRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
+    instantCloseRef.current = false;
     setTheme(getFoodUserTheme());
   }, [open]);
 
@@ -26,16 +30,35 @@ export default function UserAppearanceDialog({ open, onOpenChange }) {
     };
   }, []);
 
+  // Plain `overflow:hidden` on body doesn't reliably block touch-drag
+  // scrolling on mobile WebViews. Pinning body with `position:fixed` at the
+  // current scroll offset (and restoring it on close) blocks scroll on both
+  // touch and desktop, and doesn't jump the page on close.
   useEffect(() => {
     if (!open || typeof document === "undefined") return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const body = document.body;
+    const previous = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
     return () => {
-      document.body.style.overflow = previousOverflow;
+      body.style.overflow = previous.overflow;
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.width = previous.width;
+      window.scrollTo(0, scrollY);
     };
   }, [open]);
 
   const selectTheme = (nextTheme) => {
+    instantCloseRef.current = true;
     saveFoodUserTheme(nextTheme);
     setTheme(nextTheme);
     onOpenChange?.(false);
@@ -63,7 +86,7 @@ export default function UserAppearanceDialog({ open, onOpenChange }) {
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 p-4">
           <motion.button
             type="button"
             aria-label="Close appearance settings"
@@ -71,6 +94,7 @@ export default function UserAppearanceDialog({ open, onOpenChange }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: instantCloseRef.current ? 0 : 0.2 }}
             onClick={() => onOpenChange?.(false)}
           />
 
@@ -78,7 +102,7 @@ export default function UserAppearanceDialog({ open, onOpenChange }) {
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            transition={{ duration: instantCloseRef.current ? 0 : 0.22, ease: "easeOut" }}
             className="relative z-[1] w-full max-w-md overflow-hidden rounded-[28px] border border-border bg-card shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >

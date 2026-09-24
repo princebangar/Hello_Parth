@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import api from '../api/axiosInstance';
 import { BACKEND_ORIGIN } from '../api/runtimeConfig';
 
@@ -213,7 +213,10 @@ export const SettingsProvider = ({ children }) => {
   const [hasBootstrapSettings, setHasBootstrapSettings] = useState(Boolean(cachedSettings));
   const [modules, setModules] = useState([]);
 
+  const lastFetchAtRef = useRef(0);
+
   const fetchSettings = async () => {
+    lastFetchAtRef.current = Date.now();
     try {
       const response = await api.get('/users/bootstrap');
       const data = response?.data?.data || response?.data || {};
@@ -243,7 +246,18 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    // A 'focus' event fires on plenty of things that aren't "the user came
+    // back to a backgrounded app" — closing any overlay (like the Appearance
+    // dialog) can hand focus back to the window, especially inside Chrome's
+    // device-emulation mode. That was re-firing this full network refetch
+    // on every theme pick, and the settings object it eventually replaces
+    // re-renders BottomNavbar/ServiceGrid/etc a second or two later —
+    // exactly the delayed "half changed, then catches up" glitch, and
+    // entirely unrelated to the theme code itself. Skip resume-refreshes
+    // that land within a few seconds of the last fetch.
+    const MIN_REFRESH_GAP_MS = 4000;
     const refreshOnResume = () => {
+      if (Date.now() - lastFetchAtRef.current < MIN_REFRESH_GAP_MS) return;
       fetchSettings();
     };
 

@@ -1,4 +1,5 @@
 import api from '../../../shared/api/axiosInstance';
+import { clearSharedUserLocation } from '@/shared/utils/sharedUserLocation.js';
 
 const decodeBase64Url = (value) => {
   const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
@@ -72,6 +73,15 @@ export const clearLocalUserSession = () => {
 
   if (String(localStorage.getItem('chatRole') || '').toLowerCase() === 'user') {
     localStorage.removeItem('chatRole');
+  }
+
+  // Food and Taxi share one user's last-known location — a shared device
+  // shouldn't hand the next person who logs in the previous one's address.
+  try {
+    clearSharedUserLocation();
+    localStorage.removeItem('deliveryAddressMode');
+  } catch {
+    /* ignore */
   }
 };
 

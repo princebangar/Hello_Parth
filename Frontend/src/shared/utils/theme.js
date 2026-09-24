@@ -1,10 +1,15 @@
+// `USER_THEME_KEY` is the single source of truth for the Food+Taxi user
+// app's theme — one user, one preference, one key. The other three used to
+// each get written on every save; now they're kept only as read fallbacks
+// so anyone with an old value saved under one of them doesn't lose their
+// preference — new saves land only in USER_THEME_KEY.
 export const FOOD_USER_THEME_KEY = "foodUserTheme";
 export const APP_THEME_KEY = "appTheme";
 export const USER_THEME_KEY = "userTheme";
 export const TAXI_USER_THEME_KEY = "userAppTheme";
 export const THEME_CHANGE_EVENT = "helloparth:theme-change";
 
-const USER_THEME_STORAGE_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, USER_THEME_KEY, TAXI_USER_THEME_KEY];
+const LEGACY_USER_THEME_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, TAXI_USER_THEME_KEY];
 
 const THEME_CSS_VARS = [
   "--background",
@@ -76,7 +81,12 @@ export function normalizeTheme(theme) {
 export function getFoodUserTheme() {
   if (typeof localStorage === "undefined") return "light";
 
-  for (const key of USER_THEME_STORAGE_KEYS) {
+  const primary = localStorage.getItem(USER_THEME_KEY);
+  if (primary) return normalizeTheme(primary);
+
+  // Migration read only — an existing value saved under one of the old
+  // per-app keys before this consolidation. Never written to anymore.
+  for (const key of LEGACY_USER_THEME_KEYS) {
     const stored = localStorage.getItem(key);
     if (stored) return normalizeTheme(stored);
   }
@@ -130,9 +140,7 @@ export function saveFoodUserTheme(theme) {
   const normalizedTheme = normalizeTheme(theme);
 
   if (typeof localStorage !== "undefined") {
-    for (const key of USER_THEME_STORAGE_KEYS) {
-      localStorage.setItem(key, normalizedTheme);
-    }
+    localStorage.setItem(USER_THEME_KEY, normalizedTheme);
   }
 
   applyTheme(normalizedTheme);
@@ -161,9 +169,7 @@ export function reassertFoodUserTheme() {
   applyTheme(theme);
 
   if (typeof localStorage !== "undefined") {
-    for (const key of USER_THEME_STORAGE_KEYS) {
-      localStorage.setItem(key, theme);
-    }
+    localStorage.setItem(USER_THEME_KEY, theme);
   }
 
   return theme;

@@ -70,7 +70,7 @@ const UserSubscriptionCreate = () => {
           <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-400">
             <span>Users</span>
             <ChevronRight size={12} />
-            <Link  param($m) $m.Value -replace '/admin/', '/taxi/admin/' users/subscriptions" className="hover:text-gray-700">Subscription Management</Link>
+            <Link to="/taxi/admin/users/subscriptions" className="hover:text-gray-700">Subscription Management</Link>
             <ChevronRight size={12} />
             <span className="text-gray-700">Create</span>
           </div>

@@ -221,6 +221,24 @@ export function markLocationAllowed() {
   } catch {}
 }
 
+const LOCATION_SESSION_KEY = "helloparth_location_session"
+
+/**
+ * Drops the shared last-known-location data on logout — Food and Taxi both
+ * read/write it, so a shared device shouldn't hand the next person who
+ * logs in the previous person's saved address. Called from both apps'
+ * logout paths.
+ */
+export function clearSharedUserLocation() {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(FOOD_USER_LOCATION_KEY)
+    localStorage.removeItem(TAXI_LOCATION_STORAGE_KEY)
+    localStorage.removeItem(LOCATION_ALLOWED_KEY)
+    sessionStorage.removeItem(LOCATION_SESSION_KEY)
+  } catch {}
+}
+
 export function syncSharedLocationStoresOnBoot() {
   if (typeof window === "undefined") return
   try {

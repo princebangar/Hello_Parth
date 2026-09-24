@@ -114,7 +114,7 @@ const OwnerNeededDocumentsCreate = () => {
           module="Owner Management"
           page="Owner Needed Documents"
           title="Create Owner Needed Document"
-          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' owners/documents"
+          back="/taxi/admin/owners/documents"
         />
 
       <div className="flex justify-center px-5 pb-10 pt-4">

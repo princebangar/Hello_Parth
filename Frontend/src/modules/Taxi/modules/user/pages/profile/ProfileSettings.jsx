@@ -99,7 +99,11 @@ const ProfileSettings = () => {
   return (
     <div className="min-h-screen bg-white max-w-lg mx-auto flex flex-col font-sans relative">
       <header className="bg-white px-5 py-8 flex items-center gap-6 border-b border-gray-50 shadow-sm sticky top-0 z-20">
-         <button onClick={() => navigate('/taxi/user/profile')} className="p-2 -ml-2 active:scale-95 transition-all">
+         {/* Back to wherever this was opened from (main Profile's "Edit
+             profile" link, or the Settings hub's "Edit Profile" row) —
+             a fixed destination here sent both entry points to the same
+             place, which was wrong for the direct-from-Profile case. */}
+         <button onClick={() => navigate(-1)} className="p-2 -ml-2 active:scale-95 transition-all">
             <ArrowLeft size={24} className="text-slate-900" strokeWidth={3} />
          </button>
          <div>

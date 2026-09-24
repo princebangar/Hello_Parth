@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ShieldCheck, Wallet, Clock, Star, TrendingUp, Sparkles, UserCheck } from 'lucide-react';
 import DriverHero from '@/assets/driver_welcome_hero.png';
-import { useSettings } from '@/shared/context/SettingsContext';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 
 const partnerAvatars = [
     {
