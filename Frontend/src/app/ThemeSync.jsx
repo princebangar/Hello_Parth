@@ -1,8 +1,6 @@
 import { useEffect, useLayoutEffect } from "react";
 import { useLocation } from "react-router-dom";
 import {
-  FOOD_USER_THEME_KEY,
-  APP_THEME_KEY,
   USER_THEME_KEY,
   THEME_CHANGE_EVENT,
   cancelScheduledFoodThemeReassert,
@@ -11,8 +9,6 @@ import {
   scheduleFoodThemeReassert,
   syncThemeForPath,
 } from "../shared/utils/theme.js";
-
-const USER_THEME_STORAGE_KEYS = [FOOD_USER_THEME_KEY, APP_THEME_KEY, USER_THEME_KEY];
 
 export default function ThemeSync() {
   const location = useLocation();
@@ -45,7 +41,7 @@ export default function ThemeSync() {
     };
 
     const handleStorage = (event) => {
-      if (event.key && !USER_THEME_STORAGE_KEYS.includes(event.key)) return;
+      if (event.key && event.key !== USER_THEME_KEY) return;
       if (isUserAppPath(pathname)) {
         reassertFoodUserTheme();
       }

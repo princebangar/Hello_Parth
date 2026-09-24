@@ -152,7 +152,7 @@ export default function Checkout() {
             <CardContent>
               <div className="text-center py-12">
                 <p className="text-muted-foreground text-lg mb-4">Your cart is empty</p>
-                <Link to="/user/cart">
+                <Link to="/food/user/cart">
                   <Button>Go to Cart</Button>
                 </Link>
               </div>
@@ -168,7 +168,7 @@ export default function Checkout() {
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         <ScrollReveal>
           <div className="flex items-center gap-4 mb-6 md:mb-8">
-            <Link to="/user/cart">
+            <Link to="/food/user/cart">
               <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 md:h-10 md:w-10">
                 <ArrowLeft className="h-5 w-5 md:h-6 md:w-6" />
               </Button>
@@ -263,7 +263,7 @@ export default function Checkout() {
                       <p className="text-muted-foreground mb-4">No addresses saved</p>
                       <Button
                         onClick={() =>
-                          navigate("/user/cart/select-address", { state: { from: "/user/cart/checkout" } })
+                          navigate("/food/user/cart/select-address", { state: { from: "/user/cart/checkout" } })
                         }
                       >
                         Add Address
@@ -355,7 +355,7 @@ export default function Checkout() {
                       )
                     })}
 
-                    <Link to="/user/profile/payments" className="block w-full">
+                    <Link to="/food/user/profile/payments" className="block w-full">
                       <Button variant="outline" className="w-full">
                         Manage Payment Methods
                       </Button>

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react"
+import React, { Suspense, lazy, useEffect } from "react"
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom"
 import UserLayout from "./UserLayout"
 import Loader from "@food/components/Loader"
@@ -89,7 +89,6 @@ const Wallet = lazy(() => import("@food/pages/user/Wallet"))
 // Complaints
 const SubmitComplaint = lazy(() => import("@food/pages/user/complaints/SubmitComplaint"))
 
-import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
 import { Loader2 } from "lucide-react"
 
 const PageLoader = () => (
@@ -106,9 +105,51 @@ const MainTabRoutePlaceholder = () => null
 
 const RequireInitialAuth = ({ children }) => children;
 
+// The routes someone lands on right after the Profile page (and a few other
+// very common first clicks) — warmed on idle so tapping one of these for the
+// first time doesn't wait on a fresh chunk fetch. Same import() specifiers
+// as the lazy() declarations above, so this shares the browser's module
+// cache with them instead of causing a second fetch.
+function usePrefetchCommonRoutes() {
+  useEffect(() => {
+    const warm = () => {
+      import("@food/pages/user/profile/Settings").catch(() => {})
+      import("@food/pages/user/profile/EditProfile").catch(() => {})
+      import("@food/pages/user/cart/Cart").catch(() => {})
+      import("@food/pages/user/Wallet").catch(() => {})
+      import("@food/pages/user/profile/Coupons").catch(() => {})
+      import("@food/pages/user/orders/Orders").catch(() => {})
+      import("@food/pages/user/profile/Support").catch(() => {})
+      import("@food/pages/user/profile/About").catch(() => {})
+      import("@food/pages/user/profile/Favorites").catch(() => {})
+    }
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(warm, { timeout: 2000 })
+      : window.setTimeout(warm, 500)
+    return () => {
+      if (window.cancelIdleCallback && typeof idle === "number") {
+        window.cancelIdleCallback(idle)
+      } else {
+        window.clearTimeout(idle)
+      }
+    }
+  }, [])
+}
+
 export default function UserRouter() {
+  usePrefetchCommonRoutes()
+
+  // AppShellSkeleton (home-page-shaped) only makes visual sense for routes
+  // that actually look like the home page. Most routes here (Cart, Wallet,
+  // Coupons, Restaurants, …) don't have their own nested Suspense, so this
+  // outer boundary was their fallback too — swapping a full fake home-page
+  // skeleton in and out for a Cart/Terms/Wallet visit read as a jarring
+  // "flash" on every such click. PageLoader (a plain spinner, already used
+  // by several routes below) is the fallback everywhere else in this file;
+  // using it here too makes the one-time per-route chunk-load moment
+  // consistent instead of sometimes-spinner, sometimes-full-skeleton.
   return (
-    <Suspense fallback={<AppShellSkeleton />}>
+    <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route element={<RequireInitialAuth><UserLayout /></RequireInitialAuth>}>
           {/* ========================================== */}

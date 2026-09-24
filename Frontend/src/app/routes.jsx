@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Suspense, lazy, useEffect } from 'react'
 import {
   NATIVE_LAST_ROUTE_KEY,
@@ -11,36 +11,39 @@ import {
   prefetchTaxiAdmin,
 } from '../shared/utils/activeModule.js'
 import AdminModulesKeepAlive, { AdminKeepAliveSlot } from './AdminModulesKeepAlive.jsx'
+import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
 
 // Lazy load the Food service module (Quick-spicy app)
 const FoodApp = lazy(() => import('../modules/Food/routes'))
 const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp'))
 const AuthApp = lazy(() => import('../modules/auth/routes'))
 
-// Avoid full-screen white spinner flash on Food ↔ Taxi switches.
+// Auth only — Food and Taxi get a real skeleton below instead (see
+// FoodAppWrapper/TaxiAppWrapper).
 const SoftFallback = () => <div className="min-h-screen bg-transparent" aria-hidden="true" />
 
-const FoodAppWrapper = () => {
-  const location = useLocation()
-  const vertical = new URLSearchParams(location.search).get('vertical')
-
-  // Taxi lives under /taxi/* only — never embed it on /food/user.
-  if (
-    location.pathname.replace(/\/$/, '') === '/food/user' &&
-    vertical === 'taxi'
-  ) {
-    return <Navigate to="/taxi/user" replace />
-  }
-
-  return (
-    <Suspense fallback={<SoftFallback />}>
-      <FoodApp />
-    </Suspense>
-  )
-}
+// Static on purpose — no useLocation() here. This used to also read
+// location/redirect for the one-off "/food/user?vertical=taxi" deep link,
+// which made it re-render (recreating this Suspense + <FoodApp/> JSX fresh)
+// on every navigation anywhere inside Food, which reset everything *inside*
+// FoodApp that only sets itself up once (UserLayout's socket connection,
+// its initial location/zone check). That redirect check now lives in
+// AppRoutes' own effect below instead. The actual root cause of Food
+// resetting on ordinary clicks was unrelated — several in-app links pointed
+// at "/user/..." instead of "/food/user/..." and bounced through the
+// RedirectToFood catch-all below — now fixed at the source, so this
+// boundary only ever suspends on the one genuine case it's meant for: this
+// module's chunk not being loaded yet (first visit, or switching from the
+// other module for the first time in a session). AppShellSkeleton is safe
+// to show here now instead of blank, since it won't fire on every click.
+const FoodAppWrapper = () => (
+  <Suspense fallback={<AppShellSkeleton />}>
+    <FoodApp />
+  </Suspense>
+)
 
 const TaxiAppWrapper = () => (
-  <Suspense fallback={<SoftFallback />}>
+  <Suspense fallback={<AppShellSkeleton />}>
     <TaxiApp />
   </Suspense>
 )
@@ -52,11 +55,22 @@ const RedirectToFood = () => {
 
 const AppRoutes = () => {
   const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
     syncActiveModule(location.pathname)
     rememberLoginReturnTo(location.pathname)
   }, [location.pathname])
+
+  // Taxi lives under /taxi/* only — never embed it on /food/user. Moved out
+  // of FoodAppWrapper (see its comment) so this one-off deep-link check
+  // doesn't force that wrapper to re-render on every Food navigation.
+  useEffect(() => {
+    const vertical = new URLSearchParams(location.search).get('vertical')
+    if (location.pathname.replace(/\/$/, '') === '/food/user' && vertical === 'taxi') {
+      navigate('/taxi/user', { replace: true })
+    }
+  }, [location.pathname, location.search, navigate])
 
   // Warm sibling modules on idle so Food ↔ Taxi (user + admin) switches stay smooth.
   useEffect(() => {

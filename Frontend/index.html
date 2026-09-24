@@ -14,7 +14,9 @@
     <script>
       (function() {
         try {
-          var keys = ['foodUserTheme', 'appTheme', 'userTheme', 'userAppTheme'];
+          // 'userTheme' is the single current key (see shared/utils/theme.js);
+          // the rest are only checked as a fallback for old saved values.
+          var keys = ['userTheme', 'foodUserTheme', 'appTheme', 'userAppTheme'];
           var theme = 'light';
           for (var i = 0; i < keys.length; i++) {
             var v = localStorage.getItem(keys[i]);
@@ -34,12 +36,70 @@
     <style>
       /* Match the app's own background before React mounts, so a hard
          reload shows a plain themed colour instead of a stark white flash. */
-      html, body { background-color: #EFF5FD; }
-      html[data-theme="dark"], html[data-theme="dark"] body { background-color: #0B172A; }
+      html, body { background-color: #fffdf9; }
+      html[data-theme="dark"], html[data-theme="dark"] body { background-color: #0b0b0b; }
+
+      /* Static placeholder — plain HTML/CSS shown the instant the document
+         paints, before the JS bundle has even started parsing. Food and
+         Taxi now both render the exact same AppShellSkeleton component
+         (src/modules/Food/components/ui/loading-skeletons.jsx) once React
+         mounts, so this copies just that component's top section (same
+         gradient background, same header/hero/section shapes) — close
+         enough that the hand-off from this static markup into the real,
+         React-rendered one is invisible instead of a blank flash. Plain
+         inline CSS, not Tailwind classes — in dev, Tailwind's CSS is
+         injected by JS and isn't available yet at this point. React's
+         createRoot(...).render() wipes #root's innerHTML the moment it
+         mounts, so this needs no cleanup. */
+      #boot-skeleton {
+        min-height: 100vh;
+        max-width: 1024px;
+        margin: 0 auto;
+        padding: 24px 20px;
+        box-sizing: border-box;
+        background: radial-gradient(circle at top left, #fff8ef, transparent 34%), linear-gradient(180deg, #fffdf9 0%, #fff8f1 100%);
+      }
+      html[data-theme="dark"] #boot-skeleton {
+        background: linear-gradient(180deg, #0b0b0b 0%, #151515 100%);
+      }
+      .boot-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .boot-actions { display: flex; gap: 12px; }
+      .boot-hero { border-radius: 28px; border: 1px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.7); padding: 16px; margin-top: 24px; box-sizing: border-box; }
+      html[data-theme="dark"] .boot-hero { border-color: rgba(255,255,255,0.1); background: #141414; }
+      .boot-chip-row { display: flex; gap: 12px; overflow: hidden; margin-top: 12px; }
+      .boot-bar {
+        background-color: rgba(226, 232, 240, 0.8);
+        border-radius: 16px;
+        animation: boot-pulse 1.6s ease-in-out infinite;
+      }
+      html[data-theme="dark"] .boot-bar { background-color: rgba(255, 255, 255, 0.1); }
+      @keyframes boot-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot-skeleton" aria-hidden="true">
+      <div class="boot-row">
+        <div class="boot-bar" style="width:160px;height:44px;border-radius:999px;"></div>
+        <div class="boot-actions">
+          <div class="boot-bar" style="width:96px;height:44px;border-radius:999px;"></div>
+          <div class="boot-bar" style="width:44px;height:44px;border-radius:999px;"></div>
+        </div>
+      </div>
+      <div class="boot-hero">
+        <div class="boot-bar" style="height:192px;border-radius:22px;"></div>
+      </div>
+      <div class="boot-bar" style="height:28px;width:208px;border-radius:999px;margin-top:20px;"></div>
+      <div class="boot-chip-row">
+        <div class="boot-bar" style="height:36px;width:112px;border-radius:999px;"></div>
+        <div class="boot-bar" style="height:36px;width:96px;border-radius:999px;"></div>
+        <div class="boot-bar" style="height:36px;width:80px;border-radius:999px;"></div>
+        <div class="boot-bar" style="height:36px;width:112px;border-radius:999px;"></div>
+        <div class="boot-bar" style="height:36px;width:96px;border-radius:999px;"></div>
+      </div>
+    </div></div>
     <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>

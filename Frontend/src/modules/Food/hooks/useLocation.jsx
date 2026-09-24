@@ -334,9 +334,15 @@ function isBrowserPageReload() {
 }
 
 /**
- * Stick selected delivery location only on F5/reload.
- * New tab / cold open / reopened closed tab → force current GPS
- * (sessionStorage alone is unreliable — Chrome often restores it on reopen).
+ * Stick selected delivery location on refresh AND on background/foreground resume.
+ * Only a genuinely new app session (tab/WebView actually destroyed and recreated —
+ * e.g. the Flutter-wrapped app was closed and reopened) forces a fresh GPS fetch.
+ *
+ * sessionStorage is the primary signal: inside the Flutter WebView wrapper it survives
+ * page refresh and backgrounding, and is only cleared when the WebView itself is torn
+ * down (app closed) — which is exactly the boundary we want. The Performance Navigation
+ * Timing reload check is kept as a secondary signal for plain desktop-browser testing,
+ * where sessionStorage can occasionally be restored by "continue where you left off".
  * @returns {{ isNewAppSession: boolean }}
  */
 function bootstrapLocationModeOnAppOpen() {
@@ -345,7 +351,14 @@ function bootstrapLocationModeOnAppOpen() {
   }
   pageLoadDeliveryModeBootstrapped = true
 
-  if (isBrowserPageReload()) {
+  let hasSessionMarker = false
+  try {
+    hasSessionMarker = sessionStorage.getItem(LOCATION_APP_SESSION_KEY) === "1"
+  } catch {
+    /* ignore */
+  }
+
+  if (hasSessionMarker || isBrowserPageReload()) {
     cachedIsNewAppSession = false
     try {
       sessionStorage.setItem(LOCATION_APP_SESSION_KEY, "1")

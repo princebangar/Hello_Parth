@@ -51,21 +51,17 @@ const AdminForgotPassword = lazy(() => import("@food/pages/admin/auth/AdminForgo
 // Delivery Module
 const DeliveryRouter = lazy(() => import("../DeliveryV2"))
 
-const UserRouterWrapper = () => {
-  const location = useLocation();
-  const isPolicyPage = location.pathname.includes('terms') || 
-                       location.pathname.includes('privacy') || 
-                       location.pathname.includes('support') ||
-                       location.pathname.includes('refund') ||
-                       location.pathname.includes('shipping') ||
-                       location.pathname.includes('cancellation');
-
-  return (
-    <Suspense fallback={isPolicyPage ? <PageLoader /> : <AppShellSkeleton />}>
-      <UserRouter />
-    </Suspense>
-  )
-}
+// No useLocation() here on purpose — this only needs to cover UserRouter's
+// own one-time chunk load. Calling useLocation() made this component
+// re-render (and hand React fresh <Suspense>/<UserRouter/> JSX) on every
+// navigation anywhere inside Food, which was causing UserRouter's whole
+// subtree — its layout, its socket connection, its initial location/zone
+// check — to actually reset on ordinary clicks, not just the first load.
+const UserRouterWrapper = () => (
+  <Suspense fallback={<AppShellSkeleton />}>
+    <UserRouter />
+  </Suspense>
+)
 
 function UserPathRedirect() {
   const location = useLocation()
