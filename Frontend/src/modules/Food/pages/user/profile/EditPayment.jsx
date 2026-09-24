@@ -79,7 +79,7 @@ export default function EditPayment() {
     }
 
     updatePaymentMethod(id, formData)
-    navigate("/user/profile/payments")
+    navigate("/food/user/profile/payments")
   }
 
   if (!payment) {
@@ -89,7 +89,7 @@ export default function EditPayment() {
           <Card>
             <CardContent className="py-8 text-center">
               <p className="text-muted-foreground">Payment method not found</p>
-              <Button onClick={() => navigate("/user/profile/payments")} className="mt-4">
+              <Button onClick={() => navigate("/food/user/profile/payments")} className="mt-4">
                 Back to Payment Methods
               </Button>
             </CardContent>
@@ -173,7 +173,7 @@ export default function EditPayment() {
               <div className="flex gap-2 pt-4">
                 <Button
                   type="button"
-                  onClick={() => navigate("/user/profile/payments")}
+                  onClick={() => navigate("/food/user/profile/payments")}
                   variant="outline"
                 >
                   Cancel

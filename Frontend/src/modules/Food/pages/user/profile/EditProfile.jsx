@@ -328,7 +328,7 @@ export default function EditProfile() {
         window.dispatchEvent(new Event("userAuthChanged"))
 
         // Navigate back
-        navigate("/user/profile")
+        navigate("/food/user/profile")
       }
     } catch (error) {
       debugError('Error updating profile:', error)

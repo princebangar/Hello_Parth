@@ -63,7 +63,7 @@ export default function AddPayment() {
     }
 
     addPaymentMethod(formData)
-    navigate("/user/profile/payments")
+    navigate("/food/user/profile/payments")
   }
 
   return (
@@ -140,7 +140,7 @@ export default function AddPayment() {
               <div className="flex gap-2 pt-4">
                 <Button
                   type="button"
-                  onClick={() => navigate("/user/profile/payments")}
+                  onClick={() => navigate("/food/user/profile/payments")}
                   variant="outline"
                 >
                   Cancel

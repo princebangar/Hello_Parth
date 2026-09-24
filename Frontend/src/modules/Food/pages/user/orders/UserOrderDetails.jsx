@@ -51,7 +51,7 @@ export default function UserOrderDetails() {
           orderData = response.data.order
         } else {
           toast.error("Order not found")
-          navigate("/user/orders")
+          navigate("/food/user/orders")
           return
         }
 
@@ -77,7 +77,7 @@ export default function UserOrderDetails() {
         toast.error(
           error?.response?.data?.message || "Failed to load order details"
         )
-        navigate("/user/orders")
+        navigate("/food/user/orders")
       } finally {
         setLoading(false)
       }
@@ -111,7 +111,7 @@ export default function UserOrderDetails() {
         <div className="text-center space-y-3">
           <p className="text-gray-700 dark:text-gray-300 text-sm font-medium">Order not found</p>
           <button
-            onClick={() => navigate("/user/orders")}
+            onClick={() => navigate("/food/user/orders")}
             className="px-4 py-2 rounded-lg bg-[#DC2626] text-white text-sm font-semibold hover:bg-[#991B1B] transition-all active:scale-95 shadow-md"
           >
             Back to Orders

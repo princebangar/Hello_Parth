@@ -195,7 +195,7 @@ export default function About() {
               </h3>
               <div className="space-y-3">
                 <Link
-                  to="/user/profile/terms"
+                  to="/food/user/profile/terms"
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -213,7 +213,7 @@ export default function About() {
                 </Link>
 
                 <Link
-                  to="/user/profile/privacy"
+                  to="/food/user/profile/privacy"
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -231,7 +231,7 @@ export default function About() {
                 </Link>
 
                 <Link
-                  to="/user/profile/refund"
+                  to="/food/user/profile/refund"
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -249,7 +249,7 @@ export default function About() {
                 </Link>
 
                 <Link
-                  to="/user/profile/shipping"
+                  to="/food/user/profile/shipping"
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
@@ -267,7 +267,7 @@ export default function About() {
                 </Link>
 
                 <Link
-                  to="/user/profile/cancellation"
+                  to="/food/user/profile/cancellation"
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                 >
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">

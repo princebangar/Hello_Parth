@@ -1011,7 +1011,7 @@ export default function OrderTracking() {
   useEffect(() => {
     if (!showRatingModal && navigateToHomeAfterRating.current) {
       navigateToHomeAfterRating.current = false
-      navigate("/user/home")
+      navigate("/food/user/home")
     }
   }, [showRatingModal])
 
@@ -2006,7 +2006,7 @@ export default function OrderTracking() {
         <div className="max-w-lg mx-auto text-center py-20">
           <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-4 dark:text-gray-100">Order Not Found</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{error || 'The order you\'re looking for doesn\'t exist.'}</p>
-          <Link to="/user/orders">
+          <Link to="/food/user/orders">
             <Button>Back to Orders</Button>
           </Link>
         </div>
@@ -2157,7 +2157,7 @@ export default function OrderTracking() {
                 transition={{ delay: 2.0 }}
                 className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800"
               >
-                <div className="flex items-center justify-center gap-2 text-[#DC2626] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}>
+                <div className="flex items-center justify-center gap-2 text-[#DC2626] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/food/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}>
                   <Shield className="w-4 h-4" />
                   <span className="text-sm">Learn about delivery partner safety</span>
                 </div>
@@ -2576,7 +2576,7 @@ export default function OrderTracking() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
             whileTap={{ scale: 0.99 }}
-            onClick={() => navigate('/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}
+            onClick={() => navigate('/food/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}
           >
             <Shield className="w-6 h-6 text-gray-600 dark:text-gray-400" />
             <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">
