@@ -121,7 +121,7 @@ export default function ReferEarn() {
     <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
       <div className="max-w-md mx-auto px-4 py-4 pb-24">
         <div className="flex items-center gap-3 mb-5">
-          <Link to="/user/profile">
+          <Link to="/food/user/profile">
             <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
               <ArrowLeft className="h-5 w-5 text-black dark:text-white" />
             </Button>

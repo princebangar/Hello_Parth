@@ -65,7 +65,7 @@ export default function Settings() {
         <div className="mt-6">
           
           {/* Edit Profile */}
-          <Link to="/user/profile/edit" className="block group border-b border-gray-200/80 dark:border-gray-800/80 py-4">
+          <Link to="/food/user/profile/edit" className="block group border-b border-gray-200/80 dark:border-gray-800/80 py-4">
             <div className="flex items-center gap-3 transition-all duration-150">
               <User className="h-5 w-5 text-gray-500 dark:text-gray-400 group-hover:text-red-500 transition-colors" />
               <div className="flex-1 min-w-0">

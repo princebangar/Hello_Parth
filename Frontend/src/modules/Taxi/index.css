@@ -313,9 +313,9 @@ body {
 
 /* 2. Color Schemes for Dark Mode (Default) */
 .user-app-theme.dark {
-  --user-bg: #07111f;
-  --user-card-bg: #0f1b2d;
-  --user-card-soft: #162238;
+  --user-bg: #0a0a0a;
+  --user-card-bg: #141414;
+  --user-card-soft: #1c1c1c;
   --user-text-primary: #ffffff;
   --user-text-secondary: #b8c2d6;
   --user-text-muted: #7d8aa5;
@@ -779,15 +779,15 @@ body {
 
 /* User Theme Custom Variables */
 :root {
-  --user-bg: #0F172A;
-  --user-card-bg: #111827;
-  --user-card-soft: #162238;
+  --user-bg: #0a0a0a;
+  --user-card-bg: #141414;
+  --user-card-soft: #1c1c1c;
   --user-text-primary: #FFFFFF;
   --user-text-secondary: #CBD5E1;
   --user-border: rgba(255,255,255,0.10);
   --user-accent: #FFC400;
-  --user-profile-header-bg: #090d16;
-  --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(15, 23, 42, 1) 100%);
+  --user-profile-header-bg: #0a0a0a;
+  --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
 }
 
 .user-app-theme.light,
@@ -807,15 +807,15 @@ body {
 .user-app-theme.dark,
 .user-app-theme .dark,
 .user-app-theme[class*="dark"] {
-  --user-bg: #05070D;
-  --user-card-bg: #101827;
-  --user-card-soft: #162238;
+  --user-bg: #0a0a0a;
+  --user-card-bg: #141414;
+  --user-card-soft: #1c1c1c;
   --user-text-primary: #FFFFFF;
   --user-text-secondary: #CBD5E1;
   --user-border: rgba(255,255,255,0.12);
   --user-accent: #FFC400;
-  --user-profile-header-bg: #090d16;
-  --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(5, 7, 13, 1) 100%);
+  --user-profile-header-bg: #0a0a0a;
+  --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
 }
 
 /* Theme variable mapping utilities */

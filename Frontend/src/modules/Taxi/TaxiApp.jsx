@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
 import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
-import { UserThemeProvider, useUserTheme } from './shared/context/UserThemeContext';
+import { UserThemeProvider } from './shared/context/UserThemeContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
 import { addRealtimeNotification } from './modules/user/utils/realtimeNotificationStore';
 import { clearLocalUserSessionData } from '@/shared/utils/userSession.js';
@@ -22,6 +22,7 @@ import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistrat
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
 import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
+import RouteSkeleton from './modules/shared/components/RouteSkeleton';
 import './App.css';
 import './index.css';
 
@@ -117,6 +118,9 @@ const UserPoolingConfirm = lazy(() => import('./modules/user/pages/pooling/Pooli
 
 // Profile Settings Sub-pages
 const ProfileSettings = lazy(() => import('./modules/user/pages/profile/ProfileSettings'));
+// Settings hub (Edit Profile / Delete Account) — separate from the edit
+// form itself (ProfileSettings, now mounted at .../profile/edit).
+const SettingsHub = lazy(() => import('./modules/user/pages/profile/Settings'));
 const PaymentSettings = lazy(() => import('./modules/user/pages/profile/PaymentSettings'));
 const AddressSettings = lazy(() => import('./modules/user/pages/profile/AddressSettings'));
 const BusBookings = lazy(() => import('./modules/user/pages/profile/BusBookings'));
@@ -361,7 +365,6 @@ const AdminSectionPlaceholder = () => {
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
-  const { theme } = useUserTheme();
   const staticPages = ['/taxi', '/taxi/about', '/taxi/contact', '/taxi/faq', '/taxi/services', '/taxi/privacy', '/taxi/terms', '/taxi/refund', '/taxi/cancellation', '/taxi/blog', '/taxi/links'];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
@@ -381,19 +384,18 @@ const MainLayout = ({ children }) => {
     );
   }
 
-  // Match the real theme immediately — this is what's visible behind the
-  // route's Suspense fallback while its chunk/data is still loading, so a
-  // hardcoded light background here was the actual source of the white
-  // flash between the dark app shell and the dark page content.
-  //
-  // `user-app-theme <dark|light>` activates index.css's --user-* CSS
-  // variables and its !important light/dark overrides for the whole taxi
-  // user app. Without it, every page silently falls back to whatever raw
-  // Tailwind classes were hardcoded inline — which is why light theme
-  // looked broken (unstyled dark-mode text/colors) everywhere.
+  // `user-app-theme` (id="taxi-app-root") activates index.css's --user-*
+  // CSS variables and its !important light/dark overrides for the whole
+  // taxi user app. The `dark`/`light` class itself is applied directly to
+  // this node by UserThemeContext (see TAXI_APP_ROOT_ID there) instead of
+  // through this component's own className — that decouples the actual
+  // colour switch from React re-rendering this div (and everything inside
+  // it: all 5 kept-alive tabs), so it updates in one paint instead of
+  // waiting for the whole tree to catch up. Background comes from the same
+  // --user-bg variable for the same reason — no JS-computed ternary here.
   return (
-    <div className={`redigo-app user-app-theme ${theme} min-h-screen ${theme === 'dark' ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`}>
-      <main className={`max-w-lg mx-auto min-h-screen relative overflow-x-hidden shadow-2xl ${theme === 'dark' ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`}>
+    <div id="taxi-app-root" className="redigo-app user-app-theme min-h-screen" style={{ backgroundColor: 'var(--user-bg)' }}>
+      <main className="max-w-lg mx-auto min-h-screen relative overflow-x-hidden shadow-2xl" style={{ backgroundColor: 'var(--user-bg)' }}>
         {children}
       </main>
     </div>
@@ -686,25 +688,11 @@ const DriverEntryRedirect = () => {
   );
 };
 
-/** Generic skeleton for the top-level route Suspense — covers every lazy
- *  page in the app (admin/driver/user). A plain transparent fallback would
- *  otherwise flash blank while that route's own chunk is still downloading. */
-const RouteSoftFallback = () => {
-  const { theme } = useUserTheme();
-  const isDark = theme === 'dark';
-  // Light mode needs a visibly darker grey — the page background is already
-  // near-white, so a pale skeleton block blended straight into it.
-  const soft = isDark ? 'bg-zinc-800/70' : 'bg-slate-300/80';
-  const softer = isDark ? 'bg-zinc-800/40' : 'bg-slate-300/50';
-  return (
-    <div className={`min-h-screen px-4 pt-6 pb-24 space-y-4 ${isDark ? 'bg-[#0B172A]' : 'bg-[#EFF5FD]'}`} aria-hidden="true">
-      <div className={`h-6 w-32 rounded-full animate-pulse ${soft}`} />
-      <div className={`h-24 w-full rounded-[20px] animate-pulse ${softer}`} />
-      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
-      <div className={`h-14 w-full rounded-[16px] animate-pulse ${softer}`} />
-    </div>
-  );
-};
+// Shared full-viewport skeleton (RouteSkeleton) used for the top-level route
+// Suspense — covers every lazy page in the app (admin/driver/user) with the
+// same "global" loading skeleton as the bottom-nav tabs in
+// UserMainTabKeepAlive.jsx, instead of each Suspense boundary having its own.
+const RouteSoftFallback = RouteSkeleton;
 
 function TaxiApp() {
   useEffect(() => {
@@ -814,7 +802,8 @@ function TaxiApp() {
                 <Route path="promo" element={<PromoCodes />} />
                 <Route path="referral" element={<UserReferral />} />
 
-                <Route path="profile/settings" element={<ProfileSettings />} />
+                <Route path="profile/settings" element={<SettingsHub />} />
+                <Route path="profile/edit" element={<ProfileSettings />} />
                 <Route path="profile/payments" element={<PaymentSettings />} />
                 <Route path="profile/addresses" element={<AddressSettings />} />
                 <Route
@@ -974,6 +963,10 @@ function TaxiApp() {
 
                 <Route
                   path="user/profile/settings"
+                  element={<SettingsHub />}
+                />
+                <Route
+                  path="user/profile/edit"
                   element={<ProfileSettings />}
                 />
                 <Route

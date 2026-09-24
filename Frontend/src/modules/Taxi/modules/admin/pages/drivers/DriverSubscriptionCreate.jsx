@@ -87,7 +87,7 @@ const DriverSubscriptionCreate = () => {
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
           <span>Drivers</span>
           <ChevronRight size={12} />
-          <Link  param($m) $m.Value -replace '/admin/', '/taxi/admin/' drivers/subscription" className="hover:text-gray-700">Subscription</Link>
+          <Link to="/taxi/admin/drivers/subscription" className="hover:text-gray-700">Subscription</Link>
           <ChevronRight size={12} />
           <span className="text-gray-700 uppercase font-medium">Create</span>
         </div>

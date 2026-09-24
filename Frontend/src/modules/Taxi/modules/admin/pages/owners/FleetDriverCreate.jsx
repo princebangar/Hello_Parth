@@ -159,7 +159,7 @@ const FleetDriverCreate = () => {
           module="Fleet Management"
           page="Fleet Drivers"
           title="Create Fleet Driver"
-          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' fleet/drivers"
+          back="/taxi/admin/fleet/drivers"
         />
       </div>
 

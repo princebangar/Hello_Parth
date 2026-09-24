@@ -113,7 +113,7 @@ const DeletedOwners = () => {
           module="Owner Management"
           page="Deleted Owners"
           title="Deleted Owners"
-          back param($m) $m.Value -replace '/admin/', '/taxi/admin/' owners"
+          back="/taxi/admin/owners"
         />
 
         <div className="mt-6">

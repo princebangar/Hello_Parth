@@ -4,6 +4,7 @@
  */
 
 import { clearCategoryBrowseStorage } from "./categoryCache.js";
+import { clearSharedUserLocation } from "@/shared/utils/sharedUserLocation.js";
 
 /**
  * Decode JWT token without verification (client-side only)
@@ -221,11 +222,12 @@ export function clearUserSession() {
     "app:isOnline"
   ];
   keys.forEach((k) => localStorage.removeItem(k));
-  // Next login should fetch current GPS like a fresh app open.
+  // Next login should fetch current GPS like a fresh app open — a shared
+  // device shouldn't hand the next person the previous one's last address.
   try {
-    sessionStorage.removeItem("helloparth_location_session");
+    clearSharedUserLocation();
     sessionStorage.removeItem("lastLoginLocationFetch");
-    localStorage.setItem("deliveryAddressMode", "current");
+    localStorage.removeItem("deliveryAddressMode");
   } catch {
     /* ignore */
   }
