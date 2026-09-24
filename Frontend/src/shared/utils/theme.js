@@ -114,12 +114,54 @@ function applyInlineThemeVars(root, useDarkTheme) {
   }
 }
 
+// Many cards/headers carry `transition-all` / `transition-colors`, so a theme
+// flip made their bg/border/text colours animate over ~300ms from the old
+// theme's values — a visible "half light, half dark" frame (dark card with
+// light-theme text) before everything settled. While switching, suppress
+// every transition so the whole UI swaps colours in a single paint.
+const THEME_SWITCHING_CLASS = "theme-switching";
+const THEME_SWITCHING_STYLE_ID = "theme-switching-style";
+let switchRaf1 = null;
+let switchRaf2 = null;
+
+function suspendTransitionsForThemeSwitch(root) {
+  if (typeof window === "undefined") return;
+
+  if (!document.getElementById(THEME_SWITCHING_STYLE_ID)) {
+    const style = document.createElement("style");
+    style.id = THEME_SWITCHING_STYLE_ID;
+    style.textContent = `html.${THEME_SWITCHING_CLASS} *, html.${THEME_SWITCHING_CLASS} *::before, html.${THEME_SWITCHING_CLASS} *::after { transition: none !important; }`;
+    document.head.appendChild(style);
+  }
+
+  root.classList.add(THEME_SWITCHING_CLASS);
+
+  if (switchRaf1 !== null) cancelAnimationFrame(switchRaf1);
+  if (switchRaf2 !== null) cancelAnimationFrame(switchRaf2);
+
+  // Two frames: covers the React commit (isDark-driven inline styles, the
+  // taxi-app-root class flip in a layout effect) so those also land with
+  // transitions off, then restores normal hover/press transitions.
+  switchRaf1 = window.requestAnimationFrame(() => {
+    switchRaf1 = null;
+    switchRaf2 = window.requestAnimationFrame(() => {
+      switchRaf2 = null;
+      root.classList.remove(THEME_SWITCHING_CLASS);
+    });
+  });
+}
+
 export function applyTheme(theme) {
   if (typeof document === "undefined") return;
 
   const resolvedTheme = normalizeTheme(theme);
   const useDarkTheme = resolvedTheme === "dark";
   const root = document.documentElement;
+
+  const previousTheme = root.dataset.theme;
+  if (previousTheme && previousTheme !== resolvedTheme) {
+    suspendTransitionsForThemeSwitch(root);
+  }
 
   clearNestedThemeClasses();
 
