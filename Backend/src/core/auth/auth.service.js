@@ -3,7 +3,7 @@ import ms from "ms";
 import { FoodUser } from "../users/user.model.js";
 import { FoodAdmin } from "../admin/admin.model.js";
 import { ADMIN_LEVELS } from "../admin/adminHierarchy.constants.js";
-import { serializeAdminContext } from "../admin/adminHierarchy.service.js";
+import { isAdminAccountDisabled, serializeAdminContext } from "../admin/adminHierarchy.service.js";
 import { AdminResetOtp } from "../admin/adminResetOtp.model.js";
 import { FoodRestaurant } from "../../modules/food/restaurant/models/restaurant.model.js";
 import { FoodDeliveryPartner } from "../../modules/food/delivery/models/deliveryPartner.model.js";
@@ -364,6 +364,11 @@ export const adminLogin = async (email, password) => {
     throw new AuthError("Invalid credentials");
   }
 
+  // A disabled (sub-)admin must not be able to sign in until it is enabled again.
+  if (isAdminAccountDisabled(admin)) {
+    throw new AuthError("This admin account is disabled. Please contact the administrator.");
+  }
+
   const payload = { userId: admin._id.toString(), role: "ADMIN" };
 
   const accessToken = signAccessToken(payload);
@@ -653,9 +658,12 @@ export const getProfile = async (userId, role) => {
     case ROLES.USER:
       profile = await FoodUser.findById(id).lean();
       break;
-    case ROLES.ADMIN:
-      profile = await FoodAdmin.findById(id).select("-password").lean();
+    case ROLES.ADMIN: {
+      const adminDoc = await FoodAdmin.findById(id).select("-password").lean();
+      // Same shape as the login response so permission / module-access changes reach the panel without re-login.
+      profile = adminDoc ? { ...adminDoc, ...serializeAdminContext(adminDoc) } : null;
       break;
+    }
     case ROLES.RESTAURANT:
       {
         const doc = await FoodRestaurant.findById(id).lean();
@@ -1109,6 +1117,17 @@ export const refreshAccessToken = async (token) => {
     const u = await FoodUser.findById(payload.userId).select("isActive").lean();
     if (!u || u.isActive === false) {
       throw new AuthError("User account is deactivated");
+    }
+  }
+
+  // Same for a disabled / deleted admin: no new access token, so the panel logs out.
+  if (payload?.role === "ADMIN") {
+    const adminDoc = await FoodAdmin.findById(payload.userId)
+      .select("isActive active status")
+      .lean();
+    if (!adminDoc || isAdminAccountDisabled(adminDoc)) {
+      await FoodRefreshToken.deleteOne({ token });
+      throw new AuthError("This admin account is disabled or no longer exists");
     }
   }
 

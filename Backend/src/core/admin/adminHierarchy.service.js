@@ -14,6 +14,7 @@ import {
   hasResourcePermission,
   parsePermissionKey,
 } from './adminAccess.util.js';
+import { hasAnyGlobalPermission } from './globalPermissions.constants.js';
 
 const toObjectId = (value) => {
   if (!value) return null;
@@ -27,7 +28,13 @@ const toObjectId = (value) => {
 export const normalizeObjectIdList = (values = []) =>
   [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || '').trim()).filter(Boolean))];
 
+export const isGlobalSubAdmin = (admin = {}) => admin?.isGlobalSubAdmin === true;
+
 export const resolveAdminLevel = (admin = {}) => {
+  if (isGlobalSubAdmin(admin)) {
+    return ADMIN_LEVELS.SUBADMIN;
+  }
+
   const explicit = String(admin.adminLevel || admin.admin_level || '').trim().toLowerCase();
   if (Object.values(ADMIN_LEVELS).includes(explicit)) {
     return explicit;
@@ -65,6 +72,11 @@ export const resolveAdminLevel = (admin = {}) => {
 };
 
 export const resolveAdminModule = (admin = {}) => {
+  // A global sub-admin belongs to no single module; its `servicesAccess` lists the ones it may open.
+  if (isGlobalSubAdmin(admin)) {
+    return null;
+  }
+
   const explicit = String(admin.module || '').trim().toLowerCase();
   if (explicit && Object.values(ADMIN_MODULES).includes(explicit)) {
     return explicit;
@@ -107,9 +119,53 @@ export const isSuperAdminLike = (admin = {}) => {
   );
 };
 
+/**
+ * Which top-level areas of the admin panel this account may open.
+ * platform superadmin: everything. Module superadmin: its own module. Module sub-admin: its module.
+ * Global sub-admin: the modules in `servicesAccess`, plus Global when it was given any Global section.
+ */
+export const getAdminModuleAccess = (admin = {}) => {
+  const level = resolveAdminLevel(admin);
+
+  if (level === ADMIN_LEVELS.PLATFORM_SUPERADMIN) {
+    return { food: true, taxi: true, global: true };
+  }
+  if (level === ADMIN_LEVELS.FOOD_SUPERADMIN) {
+    return { food: true, taxi: false, global: false };
+  }
+  if (level === ADMIN_LEVELS.TAXI_SUPERADMIN) {
+    return { food: false, taxi: true, global: false };
+  }
+
+  if (isGlobalSubAdmin(admin)) {
+    const services = Array.isArray(admin.servicesAccess) ? admin.servicesAccess : [];
+    return {
+      food: services.includes(ADMIN_MODULES.FOOD),
+      taxi: services.includes(ADMIN_MODULES.TAXI),
+      global: hasAnyGlobalPermission(admin.globalPermissions),
+    };
+  }
+
+  const module = resolveAdminModule(admin);
+  return {
+    food: module === ADMIN_MODULES.FOOD,
+    taxi: module === ADMIN_MODULES.TAXI,
+    global: false,
+  };
+};
+
+export const isAdminAccountDisabled = (admin = {}) =>
+  admin.isActive === false ||
+  admin.active === false ||
+  String(admin.status || '').trim().toLowerCase() === 'inactive';
+
 export const hasModuleAccess = (admin = {}, module) => {
   if (!module) return true;
   if (isPlatformSuperAdmin(admin)) return true;
+
+  if (isGlobalSubAdmin(admin)) {
+    return getAdminModuleAccess(admin)[module] === true;
+  }
 
   const adminModule = resolveAdminModule(admin);
   if (adminModule && adminModule !== module) {
@@ -318,6 +374,11 @@ export const serializeAdminContext = (admin = {}) => ({
   parentAdminId: admin.parentAdminId ? String(admin.parentAdminId) : null,
   admin_type: normalizeAdminType(admin.admin_type || admin.role),
   permissions: normalizeAdminPermissions(admin.permissions || []),
+  // Food / Global sidebar matrices ({ key: { view, create, edit, delete } }); only sub-admins carry them.
+  foodPermissions: admin.foodPermissions && typeof admin.foodPermissions === 'object' ? admin.foodPermissions : {},
+  globalPermissions: admin.globalPermissions && typeof admin.globalPermissions === 'object' ? admin.globalPermissions : {},
+  isGlobalSubAdmin: isGlobalSubAdmin(admin),
+  moduleAccess: getAdminModuleAccess(admin),
   servicesAccess: Array.isArray(admin.servicesAccess) ? admin.servicesAccess : [],
   service_location_ids: normalizeObjectIdList(admin.service_location_ids),
   zone_ids: normalizeObjectIdList(admin.zone_ids),

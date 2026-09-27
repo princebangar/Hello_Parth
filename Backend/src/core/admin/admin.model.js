@@ -53,9 +53,27 @@ const adminSchema = new mongoose.Schema(
             default: 'superadmin',
             trim: true,
         },
+        // Taxi sidebar permissions: flat list such as "drivers.view" (or "*" for full access).
         permissions: {
             type: [String],
             default: [],
+        },
+        // Food sidebar permissions: { <sidebarKey>: { view, create, edit, delete } }. Kept apart from
+        // `permissions` because the two modules use different shapes and overlapping key names.
+        foodPermissions: {
+            type: mongoose.Schema.Types.Mixed,
+            default: undefined,
+        },
+        // Global sidebar permissions: { <sidebarKey>: { view, create, edit, delete } }.
+        globalPermissions: {
+            type: mongoose.Schema.Types.Mixed,
+            default: undefined,
+        },
+        // A sub-admin that works across modules: `servicesAccess` says which of Food / Taxi it may open and
+        // the three permission fields above say which sidebar options it gets in each.
+        isGlobalSubAdmin: {
+            type: Boolean,
+            default: false,
         },
         isActive: {
             type: Boolean,
@@ -121,6 +139,7 @@ const adminSchema = new mongoose.Schema(
 adminSchema.index({ servicesAccess: 1 });
 adminSchema.index({ adminLevel: 1, module: 1 });
 adminSchema.index({ parentAdminId: 1, module: 1 });
+adminSchema.index({ isGlobalSubAdmin: 1 });
 
 adminSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
