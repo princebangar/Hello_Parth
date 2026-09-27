@@ -24,6 +24,7 @@ import diningBookingRoutes from '../modules/food/dining/routes/diningBooking.rou
 import { maintenanceModeMiddleware } from '../modules/food/admin/middleware/maintenanceMode.middleware.js';
 import { taxiRouter } from '../modules/taxi/routes/index.js';
 import globalAdminRoutes from '../modules/global/admin/global.routes.js';
+import landingPublicRoutes from '../modules/global/landing/landingPublic.routes.js';
 import { promotionsRouter as taxiPromotionsRouter } from '../modules/taxi/admin/promotions/routes/index.js';
 
 const router = express.Router();
@@ -48,6 +49,7 @@ router.get('/v1/food/dining/categories/public', getPublicDiningCategories);
 router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.use('/v1/food/dining/bookings', diningBookingRoutes);
 router.use('/v1/uploads', uploadRoutes);
+router.use('/v1/landing', landingPublicRoutes);
 
 router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN', 'SUB_ADMIN'), attachFoodAdminAccess, restaurantAdminRoutes);
 router.use('/v1/food/user', authMiddleware, requireRoles('USER'), userRoutes);

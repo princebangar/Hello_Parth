@@ -8,6 +8,7 @@ export const GLOBAL_PERMISSION_ACTIONS = ['view', 'create', 'edit', 'delete'];
 export const GLOBAL_PERMISSION_SECTIONS = [
   { key: 'overview', label: 'Overview', path: '/admin/global' },
   { key: 'customers', label: 'Customers', path: '/admin/global/customers' },
+  { key: 'landing', label: 'Landing Page', path: '/admin/global/landing' },
 ];
 
 export const GLOBAL_SECTION_KEYS = GLOBAL_PERMISSION_SECTIONS.map((section) => section.key);
