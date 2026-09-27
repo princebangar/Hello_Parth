@@ -9,7 +9,6 @@ import {
   MapPin,
   Search,
   Sparkles,
-  Clock,
   Navigation,
   X,
   ShieldCheck,
@@ -1014,7 +1013,7 @@ const IntercityHome = () => {
       </div>
 
       {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg bg-white border-t border-slate-200 grid grid-cols-3 h-16 items-center z-40 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg bg-white border-t border-slate-200 grid grid-cols-2 h-16 items-center z-40 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
 
         {/* ONE WAY */}
         <button
@@ -1039,25 +1038,6 @@ const IntercityHome = () => {
           <Briefcase size={18} strokeWidth={2.5} className="mb-0.5" />
           <span className="text-[9px] tracking-wide uppercase font-extrabold">Round Trip</span>
         </button>
-
-        {/* LOCAL */}
-        <button
-          onClick={() => navigate(`${routePrefix}/rental`)}
-          className="flex flex-col items-center justify-center h-full border-r border-slate-100 text-slate-500 hover:bg-slate-50 transition-colors"
-        >
-          <Clock size={18} strokeWidth={2.5} className="mb-0.5" />
-          <span className="text-[9px] tracking-wide uppercase font-extrabold">Local</span>
-        </button>
-
-        {/*
-        <button
-          onClick={() => navigate(`${routePrefix}/cab/airport`)}
-          className="flex flex-col items-center justify-center h-full text-slate-500 hover:bg-slate-50 transition-colors"
-        >
-          <Plane size={18} strokeWidth={2.5} className="mb-0.5" />
-          <span className="text-[9px] tracking-wide uppercase font-extrabold">Airport</span>
-        </button>
-        */}
 
       </nav>
     </div>

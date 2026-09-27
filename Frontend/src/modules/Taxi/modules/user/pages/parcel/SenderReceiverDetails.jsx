@@ -70,14 +70,6 @@ const getZoneServiceLocationId = (zone) =>
 
 const isZoneActive = (zone) => zone?.active !== false && Number(zone?.status ?? 1) !== 0;
 
-const getZoneId = (zone) => zone?._id || zone?.id || '';
-
-const getStoreZoneId = (store) =>
-  store?.zone_id?._id
-  || store?.zone_id?.id
-  || store?.zone_id
-  || '';
-
 const toZonePoint = (point) => {
   if (Array.isArray(point) && point.length >= 2) {
     const [lng, lat] = point;
@@ -1036,9 +1028,8 @@ const SenderReceiverDetails = () => {
   const [recoveredSelectedVehicles, setRecoveredSelectedVehicles] = useState([]);
   const [googleSuggestions, setGoogleSuggestions] = useState([]);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
-  const [zones, setZones] = useState([]);
+  const [, setZones] = useState([]);
   const [zonePaths, setZonePaths] = useState([]);
-  const [serviceStores, setServiceStores] = useState([]);
   const [routeEstimate, setRouteEstimate] = useState({ distanceKm: 0, durationMinutes: 0, source: 'air' });
   const autoPickupRequestedRef = useRef(false);
   const livePickupHydratedRef = useRef(false);
@@ -1072,28 +1063,20 @@ const SenderReceiverDetails = () => {
 
     const loadZoneData = async () => {
       try {
-        const [zonesResponse, storesResponse] = await Promise.all([
-          api.get('/admin/zones'),
-          api.get('/users/service-stores'),
-        ]);
+        const zonesResponse = await api.get('/users/zones');
         if (!active) {
           return;
         }
 
         const allZones = unwrapResults(zonesResponse).filter(isZoneActive);
         const allPaths = allZones.map(normalizeZonePath).filter((path) => path.length >= 3);
-        const allStores = unwrapResults(storesResponse).filter((store) => {
-          return store?.active !== false && String(store?.status || '').toLowerCase() !== 'inactive';
-        });
 
         setZones(allZones);
         setZonePaths(allPaths);
-        setServiceStores(allStores);
       } catch {
         if (active) {
           setZones([]);
           setZonePaths([]);
-          setServiceStores([]);
         }
       }
     };
@@ -1185,48 +1168,13 @@ const SenderReceiverDetails = () => {
 
   const query = useMemo(() => (activeInput === 'pickup' ? pickup : drop), [activeInput, drop, pickup]);
 
-  const currentZone = useMemo(() => {
-    if (!Array.isArray(pickupCoords) || pickupCoords.length !== 2 || !zones.length) {
-      return null;
-    }
-
-    const [lng, lat] = pickupCoords;
-    const point = { lat: Number(lat), lng: Number(lng) };
-
-    return zones.find((zone) => {
-      const zonePath = normalizeZonePath(zone);
-      return zonePath.length >= 3 && isPointInPolygon(point, zonePath);
-    }) || null;
-  }, [pickupCoords, zones]);
-
-  const currentZoneId = currentZone ? getZoneId(currentZone) : null;
-
-  const zoneStores = useMemo(() => {
-    if (!currentZoneId) return [];
-    return serviceStores.filter((store) => {
-      const storeZoneId = getStoreZoneId(store);
-      return String(storeZoneId) === String(currentZoneId);
-    });
-  }, [currentZoneId, serviceStores]);
-
   const popularSuggestions = useMemo(() => {
-    if (zoneStores.length > 0) {
-      return zoneStores.slice(0, 6).map((store) => ({
-        title: store.name || store.address || 'Service Store',
-        address: store.address || currentZone?.name || 'Service Store',
-        coords:
-          Number.isFinite(Number(store.longitude)) && Number.isFinite(Number(store.latitude))
-            ? [Number(store.longitude), Number(store.latitude)]
-            : null,
-      }));
-    }
-
     return POPULAR_LOCATIONS.filter((item) => item.toLowerCase().includes(String(query || '').toLowerCase())).slice(0, 6).map(name => ({
       title: name,
       address: name + ', Indore, Madhya Pradesh',
       coords: getCoords(name),
     }));
-  }, [zoneStores, currentZone, query]);
+  }, [query]);
 
   const nearbySuggestions = useMemo(() => {
     if (activeInput === 'drop' && Array.isArray(pickupCoords) && pickupCoords.length === 2) {
