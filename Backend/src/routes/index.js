@@ -16,12 +16,14 @@ import { authMiddleware } from '../core/auth/auth.middleware.js';
 import * as businessSettingsController from '../modules/food/admin/controllers/businessSettings.controller.js';
 import * as systemConfigController from '../modules/food/admin/controllers/systemConfig.controller.js';
 import { requireRoles } from '../core/roles/role.middleware.js';
+import { attachFoodAdminAccess } from '../core/admin/adminAccess.middleware.js';
 import { getQueuesController } from '../controllers/admin.controller.js';
 import webhookRoutes from '../core/payments/routes/webhook.routes.js';
 import searchRoutes from '../modules/food/search/routes/search.routes.js';
 import diningBookingRoutes from '../modules/food/dining/routes/diningBooking.routes.js';
 import { maintenanceModeMiddleware } from '../modules/food/admin/middleware/maintenanceMode.middleware.js';
 import { taxiRouter } from '../modules/taxi/routes/index.js';
+import globalAdminRoutes from '../modules/global/admin/global.routes.js';
 import { promotionsRouter as taxiPromotionsRouter } from '../modules/taxi/admin/promotions/routes/index.js';
 
 const router = express.Router();
@@ -47,7 +49,7 @@ router.get('/v1/food/dining/restaurants/public', getPublicDiningRestaurants);
 router.use('/v1/food/dining/bookings', diningBookingRoutes);
 router.use('/v1/uploads', uploadRoutes);
 
-router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN', 'SUB_ADMIN'), restaurantAdminRoutes);
+router.use('/v1/food/admin', authMiddleware, requireRoles('ADMIN', 'SUB_ADMIN'), attachFoodAdminAccess, restaurantAdminRoutes);
 router.use('/v1/food/user', authMiddleware, requireRoles('USER'), userRoutes);
 router.use('/v1/food/cart', authMiddleware, requireRoles('USER'), foodCartRoutes);
 router.use('/v1/food/notifications', authMiddleware, requireRoles('USER', 'RESTAURANT', 'DELIVERY_PARTNER'), notificationRoutes);
@@ -58,6 +60,7 @@ router.use('/v1/fcm-tokens', fcmRoutes);
 router.use('/fcm-tokens', fcmRoutes);
 
 router.get('/v1/admin/queues', authMiddleware, requireRoles('ADMIN'), getQueuesController);
+router.use('/v1/admin/global', authMiddleware, requireRoles('ADMIN'), globalAdminRoutes);
 router.use('/v1', taxiPromotionsRouter);
 router.use('/v1/taxi', taxiRouter);
 
