@@ -1,4 +1,4 @@
-import { LayoutDashboard, User, UserCog, Users } from "lucide-react"
+import { LayoutDashboard, Link2, User, UserCog, Users } from "lucide-react"
 import { GLOBAL_ADMIN_HOME } from "@/shared/utils/activeModule.js"
 import { hasGlobalSection, isPlatformAdmin } from "@/shared/utils/adminAccess.js"
 
@@ -18,6 +18,12 @@ export const GLOBAL_MENU = [
     label: "People",
     items: [
       { label: "Customers", path: `${GLOBAL_ADMIN_HOME}/customers`, icon: Users, section: "customers" },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      { label: "Landing Page", path: `${GLOBAL_ADMIN_HOME}/landing`, icon: Link2, section: "landing" },
     ],
   },
   {

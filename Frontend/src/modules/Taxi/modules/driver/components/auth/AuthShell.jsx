@@ -1,5 +1,5 @@
-import { ArrowLeft, Layers, ShieldCheck, Wallet } from 'lucide-react';
-import { useSettings } from '../../../../shared/context/SettingsContext';
+import { ArrowLeft, Bus, Car, ShieldCheck, Users as UsersIcon, Wallet } from 'lucide-react';
+import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import heroImage from '../../../../assets/images/driver-login-bg.png';
 import './AuthShell.css';
 
@@ -19,7 +19,7 @@ const LIGHT_SCOPE = {
 
 const BRAND_POINTS = [
   {
-    Icon: Layers,
+    Icon: UsersIcon,
     title: 'Every partner role in one place',
     text: 'Taxi drivers, fleet owners, pooling and bus partners all sign in here.',
   },
@@ -35,22 +35,29 @@ const BRAND_POINTS = [
   },
 ];
 
-const Brand = ({ appName, appLogo, onDark = false }) => (
-  <div className="flex items-center gap-3">
-    {appLogo ? (
-      <img
-        src={appLogo}
-        alt={`${appName} logo`}
-        className="h-10 w-10 rounded-xl bg-[#ffffff] object-cover p-1 shadow-[0_6px_18px_-8px_rgba(15,23,42,0.45)]"
-      />
-    ) : (
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ffc400] text-lg font-bold text-[#0b1220]">
-        {String(appName || 'P').trim().charAt(0).toUpperCase()}
+// The fleet this partner login covers — shown as a small badge row so the page reads as a transport app at
+// a glance, not just a generic sign-in form.
+const FLEET_BADGES = [
+  { Icon: Car, label: 'Taxi' },
+  { Icon: Bus, label: 'Bus' },
+  { Icon: UsersIcon, label: 'Pooling' },
+];
+
+const FleetStrip = ({ tone = 'dark' }) => (
+  <div className="flex items-center gap-2.5">
+    {FLEET_BADGES.map(({ Icon, label }) => (
+      <span
+        key={label}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur-sm ${
+          tone === 'dark'
+            ? 'border-white/15 bg-white/10 text-white'
+            : 'border-[#fde68a] bg-[#fffbeb] text-[#b45309]'
+        }`}
+      >
+        <Icon size={14} strokeWidth={2.4} />
+        {label}
       </span>
-    )}
-    <span className={`text-base font-semibold tracking-tight ${onDark ? 'text-[#ffffff]' : 'text-[#0b1220]'}`}>
-      {appName}
-    </span>
+    ))}
   </div>
 );
 
@@ -61,10 +68,6 @@ const Brand = ({ appName, appLogo, onDark = false }) => (
  * - desktop (lg+): brand panel on the left, form on the right
  */
 const AuthShell = ({ eyebrow, title, subtitle, onBack, backLabel = 'Back', children, footer }) => {
-  const { settings } = useSettings();
-  const appName = settings.general?.app_name || 'Partner App';
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
-
   return (
     <div
       style={LIGHT_SCOPE}
@@ -76,11 +79,12 @@ const AuthShell = ({ eyebrow, title, subtitle, onBack, backLabel = 'Back', child
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-[rgba(9,12,28,0.94)] via-[rgba(9,12,28,0.6)] to-[rgba(9,12,28,0.4)]" />
           <div className="relative">
-            <Brand appName={appName} appLogo={appLogo} onDark />
+            <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-11 w-auto object-contain" />
           </div>
-          <div className="relative max-w-md space-y-9">
+          <div className="relative max-w-md space-y-8">
+            <FleetStrip tone="dark" />
             <h2 className="text-4xl font-semibold leading-[1.15] tracking-tight text-[#ffffff] xl:text-[2.75rem]">
-              Drive, earn and grow with {appName}.
+              Drive, earn and grow with every trip.
             </h2>
             <ul className="space-y-5">
               {BRAND_POINTS.map(({ Icon, title: pointTitle, text }) => (
@@ -101,11 +105,12 @@ const AuthShell = ({ eyebrow, title, subtitle, onBack, backLabel = 'Back', child
 
       <div className="relative flex min-h-dvh flex-col lg:bg-[#ffffff]">
         {/* Hero strip — phones and tablets */}
-        <div className="relative h-28 shrink-0 overflow-hidden sm:h-44 lg:hidden">
+        <div className="relative h-32 shrink-0 overflow-hidden sm:h-48 lg:hidden">
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[rgba(9,12,28,0.55)] via-[rgba(9,12,28,0.4)] to-[#f6f7fb]" />
-          <div className="relative px-5 pt-5 sm:px-8 sm:pt-7">
-            <Brand appName={appName} appLogo={appLogo} onDark />
+          <div className="absolute inset-0 bg-gradient-to-b from-[rgba(9,12,28,0.6)] via-[rgba(9,12,28,0.45)] to-[#f6f7fb]" />
+          <div className="relative flex h-full flex-col justify-between px-5 pb-4 pt-5 sm:px-8 sm:pt-7">
+            <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-9 w-auto object-contain sm:h-10" />
+            <FleetStrip tone="dark" />
           </div>
         </div>
 

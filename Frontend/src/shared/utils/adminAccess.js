@@ -16,6 +16,13 @@ export const GLOBAL_SECTIONS = [
     actions: ['view', 'edit'],
     hint: 'Edit = block or unblock a customer in both apps',
   },
+  {
+    key: 'landing',
+    label: 'Landing Page',
+    path: `${GLOBAL_ADMIN_HOME}/landing`,
+    actions: ['view', 'create', 'edit', 'delete'],
+    hint: 'Manage the "Other Service" cards shown on the public landing page',
+  },
 ]
 
 export function readAdminProfile() {

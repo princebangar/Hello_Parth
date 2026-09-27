@@ -21,14 +21,17 @@ export function resolveConsumerPostLoginRoute() {
  * Guests → login (Taxi is login-only; Skip for now opens Food).
  * Logged-in users → Taxi home first.
  */
-export function resolveAppColdStartRoute() {
-  if (typeof localStorage === 'undefined') return '/login'
+/** True once either Food or Taxi has a stored consumer session (they share one login). */
+export function isConsumerLoggedIn() {
+  if (typeof localStorage === 'undefined') return false
 
   const foodToken = String(localStorage.getItem('user_accessToken') || '').trim()
   const taxiToken = String(localStorage.getItem('userToken') || '').trim()
-  const isLoggedIn = Boolean(foodToken || taxiToken)
+  return Boolean(foodToken || taxiToken)
+}
 
-  if (!isLoggedIn) {
+export function resolveAppColdStartRoute() {
+  if (!isConsumerLoggedIn()) {
     return '/login'
   }
 
