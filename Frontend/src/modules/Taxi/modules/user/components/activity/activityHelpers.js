@@ -7,7 +7,7 @@ import SuvIcon from '../../../../assets/icons/SUV.png';
 import busIcon from '../../../../assets/3d images/AutoCab/bus.png';
 
 export const PAGE_SIZE = 4;
-export const TABS = ['All', 'Rides', 'Parcels', 'Rental', 'Bus', 'Pooling', 'Outstation', 'Scheduled', 'Support'];
+export const TABS = ['All', 'Rides', 'Parcels', 'Bus', 'Pooling', 'Outstation', 'Scheduled', 'Support'];
 
 export const pickFirstString = (...values) => {
   for (const value of values) {
@@ -251,43 +251,5 @@ export const normalizePoolingBooking = (booking) => {
     vehicleImage: getVehicleVisual(null, 'pooling'),
     booking,
     sortTimestamp: toTimestamp(booking?.createdAt || booking?.travelDate),
-  };
-};
-
-export const normalizeRentalBooking = (booking) => {
-  const status = formatStatus(booking?.status || 'pending');
-  const locationName = pickFirstString(
-    booking?.serviceLocation?.name,
-    booking?.serviceLocation?.city,
-    'Rental pickup hub',
-  );
-  const assignedVehicleName = pickFirstString(booking?.assignedVehicle?.name, booking?.vehicleName, 'Rental vehicle');
-  const title = pickFirstString(
-    booking?.vehicleName,
-    booking?.selectedPackage?.label ? `Rental - ${booking.selectedPackage.label}` : '',
-    'Rental booking',
-  );
-  const pickupTimeSource = booking?.pickupDateTime || booking?.createdAt;
-
-  return {
-    id: booking?.id || booking?._id,
-    type: 'rental',
-    title,
-    address: `${locationName} to ${pickFirstString(booking?.serviceLocation?.address, booking?.serviceLocation?.city, 'Return at same hub')}`,
-    date: formatRideDate(pickupTimeSource),
-    time: formatRideTime(pickupTimeSource),
-    status,
-    statusTone: getStatusTone(status),
-    price: Number(booking?.totalCost || 0).toFixed(0),
-    driverName: assignedVehicleName,
-    eyebrow: pickFirstString(booking?.selectedPackage?.label, booking?.bookingReference, 'Rental booking'),
-    driverImage: buildAvatarFallback(assignedVehicleName),
-    vehicleImage: pickFirstString(
-      booking?.assignedVehicle?.image,
-      booking?.vehicleImage,
-      carIcon,
-    ),
-    booking,
-    sortTimestamp: toTimestamp(booking?.updatedAt || booking?.pickupDateTime || booking?.createdAt),
   };
 };

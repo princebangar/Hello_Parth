@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 // ... removed BottomNavbar import ...
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 
@@ -17,7 +18,7 @@ import api from '../../../shared/api/axiosInstance';
 import { toHistorySafeState } from '../../../shared/utils/historyState';
 import userBusService from '../services/busService';
 import { userService } from '../services/userService';
-import { normalizeBusBooking, normalizePoolingBooking, normalizeRentalBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
+import { normalizeBusBooking, normalizePoolingBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
 
 import taxiFallback from '../../../assets/user-app/taxi.png';
 import bikeFallback from '../../../assets/user-app/bike.png';
@@ -30,7 +31,7 @@ import {
   getCurrentRideSignature,
   isActiveCurrentRide,
 } from '../services/currentRideService';
-import { CalendarClock, Clock3, MapPin, ShieldCheck, User, ChevronRight } from 'lucide-react';
+import { CalendarClock, MapPin, ShieldCheck, User, ChevronRight } from 'lucide-react';
 
 const getCurrentRideIcon = (ride) => {
   const customIcon = String(
@@ -114,85 +115,6 @@ const getScheduledCountdownLabel = (value, now = Date.now()) => {
   return `Starts in ${minutes}m`;
 };
 
-const normalizeRentalCurrentRideSnapshot = (ride = {}, previousRide = {}) => {
-  if (!ride) {
-    return null;
-  }
-
-  const assignedVehicle = ride.assignedVehicle || previousRide.assignedVehicle || {};
-  const selectedPackage = ride.selectedPackage || previousRide.selectedPackage || null;
-  const rideMetrics = ride.rideMetrics || previousRide.rideMetrics || {};
-  const serviceLocation = ride.serviceLocation || previousRide.serviceLocation || null;
-  const bookingReference = ride.bookingReference || previousRide.bookingReference || '';
-  const vehicleName =
-    assignedVehicle?.name ||
-    ride.vehicleName ||
-    previousRide.vehicleName ||
-    previousRide?.vehicle?.name ||
-    'Assigned Vehicle';
-  const vehicleImage =
-    assignedVehicle?.image ||
-    ride.vehicleImage ||
-    previousRide.vehicleImage ||
-    previousRide?.vehicle?.image ||
-    '';
-  const vehicleCategory =
-    assignedVehicle?.vehicleCategory ||
-    ride.vehicleCategory ||
-    previousRide.vehicleCategory ||
-    previousRide?.driver?.vehicle ||
-    'Rental';
-
-  return {
-    ...previousRide,
-    ...ride,
-    rideId: ride.id || ride.rideId || previousRide.rideId || '',
-    bookingReference,
-    fare: rideMetrics?.currentCharge ?? ride.fare ?? previousRide.fare ?? ride.payableNow ?? 0,
-    totalCost: ride.totalCost ?? previousRide.totalCost ?? 0,
-    advancePaid: ride.payableNow ?? ride.advancePaid ?? previousRide.advancePaid ?? 0,
-    status: ride.status || previousRide.status || 'assigned',
-    liveStatus: ride.status || ride.liveStatus || previousRide.liveStatus || 'assigned',
-    serviceType: 'rental',
-    vehicleName,
-    vehicleImage,
-    vehicleCategory,
-    vehicle: {
-      ...(previousRide.vehicle || {}),
-      name: vehicleName,
-      image: vehicleImage,
-      vehicleIconUrl: vehicleImage,
-    },
-    driver: {
-      ...(previousRide.driver || {}),
-      name: vehicleName,
-      vehicle: vehicleCategory,
-      vehicleType: vehicleCategory,
-      vehicleIconUrl: vehicleImage,
-    },
-    vehicleIconUrl: vehicleImage || previousRide.vehicleIconUrl || '',
-    assignedAt: ride.assignedAt || previousRide.assignedAt || ride.createdAt || null,
-    completionRequestedAt: ride.completionRequestedAt || previousRide.completionRequestedAt || null,
-    hourlyRate: rideMetrics?.hourlyRate ?? ride.hourlyRate ?? previousRide.hourlyRate ?? 0,
-    includedHours: rideMetrics?.includedHours ?? ride.includedHours ?? previousRide.includedHours ?? selectedPackage?.durationHours ?? 0,
-    basePrice: rideMetrics?.basePrice ?? ride.basePrice ?? previousRide.basePrice ?? selectedPackage?.price ?? ride.totalCost ?? 0,
-    extraHourRate: rideMetrics?.extraHourRate ?? ride.extraHourRate ?? previousRide.extraHourRate ?? selectedPackage?.extraHourPrice ?? 0,
-    elapsedMinutes: rideMetrics?.elapsedMinutes ?? ride.elapsedMinutes ?? previousRide.elapsedMinutes ?? 0,
-    remainingDue: rideMetrics?.remainingDue ?? ride.remainingDue ?? previousRide.remainingDue ?? 0,
-    requestedHours: ride.requestedHours ?? previousRide.requestedHours ?? selectedPackage?.durationHours ?? 0,
-    selectedPackage,
-    paymentMethodLabel: ride.paymentMethodLabel || previousRide.paymentMethodLabel || '',
-    serviceLocation,
-    assignedVehicle,
-    finalCharge: ride.finalCharge ?? previousRide.finalCharge ?? 0,
-    finalElapsedMinutes: ride.finalElapsedMinutes ?? previousRide.finalElapsedMinutes ?? 0,
-    updatedAt: ride.updatedAt || previousRide.updatedAt || Date.now(),
-  };
-};
-
-const isRentalCurrentRide = (ride) =>
-  String(ride?.serviceType || ride?.type || '').toLowerCase() === 'rental';
-
 const AGGREGATE_FETCH_LIMIT = 60;
 
 const getPayload = (response) => response?.data?.data || response?.data || response || {};
@@ -228,21 +150,12 @@ const getRideCategoryForTab = (tab) => {
 
 const getHelperText = (tab) => {
   if (tab === 'Support') return 'Tickets and help requests';
-  if (tab === 'Rental') return 'Your rental bookings, pickup schedule, and booking status';
   if (tab === 'Bus') return 'Your bus tickets, travel timings, and operator details';
   if (tab === 'Pooling') return 'Shared pooling rides, seat reservations, and upcoming departures';
   if (tab === 'Outstation') return 'Long-distance trips and outstation deliveries';
   if (tab === 'Scheduled') return 'Bookings reserved for a later pickup time';
   return 'Your recent trips, deliveries, and bookings';
 };
-
-const buildRentalActivityState = (booking) => ({
-  ...booking,
-  serviceType: 'rental',
-  rideId: booking?.id || booking?._id || '',
-  status: booking?.status || 'pending',
-  summaryMode: String(booking?.status || '').toLowerCase() === 'completed' ? 'completed' : undefined,
-});
 
 const Activity = () => {
   const [activeTab, setActiveTab] = useState('All');
@@ -277,11 +190,6 @@ const Activity = () => {
   useEffect(() => {
     const refreshCurrentRide = () => {
       const ride = getCurrentRide();
-      if (String(ride?.serviceType || '').toLowerCase() === 'rental') {
-        const normalizedRentalRide = normalizeRentalCurrentRideSnapshot(ride, currentRideRef.current || {});
-        setCurrentRide(isActiveCurrentRide(normalizedRentalRide) ? normalizedRentalRide : null);
-        return;
-      }
       setCurrentRide(isActiveCurrentRide(ride) ? ride : null);
     };
 
@@ -296,8 +204,7 @@ const Activity = () => {
   }, []);
 
   const shouldTickClock =
-    String(currentRide?.serviceType || '').toLowerCase() === 'rental'
-    || Number.isFinite(currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN);
+    Number.isFinite(currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN);
 
   useEffect(() => {
     if (!shouldTickClock) {
@@ -313,14 +220,12 @@ const Activity = () => {
 
   const driverName = currentRide?.driver?.name || 'Captain';
   const serviceType = String(currentRide?.serviceType || currentRide?.type || 'ride').toLowerCase();
-  const vehicleLabel = currentRide?.driver?.vehicle || currentRide?.driver?.vehicleType || (serviceType === 'parcel' ? 'Parcel' : serviceType === 'rental' ? 'Rental' : 'Taxi');
+  const vehicleLabel = currentRide?.driver?.vehicle || currentRide?.driver?.vehicleType || (serviceType === 'parcel' ? 'Parcel' : 'Taxi');
   const currentRideIcon = getCurrentRideIcon(currentRide);
   const trackingPath =
     serviceType === 'parcel'
       ? `${routePrefix}/parcel/tracking`
-      : serviceType === 'rental'
-        ? `${routePrefix}/rental/confirmed`
-        : `${routePrefix}/ride/tracking`;
+      : `${routePrefix}/ride/tracking`;
   const rideStage = String(currentRide?.liveStatus || currentRide?.status || 'accepted').toLowerCase();
   const hasAssignedDriver = Boolean(currentRide?.driver?._id || currentRide?.driver?.id || currentRide?.driver?.name);
   const scheduledTimestamp = currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN;
@@ -328,73 +233,20 @@ const Activity = () => {
   const isScheduledUpcoming = isScheduledRide && scheduledTimestamp > clockNow;
   const isScheduledAcceptedRide = ['ride', 'intercity'].includes(serviceType) && isScheduledUpcoming && hasAssignedDriver && ['accepted', 'arriving'].includes(rideStage);
   const rideStageLabel =
-    serviceType === 'rental'
-      ? rideStage === 'end_requested'
-        ? 'End ride review pending'
-        : rideStage === 'assigned'
-          ? 'Rental in progress'
-          : 'Rental booking active'
-      : rideStage === 'started'
-        ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
-        : rideStage === 'arrived'
-          ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
-          : rideStage === 'arriving'
-            ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
-            : serviceType === 'parcel'
-              ? 'Parcel booked'
-              : 'Ride booked';
+    rideStage === 'started'
+      ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
+      : rideStage === 'arrived'
+        ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
+        : rideStage === 'arriving'
+          ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
+          : serviceType === 'parcel'
+            ? 'Parcel booked'
+            : 'Ride booked';
   const rideStageContextLabel = isScheduledAcceptedRide
     ? 'Driver assigned for your scheduled trip'
     : rideStageLabel;
   const scheduledDateLabel = formatScheduledDateTime(currentRide?.scheduledAt);
   const scheduledCountdown = getScheduledCountdownLabel(currentRide?.scheduledAt, clockNow);
-  const rentalElapsedSeconds = serviceType === 'rental' && currentRide?.assignedAt
-    ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalElapsedMinutes || 0) > 0
-      ? Number(currentRide.finalElapsedMinutes || 0) * 60
-      : Math.max(1, Math.floor((clockNow - new Date(currentRide.assignedAt).getTime()) / 1000))
-    : Number(currentRide?.elapsedMinutes || 0) * 60;
-
-  const computeRentalLiveCharge = (ride = {}, elapsedSeconds = 0) => {
-    const basePrice = Math.max(
-      Number(ride?.basePrice || 0),
-      Number(ride?.selectedPackage?.price || 0),
-      Number(ride?.advancePaid || 0),
-      0,
-    );
-    const includedHours = Math.max(
-      Number(ride?.includedHours || 0),
-      Number(ride?.selectedPackage?.durationHours || 0),
-      Number(ride?.requestedHours || 0) > 0 && Number(ride?.extraHourRate || 0) <= 0 ? Number(ride.requestedHours) : 0,
-      1,
-    );
-    const extraHourRate = Math.max(
-      Number(ride?.extraHourRate || 0),
-      Number(ride?.selectedPackage?.extraHourPrice || 0),
-      0,
-    );
-    const elapsedHours = Math.max(0, elapsedSeconds / 3600);
-    const packageCharge = elapsedHours <= includedHours
-      ? basePrice
-      : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourRate;
-
-    return Math.max(Number(ride?.advancePaid || 0), packageCharge);
-  };
-
-  const rentalCurrentCharge = serviceType === 'rental'
-    ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalCharge || 0) > 0
-      ? Number(currentRide.finalCharge || 0)
-      : computeRentalLiveCharge(currentRide, rentalElapsedSeconds)
-    : Number(currentRide?.fare || 0);
-
-  const formatRentalTime = (totalSeconds) => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
-  };
-
-  const rentalTimerLabel = serviceType === 'rental' ? formatRentalTime(rentalElapsedSeconds) : '';
-
   useEffect(() => {
     let active = true;
 
@@ -420,16 +272,7 @@ const Activity = () => {
         let nextActivities = [];
         let nextPagination = null;
 
-        if (activeTab === 'Rental') {
-          const response = await userService.getMyRentalBookings({
-            page: currentPage,
-            limit: PAGE_SIZE,
-          });
-          const payload = getPayload(response);
-          const bookings = Array.isArray(payload?.results) ? payload.results : [];
-          nextActivities = bookings.map(normalizeRentalBooking).filter((item) => item.id);
-          nextPagination = payload?.pagination || null;
-        } else if (activeTab === 'Bus') {
+        if (activeTab === 'Bus') {
           const response = await userBusService.getMyBookings({
             page: currentPage,
             limit: PAGE_SIZE,
@@ -449,16 +292,12 @@ const Activity = () => {
           nextActivities = localPage.results;
           nextPagination = localPage.pagination;
         } else if (activeTab === 'All') {
-          const [ridesResult, rentalResult, busResult, poolingResult] = await Promise.allSettled([
+          const [ridesResult, busResult, poolingResult] = await Promise.allSettled([
             api.get('/rides', {
               params: {
                 limit: AGGREGATE_FETCH_LIMIT,
                 page: 1,
               },
-            }),
-            userService.getMyRentalBookings({
-              page: 1,
-              limit: AGGREGATE_FETCH_LIMIT,
             }),
             userBusService.getMyBookings({
               page: 1,
@@ -468,16 +307,13 @@ const Activity = () => {
           ]);
 
           const ridesResponse = ridesResult.status === 'fulfilled' ? ridesResult.value : null;
-          const rentalResponse = rentalResult.status === 'fulfilled' ? rentalResult.value : null;
           const busResponse = busResult.status === 'fulfilled' ? busResult.value : null;
           const poolingResponse = poolingResult.status === 'fulfilled' ? poolingResult.value : null;
 
           const ridePayload = ridesResponse ? getPayload(ridesResponse) : {};
-          const rentalPayload = rentalResponse ? getPayload(rentalResponse) : {};
           const busPayload = busResponse ? getPayload(busResponse) : {};
           const poolingPayload = poolingResponse ? getPayload(poolingResponse) : {};
           const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
-          const rentalBookings = Array.isArray(rentalPayload?.results) ? rentalPayload.results : [];
           const bookings = Array.isArray(busPayload?.results) ? busPayload.results : [];
           const poolingBookings = Array.isArray(poolingPayload)
             ? poolingPayload
@@ -485,14 +321,8 @@ const Activity = () => {
               ? poolingPayload.results
               : [];
 
-          const filteredRides = rides.filter(r => {
-            const serviceType = String(r.serviceType || r.type || r.category || '').toLowerCase();
-            return serviceType !== 'rental';
-          });
-
           const merged = sortLatestFirst([
-            ...filteredRides.map(normalizeRide).filter((item) => item.id),
-            ...rentalBookings.map(normalizeRentalBooking).filter((item) => item.id),
+            ...rides.map(normalizeRide).filter((item) => item.id),
             ...bookings.map(normalizeBusBooking).filter((item) => item.id),
             ...poolingBookings.map(normalizePoolingBooking).filter((item) => item.id),
           ]);
@@ -500,38 +330,18 @@ const Activity = () => {
           nextActivities = localPage.results;
           nextPagination = localPage.pagination;
         } else if (activeTab === 'Rides') {
-          const [ridesResult, rentalResult] = await Promise.allSettled([
-            api.get('/rides', {
-              params: {
-                limit: AGGREGATE_FETCH_LIMIT,
-                page: 1,
-                category: 'rides',
-              },
-            }),
-            userService.getMyRentalBookings({
-              page: 1,
+          const ridesResponse = await api.get('/rides', {
+            params: {
               limit: AGGREGATE_FETCH_LIMIT,
-            }),
-          ]);
-
-          const ridesResponse = ridesResult.status === 'fulfilled' ? ridesResult.value : null;
-          const rentalResponse = rentalResult.status === 'fulfilled' ? rentalResult.value : null;
-
-          const ridePayload = ridesResponse ? getPayload(ridesResponse) : {};
-          const rentalPayload = rentalResponse ? getPayload(rentalResponse) : {};
-
-          const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
-          const rentalBookings = Array.isArray(rentalPayload?.results) ? rentalPayload.results : [];
-
-          const filteredRides = rides.filter(r => {
-            const serviceType = String(r.serviceType || r.type || r.category || '').toLowerCase();
-            return serviceType !== 'rental';
+              page: 1,
+              category: 'rides',
+            },
           });
 
-          const merged = sortLatestFirst([
-            ...filteredRides.map(normalizeRide).filter((item) => item.id),
-            ...rentalBookings.map(normalizeRentalBooking).filter((item) => item.id),
-          ]);
+          const ridePayload = getPayload(ridesResponse);
+          const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
+
+          const merged = sortLatestFirst(rides.map(normalizeRide).filter((item) => item.id));
           const localPage = buildLocalPagination(merged, currentPage);
           nextActivities = localPage.results;
           nextPagination = localPage.pagination;
@@ -546,12 +356,7 @@ const Activity = () => {
           const payload = getPayload(response);
           const rides = Array.isArray(payload?.results) ? payload.results : [];
 
-          const filteredRides = rides.filter(r => {
-            const serviceType = String(r.serviceType || r.type || r.category || '').toLowerCase();
-            return serviceType !== 'rental';
-          });
-
-          nextActivities = filteredRides.map(normalizeRide).filter((ride) => ride.id);
+          nextActivities = rides.map(normalizeRide).filter((ride) => ride.id);
           nextPagination = payload?.pagination || null;
         }
 
@@ -601,13 +406,23 @@ const Activity = () => {
     setCurrentPage(1);
   }, [activeTab]);
 
+  const handleCancelPooling = async (item) => {
+    if (!window.confirm('Cancel this pooling booking? Bookings can be cancelled up to 6 hours before departure.')) {
+      return;
+    }
+
+    try {
+      const response = await userService.cancelPoolingBooking(item.booking?._id || item.id);
+      toast.success(response?.message || response?.data?.message || 'Booking cancelled');
+      setReloadKey((current) => current + 1);
+    } catch (cancelError) {
+      toast.error(cancelError?.response?.data?.error || cancelError?.message || 'Could not cancel this booking');
+    }
+  };
+
   const handleItemClick = (item) => {
     if (item.type === 'bus') {
       navigate(`${routePrefix}/profile/bus-bookings/${item.id}`);
-    } else if (item.type === 'rental') {
-      navigate(`${routePrefix}/rental/confirmed`, {
-        state: toHistorySafeState(buildRentalActivityState(item.booking)),
-      });
     } else if (item.type === 'pooling') {
       navigate(`${routePrefix}/pooling`);
     } else if (item.type === 'parcel') {
@@ -665,7 +480,7 @@ const Activity = () => {
                     {rideStageContextLabel}
                   </h2>
                   <p className="mt-1 text-[11px] font-bold opacity-60">
-                    {isScheduledAcceptedRide ? scheduledDateLabel : (serviceType === 'rental' ? 'Rental Booking' : 'Active Booking')}
+                    {isScheduledAcceptedRide ? scheduledDateLabel : 'Active Booking'}
                   </p>
                 </div>
                 <div className="relative mb-1">
@@ -687,21 +502,7 @@ const Activity = () => {
                 <span className="truncate">{currentRide.drop || 'Drop location'}</span>
               </div>
 
-              {serviceType === 'rental' ? (
-                <div className="mt-3.5 flex items-center gap-2 text-[10px] font-medium">
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${
-                    isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    <Clock3 size={11} />
-                    {rentalTimerLabel}
-                  </span>
-                  <span className={`rounded-full px-2.5 py-1 ${
-                    isDark ? 'bg-yellow-400/10 text-yellow-400' : 'bg-emerald-50 text-emerald-700'
-                  }`}>
-                    Live charge Rs {rentalCurrentCharge.toFixed(0)}
-                  </span>
-                </div>
-              ) : isScheduledAcceptedRide ? (
+              {isScheduledAcceptedRide ? (
                 <div className="mt-3.5 flex items-center gap-2 text-[10px] font-medium">
                   <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${
                     isDark ? 'bg-slate-950 text-slate-300' : 'bg-sky-50 text-sky-700'
@@ -736,7 +537,7 @@ const Activity = () => {
                 <div className="text-right flex items-center gap-3">
                   <div>
                     <p className="text-[9px] font-semibold uppercase tracking-[0.14em] opacity-50 leading-none">Fare</p>
-                    <p className="mt-0.5 text-[12.5px] font-bold">₹{Number(serviceType === 'rental' ? rentalCurrentCharge : currentRide?.fare || 0).toFixed(0)}</p>
+                    <p className="mt-0.5 text-[12.5px] font-bold">₹{Number(currentRide?.fare || 0).toFixed(0)}</p>
                   </div>
                   <div className={`inline-flex h-7 w-7 items-center justify-center rounded-[10px] shadow-sm ${
                     isDark ? 'bg-yellow-400 text-slate-950' : 'bg-slate-900 text-white'
@@ -760,7 +561,18 @@ const Activity = () => {
         ) : (
           <div className="space-y-3 pb-2">
             {activities.map((activity) => (
-              <ActivityCard key={activity.id} {...activity} onClick={() => handleItemClick(activity)} />
+              <div key={activity.id}>
+                <ActivityCard {...activity} onClick={() => handleItemClick(activity)} />
+                {activity.type === 'pooling' && String(activity.booking?.bookingStatus || 'confirmed') === 'confirmed' && (
+                  <button
+                    type="button"
+                    onClick={() => handleCancelPooling(activity)}
+                    className="mt-1.5 w-full rounded-xl border border-rose-100 bg-rose-50 py-2 text-[12px] font-semibold text-rose-600 active:scale-[0.99]"
+                  >
+                    Cancel booking
+                  </button>
+                )}
+              </div>
             ))}
             <ActivityPager
               pagination={pagination}

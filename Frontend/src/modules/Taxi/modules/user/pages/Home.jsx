@@ -176,7 +176,6 @@ const FooterBannerImage = ({ footerSettings, fallbackImage }) => {
     </>
   );
 };
-import { userService } from '../services/userService';
 import { getLocalUserToken, clearLocalUserSession } from '../services/authService';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
@@ -253,7 +252,7 @@ const defaultSettings = {
     { id: '2', title: 'Need to Send Packages? Try Parcel!', subtitle: 'Fast and secure delivery across Indore at affordable prices.', image: '', route: '/taxi/user/parcel/type', order: 2, status: 'active' }
   ],
   goPlaces: [
-    { id: '1', title: 'Hassle-Free Airport Rides', image: '', route: '/taxi/user/ride/select-location', order: 1, status: 'active' },
+    { id: '1', title: 'Hassle-Free City Rides', image: '', route: '/taxi/user/ride/select-location', order: 1, status: 'active' },
     { id: '2', title: 'Quick Rides to Railway Station', image: '', route: '/taxi/user/ride/select-location', order: 2, status: 'active' },
     { id: '3', title: 'Ride to Bus Terminal', image: '', route: '/taxi/user/ride/select-location', order: 3, status: 'active' }
   ],
@@ -312,85 +311,6 @@ const getScheduledCountdownLabel = (value, now = Date.now()) => {
 
   return `Starts in ${minutes}m`;
 };
-
-const normalizeRentalCurrentRideSnapshot = (ride = {}, previousRide = {}) => {
-  if (!ride) {
-    return null;
-  }
-
-  const assignedVehicle = ride.assignedVehicle || previousRide.assignedVehicle || {};
-  const selectedPackage = ride.selectedPackage || previousRide.selectedPackage || null;
-  const rideMetrics = ride.rideMetrics || previousRide.rideMetrics || {};
-  const serviceLocation = ride.serviceLocation || previousRide.serviceLocation || null;
-  const bookingReference = ride.bookingReference || previousRide.bookingReference || '';
-  const vehicleName =
-    assignedVehicle?.name ||
-    ride.vehicleName ||
-    previousRide.vehicleName ||
-    previousRide?.vehicle?.name ||
-    'Assigned Vehicle';
-  const vehicleImage =
-    assignedVehicle?.image ||
-    ride.vehicleImage ||
-    previousRide.vehicleImage ||
-    previousRide?.vehicle?.image ||
-    '';
-  const vehicleCategory =
-    assignedVehicle?.vehicleCategory ||
-    ride.vehicleCategory ||
-    previousRide.vehicleCategory ||
-    previousRide?.driver?.vehicle ||
-    'Rental';
-
-  return {
-    ...previousRide,
-    ...ride,
-    rideId: ride.id || ride.rideId || previousRide.rideId || '',
-    bookingReference,
-    fare: rideMetrics?.currentCharge ?? ride.fare ?? previousRide.fare ?? ride.payableNow ?? 0,
-    totalCost: ride.totalCost ?? previousRide.totalCost ?? 0,
-    advancePaid: ride.payableNow ?? ride.advancePaid ?? previousRide.advancePaid ?? 0,
-    status: ride.status || previousRide.status || 'assigned',
-    liveStatus: ride.status || ride.liveStatus || previousRide.liveStatus || 'assigned',
-    serviceType: 'rental',
-    vehicleName,
-    vehicleImage,
-    vehicleCategory,
-    vehicle: {
-      ...(previousRide.vehicle || {}),
-      name: vehicleName,
-      image: vehicleImage,
-      vehicleIconUrl: vehicleImage,
-    },
-    driver: {
-      ...(previousRide.driver || {}),
-      name: vehicleName,
-      vehicle: vehicleCategory,
-      vehicleType: vehicleCategory,
-      vehicleIconUrl: vehicleImage,
-    },
-    vehicleIconUrl: vehicleImage || previousRide.vehicleIconUrl || '',
-    assignedAt: ride.assignedAt || previousRide.assignedAt || ride.createdAt || null,
-    completionRequestedAt: ride.completionRequestedAt || previousRide.completionRequestedAt || null,
-    hourlyRate: rideMetrics?.hourlyRate ?? ride.hourlyRate ?? previousRide.hourlyRate ?? 0,
-    includedHours: rideMetrics?.includedHours ?? ride.includedHours ?? previousRide.includedHours ?? selectedPackage?.durationHours ?? 0,
-    basePrice: rideMetrics?.basePrice ?? ride.basePrice ?? previousRide.basePrice ?? selectedPackage?.price ?? ride.totalCost ?? 0,
-    extraHourRate: rideMetrics?.extraHourRate ?? ride.extraHourRate ?? previousRide.extraHourRate ?? selectedPackage?.extraHourPrice ?? 0,
-    elapsedMinutes: rideMetrics?.elapsedMinutes ?? ride.elapsedMinutes ?? previousRide.elapsedMinutes ?? 0,
-    remainingDue: rideMetrics?.remainingDue ?? ride.remainingDue ?? previousRide.remainingDue ?? 0,
-    requestedHours: ride.requestedHours ?? previousRide.requestedHours ?? selectedPackage?.durationHours ?? 0,
-    selectedPackage,
-    paymentMethodLabel: ride.paymentMethodLabel || previousRide.paymentMethodLabel || '',
-    serviceLocation,
-    assignedVehicle,
-    finalCharge: ride.finalCharge ?? previousRide.finalCharge ?? 0,
-    finalElapsedMinutes: ride.finalElapsedMinutes ?? previousRide.finalElapsedMinutes ?? 0,
-    updatedAt: ride.updatedAt || previousRide.updatedAt || Date.now(),
-  };
-};
-
-const isRentalCurrentRide = (ride) =>
-  String(ride?.serviceType || ride?.type || '').toLowerCase() === 'rental';
 
 const calculateDistanceKm = (fromCoords, toCoords) => {
   const [fromLng, fromLat] = fromCoords;
@@ -671,7 +591,6 @@ const Home = () => {
     return isActiveCurrentRide(ride) ? ride : null;
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const [endingRide, setEndingRide] = useState(false);
   const [showDeferredSections, setShowDeferredSections] = useState(false);
   const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
   const [isHoveringPromo, setIsHoveringPromo] = useState(false);
@@ -746,31 +665,6 @@ const Home = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleEndRide = async () => {
-    if (!currentRide?.rideId) return;
-
-    try {
-      setEndingRide(true);
-      const response = await userService.endRentalRide(currentRide.rideId);
-      const payload = response?.data || null;
-      const nextRideState = {
-        ...currentRide,
-        ...payload,
-        rideId: payload?.id || currentRide.rideId,
-        status: payload?.status || 'end_requested',
-        liveStatus: payload?.status || 'end_requested',
-      };
-      persistCurrentRide(nextRideState);
-      navigate(`${routePrefix}/rental/confirmed`, {
-        state: nextRideState,
-      });
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setEndingRide(false);
-    }
-  };
-
   const handleServiceClick = (service) => {
     // Scroll everything to top immediately upon clicking a service
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -784,10 +678,8 @@ const Home = () => {
     const cleanRoute = (route) => {
       if (!route) return '/taxi/user/ride/select-location';
       if (route === '/delivery') return '/taxi/user/parcel/type';
-      if (route === '/rental') return '/taxi/user/rental';
       if (route === '/bus') return '/taxi/user/bus';
       if (route === '/truck') return '/taxi/user/ride/select-location';
-      if (route === '/self-drive') return '/taxi/user/rental';
       return route;
     };
 
@@ -854,11 +746,6 @@ const Home = () => {
       return;
     }
 
-    if (name.includes("rental") || serviceType.includes("rental") || name.includes("self-drive")) {
-      navigate("/taxi/user/rental");
-      return;
-    }
-
     if (name.includes("bus") || transportType.includes("bus") || serviceType.includes("bus")) {
       navigate("/taxi/user/bus");
       return;
@@ -898,8 +785,7 @@ const Home = () => {
   }, [navigate]);
 
   const shouldTickClock =
-    String(currentRide?.serviceType || '').toLowerCase() === 'rental'
-    || Number.isFinite(currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN);
+    Number.isFinite(currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN);
 
   useEffect(() => {
     if (!shouldTickClock) {
@@ -941,13 +827,6 @@ const Home = () => {
   useEffect(() => {
     const refreshCurrentRide = () => {
       const ride = getCurrentRide();
-      if (String(ride?.serviceType || '').toLowerCase() === 'rental') {
-        const normalizedRentalRide = normalizeRentalCurrentRideSnapshot(ride, currentRideRef.current || {});
-        const nextRide = isActiveCurrentRide(normalizedRentalRide) ? normalizedRentalRide : null;
-        lastRideSignatureRef.current = getCurrentRideSignature(nextRide);
-        setCurrentRide(nextRide);
-        return;
-      }
       const nextRide = isActiveCurrentRide(ride) ? ride : null;
       lastRideSignatureRef.current = getCurrentRideSignature(nextRide);
       setCurrentRide(nextRide);
@@ -966,7 +845,7 @@ const Home = () => {
         return;
       }
 
-      const nextInterval = currentRideRef.current && !isRentalCurrentRide(currentRideRef.current)
+      const nextInterval = currentRideRef.current
         ? ACTIVE_RIDE_SYNC_INTERVAL_MS
         : IDLE_RIDE_SYNC_INTERVALS_MS[Math.min(consecutiveIdleMissesRef.current, IDLE_RIDE_SYNC_INTERVALS_MS.length - 1)];
       syncTimer = window.setTimeout(() => {
@@ -994,13 +873,6 @@ const Home = () => {
         if (!token) {
           persistCurrentRide(null);
           currentRideRef.current = null;
-          consecutiveIdleMissesRef.current = 0;
-          return;
-        }
-
-        // Rental booking state is synchronized globally by RentalLocationTracker.
-        // Avoid re-polling the same "active rental" endpoint from the home page.
-        if (isRentalCurrentRide(currentRideRef.current)) {
           consecutiveIdleMissesRef.current = 0;
           return;
         }
@@ -1086,14 +958,12 @@ const Home = () => {
 
   const driverName = currentRide?.driver?.name || 'Captain';
   const serviceType = String(currentRide?.serviceType || currentRide?.type || 'ride').toLowerCase();
-  const vehicleLabel = currentRide?.driver?.vehicle || currentRide?.driver?.vehicleType || (serviceType === 'parcel' ? 'Parcel' : serviceType === 'rental' ? 'Rental' : 'Taxi');
+  const vehicleLabel = currentRide?.driver?.vehicle || currentRide?.driver?.vehicleType || (serviceType === 'parcel' ? 'Parcel' : 'Taxi');
   const currentRideIcon = getCurrentRideIcon(currentRide);
   const trackingPath =
     serviceType === 'parcel'
       ? `${routePrefix}/parcel/tracking`
-      : serviceType === 'rental'
-        ? `${routePrefix}/rental/confirmed`
-        : `${routePrefix}/ride/tracking`;
+      : `${routePrefix}/ride/tracking`;
   const rideStage = String(currentRide?.liveStatus || currentRide?.status || 'accepted').toLowerCase();
   const hasAssignedDriver = Boolean(currentRide?.driver?._id || currentRide?.driver?.id || currentRide?.driver?.name);
   const scheduledTimestamp = currentRide?.scheduledAt ? new Date(currentRide.scheduledAt).getTime() : NaN;
@@ -1101,72 +971,20 @@ const Home = () => {
   const isScheduledUpcoming = isScheduledRide && scheduledTimestamp > clockNow;
   const isScheduledAcceptedRide = ['ride', 'intercity'].includes(serviceType) && isScheduledUpcoming && hasAssignedDriver && ['accepted', 'arriving'].includes(rideStage);
   const rideStageLabel =
-    serviceType === 'rental'
-      ? rideStage === 'end_requested'
-        ? 'End ride review pending'
-        : rideStage === 'assigned'
-          ? 'Rental in progress'
-          : 'Rental booking active'
-      : rideStage === 'started'
-        ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
-        : rideStage === 'arrived'
-          ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
-          : rideStage === 'arriving'
-            ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
-            : serviceType === 'parcel'
-              ? 'Parcel booked'
-              : 'Ride booked';
+    rideStage === 'started'
+      ? serviceType === 'parcel' ? 'Parcel in transit' : 'Ride in progress'
+      : rideStage === 'arrived'
+        ? serviceType === 'parcel' ? 'Parcel reached destination' : `${driverName} reached destination`
+        : rideStage === 'arriving'
+          ? serviceType === 'parcel' ? `${driverName} reached sender` : `${driverName} has arrived`
+          : serviceType === 'parcel'
+            ? 'Parcel booked'
+            : 'Ride booked';
   const rideStageContextLabel = isScheduledAcceptedRide
     ? 'Driver assigned for your scheduled trip'
     : rideStageLabel;
   const scheduledDateLabel = formatScheduledDateTime(currentRide?.scheduledAt);
   const scheduledCountdown = getScheduledCountdownLabel(currentRide?.scheduledAt, clockNow);
-  const rentalElapsedSeconds = serviceType === 'rental' && currentRide?.assignedAt
-    ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalElapsedMinutes || 0) > 0
-      ? Number(currentRide.finalElapsedMinutes || 0) * 60
-      : Math.max(1, Math.floor((clockNow - new Date(currentRide.assignedAt).getTime()) / 1000))
-    : Number(currentRide?.elapsedMinutes || 0) * 60;
-
-  const computeRentalLiveCharge = (ride = {}, elapsedSeconds = 0) => {
-    const basePrice = Math.max(
-      Number(ride?.basePrice || 0),
-      Number(ride?.selectedPackage?.price || 0),
-      Number(ride?.advancePaid || 0),
-      0,
-    );
-    const includedHours = Math.max(
-      Number(ride?.includedHours || 0),
-      Number(ride?.selectedPackage?.durationHours || 0),
-      Number(ride?.requestedHours || 0) > 0 && Number(ride?.extraHourRate || 0) <= 0 ? Number(ride.requestedHours) : 0,
-      1,
-    );
-    const extraHourRate = Math.max(
-      Number(ride?.extraHourRate || 0),
-      Number(ride?.selectedPackage?.extraHourPrice || 0),
-      0,
-    );
-    const elapsedHours = Math.max(0, elapsedSeconds / 3600);
-    const packageCharge = elapsedHours <= includedHours
-      ? basePrice
-      : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourRate;
-
-    return Math.max(Number(ride?.advancePaid || 0), packageCharge);
-  };
-
-  const rentalCurrentCharge = serviceType === 'rental'
-    ? String(currentRide?.status || '').toLowerCase() === 'end_requested' && Number(currentRide?.finalCharge || 0) > 0
-      ? Number(currentRide.finalCharge || 0)
-      : computeRentalLiveCharge(currentRide, rentalElapsedSeconds)
-    : Number(currentRide?.fare || 0);
-
-  const formatRentalTime = (totalSeconds) => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
-  };
-
-  const rentalTimerLabel = serviceType === 'rental' ? formatRentalTime(rentalElapsedSeconds) : '';
   const footerIllustrationBg = {
     backgroundImage: `url(${indiaGateRealImg})`,
     backgroundRepeat: 'no-repeat',
@@ -1741,7 +1559,7 @@ const Home = () => {
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                     </span>
                     <span className="text-[13px] font-bold truncate leading-none">
-                      {serviceType === 'rental' ? 'You have an active rental booking' : 'You have an active ride'}
+                      You have an active ride
                     </span>
                   </div>
                   <span className="text-[12px] font-black text-emerald-650 dark:text-emerald-400 hover:opacity-80 shrink-0 flex items-center gap-0.5 leading-none">
@@ -1899,7 +1717,7 @@ const Home = () => {
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
                 <span className="text-[14px] font-bold truncate">
-                  {serviceType === 'rental' ? 'You have an active rental booking' : 'You have an active ride'}
+                  You have an active ride
                 </span>
               </div>
               <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400 hover:opacity-80 shrink-0 flex items-center gap-0.5">

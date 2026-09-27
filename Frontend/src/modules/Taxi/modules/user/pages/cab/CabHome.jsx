@@ -5,8 +5,6 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
 import imgShared    from '@/assets/3d images/AutoCab/taxi.png';
-import imgAirport   from '@/assets/3d images/AutoCab/airoplan.png';
-import imgSpiritual from '@/assets/3d images/AutoCab/temple.png';
 import imgOneWay    from '@/assets/3d images/AutoCab/one way.png';
 import imgBus       from '@/assets/3d images/AutoCab/bus.png';
 
@@ -26,26 +24,6 @@ const services = [
     accent: 'bg-[linear-gradient(135deg,#F0FDF4_0%,#BBF7D0_100%)]',
     tag: '50% cheaper',
     tagColor: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-  },
-  {
-    id: 'airport',
-    title: 'Airport Cab',
-    sub: 'On-time airport transfers',
-    img: imgAirport,
-    path: '/cab/airport',
-    accent: 'bg-[linear-gradient(135deg,#EFF6FF_0%,#DBEAFE_100%)]',
-    tag: 'Fixed fare',
-    tagColor: 'bg-blue-50 text-blue-600 border-blue-100',
-  },
-  {
-    id: 'spiritual',
-    title: 'Spiritual Trips',
-    sub: 'Ujjain, Omkareshwar & more',
-    img: imgSpiritual,
-    path: '/cab/spiritual',
-    accent: 'bg-[linear-gradient(135deg,#FDF4FF_0%,#F3E8FF_100%)]',
-    tag: 'Guided tours',
-    tagColor: 'bg-purple-50 text-purple-600 border-purple-100',
   },
   {
     id: 'oneway',
