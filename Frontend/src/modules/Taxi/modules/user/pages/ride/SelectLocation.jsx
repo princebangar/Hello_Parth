@@ -51,12 +51,6 @@ const isZoneActive = (zone) => zone?.active !== false && Number(zone?.status ?? 
 
 const getZoneId = (zone) => zone?._id || zone?.id || '';
 
-const getStoreZoneId = (store) =>
-  store?.zone_id?._id
-  || store?.zone_id?.id
-  || store?.zone_id
-  || '';
-
 const toZonePoint = (point) => {
   if (Array.isArray(point) && point.length >= 2) {
     const [lng, lat] = point;
@@ -214,7 +208,6 @@ const SelectLocation = () => {
   const [isLocating, setIsLocating] = useState(false);
   const [zones, setZones] = useState([]);
   const [zonePaths, setZonePaths] = useState([]);
-  const [serviceStores, setServiceStores] = useState([]);
   const [remoteResults, setRemoteResults] = useState([]);
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
   const mapInstanceRef = useRef(null);
@@ -263,15 +256,11 @@ const SelectLocation = () => {
       if (!serviceLocationId) {
         setZones([]);
         setZonePaths([]);
-        setServiceStores([]);
         return;
       }
 
       try {
-        const [zonesResponse, storesResponse] = await Promise.all([
-          api.get('/admin/zones'),
-          api.get('/users/service-stores'),
-        ]);
+        const zonesResponse = await api.get('/users/zones');
         if (!active) {
           return;
         }
@@ -281,22 +270,13 @@ const SelectLocation = () => {
         const matchingPaths = matchingZones
           .map(normalizeZonePath)
           .filter((path) => path.length >= 3);
-        const matchingStores = unwrapResults(storesResponse).filter((store) => {
-          if (store?.active === false || String(store?.status || '').toLowerCase() === 'inactive') {
-            return false;
-          }
-
-          return true;
-        });
 
         setZones(matchingZones);
         setZonePaths(matchingPaths);
-        setServiceStores(matchingStores);
       } catch {
         if (active) {
           setZones([]);
           setZonePaths([]);
-          setServiceStores([]);
         }
       }
     };
@@ -518,25 +498,7 @@ const SelectLocation = () => {
   const query = getQuery();
   const currentZone = useMemo(() => findMatchingZone(pickupCoords, zones), [pickupCoords, zones]);
 
-  const popularSuggestions = useMemo(() => {
-    const currentZoneId = String(getZoneId(currentZone));
-    const zoneStores = currentZoneId
-      ? serviceStores.filter((store) => String(getStoreZoneId(store)) === currentZoneId)
-      : [];
-
-    if (zoneStores.length) {
-      return zoneStores.slice(0, 6).map((store) => ({
-        title: store.name || store.address || 'Service Store',
-        address: store.address || currentZone?.name || 'Service Store',
-        coords:
-          Number.isFinite(Number(store.longitude)) && Number.isFinite(Number(store.latitude))
-            ? [Number(store.longitude), Number(store.latitude)]
-            : null,
-      }));
-    }
-
-    return allResults.slice(0, 6);
-  }, [currentZone, serviceStores]);
+  const popularSuggestions = useMemo(() => allResults.slice(0, 6), []);
 
   const isInitialDefault = useMemo(() => {
     const trimmedQuery = query.trim();
@@ -1434,13 +1396,6 @@ const SelectLocation = () => {
                   : zonePaths.length
                     ? 'Showing zone-prioritized results after 3+ characters.'
                     : 'Showing optimized search results after 3+ characters.'}
-              </p>
-            </div>
-          )}
-          {!query.trim().length && currentZone?.name && (
-            <div className="mt-3 px-1">
-              <p className="text-[11px] font-bold text-slate-400">
-                Popular suggestions are pulled from the admin-created stores in the <span className="text-slate-600">{currentZone.name}</span> zone.
               </p>
             </div>
           )}
