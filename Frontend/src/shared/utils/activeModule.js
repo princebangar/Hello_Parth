@@ -4,6 +4,8 @@ export const LOGIN_RETURN_TO_KEY = 'hello_parth_login_return_to'
 
 export const FOOD_ADMIN_HOME = '/admin/food'
 export const TAXI_ADMIN_HOME = '/taxi/admin/dashboard'
+/** Cross-module overview for admins who can see both Food and Taxi. Rendered by the Food admin shell. */
+export const GLOBAL_ADMIN_HOME = '/admin/global'
 
 /** Logged-in consumer default — Taxi opens first on app/web launch. */
 export const CONSUMER_POST_LOGIN_HOME = '/taxi/user'
@@ -31,6 +33,30 @@ export function resolveAppColdStartRoute() {
   }
 
   return CONSUMER_POST_LOGIN_HOME
+}
+
+/**
+ * The Taxi admin screens were written for a standalone app where they lived at /admin/<page>.
+ * In this super-app /admin/* is the Food admin and Taxi is /taxi/admin/*, so every leftover
+ * navigate('/admin/drivers/…') / Link to="/admin/pricing/…" in the Taxi admin used to dump the
+ * admin into the Food dashboard. This maps those legacy URLs to their real Taxi address.
+ */
+const LEGACY_TAXI_ADMIN_SEGMENTS = new Set([
+  'dashboard', 'cancellation-analytics', 'earnings', 'chat', 'trips', 'deliveries', 'ongoing',
+  'bus-service', 'pooling', 'wallet', 'users', 'user-import', 'drivers', 'driver-import',
+  'referrals', 'promotions', 'management', 'owners', 'owner-management', 'fleet', 'geo',
+  'finance', 'pricing', 'safety', 'cms', 'support', 'reports', 'masters', 'settings', 'employees',
+])
+
+export function resolveLegacyTaxiAdminPath(pathname = '') {
+  const match = /^\/admin\/([^/]+)(\/.*)?$/.exec(String(pathname || ''))
+  if (!match || !LEGACY_TAXI_ADMIN_SEGMENTS.has(match[1])) return null
+
+  const rest = match[2] || ''
+  if (match[1] === 'owner-management') {
+    return `/taxi/admin/owners${rest.replace(/^\/manage-owners/, '')}`
+  }
+  return `/taxi/admin/${match[1]}${rest}`
 }
 
 export function getModuleFromPath(pathname = '') {
@@ -151,11 +177,6 @@ const TRANSIENT_ROUTE_SEGMENTS = [
   '/parcel/contacts',
   '/intercity/details',
   '/intercity/confirm',
-  '/rental/vehicle',
-  '/rental/schedule',
-  '/rental/kyc',
-  '/rental/deposit',
-  '/rental/confirmed',
 ]
 
 const isTransientRoute = (route) =>
@@ -183,9 +204,6 @@ const AUTH_GATED_ROUTE_SEGMENTS = [
   '/parcel/detail',
   '/intercity/confirm',
   '/pooling/confirm',
-  '/rental/kyc',
-  '/rental/deposit',
-  '/rental/confirmed',
   '/food/user/cart',
   '/food/user/checkout',
   '/food/user/orders',
