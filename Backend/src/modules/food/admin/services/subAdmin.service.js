@@ -8,6 +8,18 @@ import {
 
 const SUB_ADMIN_ROLE = 'SUB_ADMIN';
 
+/**
+ * Food sub-admins are admin accounts with role SUB_ADMIN, module "food" and their sidebar matrix in
+ * `foodPermissions` (the plain `permissions` field is the Taxi permission list). Global sub-admins share the
+ * role but are managed from the Global admin, so they are excluded here.
+ */
+const foodSubAdminFilter = (extra = {}) => ({
+  role: SUB_ADMIN_ROLE,
+  module: 'food',
+  isGlobalSubAdmin: { $ne: true },
+  ...extra,
+});
+
 function sanitizeAdmin(doc) {
   if (!doc) return null;
   const obj = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
@@ -19,8 +31,8 @@ function sanitizeAdmin(doc) {
     email: obj.email || '',
     phone: obj.phone || '',
     role: obj.role,
-    isActive: obj.isActive !== false,
-    permissions: normalizePermissions(obj.permissions || {}),
+    isActive: obj.isActive !== false && obj.active !== false && obj.status !== 'inactive',
+    permissions: normalizePermissions(obj.foodPermissions || {}),
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,
   };
@@ -35,7 +47,7 @@ export async function listSubAdmins(query = {}) {
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
   const skip = (page - 1) * limit;
 
-  const filter = { role: SUB_ADMIN_ROLE };
+  const filter = foodSubAdminFilter();
 
   if (query.search && String(query.search).trim()) {
     const raw = String(query.search).trim().slice(0, 80);
@@ -69,7 +81,7 @@ export async function listSubAdmins(query = {}) {
 }
 
 export async function getSubAdminById(id) {
-  const doc = await FoodAdmin.findOne({ _id: id, role: SUB_ADMIN_ROLE }).select('-password');
+  const doc = await FoodAdmin.findOne(foodSubAdminFilter({ _id: id })).select('-password');
   if (!doc) return null;
   return sanitizeAdmin(doc);
 }
@@ -91,8 +103,14 @@ export async function createSubAdmin({ name, email, phone, password }) {
     phone: String(phone || '').trim(),
     password: String(password),
     role: SUB_ADMIN_ROLE,
+    admin_type: 'subadmin',
+    adminLevel: 'subadmin',
+    module: 'food',
     isActive: true,
-    permissions: normalizePermissions({}),
+    active: true,
+    status: 'active',
+    permissions: [],
+    foodPermissions: normalizePermissions({}),
     servicesAccess: ['food'],
   });
 
@@ -100,7 +118,7 @@ export async function createSubAdmin({ name, email, phone, password }) {
 }
 
 export async function updateSubAdmin(id, { name, email, phone, password }) {
-  const doc = await FoodAdmin.findOne({ _id: id, role: SUB_ADMIN_ROLE });
+  const doc = await FoodAdmin.findOne(foodSubAdminFilter({ _id: id }));
   if (!doc) return null;
 
   if (name !== undefined) doc.name = String(name).trim();
@@ -129,10 +147,12 @@ export async function updateSubAdmin(id, { name, email, phone, password }) {
 }
 
 export async function updateSubAdminStatus(id, isActive) {
-  const doc = await FoodAdmin.findOne({ _id: id, role: SUB_ADMIN_ROLE });
+  const doc = await FoodAdmin.findOne(foodSubAdminFilter({ _id: id }));
   if (!doc) return null;
 
   doc.isActive = isActive !== false;
+  doc.active = doc.isActive;
+  doc.status = doc.isActive ? 'active' : 'inactive';
   await doc.save();
 
   if (!doc.isActive) {
@@ -149,7 +169,7 @@ export async function resetSubAdminPassword(id, newPassword) {
     throw new ValidationError('Password must be at least 6 characters');
   }
 
-  const doc = await FoodAdmin.findOne({ _id: id, role: SUB_ADMIN_ROLE });
+  const doc = await FoodAdmin.findOne(foodSubAdminFilter({ _id: id }));
   if (!doc) return null;
 
   doc.password = password;
@@ -161,17 +181,17 @@ export async function resetSubAdminPassword(id, newPassword) {
 }
 
 export async function updateSubAdminPermissions(id, permissions) {
-  const doc = await FoodAdmin.findOne({ _id: id, role: SUB_ADMIN_ROLE });
+  const doc = await FoodAdmin.findOne(foodSubAdminFilter({ _id: id }));
   if (!doc) return null;
 
-  doc.permissions = normalizePermissions(permissions || {});
-  doc.markModified('permissions');
+  doc.foodPermissions = normalizePermissions(permissions || {});
+  doc.markModified('foodPermissions');
   await doc.save();
   return sanitizeAdmin(doc);
 }
 
 export async function deleteSubAdmin(id) {
-  const doc = await FoodAdmin.findOne({ _id: id, role: SUB_ADMIN_ROLE });
+  const doc = await FoodAdmin.findOne(foodSubAdminFilter({ _id: id }));
   if (!doc) return null;
 
   await FoodRefreshToken.deleteMany({ userId: doc._id });
