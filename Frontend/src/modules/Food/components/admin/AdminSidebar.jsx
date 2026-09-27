@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect, startTransition 
 import { Link, useLocation, useNavigationType, useNavigate } from "react-router-dom"
 import {
   FOOD_ADMIN_HOME,
+  GLOBAL_ADMIN_HOME,
   TAXI_ADMIN_HOME,
   prefetchFoodAdmin,
   prefetchTaxiAdmin,
@@ -59,7 +60,8 @@ import {
 import { cn } from "@food/utils/utils"
 import { Input } from "@food/components/ui/input"
 import { adminSidebarMenu } from "@food/utils/adminSidebarMenu"
-import { filterSidebarMenuByPermissions } from "@food/utils/subAdminPermissions"
+import { filterSidebarMenuByPermissions, getFoodPermissionMap } from "@food/utils/subAdminPermissions"
+import { getModuleAccess } from "@/shared/utils/adminAccess.js"
 import { getCurrentUser } from "@food/utils/auth"
 import { adminAPI } from "@food/api"
 import { dispatchAdminNotificationsUpdated } from "@food/hooks/useAdminNotifications"
@@ -205,14 +207,11 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
   const pendingNavScrollPath = useRef(null)
   const [isLoading, setIsLoading] = useState(true)
   const adminProfile = useMemo(() => getCurrentUser("admin") || {}, [])
-  const showFoodTab = adminProfile.adminLevel === "platform_superadmin" ||
-                       adminProfile.adminLevel === "food_superadmin" ||
-                       (adminProfile.adminLevel === "subadmin" && adminProfile.module === "food") ||
-                       !adminProfile.adminLevel
-  const showTaxiTab = adminProfile.adminLevel === "platform_superadmin" ||
-                       adminProfile.adminLevel === "taxi_superadmin" ||
-                       (adminProfile.adminLevel === "subadmin" && adminProfile.module === "taxi") ||
-                       !adminProfile.adminLevel
+  // Which modules this admin may open, from the server-computed access (falls back to the admin level).
+  const moduleAccess = getModuleAccess(adminProfile)
+  const showFoodTab = moduleAccess.food
+  const showTaxiTab = moduleAccess.taxi
+  const showGlobalTab = moduleAccess.global
 
   useEffect(() => {
     if (showTaxiTab) prefetchTaxiAdmin()
@@ -412,7 +411,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
   // Permission-filtered base menu (full ADMIN sees all; SUB_ADMIN sees allowed only)
   // Do NOT depend on location.pathname — remounting menu on every route break expandable submenus.
   const adminUser = getCurrentUser("admin")
-  const permissionSyncKey = `${adminUser?.role || ""}:${JSON.stringify(adminUser?.permissions || {})}`
+  const permissionSyncKey = `${adminUser?.role || ""}:${JSON.stringify(getFoodPermissionMap(adminUser))}`
   const permissionMenuData = useMemo(() => {
     return filterSidebarMenuByPermissions(adminSidebarMenu, getCurrentUser("admin"))
   }, [permissionSyncKey])
@@ -1022,6 +1021,23 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
                 </button>
               )}
             </div>
+          )}
+
+          {/* Global (only for admins that were given Global access) */}
+          {!isCollapsed && showGlobalTab && (
+            <button
+              type="button"
+              onClick={() => switchAdminModule(GLOBAL_ADMIN_HOME)}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 py-2 mb-4 -mt-2 text-xs font-bold rounded-lg border transition-all duration-300",
+                location.pathname.startsWith("/admin/global")
+                  ? "bg-white text-black border-white shadow-[0_4px_12px_rgba(255,255,255,0.15)]"
+                  : "text-neutral-300 border-white/10 bg-neutral-800/40 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              Global
+            </button>
           )}
 
           {/* Search Bar */}

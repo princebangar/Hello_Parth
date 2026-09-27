@@ -8,7 +8,7 @@ const isConsumerAppPath = (pathname = "") => {
   const path = String(pathname || "").toLowerCase()
   if (path.startsWith("/admin") || path.includes("/taxi/admin")) return false
   if (path.includes("/restaurant") || path.includes("/delivery")) return false
-  if (path.includes("/taxi/driver")) return false
+  if (path.includes("/taxi/driver") || path.includes("/taxi/owner")) return false
   if (path.startsWith("/login")) return true
   if (path.startsWith("/food/user") || path === "/food" || path.startsWith("/food/")) return true
   if (path.startsWith("/taxi/user") || path === "/taxi" || path.startsWith("/taxi/")) return true

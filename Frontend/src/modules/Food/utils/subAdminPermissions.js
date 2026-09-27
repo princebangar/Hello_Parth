@@ -194,6 +194,16 @@ export function normalizePermissions(input = {}, modules = getSubAdminPermission
   return result
 }
 
+/**
+ * Food sidebar matrix of an admin. It lives in `foodPermissions`; `permissions` holds the Taxi list on the
+ * same account, so it is only read as a Food matrix when it still has the old object shape.
+ */
+export function getFoodPermissionMap(user) {
+  if (user?.foodPermissions && typeof user.foodPermissions === "object") return user.foodPermissions
+  const legacy = user?.permissions
+  return legacy && typeof legacy === "object" && !Array.isArray(legacy) ? legacy : {}
+}
+
 export function isFullAdmin(user) {
   return String(user?.role || "").toUpperCase() === "ADMIN"
 }
@@ -238,7 +248,7 @@ export function canAccessPath(user, pathname) {
 
   const key = findModuleKeyForPath(pathname)
   if (!key) return false
-  const perms = user.permissions?.[key]
+  const perms = getFoodPermissionMap(user)[key]
   return Boolean(perms?.view || perms?.create || perms?.edit || perms?.delete)
 }
 
@@ -260,7 +270,7 @@ export function hasPermission(user, pathname, action = "view") {
 
   const key = findModuleKeyForPath(pathname)
   if (!key) return false
-  const perms = user.permissions?.[key]
+  const perms = getFoodPermissionMap(user)[key]
   if (!perms) return false
 
   if (action === "view") {
@@ -271,8 +281,9 @@ export function hasPermission(user, pathname, action = "view") {
 
 export function getFirstAllowedPath(user) {
   if (!user || isFullAdmin(user)) return "/admin/food"
+  const foodPermissions = getFoodPermissionMap(user)
   for (const mod of getSubAdminPermissionModules()) {
-    const perms = user.permissions?.[mod.key]
+    const perms = foodPermissions[mod.key]
     if (perms?.view || perms?.create || perms?.edit || perms?.delete) {
       return mod.pathPrefixes[0]
     }

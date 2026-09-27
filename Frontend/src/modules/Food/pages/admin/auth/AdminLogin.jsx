@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { adminAPI } from "@food/api";
 import { setAuthData } from "@food/utils/auth";
 import { setUnifiedAdminSession } from "../../../../Taxi/modules/admin/services/adminSession";
+import { getAdminHomePath } from "@/shared/utils/adminAccess.js";
 import { User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo";
@@ -151,7 +152,8 @@ export default function AdminLogin() {
       setAuthData("admin", accessToken, adminUser, refreshToken);
       setUnifiedAdminSession({ token: accessToken, user: adminUser, refreshToken });
       toast.success("Welcome, Administrator");
-      navigate("/admin/food", { replace: true });
+      // Land where this admin actually has access (Food, Taxi or Global), not always in Food.
+      navigate(getAdminHomePath(adminUser), { replace: true });
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
