@@ -1,7 +1,5 @@
 import { Admin } from '../admin/models/Admin.js';
 import { Owner } from '../admin/models/Owner.js';
-import { ServiceStore } from '../admin/models/ServiceStore.js';
-import { ServiceCenterStaff } from '../admin/models/ServiceCenterStaff.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
@@ -12,6 +10,7 @@ import {
   normalizeAdminPermissions,
   normalizeAdminType,
 } from '../admin/services/adminAccessService.js';
+import { getAdminModuleAccess } from '../../../core/admin/adminHierarchy.service.js';
 
 const roleModelMap = {
   admin: Admin,
@@ -20,8 +19,6 @@ const roleModelMap = {
   pooling_driver: PoolingVehicle,
   bus_driver: BusDriver,
   owner: Owner,
-  service_center: ServiceStore,
-  service_center_staff: ServiceCenterStaff,
   user: User,
 };
 
@@ -132,30 +129,15 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
       throw new ApiError(403, 'Pooling driver account is inactive');
     }
 
-    if (
-      normalizedRole === 'service_center' &&
-      !allowPending &&
-      (entity.active === false ||
-        entity.approve === false ||
-        String(entity.status || '').toLowerCase() === 'inactive')
-    ) {
-      throw new ApiError(403, 'Service center account is inactive');
-    }
-
-    if (
-      normalizedRole === 'service_center_staff' &&
-      !allowPending &&
-      (entity.active === false ||
-        entity.approve === false ||
-        String(entity.status || '').toLowerCase() === 'inactive')
-    ) {
-      throw new ApiError(403, 'Service center staff account is inactive');
-    }
-
     attachResolvedAuth(req, payload, subjectId);
     req.auth.entity = entity;
 
     if (normalizedRole === 'admin') {
+      // Food-only and Global sub-admins without the Taxi module must not reach the Taxi admin API.
+      if (!getAdminModuleAccess(entity).taxi) {
+        throw new ApiError(403, 'You do not have access to the Taxi admin');
+      }
+
       req.auth.admin = {
         id: String(entity._id),
         email: entity.email || '',

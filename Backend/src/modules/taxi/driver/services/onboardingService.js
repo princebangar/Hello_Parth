@@ -6,8 +6,6 @@ import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js
 import { Driver } from '../models/Driver.js';
 import { DriverRegistrationSession } from '../models/DriverRegistrationSession.js';
 import { Owner } from '../../admin/models/Owner.js';
-import { ServiceStore } from '../../admin/models/ServiceStore.js';
-import { ServiceCenterStaff } from '../../admin/models/ServiceCenterStaff.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
@@ -64,25 +62,16 @@ const normalizePhone = (phone) => {
   return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
 };
 
-const SPECIAL_SIGNUP_ROLES = ['bus_driver', 'service_center', 'service_center_staff'];
+const SPECIAL_SIGNUP_ROLES = ['bus_driver'];
 const normalizeRole = (role) => {
   const normalized = String(role || 'driver').trim().toLowerCase();
   if (normalized === 'owner') return 'owner';
   if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') return 'bus_driver';
-  if (normalized === 'service_center' || normalized === 'service-center' || normalized === 'servicecenter') return 'service_center';
-  if (
-    normalized === 'service_center_staff' ||
-    normalized === 'service-center-staff' ||
-    normalized === 'servicecenterstaff' ||
-    normalized === 'center_staff'
-  ) {
-    return 'service_center_staff';
-  }
   return 'driver';
 };
 const hasExplicitSignupRole = (role) =>
   Boolean(role) &&
-  ['driver', 'owner', 'bus_driver', 'service_center', 'service_center_staff'].includes(
+  ['driver', 'owner', 'bus_driver'].includes(
     normalizeRole(role),
   );
 const normalizeServiceCategories = (value, fallback = 'taxi') => {
@@ -463,19 +452,6 @@ const serializeSignupBusServiceOption = (busService = {}) => ({
   status: busService.status || 'draft',
 });
 
-const serializeSignupServiceCenterOption = (center = {}) => ({
-  id: center._id,
-  name: center.name || '',
-  address: center.address || '',
-  ownerName: center.owner_name || '',
-  ownerPhone: center.owner_phone || '',
-  serviceLocationId: center.service_location_id?._id || center.service_location_id || null,
-  serviceLocationName:
-    center.service_location_id?.service_location_name ||
-    center.service_location_id?.name ||
-    '',
-});
-
 const normalizeStoredDocument = (value) => {
   if (!value) {
     return null;
@@ -689,10 +665,6 @@ export const startDriverOnboarding = async ({ phone, role }) => {
       }).lean();
     } else if (normalizedRole === 'bus_driver') {
       roleSpecificExistingAccount = await BusDriver.findOne({ phone: normalizedPhone }).lean();
-    } else if (normalizedRole === 'service_center') {
-      roleSpecificExistingAccount = await ServiceStore.findOne({ owner_phone: normalizedPhone }).lean();
-    } else if (normalizedRole === 'service_center_staff') {
-      roleSpecificExistingAccount = await ServiceCenterStaff.findOne({ phone: normalizedPhone }).lean();
     } else {
       roleSpecificExistingAccount = await Driver.findOne({ phone: normalizedPhone }).lean();
     }
@@ -809,17 +781,10 @@ export const setDriverOnboardingRole = async ({ registrationId, phone, role }) =
 };
 
 export const getDriverOnboardingSignupOptions = async () => {
-  const [serviceLocations, serviceCenters, busServices] = await Promise.all([
+  const [serviceLocations, busServices] = await Promise.all([
     ServiceLocation.find({ active: { $ne: false } })
       .select('name service_location_name address country latitude longitude location')
       .sort({ service_location_name: 1, name: 1 })
-      .lean(),
-    ServiceStore.find({
-      active: { $ne: false },
-      approve: true,
-    })
-      .populate('service_location_id', 'name service_location_name')
-      .sort({ name: 1 })
       .lean(),
     BusService.find({
       status: { $in: ['active', 'paused'] },
@@ -841,7 +806,6 @@ export const getDriverOnboardingSignupOptions = async () => {
       longitude: item.longitude ?? item.location?.coordinates?.[0] ?? null,
       location: item.location || null,
     })),
-    serviceCenters: (Array.isArray(serviceCenters) ? serviceCenters : []).map(serializeSignupServiceCenterOption),
     busServices: (Array.isArray(busServices) ? busServices : []).map(serializeSignupBusServiceOption),
   };
 };
@@ -856,59 +820,6 @@ export const saveDriverRoleDetails = async ({ registrationId, phone, roleDetails
 
   if (!isSpecialSignupRole(normalizedRole)) {
     throw new ApiError(400, 'This role does not use the self-signup details form');
-  }
-
-  if (normalizedRole === 'service_center') {
-    const centerName = String(roleDetails.centerName || roleDetails.name || '').trim();
-    const address = String(roleDetails.address || '').trim();
-    const serviceLocationId = String(roleDetails.serviceLocationId || '').trim();
-
-    if (!centerName) {
-      throw new ApiError(400, 'Service center name is required');
-    }
-
-    if (!address) {
-      throw new ApiError(400, 'Service center address is required');
-    }
-
-    if (!serviceLocationId || !/^[a-f\d]{24}$/i.test(serviceLocationId)) {
-      throw new ApiError(400, 'Select a valid service location');
-    }
-
-    const serviceLocation = await ServiceLocation.findById(serviceLocationId).lean();
-    if (!serviceLocation) {
-      throw new ApiError(404, 'Service location not found');
-    }
-
-    session.roleDetails = {
-      centerName,
-      address,
-      serviceLocationId,
-      serviceLocationName: serviceLocation.service_location_name || serviceLocation.name || '',
-    };
-  }
-
-  if (normalizedRole === 'service_center_staff') {
-    const serviceCenterId = String(roleDetails.serviceCenterId || '').trim();
-    if (!serviceCenterId || !/^[a-f\d]{24}$/i.test(serviceCenterId)) {
-      throw new ApiError(400, 'Select a valid service center');
-    }
-
-    const serviceCenter = await ServiceStore.findOne({
-      _id: serviceCenterId,
-      active: { $ne: false },
-      approve: true,
-    }).lean();
-
-    if (!serviceCenter) {
-      throw new ApiError(404, 'Service center not found');
-    }
-
-    session.roleDetails = {
-      serviceCenterId,
-      serviceCenterName: serviceCenter.name || '',
-      serviceCenterAddress: serviceCenter.address || '',
-    };
   }
 
   if (normalizedRole === 'bus_driver') {
@@ -1302,135 +1213,6 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   if (isSpecialSignupRole(normalizedRole)) {
     if (!session.roleDetails || Object.keys(session.roleDetails || {}).length === 0) {
       throw new ApiError(400, 'Signup details are incomplete');
-    }
-
-    if (normalizedRole === 'service_center') {
-      const serviceLocation = await ServiceLocation.findById(session.roleDetails.serviceLocationId).lean();
-      if (!serviceLocation) {
-        throw new ApiError(404, 'Service location not found');
-      }
-
-      const coordinates = getValidatedServiceLocationCoordinates(serviceLocation);
-      if (!coordinates) {
-        throw new ApiError(400, 'Service location coordinates are not configured');
-      }
-
-      const existingCenter = await ServiceStore.findOne({ owner_phone: session.phone }).lean();
-      if (existingCenter) {
-        throw new ApiError(409, 'Service center already exists with this phone number');
-      }
-
-      const zone = await findZoneByPickup(coordinates);
-      if (!zone?._id) {
-        throw new ApiError(400, 'No service zone is configured for the selected location');
-      }
-
-      const center = await ServiceStore.create({
-        name: session.roleDetails.centerName,
-        zone_id: zone._id,
-        service_location_id: serviceLocation._id,
-        address: session.roleDetails.address,
-        owner_name: session.personal.fullName,
-        owner_phone: session.phone,
-        latitude: coordinates[1],
-        longitude: coordinates[0],
-        location: toPoint(coordinates, 'location'),
-        status: 'active',
-        active: true,
-        approve: false,
-        signupSource: 'self_signup',
-        onboarding: {
-          registrationId: session.registrationId,
-          role: normalizedRole,
-          verifiedAt: session.otpVerifiedAt,
-          submittedAt,
-          personal: {
-            fullName: session.personal.fullName,
-            email: session.personal.email,
-            gender: session.personal.gender,
-          },
-          roleDetails: session.roleDetails,
-        },
-      });
-
-      session.finalEntityId = center._id;
-      session.finalEntityRole = normalizedRole;
-      session.status = 'completed';
-      session.completedAt = submittedAt;
-      await session.save();
-      await DriverRegistrationSession.deleteOne({ _id: session._id });
-
-      return {
-        message: 'Service center signup submitted successfully',
-        serviceCenter: {
-          id: center._id,
-          name: center.name || '',
-          phone: center.owner_phone || '',
-          approve: center.approve,
-          status: center.status,
-        },
-        token: signAccessToken({ sub: String(center._id), role: 'service_center' }),
-        session: publicSessionPayload(session),
-      };
-    }
-
-    if (normalizedRole === 'service_center_staff') {
-      const existingStaff = await ServiceCenterStaff.findOne({ phone: session.phone }).lean();
-      if (existingStaff) {
-        throw new ApiError(409, 'Service staff already exists with this phone number');
-      }
-
-      const serviceCenter = await ServiceStore.findOne({
-        _id: session.roleDetails.serviceCenterId,
-        active: { $ne: false },
-        approve: true,
-      }).lean();
-
-      if (!serviceCenter) {
-        throw new ApiError(404, 'Selected service center is not available');
-      }
-
-      const staff = await ServiceCenterStaff.create({
-        serviceCenterId: serviceCenter._id,
-        name: session.personal.fullName,
-        phone: session.phone,
-        active: true,
-        status: 'active',
-        approve: false,
-        signupSource: 'self_signup',
-        onboarding: {
-          registrationId: session.registrationId,
-          role: normalizedRole,
-          verifiedAt: session.otpVerifiedAt,
-          submittedAt,
-          personal: {
-            fullName: session.personal.fullName,
-            email: session.personal.email,
-            gender: session.personal.gender,
-          },
-          roleDetails: session.roleDetails,
-        },
-      });
-
-      session.finalEntityId = staff._id;
-      session.finalEntityRole = normalizedRole;
-      session.status = 'completed';
-      session.completedAt = submittedAt;
-      await session.save();
-      await DriverRegistrationSession.deleteOne({ _id: session._id });
-
-      return {
-        message: 'Service staff signup submitted successfully',
-        serviceStaff: {
-          id: staff._id,
-          name: staff.name || '',
-          phone: staff.phone || '',
-          approve: staff.approve,
-          status: staff.status,
-        },
-        token: signAccessToken({ sub: String(staff._id), role: 'service_center_staff' }),
-        session: publicSessionPayload(session),
-      };
     }
 
     if (normalizedRole === 'bus_driver') {
