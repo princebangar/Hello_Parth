@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CheckCircle2, ChevronRight, Smartphone } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   buildDriverOnboardingSessionSnapshot,
   clearDriverRegistrationSession,
@@ -9,10 +8,23 @@ import {
   getDriverOnboardingSession,
   getStoredDriverRegistrationSession,
   saveDriverRegistrationSession,
+  sendDriverLoginOtp,
   sendDriverOtp,
+  startPoolingDriverOnboarding,
+  toPlainData,
 } from '../../services/registrationService';
-import { useSettings } from '../../../../shared/context/SettingsContext';
-import taxiBg from '../../../../assets/images/light-taxi-bg.png';
+import AuthShell from '../../components/auth/AuthShell';
+import RolePicker from '../../components/auth/RolePicker';
+import {
+  DEFAULT_DRIVER_ROLE,
+  getDriverRole,
+  getRoutePrefixForRole,
+  isDriverRole,
+  readLastLoginRole,
+  rememberLoginRole,
+} from '../../utils/driverRoles';
+
+const unwrap = (response) => response?.data?.data || response?.data || response;
 
 const getErrorMessage = (err) => String(
   err?.message ||
@@ -21,12 +33,11 @@ const getErrorMessage = (err) => String(
   '',
 ).trim();
 
+const getErrorStatus = (err) => Number(err?.status || err?.response?.status || 0);
+
 const PhoneRegistration = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings } = useSettings();
-  const appName = settings.general?.app_name || 'Appzeto 24 Trawler';
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
   const storedSession = getStoredDriverRegistrationSession();
   const isOwnerPortal = location.pathname.startsWith('/taxi/owner');
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -60,6 +71,20 @@ const PhoneRegistration = () => {
   });
 
   const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
+  const [role, setRole] = useState(() => {
+    if (isOwnerPortal) {
+      return 'owner';
+    }
+
+    const candidates = [
+      searchParams.get('role'),
+      location.state?.role,
+      storedSession.role,
+      readLastLoginRole(),
+    ].map((value) => String(value || '').trim().toLowerCase());
+
+    return candidates.find(isDriverRole) || DEFAULT_DRIVER_ROLE;
+  });
   const [agreed, setAgreed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -67,8 +92,8 @@ const PhoneRegistration = () => {
   const routePrefix = isOwnerPortal ? '/taxi/owner' : '/taxi/driver';
   const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
   const entryPath = `${routePrefix}/login`;
-  const HeaderIcon = isOwnerPortal ? Briefcase : Smartphone;
-  const portalLabel = isOwnerPortal ? 'Owner' : 'Driver';
+  const selectedRole = getDriverRole(role);
+  const canSubmit = phone.length === 10 && agreed;
 
   useEffect(() => {
     let active = true;
@@ -101,7 +126,7 @@ const PhoneRegistration = () => {
           return;
         }
 
-        const payload = response?.data?.data || response?.data || response;
+        const payload = unwrap(response);
         const nextSession = saveDriverRegistrationSession(
           buildDriverOnboardingSessionSnapshot(payload, storedSession),
         );
@@ -138,14 +163,86 @@ const PhoneRegistration = () => {
     };
   }, [isLoginPage, navigate, routePrefix, storedOnboardingPhone, storedRegistrationId, storedSession, storedSessionResumeKey]);
 
-  const handleSendOTP = async () => {
+  const handleRoleChange = (nextRole) => {
+    setRole(nextRole);
+    rememberLoginRole(nextRole);
+    if (error) setError('');
+  };
+
+  // Pooling partners have their own onboarding API: sign an existing pooling account in, and only when
+  // this number has none yet start the pooling onboarding (which sends its own OTP).
+  const startPoolingFlow = async (baseSession) => {
+    try {
+      const response = await sendDriverLoginOtp({ phone, role: 'pooling_driver' });
+      const payload = unwrap(response);
+      const sessionData = payload?.session || {};
+
+      return saveDriverRegistrationSession({
+        ...baseSession,
+        loginMode: true,
+        existingAccount: true,
+        detectedRole: 'pooling_driver',
+        poolingOnboarding: false,
+        debugOtp: sessionData.debugOtp || '',
+        status: sessionData.status || 'otp_sent',
+        availableRoles: toPlainData(payload?.availableRoles || sessionData.availableRoles) || [],
+      });
+    } catch (loginError) {
+      if (getErrorStatus(loginError) !== 404) {
+        throw loginError;
+      }
+    }
+
+    const response = await startPoolingDriverOnboarding({ phone });
+    const payload = unwrap(response);
+
+    return saveDriverRegistrationSession({
+      ...baseSession,
+      loginMode: false,
+      existingAccount: false,
+      detectedRole: 'pooling_driver',
+      poolingOnboarding: true,
+      registrationId: payload?.session?.registrationId || '',
+      debugOtp: payload?.session?.debugOtp || '',
+      status: payload?.session?.status || 'otp_sent',
+      otpVerified: false,
+    });
+  };
+
+  // Driver / owner / bus: the onboarding endpoint signs an existing account of this role in and
+  // otherwise opens a registration session for the role that was picked here.
+  const startStandardFlow = async (baseSession) => {
+    const response = await sendDriverOtp({ phone, role });
+    const payload = unwrap(response);
+    const sessionData = payload?.session || {};
+
+    return saveDriverRegistrationSession({
+      ...baseSession,
+      registrationId: sessionData.registrationId || '',
+      debugOtp: sessionData.debugOtp || '',
+      loginMode: Boolean(payload?.loginMode || sessionData.loginMode),
+      existingAccount: Boolean(payload?.existingAccount || sessionData.existingAccount),
+      detectedRole: String(payload?.detectedRole || sessionData.role || role).trim().toLowerCase(),
+      poolingOnboarding: false,
+      status: sessionData.status || '',
+      availableRoles: toPlainData(payload?.availableRoles || sessionData.availableRoles) || [],
+    });
+  };
+
+  const handleSendOTP = async (event) => {
+    event?.preventDefault?.();
+
+    if (loading) {
+      return;
+    }
+
     if (phone.length !== 10) {
-      setError('Please enter 10 digits');
+      setError('Enter your 10-digit mobile number');
       return;
     }
 
     if (!agreed) {
-      setError('Accept terms to continue');
+      setError('Accept the Terms and Privacy Policy to continue');
       return;
     }
 
@@ -154,199 +251,146 @@ const PhoneRegistration = () => {
 
     try {
       clearDriverRegistrationSession();
+      rememberLoginRole(role);
 
-      const response = await sendDriverOtp(
-        isOwnerPortal
-          ? { phone, role: 'owner' }
-          : { phone },
-      );
-
-      const payload = response?.data?.data || response?.data || response;
-      const sessionData = payload?.session || {};
-      const loginMode = Boolean(payload?.loginMode || sessionData?.loginMode);
-      const existingAccount = Boolean(payload?.existingAccount || sessionData?.existingAccount);
-      const detectedRole = String(payload?.detectedRole || sessionData?.role || '').trim().toLowerCase();
-      const availableRoles = payload?.availableRoles || sessionData?.availableRoles || [];
-      console.log('[PhoneRegistration] payload:', payload);
-      console.log('[PhoneRegistration] availableRoles:', availableRoles);
-      console.log('[PhoneRegistration] loginMode:', loginMode);
-      const nextState = saveDriverRegistrationSession({
+      const baseSession = {
         phone,
-        role: sessionData.role || (isOwnerPortal ? 'owner' : ''),
-        roleConfirmed: sessionData.roleConfirmed ?? isOwnerPortal,
-        needsRoleSelection: !isOwnerPortal && sessionData.roleConfirmed === false,
-        registrationId: sessionData.registrationId || '',
-        debugOtp: sessionData.debugOtp || '',
-        loginMode,
-        existingAccount,
-        detectedRole,
-        poolingOnboarding: false,
+        role,
+        roleConfirmed: true,
+        needsRoleSelection: false,
         entryPath,
         referralCode: sharedReferralCode,
         employeeCode: sharedEmployeeCode,
-        status: sessionData.status || '',
-        availableRoles,
-      });
+      };
+      const nextState = role === 'pooling_driver'
+        ? await startPoolingFlow(baseSession)
+        : await startStandardFlow(baseSession);
 
-      navigate(`${routePrefix}/otp-verify`, { state: nextState });
+      navigate(`${getRoutePrefixForRole(role)}/otp-verify`, { state: nextState });
     } catch (requestError) {
-      setError(getErrorMessage(requestError) || 'Try again in a moment');
+      setError(getErrorMessage(requestError) || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen relative bg-[#F8FAFC] select-none overflow-x-hidden font-['Outfit']">
-      <div className="fixed inset-0 z-0">
-        <motion.img
-          initial={{ scale: 1.05, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 1.2, ease: 'easeOut' }}
-          src={taxiBg}
-          alt=""
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white" />
-      </div>
+    <AuthShell
+      eyebrow="Partner app"
+      title={isLoginPage ? 'Welcome back' : 'Join as a partner'}
+      subtitle="Choose your role, then verify your mobile number."
+    >
+      <form onSubmit={handleSendOTP} noValidate className="space-y-6">
+        <div>
+          <p className="mb-2.5 text-sm font-semibold text-[#0b1220]">I am a</p>
+          <RolePicker
+            value={role}
+            onChange={handleRoleChange}
+            disabled={loading}
+            label="I am a"
+          />
+        </div>
 
-      <main className="relative z-10 mx-auto max-w-sm px-6 flex flex-col min-h-screen pt-10 pb-32">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex-1 space-y-8"
-        >
-          <header className="text-center space-y-4">
-            <div className="flex flex-col items-center gap-3">
-              {appLogo ? (
-                <img
-                  src={appLogo}
-                  alt={`${appName} logo`}
-                  className="h-14 w-14 rounded-2xl object-cover bg-white p-1.5 shadow-xl shadow-slate-200/70 border border-white"
-                />
-              ) : (
-                <div className="rounded-2xl bg-slate-900 px-4 py-2 text-base font-black tracking-tight text-white shadow-xl shadow-slate-900/10">
-                  {appName}
-                </div>
-              )}
-              <div className="space-y-1">
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">
-                  {appName}
-                </p>
-              </div>
-            </div>
-
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-              {isLoginPage ? 'Hello!' : 'Welcome'}
-            </h1>
-
-            {!isOwnerPortal && (
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
-                Driver, owner, pooling, bus, and service center logins all start here
-              </p>
-            )}
-          </header>
-
-          <motion.div
-            layout
-            className="bg-white rounded-[40px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-slate-50 space-y-8"
+        <div>
+          <label htmlFor="partner-phone" className="mb-2.5 block text-sm font-semibold text-[#0b1220]">
+            Mobile number
+          </label>
+          <div
+            className={`flex h-14 items-center gap-3 rounded-2xl border-2 bg-[#ffffff] px-4 transition-colors focus-within:border-[#0b1220] ${
+              error ? 'border-[#fca5a5]' : 'border-[#e2e8f0]'
+            }`}
           >
-            <div className="space-y-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
-                {portalLabel} Mobile Number
-              </p>
-              <div className={`flex items-center gap-4 p-5 rounded-2xl transition-all border-2 ${error ? 'border-rose-100 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-amber-400 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-amber-100/50'}`}>
-                <div className="flex items-center gap-2 pr-4 border-r border-slate-200">
-                  <span className="text-slate-400 text-sm font-black">+91</span>
-                </div>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value.replace(/\D/g, ''));
-                    if (error) setError('');
-                  }}
-                  placeholder="Phone Number"
-                  className="flex-1 bg-transparent border-none p-0 text-xl font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-300"
-                />
-                {phone.length === 10 && (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                    <CheckCircle2 size={20} className="text-emerald-500" />
-                  </motion.div>
-                )}
-              </div>
-            </div>
+            <span className="border-r border-[#e2e8f0] pr-3 text-[15px] font-semibold text-[#334155]">+91</span>
+            <input
+              id="partner-phone"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel-national"
+              maxLength={10}
+              value={phone}
+              onChange={(event) => {
+                setPhone(event.target.value.replace(/\D/g, '').slice(0, 10));
+                if (error) setError('');
+              }}
+              placeholder="10-digit mobile number"
+              aria-invalid={Boolean(error)}
+              className="dauth-bare h-full min-w-0 flex-1 bg-transparent text-lg font-semibold tracking-wide text-[#0b1220] placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-[#94a3b8]"
+            />
+            {phone.length === 10 && <CheckCircle2 size={20} className="shrink-0 text-[#059669]" aria-hidden="true" />}
+          </div>
+          <p className="mt-2 text-xs leading-5 text-[#64748b]">
+            We will text a 4-digit code. Already a {selectedRole.label.toLowerCase()}? You are signed in. New? Registration starts right after.
+          </p>
+        </div>
 
-            <div className="flex gap-4 items-start px-1">
-              <input
-                type="checkbox"
-                id="terms"
-                checked={agreed}
-                onChange={() => setAgreed(!agreed)}
-                className="h-6 w-6 rounded-lg border-2 border-slate-100 bg-slate-50 text-amber-500 focus:ring-amber-500 transition-all cursor-pointer"
-              />
-              <label htmlFor="terms" className="text-sm font-medium text-slate-400 leading-snug cursor-pointer select-none">
-                I accept the <button type="button" onClick={() => navigate(`${routePrefix}/terms`)} className="text-amber-500 font-bold hover:underline">Terms</button> & <button type="button" onClick={() => navigate(`${routePrefix}/privacy`)} className="text-amber-500 font-bold hover:underline">Privacy</button>
-              </label>
-            </div>
-
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="text-rose-500 text-xs font-bold text-center bg-rose-50 p-3 rounded-xl"
-                >
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <p className="text-center text-xs font-medium leading-5 text-slate-400">
-              Existing numbers continue through login OTP. New numbers start a fresh registration automatically.
-            </p>
-          </motion.div>
-
-          <div className="text-center">
+        <label className="flex cursor-pointer items-start gap-3 text-sm leading-5 text-[#64748b]">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(event) => {
+              setAgreed(event.target.checked);
+              if (error) setError('');
+            }}
+            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[#0b1220]"
+          />
+          <span>
+            I agree to the{' '}
             <button
               type="button"
-              onClick={() => navigate(`${routePrefix}/support`)}
-              className="text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors"
+              onClick={() => navigate(`${routePrefix}/terms`)}
+              className="font-semibold text-[#0b1220] underline underline-offset-2"
             >
-              Need help? <span className="text-amber-500">Contact Support</span>
+              Terms
+            </button>{' '}
+            and{' '}
+            <button
+              type="button"
+              onClick={() => navigate(`${routePrefix}/privacy`)}
+              className="font-semibold text-[#0b1220] underline underline-offset-2"
+            >
+              Privacy Policy
             </button>
-          </div>
-        </motion.div>
+            .
+          </span>
+        </label>
 
-        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
-          <div className="mx-auto max-w-sm">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleSendOTP}
-              disabled={loading || !agreed || phone.length !== 10}
-              className={`group flex h-18 w-full items-center justify-center gap-3 rounded-[24px] text-lg font-black transition-all ${agreed && phone.length === 10
-                  ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/20'
-                  : 'bg-slate-100 text-slate-300 pointer-events-none'
-                }`}
-            >
-              {loading ? (
-                <div className="h-6 w-6 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <span className="uppercase tracking-widest">Continue</span>
-                  <ChevronRight size={24} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </motion.button>
+        {error && (
+          <div role="alert" className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm font-medium leading-5 text-[#b91c1c]">
+            {error}
           </div>
-        </div>
-      </main>
-    </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading || !canSubmit}
+          className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-base font-semibold transition-all ${
+            canSubmit
+              ? 'bg-[#0b1220] text-[#ffffff] shadow-[0_14px_28px_-14px_rgba(11,18,32,0.7)] active:scale-[0.99]'
+              : 'cursor-not-allowed bg-[#e2e8f0] text-[#94a3b8]'
+          }`}
+        >
+          {loading ? (
+            <Loader2 size={22} className="animate-spin" aria-label="Sending code" />
+          ) : (
+            <>
+              Continue
+              <ArrowRight size={20} strokeWidth={2.4} />
+            </>
+          )}
+        </button>
+
+        <p className="text-center text-sm text-[#64748b]">
+          Need help?{' '}
+          <button
+            type="button"
+            onClick={() => navigate(`${routePrefix}/support`)}
+            className="font-semibold text-[#0b1220] underline underline-offset-2"
+          >
+            Contact support
+          </button>
+        </p>
+      </form>
+    </AuthShell>
   );
 };
 

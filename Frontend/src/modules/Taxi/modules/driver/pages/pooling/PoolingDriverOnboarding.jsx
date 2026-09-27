@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PoolingVehicleForm from '../../../admin/pages/pooling/PoolingVehicleForm';
 import {
@@ -16,8 +16,13 @@ const PoolingDriverOnboarding = () => {
   const session = getStoredDriverRegistrationSession();
   const registrationId = String(session.registrationId || '').trim();
   const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
+  const finishedRef = useRef(false);
 
   useEffect(() => {
+    if (finishedRef.current) {
+      return;
+    }
+
     if (!registrationId || !phone) {
       navigate('/taxi/driver/login', { replace: true });
     }
@@ -86,6 +91,7 @@ const PoolingDriverOnboarding = () => {
         if (result?.token) {
           persistDriverAuthSession({ token: result.token, role: 'pooling_driver' });
         }
+        finishedRef.current = true;
         clearDriverRegistrationSession();
         navigate('/taxi/driver/pooling/status', { replace: true });
       }}

@@ -16,8 +16,8 @@ const OwnerPoolingVehicleForm = () => (
   <>
     <PoolingVehicleForm
       service={ownerPoolingService}
-      backPath="/taxi/owner/dashboard"
-      backLabel="Back to Owner Dashboard"
+      backPath="/taxi/owner/pooling-vehicles"
+      backLabel="Back to Pooling Vehicles"
       pageLabel="Add Pooling Vehicle"
       hidePricingFields
     />

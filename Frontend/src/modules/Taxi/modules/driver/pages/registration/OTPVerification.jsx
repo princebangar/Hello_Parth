@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, CheckCircle2, ShieldCheck, ChevronRight, MessageSquare, Car, Briefcase, Wrench, Bus, Users } from 'lucide-react';
+import { ArrowRight, ChevronRight, Loader2, MessageSquare } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
     buildDriverOnboardingSessionSnapshot,
     getDriverOnboardingResumeStep,
@@ -14,32 +13,18 @@ import {
     sendDriverLoginOtp,
     sendDriverOtp,
     startPoolingDriverOnboarding,
+    toPlainData,
     verifyDriverLoginOtp,
     verifyDriverOtp,
     verifyPoolingDriverOnboardingOtp,
 } from '../../services/registrationService';
-import taxiBg from '../../../../assets/images/light-taxi-bg.png';
+import AuthShell from '../../components/auth/AuthShell';
+import { getDriverRole, normalizeDriverRole } from '../../utils/driverRoles';
+
+const OTP_LENGTH = 4;
+const RESEND_SECONDS = 60;
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
-const normalizeDriverRole = (role) => {
-    const normalized = String(role || 'driver').toLowerCase();
-    if (normalized === 'owner') return 'owner';
-    if (normalized === 'pooling_driver' || normalized === 'pooling-driver' || normalized === 'poolingdriver' || normalized === 'pooling') return 'pooling_driver';
-    if (normalized === 'service_center' || normalized === 'service-center' || normalized === 'servicecenter') return 'service_center';
-    if (normalized === 'service_center_staff' || normalized === 'service-center-staff' || normalized === 'servicecenterstaff') return 'service_center_staff';
-    if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') return 'bus_driver';
-    return 'driver';
-};
-
-const formatRoleLabel = (role) => {
-    const normalized = normalizeDriverRole(role);
-    if (normalized === 'owner') return 'owner';
-    if (normalized === 'bus_driver') return 'bus driver';
-    if (normalized === 'pooling_driver') return 'pooling driver';
-    if (normalized === 'service_center') return 'service center';
-    if (normalized === 'service_center_staff') return 'service center staff';
-    return 'driver';
-};
 
 const isDriverApproved = (driver) => {
     if (!driver) return false;
@@ -55,7 +40,6 @@ const isDriverApproved = (driver) => {
 
 const getPostLoginRoute = (role, driver, routePrefix) => {
     const normalizedRole = normalizeDriverRole(role);
-    if (normalizedRole === 'service_center' || normalizedRole === 'service_center_staff') return '/taxi/driver/service-center';
     if (normalizedRole === 'bus_driver') return '/taxi/driver/bus-home';
     if (normalizedRole === 'pooling_driver') return '/taxi/driver/pooling';
     if (normalizedRole === 'owner' || normalizedRole === 'driver') {
@@ -73,53 +57,17 @@ const syncPushTokens = async () => {
     ]);
 };
 
-const ROLE_DETAILS = {
-    driver: {
-        title: 'Taxi Driver',
-        description: 'Accept taxi rides, view maps, and track earnings.',
-        icon: Car,
-        color: 'from-amber-400 to-orange-500',
-    },
-    owner: {
-        title: 'Fleet Owner',
-        description: 'Manage vehicles, drivers, and fleet earnings.',
-        icon: Briefcase,
-        color: 'from-blue-500 to-indigo-600',
-    },
-    service_center: {
-        title: 'Service Center',
-        description: 'Manage vehicle servicing, slots, and staff.',
-        icon: Wrench,
-        color: 'from-emerald-400 to-teal-600',
-    },
-    service_center_staff: {
-        title: 'Service Center Staff',
-        description: 'Perform vehicle services and inspections.',
-        icon: ShieldCheck,
-        color: 'from-purple-500 to-pink-600',
-    },
-    bus_driver: {
-        title: 'Bus Driver',
-        description: 'View bus routes, schedules, and ticket bookings.',
-        icon: Bus,
-        color: 'from-cyan-400 to-blue-600',
-    },
-    pooling_driver: {
-        title: 'Pooling Driver',
-        description: 'Share rides and manage pooling routes.',
-        icon: Users,
-        color: 'from-violet-500 to-purple-600',
-    },
-};
+const formatCountdown = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 const OTPVerification = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [otp, setOtp] = useState(['', '', '', '']);
+    const [otp, setOtp] = useState(() => Array(OTP_LENGTH).fill(''));
     const inputs = useRef([]);
-    const [timer, setTimer] = useState(60);
+    const [timer, setTimer] = useState(RESEND_SECONDS);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
     const [resolvingSession, setResolvingSession] = useState(false);
     const [selectedRole, setSelectedRole] = useState(null);
     const [showRoleSelector, setShowRoleSelector] = useState(false);
@@ -136,10 +84,12 @@ const OTPVerification = () => {
     const isLoginFlow = Boolean(session.loginMode);
     const isPoolingOnboardingFlow = Boolean(session.poolingOnboarding);
     const existingAccount = Boolean(session.existingAccount);
-    const detectedRole = formatRoleLabel(session.detectedRole || role);
+    const accountRole = getDriverRole(session.detectedRole || role);
+    const flowRole = getDriverRole(role);
     const entryPath = String(session.entryPath || (isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`));
-    console.log('[OTPVerification] render session:', session);
-    console.log('[OTPVerification] isLoginFlow:', isLoginFlow, 'phone:', phone, 'availableRoles:', session.availableRoles);
+    const otpCode = otp.join('');
+    const isComplete = otpCode.length === OTP_LENGTH;
+    const devOtp = import.meta.env.DEV ? String(session.debugOtp || '').trim() : '';
     const sessionResumeKey = JSON.stringify({
         registrationId,
         phone,
@@ -243,7 +193,7 @@ const OTPVerification = () => {
     useEffect(() => {
         if (!phone) {
             navigate(entryPath, { replace: true });
-            return;
+            return undefined;
         }
         const interval = setInterval(() => {
             setTimer(prev => (prev > 0 ? prev - 1 : 0));
@@ -258,46 +208,98 @@ const OTPVerification = () => {
         return () => window.clearTimeout(focusTimer);
     }, []);
 
-    const handleChange = (index, value) => {
-        if (!/^\d*$/.test(value)) return;
-        const newOtp = [...otp];
-        newOtp[index] = value.slice(-1);
-        setOtp(newOtp);
-        if (value && index < 3) {
-            inputs.current[index + 1].focus();
+    // The boxes are disabled while a request is in flight, so the first one can only be focused again
+    // once `loading` has dropped back to false.
+    const refocusRef = useRef(false);
+    useEffect(() => {
+        if (!loading && refocusRef.current) {
+            refocusRef.current = false;
+            inputs.current[0]?.focus();
         }
-        if (newOtp.join('').length === 4) {
-            handleVerify(newOtp.join(''));
+    }, [loading]);
+
+    const resetOtp = () => {
+        setOtp(Array(OTP_LENGTH).fill(''));
+        refocusRef.current = true;
+    };
+
+    const applyDigits = (startIndex, rawValue) => {
+        const digits = String(rawValue || '').replace(/\D/g, '');
+        if (!digits) return;
+
+        const next = [...otp];
+        let cursor = startIndex;
+        for (const digit of digits) {
+            if (cursor >= OTP_LENGTH) break;
+            next[cursor] = digit;
+            cursor += 1;
+        }
+        setOtp(next);
+        setError('');
+        setNotice('');
+
+        if (next.every(Boolean)) {
+            inputs.current[OTP_LENGTH - 1]?.blur();
+            handleVerify(next.join(''));
+        } else {
+            inputs.current[Math.min(cursor, OTP_LENGTH - 1)]?.focus();
         }
     };
 
-    const handleKeyDown = (index, e) => {
-        if (e.key === 'Backspace' && !otp[index] && index > 0) {
-            inputs.current[index - 1].focus();
+    const handleChange = (index, value) => {
+        if (value === '') {
+            const next = [...otp];
+            next[index] = '';
+            setOtp(next);
+            setError('');
+            return;
         }
+        // Typing over a filled first box arrives as "<old><new>"; a pasted / auto-filled code arrives whole.
+        const typedOverExisting = value.length === 2 && otp[index] && value.startsWith(otp[index]);
+        applyDigits(index, typedOverExisting ? value.slice(-1) : value.slice(0, OTP_LENGTH));
+    };
+
+    const handleKeyDown = (index, event) => {
+        if (event.key === 'Backspace' && !otp[index] && index > 0) {
+            inputs.current[index - 1]?.focus();
+        } else if (event.key === 'ArrowLeft' && index > 0) {
+            inputs.current[index - 1]?.focus();
+        } else if (event.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
+            inputs.current[index + 1]?.focus();
+        }
+    };
+
+    const handlePaste = (event) => {
+        const pasted = event.clipboardData?.getData('text') || '';
+        if (!/\d/.test(pasted)) return;
+        event.preventDefault();
+        applyDigits(0, pasted);
     };
 
     const handleVerify = async (otpOverride) => {
-        const code = otpOverride || otp.join('');
-        if (code.length !== 4) {
-            setError('Enter 4-digit code');
+        const code = typeof otpOverride === 'string' ? otpOverride : otpCode;
+        if (code.length !== OTP_LENGTH) {
+            setError(`Enter the ${OTP_LENGTH}-digit code`);
             return;
         }
 
         setLoading(true);
         setError('');
+        setNotice('');
 
         try {
             if (isLoginFlow) {
                 const targetRole = selectedRole || role;
-                const queryRole = selectedRole || undefined;
+                // A role picked on the login screen is always sent, so a number that holds several
+                // profiles opens the right one instead of asking again.
+                const queryRole = selectedRole || (roleConfirmed && session.role ? normalizeDriverRole(role) : undefined);
                 const response = await verifyDriverLoginOtp({ phone, otp: code, role: queryRole });
                 const payload = unwrap(response);
 
                 if (payload?.needsRoleSelection) {
                     saveDriverRegistrationSession({
                         ...session,
-                        availableRoles: payload.availableRoles || []
+                        availableRoles: toPlainData(payload.availableRoles) || [],
                     });
                     setShowRoleSelector(true);
                     return;
@@ -306,14 +308,11 @@ const OTPVerification = () => {
                 const loggedInRole = payload?.role || targetRole;
                 const token = payload?.token;
                 if (token) {
-                    const normalizedRole = normalizeDriverRole(loggedInRole);
-                    persistDriverAuthSession({ token, role: normalizedRole });
+                    persistDriverAuthSession({ token, role: normalizeDriverRole(loggedInRole) });
                     await syncPushTokens();
                 }
                 clearDriverRegistrationSession();
-                const normalizedRole = normalizeDriverRole(loggedInRole);
-                const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
-                navigate(nextPath, { replace: true });
+                navigate(getPostLoginRoute(loggedInRole, payload?.driver, routePrefix), { replace: true });
                 return;
             }
 
@@ -342,7 +341,7 @@ const OTPVerification = () => {
                     : (payload?.session?.roleConfirmed ?? session.roleConfirmed ?? true),
                 needsRoleSelection: shouldForceRoleSelection,
                 status: payload?.session?.status || 'otp_verified',
-                otpSession: payload?.session || null,
+                otpSession: toPlainData(payload?.session),
             });
             if (shouldForceRoleSelection || nextSession.roleConfirmed === false) {
                 navigate('/taxi/driver/select-role');
@@ -350,7 +349,8 @@ const OTPVerification = () => {
             }
             navigate(`${routePrefix}/step-personal`);
         } catch (err) {
-            setError(err?.message || 'Invalid code');
+            setError(err?.message || 'That code is not correct. Please try again.');
+            resetOtp();
         } finally {
             setLoading(false);
         }
@@ -363,30 +363,29 @@ const OTPVerification = () => {
         setError('');
 
         try {
-            const response = await verifyDriverLoginOtp({ phone, otp: otp.join(''), role: chosenRole });
+            const response = await verifyDriverLoginOtp({ phone, otp: otpCode, role: chosenRole });
             const payload = unwrap(response);
-            const token = payload?.token;
-            if (token) {
-                const normalizedRole = normalizeDriverRole(chosenRole);
-                persistDriverAuthSession({ token, role: normalizedRole });
+            const normalizedRole = normalizeDriverRole(chosenRole);
+            if (payload?.token) {
+                persistDriverAuthSession({ token: payload.token, role: normalizedRole });
                 await syncPushTokens();
             }
             clearDriverRegistrationSession();
-            const normalizedRole = normalizeDriverRole(chosenRole);
-            const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
-            navigate(nextPath, { replace: true });
+            navigate(getPostLoginRoute(normalizedRole, payload?.driver, routePrefix), { replace: true });
         } catch (err) {
-            setError(err?.message || 'Invalid code');
+            setError(err?.message || 'That code is not correct. Please try again.');
             setSelectedRole(null);
+            resetOtp();
         } finally {
             setLoading(false);
         }
     };
 
     const handleResend = async () => {
-        if (timer > 0) return;
+        if (timer > 0 || loading) return;
         setLoading(true);
         setError('');
+        setNotice('');
         try {
             const response = isLoginFlow
                 ? await sendDriverLoginOtp({ phone, role })
@@ -401,7 +400,8 @@ const OTPVerification = () => {
                     role,
                     loginMode: true,
                     entryPath,
-                    availableRoles: payload?.availableRoles || payload?.session?.availableRoles || session.availableRoles || [],
+                    debugOtp: payload?.session?.debugOtp || '',
+                    availableRoles: toPlainData(payload?.availableRoles || payload?.session?.availableRoles || session.availableRoles) || [],
                 })
                 : isPoolingOnboardingFlow
                     ? saveDriverRegistrationSession({
@@ -415,233 +415,172 @@ const OTPVerification = () => {
                         status: payload?.session?.status || 'otp_sent',
                         entryPath,
                     })
-                : saveDriverRegistrationSession(
-                    buildDriverOnboardingSessionSnapshot(payload, {
-                        ...session,
-                        phone,
-                        role,
-                        entryPath,
-                    }),
-                );
+                    : saveDriverRegistrationSession(
+                        buildDriverOnboardingSessionSnapshot(payload, {
+                            ...session,
+                            phone,
+                            role,
+                            entryPath,
+                        }),
+                    );
 
-            setOtp(['', '', '', '']);
-            inputs.current[0]?.focus();
-            setTimer(60);
-            setError(nextSession?.debugOtp ? `Code resent successfully. OTP: ${nextSession.debugOtp}` : 'Code resent successfully');
+            resetOtp();
+            setTimer(RESEND_SECONDS);
+            setNotice(import.meta.env.DEV && nextSession?.debugOtp ? `A new code was sent. Dev OTP: ${nextSession.debugOtp}` : 'A new code was sent.');
         } catch (err) {
-            setError(err?.message || 'Failed to resend');
+            setError(err?.message || 'Could not resend the code. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
+    const availableRoles = Array.isArray(session.availableRoles) ? session.availableRoles : [];
+    const ContextIcon = flowRole.Icon;
+
     return (
-        <div className="min-h-screen relative bg-white select-none overflow-x-hidden font-['Outfit']">
-            {/* Background */}
-            <div className="fixed inset-0 z-0">
-                <motion.img 
-                    initial={{ scale: 1.05, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 1.2 }}
-                    src={taxiBg} 
-                    alt="" 
-                    className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px]" />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white" />
-            </div>
-
-            <main className="relative z-10 mx-auto max-w-sm px-6 flex flex-col min-h-screen pt-12 pb-32">
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex-1 space-y-10"
-                >
-                    <header className="space-y-6">
-                        <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            onClick={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath)}
-                            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-900 shadow-xl shadow-slate-100"
-                        >
-                            <ArrowLeft size={20} strokeWidth={3} />
-                        </motion.button>
-                        
-                        <div className="space-y-2">
-                            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                                {showRoleSelector ? 'Select Profile' : 'Verify'}
-                            </h1>
-                            <p className="text-slate-500 font-medium text-lg">
-                                {showRoleSelector ? (
-                                    'Choose a dashboard to proceed'
-                                ) : (
-                                    <>Code sent to <span className="text-slate-900 font-bold">+91 {phone}</span></>
-                                )}
-                            </p>
-                        </div>
-                    </header>
-
-                    <section className="bg-white rounded-[40px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-slate-50 space-y-10">
-                        <AnimatePresence mode="wait">
-                            {!showRoleSelector ? (
-                                <motion.div
-                                    key="otp-inputs-view"
-                                    initial={{ opacity: 0, x: -15 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 15 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="space-y-10"
-                                >
-                                    {isLoginFlow && existingAccount && (
-                                        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-center">
-                                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-600">
-                                                Existing {detectedRole} account found
-                                            </p>
-                                            <p className="mt-1 text-sm font-medium text-amber-900">
-                                                This number is already registered, so we are continuing with login instead of a new signup.
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    <div className="flex justify-between gap-3">
-                                        {otp.map((digit, index) => (
-                                            <input
-                                                key={index}
-                                                ref={el => inputs.current[index] = el}
-                                                type="tel"
-                                                inputMode="numeric"
-                                                maxLength={1}
-                                                value={digit}
-                                                onChange={e => handleChange(index, e.target.value)}
-                                                onKeyDown={e => handleKeyDown(index, e)}
-                                                className={`h-16 w-full rounded-2xl border-2 text-center text-3xl font-black transition-all outline-none ${
-                                                    digit 
-                                                        ? 'border-amber-400 bg-amber-50/20 text-slate-900' 
-                                                        : 'border-slate-50 bg-slate-50 text-slate-900 focus:border-amber-200 focus:bg-white'
-                                                }`}
-                                            />
-                                        ))}
-                                    </div>
-
-                                    <div className="space-y-6">
-                                        <AnimatePresence>
-                                            {error && (
-                                                <motion.div 
-                                                    initial={{ opacity: 0, y: -10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    exit={{ opacity: 0, y: -10 }}
-                                                    className={`rounded-2xl border p-4 text-center ${
-                                                        error.includes('successfully') 
-                                                            ? 'border-emerald-100 bg-emerald-50 text-emerald-600'
-                                                            : 'border-rose-100 bg-rose-50 text-rose-600'
-                                                    }`}
-                                                >
-                                                    <p className="text-xs font-bold uppercase tracking-widest">{error}</p>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-
-                                        <div className="flex flex-col items-center gap-4">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                                Didn't get it?
-                                            </p>
-                                            <button
-                                                onClick={handleResend}
-                                                disabled={timer > 0 || loading}
-                                                className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all ${
-                                                    timer > 0 
-                                                        ? 'text-slate-200' 
-                                                        : 'text-amber-500 hover:opacity-70'
-                                                }`}
-                                            >
-                                                <MessageSquare size={14} />
-                                                {timer > 0 ? `Retry in ${timer}s` : 'Resend Code'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ) : (
-                                <motion.div
-                                    key="role-selection-view"
-                                    initial={{ opacity: 0, x: 15 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -15 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="space-y-6"
-                                >
-                                    <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-                                        {(session.availableRoles || []).map((roleKey) => {
-                                            const roleConfig = ROLE_DETAILS[normalizeDriverRole(roleKey)] || {
-                                                title: formatRoleLabel(roleKey),
-                                                description: 'Access your account dashboard.',
-                                                icon: Car,
-                                                color: 'from-amber-400 to-orange-500'
-                                            };
-                                            const IconComponent = roleConfig.icon;
-                                            
-                                            return (
-                                                <motion.button
-                                                    key={roleKey}
-                                                    whileHover={{ scale: 1.02, y: -2 }}
-                                                    whileTap={{ scale: 0.98 }}
-                                                    onClick={() => handleRoleSelect(roleKey)}
-                                                    className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:bg-white hover:border-amber-400 hover:shadow-xl hover:shadow-amber-100/30 transition-all text-left group animate-none"
-                                                >
-                                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${roleConfig.color} text-white shadow-md shadow-slate-200/50`}>
-                                                        <IconComponent size={20} strokeWidth={2.5} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="font-bold text-slate-900 text-sm group-hover:text-amber-600 transition-colors">
-                                                            {roleConfig.title}
-                                                        </h3>
-                                                        <p className="text-[11px] text-slate-400 leading-normal mt-0.5 line-clamp-2">
-                                                            {roleConfig.description}
-                                                        </p>
-                                                    </div>
-                                                    <ChevronRight size={18} className="text-slate-300 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all shrink-0" />
-                                                </motion.button>
-                                            );
-                                        })}
-                                    </div>
-                                    <button
-                                        onClick={() => setShowRoleSelector(false)}
-                                        className="w-full py-3 rounded-xl border border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors"
-                                    >
-                                        Back to OTP Verification
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </section>
-                </motion.div>
-
-                {!showRoleSelector && (
-                    <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
-                        <div className="mx-auto max-w-sm">
-                            <motion.button
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={handleVerify}
-                                disabled={loading || resolvingSession || otp.join('').length !== 4}
-                                className={`group flex h-18 w-full items-center justify-center gap-4 rounded-[24px] text-lg font-black transition-all ${
-                                    otp.join('').length === 4
-                                        ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/20'
-                                        : 'bg-slate-100 text-slate-300 pointer-events-none'
-                                }`}
-                            >
-                                {loading ? (
-                                    <div className="h-6 w-6 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <>
-                                        <span className="uppercase tracking-widest">Verify Code</span>
-                                        <ChevronRight size={24} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
-                                    </>
-                                )}
-                            </motion.button>
-                        </div>
+        <AuthShell
+            eyebrow={isLoginFlow ? 'Sign in' : 'Create account'}
+            title={showRoleSelector ? 'Choose a profile' : 'Enter the code'}
+            subtitle={showRoleSelector
+                ? 'This number has more than one partner profile. Pick the one you want to open.'
+                : `We sent a ${OTP_LENGTH}-digit code to +91 ${phone}.`}
+            onBack={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath)}
+            backLabel={showRoleSelector ? 'Back to code' : 'Change number'}
+        >
+            {!showRoleSelector ? (
+                <div className="space-y-6">
+                    <div
+                        className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-semibold"
+                        style={{ borderColor: flowRole.tint, backgroundColor: flowRole.tint, color: flowRole.accent }}
+                    >
+                        <ContextIcon size={16} strokeWidth={2.4} />
+                        {isLoginFlow ? 'Signing in as' : 'Registering as'} {flowRole.label}
                     </div>
-                )}
-            </main>
-        </div>
+
+                    {isLoginFlow && existingAccount && (
+                        <div className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-sm leading-5 text-[#92400e]">
+                            We found your {accountRole.label.toLowerCase()} account, so we are signing you in instead of starting a new registration.
+                        </div>
+                    )}
+
+                    <div
+                        className={`flex justify-between gap-3 ${error ? 'dauth-shake' : ''}`}
+                        onPaste={handlePaste}
+                    >
+                        {otp.map((digit, index) => (
+                            <input
+                                key={index}
+                                ref={(element) => { inputs.current[index] = element; }}
+                                type="tel"
+                                inputMode="numeric"
+                                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                                maxLength={index === 0 ? OTP_LENGTH : 1}
+                                value={digit}
+                                disabled={loading}
+                                aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
+                                data-filled={digit ? 'true' : 'false'}
+                                data-invalid={error ? 'true' : 'false'}
+                                onChange={(event) => handleChange(index, event.target.value)}
+                                onKeyDown={(event) => handleKeyDown(index, event)}
+                                onFocus={(event) => event.target.select()}
+                                className="dauth-otp h-16 min-w-0 flex-1 text-center text-3xl font-semibold"
+                            />
+                        ))}
+                    </div>
+
+                    {error && (
+                        <div role="alert" className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm font-medium leading-5 text-[#b91c1c]">
+                            {error}
+                        </div>
+                    )}
+
+                    {notice && !error && (
+                        <div role="status" className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3 text-sm font-medium leading-5 text-[#166534]">
+                            {notice}
+                        </div>
+                    )}
+
+                    {devOtp && !notice && (
+                        <button
+                            type="button"
+                            onClick={() => applyDigits(0, devOtp)}
+                            className="w-full rounded-xl border border-dashed border-[#cbd5e1] px-4 py-2.5 text-xs font-medium text-[#64748b]"
+                        >
+                            Dev build: code is <span className="font-semibold text-[#0b1220]">{devOtp}</span> — tap to fill
+                        </button>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={() => handleVerify()}
+                        disabled={loading || resolvingSession || !isComplete}
+                        className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-base font-semibold transition-all ${
+                            isComplete && !loading
+                                ? 'bg-[#0b1220] text-[#ffffff] shadow-[0_14px_28px_-14px_rgba(11,18,32,0.7)] active:scale-[0.99]'
+                                : 'cursor-not-allowed bg-[#e2e8f0] text-[#94a3b8]'
+                        }`}
+                    >
+                        {loading ? (
+                            <Loader2 size={22} className="animate-spin" aria-label="Verifying" />
+                        ) : (
+                            <>
+                                Verify and continue
+                                <ArrowRight size={20} strokeWidth={2.4} />
+                            </>
+                        )}
+                    </button>
+
+                    <div className="flex items-center justify-center gap-2 text-sm text-[#64748b]">
+                        <span>Did not get the code?</span>
+                        <button
+                            type="button"
+                            onClick={handleResend}
+                            disabled={timer > 0 || loading}
+                            className={`inline-flex items-center gap-1.5 font-semibold ${
+                                timer > 0 ? 'cursor-not-allowed text-[#94a3b8]' : 'text-[#0b1220] underline underline-offset-2'
+                            }`}
+                        >
+                            <MessageSquare size={14} />
+                            {timer > 0 ? `Resend in ${formatCountdown(timer)}` : 'Resend code'}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {availableRoles.map((roleKey) => {
+                        const roleConfig = getDriverRole(roleKey);
+                        const RoleIcon = roleConfig.Icon;
+
+                        return (
+                            <button
+                                key={roleKey}
+                                type="button"
+                                onClick={() => handleRoleSelect(roleKey)}
+                                disabled={loading}
+                                className="flex w-full items-center gap-4 rounded-2xl border-2 border-[#e2e8f0] bg-[#ffffff] p-4 text-left transition-all hover:border-[#cbd5e1] active:scale-[0.99] disabled:opacity-60"
+                            >
+                                <span
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                                    style={{ backgroundColor: roleConfig.tint, color: roleConfig.accent }}
+                                >
+                                    <RoleIcon size={22} strokeWidth={2.2} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-[15px] font-semibold text-[#0b1220]">{roleConfig.label}</span>
+                                    <span className="mt-0.5 block text-xs text-[#64748b]">{roleConfig.description}</span>
+                                </span>
+                                <ChevronRight size={18} className="shrink-0 text-[#94a3b8]" />
+                            </button>
+                        );
+                    })}
+                    {error && (
+                        <div role="alert" className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm font-medium leading-5 text-[#b91c1c]">
+                            {error}
+                        </div>
+                    )}
+                </div>
+            )}
+        </AuthShell>
     );
 };
 
