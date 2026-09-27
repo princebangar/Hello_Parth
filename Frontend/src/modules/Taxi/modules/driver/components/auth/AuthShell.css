@@ -1,0 +1,59 @@
+/*
+ * Partner sign-in screens.
+ * The taxi theme layer (Taxi/index.css) force-styles every <input> inside `.user-app-theme` — background,
+ * border colour and a focus ring, all !important. The inputs on the sign-in screens sit inside field
+ * wrappers / OTP boxes that draw their own chrome, so they need these higher-specificity resets.
+ */
+
+/* Borderless text input living inside a styled wrapper (phone field). */
+.user-app-theme input.dauth-bare,
+.user-app-theme input.dauth-bare:focus,
+.user-app-theme input.dauth-bare:focus-visible {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* One-digit OTP box. */
+.user-app-theme input.dauth-otp {
+  background: #ffffff !important;
+  border: 2px solid #e2e8f0 !important;
+  border-radius: 1rem !important;
+  color: #0b1220 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.user-app-theme input.dauth-otp:focus {
+  border-color: #0b1220 !important;
+  box-shadow: 0 0 0 4px rgba(255, 196, 0, 0.35) !important;
+}
+
+.user-app-theme input.dauth-otp[data-filled='true'] {
+  border-color: #0b1220 !important;
+}
+
+.user-app-theme input.dauth-otp[data-invalid='true'] {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15) !important;
+}
+
+@keyframes dauth-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.dauth-shake {
+  animation: dauth-shake 0.36s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dauth-shake {
+    animation: none;
+  }
+}
