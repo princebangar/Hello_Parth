@@ -202,6 +202,9 @@ const DriverWallet = () => {
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [processingWithdraw, setProcessingWithdraw] = useState(false);
     const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+    // Shown inside the sheet itself — the page-level `error` banner sits behind the sheet's overlay.
+    const [withdrawError, setWithdrawError] = useState('');
+    const [payoutDetailsMissing, setPayoutDetailsMissing] = useState(false);
     const [driverProfile, setDriverProfile] = useState({
         salary: 0,
         isOwnerManagedDriver: false,
@@ -685,31 +688,38 @@ const DriverWallet = () => {
         }
     };
 
+    const closeWithdrawSheet = () => {
+        setShowWithdraw(false);
+        setWithdrawError('');
+        setPayoutDetailsMissing(false);
+    };
+
     const handleWithdrawRequest = async () => {
         const amount = Number(withdrawAmount);
+        setPayoutDetailsMissing(false);
 
         if (!rules.transferEnabled) {
-            setError('Withdrawals are disabled by admin.');
+            setWithdrawError('Withdrawals are disabled by admin.');
             return;
         }
 
         if (!Number.isFinite(amount) || amount <= 0) {
-            setError('Enter a valid withdrawal amount.');
+            setWithdrawError('Enter a valid withdrawal amount.');
             return;
         }
 
         if (rules.minimumTransferAmount > 0 && amount < rules.minimumTransferAmount) {
-            setError(`Minimum withdrawal amount is Rs ${rules.minimumTransferAmount}.`);
+            setWithdrawError(`Minimum withdrawal amount is Rs ${rules.minimumTransferAmount}.`);
             return;
         }
 
         if (amount > Number(wallet.balance || 0)) {
-            setError('Withdrawal amount cannot exceed current balance.');
+            setWithdrawError('Withdrawal amount cannot exceed current balance.');
             return;
         }
 
         setProcessingWithdraw(true);
-        setError('');
+        setWithdrawError('');
 
         try {
             const response = await api.post('/drivers/wallet/withdrawals', {
@@ -732,7 +742,8 @@ const DriverWallet = () => {
                 setWithdrawAmount('');
             }, 1800);
         } catch (requestError) {
-            setError(requestError?.response?.data?.message || requestError?.message || 'Could not send withdrawal request.');
+            setPayoutDetailsMissing(requestError?.details?.code === 'PAYOUT_DETAILS_REQUIRED');
+            setWithdrawError(requestError?.response?.data?.message || requestError?.message || requestError?.error || 'Could not send withdrawal request.');
         } finally {
             setProcessingWithdraw(false);
         }
@@ -854,7 +865,11 @@ const DriverWallet = () => {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setShowWithdraw(true)}
+                                    onClick={() => {
+                                        setWithdrawError('');
+                                        setPayoutDetailsMissing(false);
+                                        setShowWithdraw(true);
+                                    }}
                                     disabled={!rules.transferEnabled || Number(wallet.balance || 0) <= 0}
                                     className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 text-sm font-black uppercase tracking-[0.08em] text-white shadow-sm disabled:bg-slate-200 disabled:text-slate-400"
                                 >
@@ -1104,7 +1119,7 @@ const DriverWallet = () => {
                                 </div>
                                 <button
                                     type="button"
-                                    onClick={() => setShowWithdraw(false)}
+                                    onClick={closeWithdrawSheet}
                                     className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-600"
                                     aria-label="Close withdrawal"
                                 >
@@ -1134,6 +1149,20 @@ const DriverWallet = () => {
                                         />
                                         <p className="mt-2 text-xs font-bold text-slate-500">Available balance: {money(wallet.balance)}</p>
                                     </div>
+                                    {withdrawError && (
+                                        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold leading-relaxed text-rose-600">
+                                            <p>{withdrawError}</p>
+                                            {payoutDetailsMissing && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate('/taxi/driver/profile/bank-details')}
+                                                    className="mt-3 h-10 w-full rounded-xl bg-rose-600 text-xs font-black uppercase tracking-widest text-white"
+                                                >
+                                                    Add payout details
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={handleWithdrawRequest}

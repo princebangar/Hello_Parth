@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+    clearDriverAuthState,
     getAuthenticatedDriverRole,
     getCurrentDriver,
     getLocalDriverToken,
@@ -20,11 +21,6 @@ const getPortalPrefix = (pathname = '', role = '') => {
 const isDriverApproved = (driver) => {
     if (!driver) {
         return false;
-    }
-
-    const role = String(driver?.onboarding?.role || getStoredDriverRole() || 'driver').toLowerCase();
-    if (role === 'service_center' || role === 'service_center_staff') {
-        return driver.status !== 'inactive';
     }
 
     const approval = String(driver.approve ?? '').toLowerCase();
@@ -96,10 +92,6 @@ const getAuthenticatedDriverHome = (pathname = '', role = '') => {
     const activeRole = String(role || getAuthenticatedRole() || 'driver').toLowerCase();
     return activeRole === 'owner'
         ? `${getPortalPrefix(pathname, 'owner')}/dashboard`
-        : activeRole === 'service_center'
-            ? '/taxi/driver/service-center'
-        : activeRole === 'service_center_staff'
-            ? '/taxi/driver/service-center'
         : activeRole === 'bus_driver'
             ? '/taxi/driver/bus-home'
         : activeRole === 'pooling_driver'
@@ -113,7 +105,6 @@ const getPendingRouteForRole = (pathname = '', role = '') =>
         ? '/taxi/driver/pooling/status'
         : getPendingDriverRoute(pathname);
 const isBusConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/bus-home');
-const isServiceCenterRoute = (pathname = '') => pathname.startsWith('/taxi/driver/service-center');
 const isPoolingConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/pooling');
 const isPendingAllowedRoute = (pathname = '') =>
     [
@@ -135,6 +126,9 @@ const DriverLayout = () => {
     const navigate = useNavigate();
     const [isChecking, setIsChecking] = useState(false);
     const [isAllowed, setIsAllowed] = useState(true);
+    // Server unreachable / 5xx while verifying the driver — must NOT be shown as "pending approval".
+    const [connectionError, setConnectionError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
     const verifiedTokenRef = useRef('');
     const verifiedApprovalRef = useRef(false);
 
@@ -175,15 +169,6 @@ const DriverLayout = () => {
             return;
         }
 
-        if (
-            isServiceCenterRoute(currentPath)
-            && !['service_center', 'service_center_staff'].includes(authenticatedRole)
-        ) {
-            setIsAllowed(false);
-            navigate(authenticatedHome, { replace: true });
-            return;
-        }
-
         if (isPoolingConsoleRoute(currentPath) && authenticatedRole !== 'pooling_driver') {
             setIsAllowed(false);
             navigate(authenticatedHome, { replace: true });
@@ -199,6 +184,7 @@ const DriverLayout = () => {
 
         const verifyDriver = async () => {
             setIsChecking(true);
+            setConnectionError(false);
 
             try {
                 const response = await getCurrentDriver();
@@ -211,7 +197,9 @@ const DriverLayout = () => {
                 }
 
                 if (!isApproved) {
-                    if (isPendingAllowedRoute(currentPath)) {
+                    // Login / welcome must stay reachable for an unapproved account, otherwise the
+                    // person is trapped on the pending screen and can never sign in with another number.
+                    if (isPendingAllowedRoute(currentPath) || softEntryRoutes.has(currentPath)) {
                         setIsAllowed(true);
                         verifiedTokenRef.current = '';
                         verifiedApprovalRef.current = false;
@@ -235,14 +223,6 @@ const DriverLayout = () => {
                     return;
                 }
 
-                if (
-                    isServiceCenterRoute(currentPath)
-                    && !['service_center', 'service_center_staff'].includes(effectiveRole)
-                ) {
-                    navigate(getAuthenticatedDriverHome(currentPath, effectiveRole), { replace: true });
-                    return;
-                }
-
                 if (isPoolingConsoleRoute(currentPath) && effectiveRole !== 'pooling_driver') {
                     navigate(getAuthenticatedDriverHome(currentPath, effectiveRole), { replace: true });
                     return;
@@ -251,7 +231,6 @@ const DriverLayout = () => {
                 const isDriverConsoleRoute =
                     currentPath.startsWith('/taxi/driver') &&
                     !isBusConsoleRoute(currentPath) &&
-                    !isServiceCenterRoute(currentPath) &&
                     !isPoolingConsoleRoute(currentPath) &&
                     !isOnboardingRoute(currentPath);
 
@@ -286,22 +265,27 @@ const DriverLayout = () => {
                 verifiedTokenRef.current = '';
                 verifiedApprovalRef.current = false;
 
-                if (error?.status === 401) {
-                    redirectToDriverLogin(navigate, currentPath, authenticatedRole);
-                    return;
-                }
-
-                if (error?.status === 404) {
+                if (error?.status === 401 || error?.status === 404) {
+                    // Token is stale or the account is gone — forget it so the login page can open.
+                    clearDriverAuthState();
                     redirectToDriverLogin(navigate, currentPath, authenticatedRole);
                     return;
                 }
 
                 if (error?.status === 403) {
-                    navigate(getPendingDriverRoute(currentPath), { replace: true });
+                    // 403 on /drivers/me is either a real pending/inactive account or a token that
+                    // belongs to another portal (e.g. a customer). Only the former is "pending".
+                    if (/pending|inactive/i.test(String(error?.message || ''))) {
+                        navigate(getPendingDriverRoute(currentPath), { replace: true });
+                    } else {
+                        redirectToDriverLogin(navigate, currentPath, authenticatedRole);
+                    }
                     return;
                 }
 
-                navigate(getPendingDriverRoute(currentPath), { replace: true });
+                // No status = network error / server down; 5xx = backend problem. The account state
+                // is unknown, so show a retry screen instead of claiming "pending approval".
+                setConnectionError(true);
             } finally {
                 if (active) {
                     setIsChecking(false);
@@ -314,7 +298,38 @@ const DriverLayout = () => {
         return () => {
             active = false;
         };
-    }, [isAllowed, location.pathname, location.state, navigate]);
+    }, [isAllowed, location.pathname, location.state, navigate, retryKey]);
+
+    const handleSignOut = () => {
+        clearDriverAuthState();
+        setConnectionError(false);
+        navigate('/taxi/driver/login', { replace: true });
+    };
+
+    if (connectionError && !isOnboardingRoute(location.pathname)) {
+        return (
+            <div className="driver-theme min-h-screen flex flex-col items-center justify-center gap-5 bg-white px-8 text-center">
+                <h1 className="text-2xl font-black tracking-tight text-slate-900">Can't reach the server</h1>
+                <p className="max-w-xs text-sm font-semibold leading-6 text-slate-500">
+                    We couldn't check your account right now. Check your internet connection and try again.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => setRetryKey((value) => value + 1)}
+                    className="h-12 w-full max-w-xs rounded-2xl bg-slate-900 text-[13px] font-black uppercase tracking-widest text-white active:scale-95"
+                >
+                    Try again
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="h-12 w-full max-w-xs rounded-2xl border border-slate-200 text-[13px] font-bold text-slate-600 active:scale-95"
+                >
+                    Use a different number
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="driver-theme min-h-screen">

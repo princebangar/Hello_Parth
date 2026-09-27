@@ -1811,6 +1811,24 @@ const ActiveTrip = () => {
             return;
         }
 
+        try {
+            if (rideId) {
+                const driverToken = getLocalDriverToken();
+                await api.patch(
+                    `/rides/${rideId}/status`,
+                    { status: 'started', otp: String(enteredOtp) },
+                    withDriverAuthorization(driverToken),
+                );
+            }
+        } catch (startError) {
+            setOtpError(
+                startError?.response?.data?.error
+                || startError?.response?.data?.message
+                || 'Could not start the trip. Check your connection and try again.',
+            );
+            return;
+        }
+
         setOtpError('');
         setLocalArrivedAt('');
         setPhase('in_trip');
@@ -1831,19 +1849,6 @@ const ActiveTrip = () => {
         if (optimisticSnapshot) {
             writeStoredActiveTripSnapshot(optimisticSnapshot);
             setHydratedTripState(optimisticSnapshot);
-        }
-
-        try {
-            if (rideId) {
-                const driverToken = getLocalDriverToken();
-                await api.patch(
-                    `/rides/${rideId}/status`,
-                    { status: 'started' },
-                    withDriverAuthorization(driverToken),
-                );
-            }
-        } catch {
-            // Keep the optimistic local state; socket/live hydration will reconcile when available.
         }
 
         publishRideStatus('started');
