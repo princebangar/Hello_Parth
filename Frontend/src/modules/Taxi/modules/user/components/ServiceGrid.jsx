@@ -51,7 +51,7 @@ const getFallbackIcon = (module = {}) => {
   if (serviceType === 'bus' || name.includes('bus')) {
     return busFallback;
   }
-  if (serviceType === 'rental' || name.includes('bike') || name.includes('rental')) {
+  if (name.includes('bike')) {
     return bikeFallback;
   }
   if (transportType === 'delivery' || serviceType === 'delivery' || name.includes('delivery')) {
@@ -93,7 +93,7 @@ const isNormalRideModule = (module = {}) => {
     return false;
   }
 
-  if (['rental', 'outstation', 'bus', 'pooling'].includes(serviceType)) {
+  if (['outstation', 'bus', 'pooling'].includes(serviceType)) {
     return false;
   }
 
@@ -143,9 +143,6 @@ export const ServiceCard = React.memo(({ icon, label, description, path, loading
     }
     if (cleanLabel.includes('parcel') || cleanLabel.includes('delivery') || cleanLabel.includes('courier')) {
       return 'Send anything';
-    }
-    if (cleanLabel.includes('rental')) {
-      return 'Bikes & cars';
     }
     if (cleanLabel.includes('bus')) {
       return 'Intercity travel';
@@ -212,7 +209,7 @@ export const ServiceCard = React.memo(({ icon, label, description, path, loading
             const cleanLabel = String(label || '').toLowerCase();
             if (cleanLabel.includes('bus')) {
               setImgSrc(busFallback);
-            } else if (cleanLabel.includes('bike') || cleanLabel.includes('rental')) {
+            } else if (cleanLabel.includes('bike')) {
               setImgSrc(bikeFallback);
             } else if (cleanLabel.includes('parcel') || cleanLabel.includes('delivery')) {
               setImgSrc(parcelFallback);
@@ -296,7 +293,7 @@ const ServiceCardStretched = React.memo(({ subtitle, title, icon, path, onClick,
   const getFallbackIcon = () => {
     const cleanTitle = String(title || '').toLowerCase();
     if (cleanTitle.includes('bus')) return busFallback;
-    if (cleanTitle.includes('bike') || cleanTitle.includes('rental')) return bikeFallback;
+    if (cleanTitle.includes('bike')) return bikeFallback;
     if (cleanTitle.includes('parcel') || cleanTitle.includes('delivery')) return parcelFallback;
     if (cleanTitle.includes('ride') || cleanTitle.includes('cab') || cleanTitle.includes('taxi')) return taxiFallback;
     return fallbackCar;
@@ -592,7 +589,6 @@ const ServiceGrid = ({
     const moduleName = String(module?.name || '').trim().toLowerCase();
 
     if (transportType === 'delivery') return '/taxi/user/parcel/type';
-    if (serviceType === 'rental') return '/taxi/user/rental';
     if (serviceType === 'outstation') return '/taxi/user/intercity';
     if (serviceType === 'pooling' || moduleName.includes('pooling')) {
       return '/taxi/user/pooling';
@@ -813,8 +809,6 @@ const ServiceGrid = ({
                     setShowAllModal(true);
                   } else if (clickRoute) {
                     navigate(clickRoute);
-                  } else if (onServiceClick) {
-                    onServiceClick(item);
                   } else {
                     const fallbackRoute = isParcel ? '/taxi/user/parcel/type' : '/taxi/user/ride/select-location';
                     const isSelectLocationRoute = fallbackRoute.includes('/ride/select-location');

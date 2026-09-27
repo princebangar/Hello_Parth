@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Calendar, Clock, User, MessageSquare } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calendar, Clock, User, MessageSquare, X } from 'lucide-react';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
 import { BlogInsightsHelper } from '@/components/ui/BlogInsightsHelper';
 
