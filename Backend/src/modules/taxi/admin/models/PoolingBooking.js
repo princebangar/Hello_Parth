@@ -9,7 +9,7 @@ const poolingBookingSchema = new mongoose.Schema(
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'TaxiUser',
       required: true,
     },
     route: {
@@ -145,6 +145,13 @@ const poolingBookingSchema = new mongoose.Schema(
       paidAt: {
         type: Date,
         default: null,
+      },
+      refund: {
+        status: { type: String, default: '', trim: true },
+        refundId: { type: String, default: '', trim: true },
+        error: { type: String, default: '', trim: true },
+        amount: { type: Number, default: 0 },
+        at: { type: Date, default: null },
       },
     },
   },
