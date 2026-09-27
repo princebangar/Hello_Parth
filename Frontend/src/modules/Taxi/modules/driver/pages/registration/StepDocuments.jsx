@@ -20,6 +20,7 @@ import {
   persistDriverAuthSession,
   saveDriverDocuments,
   saveDriverRegistrationSession,
+  toPlainData,
   verifyDriverOnboardingLicenseDocument,
 } from '../../services/registrationService';
 import {
@@ -328,6 +329,7 @@ const StepDocuments = () => {
     : '/taxi/driver';
   const session = getStoredDriverRegistrationSession();
   const isHandlingHistoryNavigationRef = useRef(false);
+  const finishedRef = useRef(false);
   const isMetaInitializedRef = useRef(false);
   const normalizedRole = normalizeSignupRole(session.role);
   const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
@@ -349,6 +351,10 @@ const StepDocuments = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (finishedRef.current) {
+      return;
+    }
+
     if (!phone || !registrationId) {
       navigate(`${routePrefix}/reg-phone`, { replace: true });
     }
@@ -403,6 +409,10 @@ const StepDocuments = () => {
   }, [documentTemplates, docs]);
 
   useEffect(() => {
+    if (finishedRef.current) {
+      return;
+    }
+
     saveDriverRegistrationSession({
       ...getStoredDriverRegistrationSession(),
       ...session,
@@ -904,15 +914,14 @@ const StepDocuments = () => {
         documents: docs,
         completedRegistration: payload || null,
       });
+      const routeState = {
+        role: normalizedRole,
+        completedRegistration: toPlainData(payload),
+        submittedDocumentSummary,
+      };
+      finishedRef.current = true;
       clearDriverRegistrationSession();
-      navigate(`${routePrefix}/registration-status`, {
-        replace: true,
-        state: {
-          role: normalizedRole,
-          completedRegistration: payload || null,
-          submittedDocumentSummary,
-        },
-      });
+      navigate(`${routePrefix}/registration-status`, { replace: true, state: routeState });
     } catch (submitError) {
       setError(submitError?.message || 'Unable to complete registration');
     } finally {

@@ -2,7 +2,6 @@ import api from "../../../shared/api/axiosInstance";
 
 const STORAGE_KEY = "driverRegistrationSession";
 const DRIVER_AUTH_KEYS = ["token", "driverToken", "driverInfo", "role", "driverRole", "chatRole"];
-const DRIVER_PORTAL_ROLES = ["driver", "owner", "pooling_driver", "bus_driver", "service_center", "service_center_staff"];
 const isDataUrl = (value) => /^data:/i.test(String(value || "").trim());
 
 const sanitizeStoredDocumentValue = (value) => {
@@ -70,6 +69,20 @@ const readStoredSession = () => {
 
 export const getStoredDriverRegistrationSession = () => readStoredSession();
 
+// The axios layer hands out Proxy views of every response body, and a Proxy cannot be structured-cloned
+// into history.state — navigate(path, { state }) throws a DataCloneError. Flatten API data before routing with it.
+export const toPlainData = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+};
+
 export const saveDriverRegistrationSession = (session = {}) => {
   const nextSession = {
     ...readStoredSession(),
@@ -82,18 +95,34 @@ export const saveDriverRegistrationSession = (session = {}) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storableSession));
   } catch {}
 
-  return storableSession;
+  // Callers hand this straight to navigate({ state }), and it can carry API payload values (e.g. the
+  // `availableRoles` array of an existing account) that are Proxies — return the plain JSON copy.
+  return toPlainData(storableSession) || storableSession;
 };
 
 export const clearDriverRegistrationSession = () => {
   localStorage.removeItem(STORAGE_KEY);
 };
 
+// `token` / `role` / `chatRole` are shared with the customer app, so only wipe them when
+// they actually hold a driver-portal value — signing a driver out must not log the customer out.
+const isDriverOwnedAuthValue = (key, value) => {
+  if (!value) return false;
+  if (key === "token") return Boolean(strictDriverPortalRole(getTokenPayload(value)?.role));
+  if (key === "role") return Boolean(strictDriverPortalRole(value));
+  if (key === "chatRole") return ["driver", "owner"].includes(String(value).toLowerCase());
+  return true;
+};
+
 export const clearDriverAuthState = () => {
   clearDriverRegistrationSession();
   DRIVER_AUTH_KEYS.forEach((key) => {
-    removeSessionValue(key);
-    localStorage.removeItem(key);
+    if (isDriverOwnedAuthValue(key, readSessionValue(key))) {
+      removeSessionValue(key);
+    }
+    if (isDriverOwnedAuthValue(key, localStorage.getItem(key))) {
+      localStorage.removeItem(key);
+    }
   });
 };
 
@@ -135,17 +164,20 @@ export const normalizeDriverPortalRole = (role) => {
   if (normalized === "pooling_driver" || normalized === "pooling-driver" || normalized === "poolingdriver" || normalized === "pooling") {
     return "pooling_driver";
   }
-  if (normalized === "service_center" || normalized === "service-center" || normalized === "servicecenter") {
-    return "service_center";
-  }
-  if (normalized === "service_center_staff" || normalized === "service-center-staff" || normalized === "servicecenterstaff") {
-    return "service_center_staff";
-  }
   if (normalized === "bus_driver" || normalized === "bus-driver" || normalized === "busdriver") {
     return "bus_driver";
   }
 
   return "driver";
+};
+
+// normalizeDriverPortalRole() maps every unknown role (e.g. a customer's "user") to "driver".
+// Use this stricter variant wherever a token/role must be *proven* to belong to a driver-portal
+// account — otherwise the customer's JWT (same `token` key) is mistaken for a driver session.
+export const strictDriverPortalRole = (role) => {
+  const raw = String(role || "").toLowerCase();
+  const mapped = normalizeDriverPortalRole(raw);
+  return mapped === "driver" && raw !== "driver" ? "" : mapped;
 };
 
 export const sendDriverOtp = (payload) =>
@@ -318,7 +350,7 @@ export const getDriverOnboardingResumeStep = (session = {}) => {
     return "select-role";
   }
 
-  if (["bus_driver", "service_center", "service_center_staff"].includes(role)) {
+  if (role === "bus_driver") {
     if (status === "personal_saved" || status === "role_details_saved" || Object.keys(session?.roleDetails || {}).length > 0) {
       return "role-signup";
     }
@@ -367,7 +399,7 @@ const getPersistedDriverToken = () => {
   }
 
   const persistedGenericToken = String(localStorage.getItem("token") || "");
-  if (DRIVER_PORTAL_ROLES.includes(normalizeDriverPortalRole(getTokenPayload(persistedGenericToken)?.role))) {
+  if (strictDriverPortalRole(getTokenPayload(persistedGenericToken)?.role)) {
     return persistedGenericToken;
   }
 
@@ -377,9 +409,9 @@ const getPersistedDriverToken = () => {
 export const hydrateDriverAuthSessionFromStorage = () => {
   const persistedToken = getPersistedDriverToken();
   const persistedRole =
-    normalizeDriverPortalRole(getTokenPayload(persistedToken)?.role)
-    || normalizeDriverPortalRole(localStorage.getItem("driverRole"))
-    || normalizeDriverPortalRole(localStorage.getItem("role"));
+    strictDriverPortalRole(getTokenPayload(persistedToken)?.role)
+    || strictDriverPortalRole(localStorage.getItem("driverRole"))
+    || strictDriverPortalRole(localStorage.getItem("role"));
 
   if (!persistedToken && !persistedRole) {
     return {
@@ -421,7 +453,8 @@ export const getStoredDriverRole = () => {
     readSessionValue("driverRole")
     || readSessionValue("role")
     || hydrated.role
-    || String(localStorage.getItem("driverRole") || localStorage.getItem("role") || "driver").toLowerCase()
+    || strictDriverPortalRole(localStorage.getItem("driverRole") || localStorage.getItem("role"))
+    || "driver"
   );
 };
 
@@ -432,7 +465,7 @@ const readLocalDriverToken = () => {
   if (direct) return direct;
 
   const fallback = readSessionValue("token");
-  if (DRIVER_PORTAL_ROLES.includes(normalizeDriverPortalRole(getTokenPayload(fallback)?.role))) {
+  if (strictDriverPortalRole(getTokenPayload(fallback)?.role)) {
     return fallback;
   }
 
@@ -586,57 +619,6 @@ export const updateOwnerFleetVehicle = (vehicleId, payload) =>
 
 export const deleteOwnerFleetVehicle = (vehicleId) =>
   api.delete(`/drivers/fleet/vehicles/${vehicleId}`, withDriverAuth());
-
-export const getServiceCenterVehicles = () =>
-  api.get("/drivers/service-center/vehicles", withDriverAuth());
-
-export const createServiceCenterVehicle = (payload) =>
-  api.post("/drivers/service-center/vehicles", payload, withDriverAuth());
-
-export const updateServiceCenterVehicle = (vehicleId, payload) =>
-  api.patch(`/drivers/service-center/vehicles/${vehicleId}`, payload, withDriverAuth());
-
-export const deleteServiceCenterVehicle = (vehicleId) =>
-  api.delete(`/drivers/service-center/vehicles/${vehicleId}`, withDriverAuth());
-
-export const getServiceCenterStaff = () =>
-  api.get("/drivers/service-center/staff", withDriverAuth());
-
-export const createServiceCenterStaff = (payload) =>
-  api.post("/drivers/service-center/staff", payload, withDriverAuth());
-
-export const updateServiceCenterStaff = (staffId, payload) =>
-  api.patch(`/drivers/service-center/staff/${staffId}`, payload, withDriverAuth());
-
-export const deleteServiceCenterStaff = (staffId) =>
-  api.delete(`/drivers/service-center/staff/${staffId}`, withDriverAuth());
-
-export const getServiceCenterStaffBiometrics = (staffId) =>
-  api.get(`/drivers/service-center/staff/${staffId}/biometrics`, withDriverAuth());
-
-export const enrollServiceCenterStaffBiometric = (payload) =>
-  api.post("/drivers/service-center/staff/biometrics/enroll", payload, withDriverAuth());
-
-export const getServiceCenterBookings = () =>
-  api.get("/drivers/service-center/bookings", withDriverAuth());
-
-export const getServiceCenterBookingBiometrics = (bookingId) =>
-  api.get(`/drivers/service-center/bookings/${bookingId}/biometrics`, withDriverAuth());
-
-export const updateServiceCenterBookingBiometrics = (bookingId, payload) =>
-  api.patch(`/drivers/service-center/bookings/${bookingId}/biometrics`, payload, withDriverAuth());
-
-export const captureServiceCenterBookingFingerprint = (bookingId, payload) =>
-  api.post(`/drivers/service-center/bookings/${bookingId}/biometrics/fingers`, payload, withDriverAuth());
-
-export const deleteServiceCenterBookingFingerprint = (bookingId, fingerCode) =>
-  api.delete(`/drivers/service-center/bookings/${bookingId}/biometrics/fingers/${encodeURIComponent(String(fingerCode || '').trim().toUpperCase())}`, withDriverAuth());
-
-export const verifyServiceCenterBookingFingerprint = (bookingId, payload) =>
-  api.post(`/drivers/service-center/bookings/${bookingId}/biometrics/verify`, payload, withDriverAuth());
-
-export const updateServiceCenterBooking = (bookingId, payload) =>
-  api.patch(`/drivers/service-center/bookings/${bookingId}`, payload, withDriverAuth());
 
 export const getDriverRegistrationSession = ({ registrationId, phone }) =>
   api.get(`/drivers/onboarding/session/${registrationId}`, {

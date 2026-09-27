@@ -29,8 +29,6 @@ const normalizePortalRole = (role) => {
   if (normalized === "owner") return "owner";
   if (normalized === "pooling_driver" || normalized === "pooling-driver" || normalized === "poolingdriver" || normalized === "pooling") return "pooling_driver";
   if (normalized === "bus_driver" || normalized === "bus-driver" || normalized === "busdriver") return "bus_driver";
-  if (normalized === "service_center" || normalized === "service-center" || normalized === "servicecenter") return "service_center";
-  if (normalized === "service_center_staff" || normalized === "service-center-staff" || normalized === "servicecenterstaff") return "service_center_staff";
   return "driver";
 };
 
@@ -76,6 +74,8 @@ const RegistrationStatus = () => {
     "Waiting for admin approval",
   );
   const [providerVerificationState, setProviderVerificationState] = useState({});
+  // True while the approval check can't reach the server, so we don't pretend the audit is running.
+  const [connectionIssue, setConnectionIssue] = useState(false);
   const timeoutRef = useRef(null);
   const requestInFlightRef = useRef(false);
   const mountedRef = useRef(false);
@@ -145,8 +145,11 @@ const RegistrationStatus = () => {
       try {
         const response = await getDriverApprovalStatus();
         const driverData = unwrapDriver(response);
-        if (mountedRef.current) setDriver(driverData);
-        
+        if (mountedRef.current) {
+          setDriver(driverData);
+          setConnectionIssue(false);
+        }
+
         const isApproved = isDriverApproved(driverData);
 
         if (!mountedRef.current) {
@@ -165,9 +168,7 @@ const RegistrationStatus = () => {
                 ? "/taxi/driver/bus-home"
               : normalizedRole === "pooling_driver"
                 ? "/taxi/driver/pooling"
-                : normalizedRole === "service_center" || normalizedRole === "service_center_staff"
-                  ? "/taxi/driver/service-center"
-                  : "/taxi/driver/home";
+                : "/taxi/driver/home";
           
           navigate(path, { replace: true });
           requestInFlightRef.current = false;
@@ -195,6 +196,13 @@ const RegistrationStatus = () => {
         }
 
         setChecking(false);
+        // 403 with a non-pending message = this login is not a driver-portal account at all.
+        if (error?.status === 403 && !/pending|inactive/i.test(String(error?.message || ""))) {
+          redirectToDriverLogin(navigate);
+          requestInFlightRef.current = false;
+          return;
+        }
+        setConnectionIssue(!error?.status || error.status >= 500);
         setStatusMessage(
           error?.message || "Your request is still under review.",
         );
@@ -322,7 +330,7 @@ const getStatusColor = (status) => {
   };
 
   const docDetails = getDocumentDetails();
-  const isSpecialRole = ["bus_driver", "service_center", "service_center_staff"].includes(
+  const isSpecialRole = ["bus_driver"].includes(
     normalizePortalRole(getStoredDriverRole() || location.state?.role || "driver"),
   );
   const rejectedDocs = docDetails.filter(d => d.status === 'rejected' || d.status === 'declined');
@@ -513,8 +521,13 @@ const getStatusColor = (status) => {
                         <>Review <span className="text-slate-400">Started</span></>
                     )}
                 </h1>
+                {connectionIssue && (
+                    <p className="mx-auto max-w-[32ch] rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-[13px] font-bold leading-relaxed text-amber-700">
+                        Can't reach the server right now, so we can't show your latest status. Retrying automatically…
+                    </p>
+                )}
                 <p className="mx-auto max-w-[28ch] text-[15px] font-bold leading-relaxed text-slate-500 opacity-80">
-                    {rejectedDocs.length > 0 
+                    {rejectedDocs.length > 0
                         ? "Some of your documents were rejected. Please re-upload them to continue."
                         : pendingReverificationDocs.length > 0
                         ? "Your updated documents were sent back to admin for another review."
@@ -629,6 +642,13 @@ const getStatusColor = (status) => {
                 className="w-full h-14 bg-white border border-slate-200 text-slate-600 rounded-2xl flex items-center justify-center gap-2 text-[15px] font-bold active:scale-95 transition-all"
             >
                 Contact Support
+            </button>
+            <button
+                type="button"
+                onClick={() => redirectToDriverLogin(navigate)}
+                className="w-full h-12 text-slate-500 rounded-2xl flex items-center justify-center text-[13px] font-bold active:scale-95 transition-all"
+            >
+                Not you? Use a different number
             </button>
         </div>
       </main>

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BusFront, Building2, ChevronRight, Search, UserRound } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, BusFront, ChevronRight, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -10,6 +10,7 @@ import {
   persistDriverAuthSession,
   saveDriverOnboardingRoleDetails,
   saveDriverRegistrationSession,
+  toPlainData,
 } from '../../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -18,14 +19,6 @@ const ROLE_META = {
   bus_driver: {
     Icon: BusFront,
     color: 'text-blue-600',  
-  },
-  service_center: {
-    Icon: Building2,
-    color: 'text-violet-600',
-  },
-  service_center_staff: {
-    Icon: UserRound,
-    color: 'text-rose-600',
   },
 };
 
@@ -50,40 +43,6 @@ const ROLE_STEPS = {
       subtitle: 'Check your bus details and send the request.',
     },
   ],
-  service_center: [
-    {
-      key: 'details',
-      badge: 'Step 2 of 4',
-      title: 'Center Basics',
-      subtitle: 'Add your service center name and full address.',
-    },
-    {
-      key: 'location',
-      badge: 'Step 3 of 4',
-      title: 'Choose Location',
-      subtitle: 'Select the service location where your center belongs.',
-    },
-    {
-      key: 'review',
-      badge: 'Step 4 of 4',
-      title: 'Review & Submit',
-      subtitle: 'Confirm your center details and send the request.',
-    },
-  ],
-  service_center_staff: [
-    {
-      key: 'center',
-      badge: 'Step 2 of 3',
-      title: 'Choose Existing Center',
-      subtitle: 'Pick any approved service center you want to enroll under.',
-    },
-    {
-      key: 'review',
-      badge: 'Step 3 of 3',
-      title: 'Review & Submit',
-      subtitle: 'Confirm the selected center before submitting.',
-    },
-  ],
 };
 
 const RoleSpecificOnboarding = () => {
@@ -97,21 +56,16 @@ const RoleSpecificOnboarding = () => {
   const registrationId = String(session.registrationId || '').trim();
   const steps = ROLE_STEPS[role] || [];
 
+  const finishedRef = useRef(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [options, setOptions] = useState({
-    serviceLocations: [],
-    serviceCenters: [],
     busServices: [],
   });
   const [formData, setFormData] = useState(() => ({
     busSignupMode: session.roleDetails?.createNewBus ? 'create' : session.roleDetails?.busServiceId ? 'existing' : '',
-    centerName: session.roleDetails?.centerName || '',
-    address: session.roleDetails?.address || '',
-    serviceLocationId: session.roleDetails?.serviceLocationId || '',
-    serviceCenterId: session.roleDetails?.serviceCenterId || '',
     busServiceId: session.roleDetails?.busServiceId || '',
     requestNote: session.roleDetails?.requestNote || '',
     operatorName: session.roleDetails?.operatorName || '',
@@ -135,23 +89,17 @@ const RoleSpecificOnboarding = () => {
       return 0;
     }
 
-    if (role === 'service_center') {
-      if (session.roleDetails?.serviceLocationId) return 2;
-      if (session.roleDetails?.centerName || session.roleDetails?.address) return 1;
-      return 0;
-    }
-
-    if (role === 'service_center_staff') {
-      return session.roleDetails?.serviceCenterId ? 1 : 0;
-    }
-
     return 0;
   });
 
   useEffect(() => {
+    if (finishedRef.current) {
+      return undefined;
+    }
+
     if (!phone || !registrationId || !meta) {
       navigate(`${routePrefix}/login`, { replace: true });
-      return;
+      return undefined;
     }
 
     let active = true;
@@ -179,6 +127,10 @@ const RoleSpecificOnboarding = () => {
   }, [meta, navigate, phone, registrationId, routePrefix]);
 
   useEffect(() => {
+    if (finishedRef.current) {
+      return;
+    }
+
     saveDriverRegistrationSession({
       ...session,
       roleDetails: {
@@ -188,17 +140,6 @@ const RoleSpecificOnboarding = () => {
       roleSignupStep: stepIndex,
     });
   }, [formData, session, stepIndex]);
-
-  const filteredServiceCenters = useMemo(() => {
-    const term = String(search || '').trim().toLowerCase();
-    const items = Array.isArray(options.serviceCenters) ? options.serviceCenters : [];
-    if (!term) return items;
-    return items.filter((item) =>
-      [item.name, item.address, item.ownerPhone, item.serviceLocationName]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term)),
-    );
-  }, [options.serviceCenters, search]);
 
   const filteredBusServices = useMemo(() => {
     const term = String(search || '').trim().toLowerCase();
@@ -217,20 +158,6 @@ const RoleSpecificOnboarding = () => {
     () =>
       (options.busServices || []).find((item) => String(item.id) === String(formData.busServiceId)) || null,
     [formData.busServiceId, options.busServices],
-  );
-
-  const selectedServiceCenter = useMemo(
-    () =>
-      (options.serviceCenters || []).find((item) => String(item.id) === String(formData.serviceCenterId)) || null,
-    [formData.serviceCenterId, options.serviceCenters],
-  );
-
-  const selectedServiceLocation = useMemo(
-    () =>
-      (options.serviceLocations || []).find(
-        (item) => String(item._id || item.id) === String(formData.serviceLocationId),
-      ) || null,
-    [formData.serviceLocationId, options.serviceLocations],
   );
 
   const canCreateBusDraft = Boolean(
@@ -261,14 +188,9 @@ const RoleSpecificOnboarding = () => {
           : 'Search and select the bus service you want to join.'
       : currentStep?.subtitle || '';
 
-  const canSubmit =
-    role === 'service_center'
-      ? Boolean(formData.centerName.trim() && formData.address.trim() && formData.serviceLocationId)
-      : role === 'service_center_staff'
-        ? Boolean(formData.serviceCenterId)
-        : isBusDriverCreateMode
-          ? canCreateBusDraft
-          : Boolean(formData.busServiceId);
+  const canSubmit = isBusDriverCreateMode
+    ? canCreateBusDraft
+    : Boolean(formData.busServiceId);
 
   const canMoveForward =
     role === 'bus_driver'
@@ -280,48 +202,25 @@ const RoleSpecificOnboarding = () => {
                 ? Boolean(formData.busServiceId)
                 : false
           )
-        : stepIndex === 1
-          ? canSubmit
-          : canSubmit
-      : role === 'service_center'
-        ? stepIndex === 0
-          ? Boolean(formData.centerName.trim() && formData.address.trim())
-          : stepIndex === 1
-            ? Boolean(formData.serviceLocationId)
-            : canSubmit
-        : role === 'service_center_staff'
-          ? stepIndex === 0
-            ? Boolean(formData.serviceCenterId)
-            : canSubmit
-          : canSubmit;
+        : canSubmit
+      : canSubmit;
 
   const handleSubmit = async () => {
     setSubmitting(true);
     setError('');
 
     try {
-      const roleDetails =
-        role === 'service_center'
-          ? {
-              centerName: formData.centerName,
-              address: formData.address,
-              serviceLocationId: formData.serviceLocationId,
-            }
-          : role === 'service_center_staff'
-            ? {
-                serviceCenterId: formData.serviceCenterId,
-              }
-            : {
-                createNewBus: isBusDriverCreateMode,
-                busServiceId: formData.busServiceId,
-                requestNote: formData.requestNote,
-                busDraft: createdBusDraft,
-                operatorName: formData.operatorName,
-                busName: formData.busName,
-                serviceNumber: formData.serviceNumber,
-                originCity: formData.originCity,
-                destinationCity: formData.destinationCity,
-              };
+      const roleDetails = {
+        createNewBus: isBusDriverCreateMode,
+        busServiceId: formData.busServiceId,
+        requestNote: formData.requestNote,
+        busDraft: createdBusDraft,
+        operatorName: formData.operatorName,
+        busName: formData.busName,
+        serviceNumber: formData.serviceNumber,
+        originCity: formData.originCity,
+        destinationCity: formData.destinationCity,
+      };
 
       await saveDriverOnboardingRoleDetails({
         registrationId,
@@ -341,14 +240,10 @@ const RoleSpecificOnboarding = () => {
         roleDetails,
         completedRegistration: payload || null,
       });
+      const routeState = { role, completedRegistration: toPlainData(payload) };
+      finishedRef.current = true;
       clearDriverRegistrationSession();
-      navigate('/taxi/driver/registration-status', {
-        replace: true,
-        state: {
-          role,
-          completedRegistration: payload || null,
-        },
-      });
+      navigate('/taxi/driver/registration-status', { replace: true, state: routeState });
     } catch (requestError) {
       setError(requestError?.message || 'Unable to submit this signup request');
     } finally {
@@ -646,136 +541,6 @@ const RoleSpecificOnboarding = () => {
             </div>
           ) : null}
 
-          {role === 'service_center' && stepIndex === 0 ? (
-            <>
-              <input
-                value={formData.centerName}
-                onChange={(event) => setFormData((current) => ({ ...current, centerName: event.target.value }))}
-                placeholder="Service center name"
-                className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-sm font-bold text-slate-900 outline-none"
-              />
-              <textarea
-                value={formData.address}
-                onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))}
-                placeholder="Center address"
-                rows={5}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-sm font-bold text-slate-900 outline-none"
-              />
-            </>
-          ) : null}
-
-          {role === 'service_center' && stepIndex === 1 ? (
-            <>
-              <select
-                value={formData.serviceLocationId}
-                onChange={(event) => setFormData((current) => ({ ...current, serviceLocationId: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-sm font-bold text-slate-900 outline-none"
-              >
-                <option value="">Select service location</option>
-                {(options.serviceLocations || []).map((item) => (
-                  <option key={item._id || item.id} value={item._id || item.id}>
-                    {item.service_location_name || item.name}
-                  </option>
-                ))}
-              </select>
-
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Why this step matters</p>
-                <p className="mt-2 text-sm font-bold text-slate-900">
-                  Your center will be attached to this service location for approval and zoning.
-                </p>
-              </div>
-            </>
-          ) : null}
-
-          {role === 'service_center' && stepIndex === 2 ? (
-            <div className="space-y-4">
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Center Name</p>
-                <p className="mt-2 text-sm font-black text-slate-900">{formData.centerName || 'Not added'}</p>
-              </div>
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Address</p>
-                <p className="mt-2 text-sm font-bold text-slate-900">{formData.address || 'Not added'}</p>
-              </div>
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Service Location</p>
-                <p className="mt-2 text-sm font-black text-slate-900">
-                  {selectedServiceLocation?.service_location_name || selectedServiceLocation?.name || 'Not selected'}
-                </p>
-              </div>
-            </div>
-          ) : null}
-
-          {role === 'service_center_staff' && stepIndex === 0 ? (
-            <>
-              <div className="rounded-[22px] border border-emerald-100 bg-emerald-50/70 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Existing Centers Only</p>
-                <p className="mt-2 text-sm font-bold text-slate-900">
-                  Choose from approved centers already on the platform and enroll under one of them.
-                </p>
-              </div>
-
-              <div className="relative">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search existing service center"
-                  className="w-full rounded-2xl border border-slate-200 py-4 pl-11 pr-4 text-sm font-bold text-slate-900 outline-none"
-                />
-              </div>
-
-              <div className="space-y-3">
-                {filteredServiceCenters.map((item) => {
-                  const isSelected = String(formData.serviceCenterId) === String(item.id);
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setFormData((current) => ({ ...current, serviceCenterId: item.id }))}
-                      className={`w-full rounded-[22px] border p-4 text-left transition ${
-                        isSelected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50 text-slate-900'
-                      }`}
-                    >
-                      <p className="text-sm font-black">{item.name}</p>
-                      <p className={`mt-1 text-xs font-bold ${isSelected ? 'text-white/70' : 'text-slate-500'}`}>
-                        {`${item.serviceLocationName || 'Location not set'} - ${item.address || 'Address not set'}`}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {!filteredServiceCenters.length && !loadingOptions ? (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm font-bold text-slate-500">
-                  No approved centers found for this search.
-                </div>
-              ) : null}
-            </>
-          ) : null}
-
-          {role === 'service_center_staff' && stepIndex === 1 ? (
-            <div className="space-y-4">
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Selected Center</p>
-                <p className="mt-2 text-sm font-black text-slate-900">{selectedServiceCenter?.name || 'No center selected'}</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">
-                  {selectedServiceCenter
-                    ? `${selectedServiceCenter.serviceLocationName || 'Location not set'} - ${selectedServiceCenter.address || 'Address not set'}`
-                    : 'Go back and choose an existing center first.'}
-                </p>
-              </div>
-
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Enrollment</p>
-                <p className="mt-2 text-sm font-bold text-slate-900">
-                  Your request will be sent under this center for admin approval.
-                </p>
-              </div>
-            </div>
-          ) : null}
         </section>
 
         {loadingOptions ? (

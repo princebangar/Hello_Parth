@@ -10,7 +10,7 @@ import {
 
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const SPECIAL_SIGNUP_ROLES = ['bus_driver', 'service_center', 'service_center_staff'];
+const SPECIAL_SIGNUP_ROLES = ['bus_driver'];
 
 const StepPersonal = () => {
     const navigate = useNavigate();
