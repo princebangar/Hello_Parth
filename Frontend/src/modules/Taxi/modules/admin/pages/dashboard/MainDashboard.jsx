@@ -34,12 +34,10 @@ import {
   FileText,
   AlertTriangle,
   Award,
-  Sparkles,
   Play,
   CheckCircle,
   Eye,
   Info,
-  Building2,
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -95,19 +93,42 @@ const MainDashboard = () => {
   const totalDrivers = dashboard?.totalDrivers?.total || 0;
   const approvedDrivers = dashboard?.totalDrivers?.approved || 0;
   const declinedDrivers = dashboard?.totalDrivers?.declined || 0;
-  const totalOwners = dashboard?.totalOwners || 0;
 
   const todayEarnings = dashboard?.todayEarnings || {};
   const overallEarnings = dashboard?.overallEarnings || {};
   const notifiedSos = dashboard?.notifiedSos || {};
   const todayTrips = dashboard?.todayTrips || {};
   const overallTrips = dashboard?.overallTrips || {};
+  const onlineDrivers = dashboard?.onlineDrivers || 0;
+  const pendingWithdrawals = dashboard?.pendingWithdrawals || 0;
+  const openSupportTickets = dashboard?.openSupportTickets || 0;
+  const topDrivers = Array.isArray(dashboard?.topDrivers) ? dashboard.topDrivers : [];
+  const systemHealth = Array.isArray(dashboard?.systemHealth) ? dashboard.systemHealth : [];
+
+  const formatUptime = (seconds) => {
+    const total = Math.max(0, Number(seconds) || 0);
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
+  const healthIcon = (name = '') => {
+    const key = name.toLowerCase();
+    if (key.includes('database')) return Database;
+    if (key.includes('socket')) return Activity;
+    if (key.includes('redis')) return Cpu;
+    if (key.includes('map')) return Map;
+    return Server;
+  };
 
   // Operational metrics calculations
+  // Share of approved drivers that are online right now
   const fleetUtilization = useMemo(() => {
-    if (totalDrivers === 0) return 0;
-    return Math.round((approvedDrivers / totalDrivers) * 100);
-  }, [totalDrivers, approvedDrivers]);
+    if (approvedDrivers === 0) return 0;
+    return Math.min(100, Math.round((onlineDrivers / approvedDrivers) * 100));
+  }, [approvedDrivers, onlineDrivers]);
 
   // SVG Area Chart Points mapping for Revenue Trajectory
   const chartWidth = 500;
@@ -223,12 +244,12 @@ const MainDashboard = () => {
             { label: "Total Customers", value: totalUsers, icon: Users, cardBg: "!bg-violet-500" },
             { label: "Total Drivers", value: totalDrivers, icon: Car, cardBg: "!bg-sky-500" },
             { label: "Active Drivers", value: approvedDrivers, icon: UserCheck, cardBg: "!bg-emerald-500" },
-            { label: "Active Vendors", value: totalOwners, icon: Building2, cardBg: "!bg-rose-500" },
-            { label: "Online Customers", value: Math.max(1, Math.round(totalUsers * 0.15)), icon: Sparkles, cardBg: "!bg-orange-500" },
+            { label: "Total Trips", value: overallTrips.total || 0, icon: Activity, cardBg: "!bg-rose-500" },
+            { label: "Online Drivers", value: onlineDrivers, icon: Car, cardBg: "!bg-orange-500" },
             { label: "Ongoing Trips", value: todayTrips.scheduled || 0, icon: Activity, cardBg: "!bg-blue-500" },
             { label: "Today's Revenue", value: `₹${currency(todayEarnings.total)}`, icon: IndianRupee, cardBg: "!bg-emerald-500" },
-            { label: "Platform Uptime", value: "99.98%", icon: Server, cardBg: "!bg-violet-500" },
-            { label: "Fleet Utilization", value: `${fleetUtilization}%`, icon: TrendingUp, cardBg: "!bg-teal-500" },
+            { label: "Server Uptime", value: formatUptime(dashboard?.serverUptimeSeconds), icon: Server, cardBg: "!bg-violet-500" },
+            { label: "Drivers Online", value: `${fleetUtilization}%`, icon: TrendingUp, cardBg: "!bg-teal-500" },
             { label: "Pending Approvals", value: declinedDrivers, icon: Clock, cardBg: "!bg-red-500" }
           ].map((kpi, idx) => (
             <div key={idx} className={`admin-card !p-4 border-none !text-white hover:scale-[1.02] transition-transform shadow-lg ${kpi.cardBg}`}>
@@ -409,25 +430,26 @@ const MainDashboard = () => {
             </div>
 
             <div className="space-y-2 text-[10px] text-slate-600">
-              {[
-                { name: "Application Node API", icon: Server, status: "Active", color: "text-emerald-500" },
-                { name: "Database Cluster", icon: Database, status: "Operational", color: "text-emerald-500" },
-                { name: "Socket Connection", icon: Activity, status: "Connected", color: "text-emerald-500" },
-                { name: "Redis Memory Cache", icon: Cpu, status: "Healthy", color: "text-emerald-500" },
-                { name: "Google Map Services", icon: Map, status: "Operational", color: "text-emerald-500" }
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <item.icon size={11} className="text-[#64748B]" />
-                    <span>{item.name}</span>
-                  </span>
-                  <span className={`font-bold ${item.color}`}>{item.status}</span>
-                </div>
-              ))}
+              {systemHealth.length === 0 ? (
+                <p className="text-center text-[#64748B] py-4">Checking…</p>
+              ) : systemHealth.map((item) => {
+                const Icon = healthIcon(item.name);
+                return (
+                  <div key={item.name} className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <Icon size={11} className="text-[#64748B]" />
+                      <span>{item.name}</span>
+                    </span>
+                    <span className={`font-bold ${item.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{item.status}</span>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="bg-[#F8FAFC] border border-[#E5E7EB] rounded-lg p-2 text-center text-[9px] text-[#64748B] mt-2.5">
-              🚀 All system channels operating under normal latency limits.
+              {systemHealth.length > 0 && systemHealth.every((item) => item.ok)
+                ? 'All checks passing.'
+                : 'Some checks need attention.'}
             </div>
           </div>
         </div>
@@ -435,7 +457,7 @@ const MainDashboard = () => {
         {/* SECONDARY ROW (Leaderboards, Activity Feed, MAP, SOS) */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           
-          {/* Driver & Vendor Performance Leaderboard */}
+          {/* Driver Performance Leaderboard */}
           <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
             <div>
               <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 flex items-center gap-1 font-bold">
@@ -444,12 +466,9 @@ const MainDashboard = () => {
               </h3>
               
               <div className="space-y-3.5">
-                {[
-                  { name: "Rydon Driver Node A", rating: "4.95", trips: 48, status: "Active", color: "bg-emerald-500" },
-                  { name: "City Fleet Partner B", rating: "4.89", trips: 42, status: "Active", color: "bg-emerald-500" },
-                  { name: "Rydon Courier Node C", rating: "4.82", trips: 36, status: "Active", color: "bg-emerald-500" },
-                  { name: "Partner Fleet Partner D", rating: "4.75", trips: 31, status: "Active", color: "bg-[#FFC400]" }
-                ].map((lead, i) => (
+                {topDrivers.length === 0 ? (
+                  <p className="text-xs text-[#64748B] py-6 text-center">No completed trips yet.</p>
+                ) : topDrivers.map((lead, i) => (
                   <div key={i} className="flex items-center justify-between text-xs pb-2 border-b border-[#F1F5F9] last:border-0 last:pb-0">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center font-bold text-[10px] text-[#0B1220] border">
@@ -457,7 +476,7 @@ const MainDashboard = () => {
                       </div>
                       <div>
                         <span className="font-semibold block text-[#0B1220]">{lead.name}</span>
-                        <span className="text-[9px] text-slate-400 block mt-0.5">Rating: {lead.rating} ⭐</span>
+                        <span className="text-[9px] text-slate-400 block mt-0.5">{lead.rating ? `Rating: ${Number(lead.rating).toFixed(2)} ⭐` : 'Not rated yet'}</span>
                       </div>
                     </div>
                     <span className="font-bold text-[#0B1220]">{lead.trips} trips</span>
@@ -496,54 +515,54 @@ const MainDashboard = () => {
 
               <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 space-y-2 text-[10px] text-slate-600 mt-2">
                 <div className="flex justify-between">
-                  <span>Assigned Security Officers:</span>
-                  <span className="font-bold text-[#0B1220]">{notifiedSos.assigned || 0}</span>
+                  <span>Last SOS alert:</span>
+                  <span className="font-bold text-[#0B1220]">
+                    {notifiedSos.lastAt ? new Date(notifiedSos.lastAt).toLocaleString('en-IN') : 'None yet'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Target Response SLA:</span>
-                  <span className="font-bold text-emerald-600">&lt; 3 mins</span>
+                  <span>Open support tickets:</span>
+                  <span className="font-bold text-[#0B1220]">{openSupportTickets}</span>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => navigate('/taxi/admin/safety')}
-              className="admin-btn-primary h-9 text-xs justify-center gap-1.5 mt-3 !bg-rose-600 !!text-white hover:bg-rose-700"
+              className="admin-btn-primary h-9 text-xs justify-center gap-1.5 mt-3 !bg-rose-600 !text-white hover:!bg-rose-700"
             >
               <AlertTriangle size={13} />
               <span>Enter Emergency Terminal</span>
             </button>
           </div>
 
-          {/* AI Insights & Anomalies Panel */}
-          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow bg-slate-900 !text-white border-0">
+          {/* Needs attention: real counts, each one links to the screen that clears it */}
+          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs !text-white uppercase tracking-wider flex items-center gap-1.5 font-bold">
-                  <Sparkles size={14} className="text-[#FFC400]" />
-                  <span>AI Operations Insights</span>
-                </h3>
-                <span className="text-[8px] bg-slate-800 text-slate-300 font-bold px-1.5 py-0.5 rounded border border-slate-700">
-                  Model v4
-                </span>
-              </div>
+              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 flex items-center gap-1.5 font-bold">
+                <AlertTriangle size={14} className="text-amber-500" />
+                <span>Needs Attention</span>
+              </h3>
 
-              <div className="space-y-3 text-xs leading-relaxed text-slate-300">
-                <p>
-                  📈 <strong>Demand Surge Identified:</strong> High session traffic recorded near core metro terminals. Recommend increasing driver incentives to support utilization.
-                </p>
-                <p>
-                  🔒 <strong>Security Posture:</strong> Platform authentication score stands at 92%. Active MFA validation verified across all Sub-admin tokens.
-                </p>
+              <div className="space-y-2">
+                {[
+                  { label: 'Drivers awaiting approval', value: declinedDrivers, path: '/taxi/admin/drivers/pending' },
+                  { label: 'Withdrawal requests', value: pendingWithdrawals, path: '/taxi/admin/drivers/wallet/withdrawals' },
+                  { label: 'Open support tickets', value: openSupportTickets, path: '/taxi/admin/support/tickets' },
+                  { label: 'Active SOS alerts', value: Number(notifiedSos.total || 0), path: '/taxi/admin/safety' },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => navigate(item.path)}
+                    className="w-full flex items-center justify-between rounded-lg border border-[#F1F5F9] px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors"
+                  >
+                    <span className="text-slate-600">{item.label}</span>
+                    <span className={`font-bold ${item.value > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{item.value}</span>
+                  </button>
+                ))}
               </div>
             </div>
-
-            <button
-              onClick={() => toast.success('Dispatching operational targets to city hubs.')}
-              className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-750 !text-white text-[10px] font-bold uppercase tracking-wider transition-all mt-4 border border-slate-700"
-            >
-              Dispatch System Recommendations
-            </button>
           </div>
         </div>
 

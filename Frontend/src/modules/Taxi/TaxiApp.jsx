@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
+import { installLegacyBackendShim } from './shared/api/legacyBackendShim';
 import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
 import { UserThemeProvider } from './shared/context/UserThemeContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
@@ -13,18 +14,20 @@ import { clearLocalUserSessionData } from '@/shared/utils/userSession.js';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import { getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
-import RentalLocationTracker from './modules/user/components/RentalLocationTracker';
 import userBusService from './modules/user/services/busService';
 import { userService } from './modules/user/services/userService';
 import { syncUpcomingRideReminders } from './modules/user/utils/upcomingRideReminderService';
 import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/driver/services/registrationService';
 import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistration';
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
-import { POOLING_ENABLED, RENTAL_ENABLED } from './shared/featureFlags';
+import { POOLING_ENABLED } from './shared/featureFlags';
 import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
 import RouteSkeleton from './modules/shared/components/RouteSkeleton';
 import './App.css';
 import './index.css';
+
+// Old-Taxi admin screens still call fetch(`${__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/...`); route them to /api/v1/taxi.
+installLegacyBackendShim();
 
 
 // Lazy loading pages for performance
@@ -50,8 +53,6 @@ const Activity = lazy(() => import('./modules/user/pages/Activity'));
 const Profile = lazy(() => import('./modules/user/pages/Profile'));
 const Wallet = lazy(() => import('./modules/user/pages/Wallet'));
 
-// Coming Soon placeholder (for /tours and any unbuilt routes)
-const ComingSoon = lazy(() => import('./modules/shared/pages/ComingSoon'));
 const LegalPage = lazy(() => import('./modules/shared/pages/LegalPage'));
 const LandingPage = lazy(() => import('./modules/shared/pages/LandingPage'));
 const AboutPage = lazy(() => import('./modules/shared/pages/AboutPage'));
@@ -81,11 +82,6 @@ const CabHome = lazy(() => import('./modules/user/pages/cab/CabHome'));
 const SharedTaxi = lazy(() => import('./modules/user/pages/cab/SharedTaxi'));
 const SharedTaxiSeats = lazy(() => import('./modules/user/pages/cab/SharedTaxiSeats'));
 const SharedTaxiConfirm = lazy(() => import('./modules/user/pages/cab/SharedTaxiConfirm'));
-const AirportCab = lazy(() => import('./modules/user/pages/cab/AirportCab'));
-const AirportCabConfirm = lazy(() => import('./modules/user/pages/cab/AirportCabConfirm'));
-const SpiritualTrip = lazy(() => import('./modules/user/pages/cab/SpiritualTrip'));
-const SpiritualTripVehicle = lazy(() => import('./modules/user/pages/cab/SpiritualTripVehicle'));
-const SpiritualTripConfirm = lazy(() => import('./modules/user/pages/cab/SpiritualTripConfirm'));
 
 const IntercityVehicle = lazy(() => import('./modules/user/pages/intercity/IntercityVehicle'));
 const IntercityDetails = lazy(() => import('./modules/user/pages/intercity/IntercityDetails'));
@@ -101,12 +97,6 @@ const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 
 
 // New Feature Pages
-const BikeRentalHome = lazy(() => import('./modules/user/pages/rental/BikeRentalHome'));
-const RentalVehicleDetail = lazy(() => import('./modules/user/pages/rental/RentalVehicleDetail'));
-const RentalSchedule = lazy(() => import('./modules/user/pages/rental/RentalSchedule'));
-const RentalKYC = lazy(() => import('./modules/user/pages/rental/RentalKYC'));
-const RentalDeposit = lazy(() => import('./modules/user/pages/rental/RentalDeposit'));
-const RentalConfirmed = lazy(() => import('./modules/user/pages/rental/RentalConfirmed'));
 const IntercityHome = lazy(() => import('./modules/user/pages/intercity/IntercityHome'));
 const CabSharing = lazy(() => import('./modules/user/pages/cabsharing/CabSharing'));
 
@@ -149,11 +139,20 @@ const OwnerBusBookingsPage = lazy(() => import('./modules/driver/pages/OwnerBusB
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
-const ServiceCenterDashboard = lazy(() => import('./modules/driver/pages/ServiceCenterDashboard'));
-const ServiceCenterVehicleDetails = lazy(() => import('./modules/driver/pages/ServiceCenterVehicleDetails'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
 const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
+const BusDriverLiveRoute = lazy(() => import('./modules/driver/pages/BusDriverLiveRoute'));
+const OwnerPoolingVehicles = lazy(() => import('./modules/driver/pages/OwnerPoolingVehicles'));
+const OwnerPoolingVehicleForm = lazy(() => import('./modules/driver/pages/OwnerPoolingVehicleForm'));
+const DriverBankDetailsPage = lazy(() => import('./modules/driver/pages/DriverBankDetailsPage'));
+const PoolingDriverDashboard = lazy(() => import('./modules/driver/pages/PoolingDriverDashboard'));
+const PoolingDriverOnboarding = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverOnboarding'));
+const PoolingDriverPendingStatus = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverPendingStatus'));
+const PoolingDriverBookings = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverBookings'));
+const RoleSelection = lazy(() => import('./modules/driver/pages/registration/RoleSelection'));
+const RoleSpecificOnboarding = lazy(() => import('./modules/driver/pages/registration/RoleSpecificOnboarding'));
+const BusSignupBuilderPage = lazy(() => import('./modules/driver/pages/registration/BusSignupBuilderPage'));
 
 // Driver Module - Settings
 const EditProfile = lazy(() => import('./modules/driver/pages/settings/EditProfile'));
@@ -222,21 +221,14 @@ const AdminBannerImage = lazy(() => import('./modules/admin/pages/promotions/Ban
 
 // Price Management
 const AdminServiceLocation = lazy(() => import('./modules/admin/pages/price-management/ServiceLocation'));
-const AdminServiceStores = lazy(() => import('./modules/admin/pages/price-management/ServiceStores'));
 const AdminZoneManagement = lazy(() => import('./modules/admin/pages/price-management/ZoneManagement'));
-const AdminAirportManagement = lazy(() => import('./modules/admin/pages/price-management/Airport'));
 const AdminSetPrices = lazy(() => import('./modules/admin/pages/price-management/SetPrices'));
 const AdminSetPackagePrices = lazy(() => import('./modules/admin/pages/price-management/SetPackagePrices'));
 const AdminCreatePackagePrice = lazy(() => import('./modules/admin/pages/price-management/CreatePackagePrice'));
 const AdminDriverIncentive = lazy(() => import('./modules/admin/pages/price-management/DriverIncentive'));
 const AdminSurgePricing = lazy(() => import('./modules/admin/pages/price-management/SurgePricing'));
 const AdminVehicleType = lazy(() => import('./modules/admin/pages/price-management/VehicleType'));
-const AdminRentalVehicleTypes = lazy(() => import('./modules/admin/pages/price-management/RentalVehicleTypes'));
-const AdminRentalTracking = lazy(() => import('./modules/admin/pages/price-management/RentalTracking'));
-const AdminRentalTrackingDetail = lazy(() => import('./modules/admin/pages/price-management/RentalTrackingDetail'));
-const AdminRentalBookingRequests = lazy(() => import('./modules/admin/pages/price-management/RentalBookingRequests'));
-const AdminRentalQuoteRequests = lazy(() => import('./modules/admin/pages/price-management/RentalQuoteRequests'));
-const AdminRentalPackageTypes = lazy(() => import('./modules/admin/pages/price-management/RentalPackageTypes'));
+const AdminPackageTypes = lazy(() => import('./modules/admin/pages/price-management/PackageTypes'));
 const AdminGoodsTypes = lazy(() => import('./modules/admin/pages/price-management/GoodsTypes'));
 const AdminPoolingManager = lazy(() => import('./modules/admin/pages/pooling/PoolingManager'));
 const AdminPoolingVehicles = lazy(() => import('./modules/admin/pages/pooling/PoolingVehicles'));
@@ -362,6 +354,8 @@ const AdminSectionPlaceholder = () => {
   );
 };
 
+const PARTNER_AUTH_PATH = /^\/taxi\/(driver|owner)\/(login|reg-phone|otp-verify|select-role)\/?$/;
+
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
   const location = useLocation();
@@ -393,9 +387,16 @@ const MainLayout = ({ children }) => {
   // it: all 5 kept-alive tabs), so it updates in one paint instead of
   // waiting for the whole tree to catch up. Background comes from the same
   // --user-bg variable for the same reason — no JS-computed ternary here.
+  // Partner sign-in screens lay themselves out for phone / tablet / desktop (AuthShell), so they must
+  // not be squeezed into the phone-width column the rest of the taxi app uses.
+  const isPartnerAuthPath = PARTNER_AUTH_PATH.test(location.pathname);
+
   return (
     <div id="taxi-app-root" className="redigo-app user-app-theme min-h-screen" style={{ backgroundColor: 'var(--user-bg)' }}>
-      <main className="max-w-lg mx-auto min-h-screen relative overflow-x-hidden shadow-2xl" style={{ backgroundColor: 'var(--user-bg)' }}>
+      <main
+        className={`min-h-screen relative overflow-x-hidden ${isPartnerAuthPath ? 'w-full' : 'max-w-lg mx-auto shadow-2xl'}`}
+        style={{ backgroundColor: 'var(--user-bg)' }}
+      >
         {children}
       </main>
     </div>
@@ -675,13 +676,9 @@ const DriverEntryRedirect = () => {
       to={
         role === 'owner'
           ? '/taxi/owner/dashboard'
-          : RENTAL_ENABLED && role === 'service_center'
-            ? '/taxi/driver/service-center'
-            : RENTAL_ENABLED && role === 'service_center_staff'
-              ? '/taxi/driver/service-center'
-              : role === 'bus_driver'
-                ? '/taxi/driver/bus-home'
-                : '/taxi/driver/home'
+          : role === 'bus_driver'
+            ? '/taxi/driver/bus-home'
+            : '/taxi/driver/home'
       }
       replace
     />
@@ -704,7 +701,6 @@ function TaxiApp() {
     <>
       <SettingsProvider>
         <UserThemeProvider>
-        {RENTAL_ENABLED ? <RentalLocationTracker /> : null}
         <AppAutoUpdater />
         <ScrollToTop />
         <UserAccountInvalidationListener />
@@ -750,18 +746,9 @@ function TaxiApp() {
                 />
                 <Route path="parcel/tracking" element={<ParcelTracking />} />
                 <Route path="parcel/detail/:id" element={<RideDetail />} />
+                <Route path="parcel/chat" element={<Chat />} />
 
                 {/* New Service Routes — Real pages replacing ComingSoon */}
-                {RENTAL_ENABLED ? (
-                  <>
-                    <Route path="rental" element={<BikeRentalHome />} />
-                    <Route path="rental/vehicle" element={<RentalVehicleDetail />} />
-                    <Route path="rental/schedule" element={<RentalSchedule />} />
-                    <Route path="rental/kyc" element={<RentalKYC />} />
-                    <Route path="rental/deposit" element={<RentalDeposit />} />
-                    <Route path="rental/confirmed" element={<RentalConfirmed />} />
-                  </>
-                ) : null}
                 <Route path="intercity" element={<IntercityHome />} />
                 <Route path="intercity/vehicle" element={<IntercityVehicle />} />
                 <Route path="intercity/details" element={<IntercityDetails />} />
@@ -774,26 +761,11 @@ function TaxiApp() {
                   path="cab/shared/confirm"
                   element={<SharedTaxiConfirm />}
                 />
-                <Route path="cab/airport" element={<AirportCab />} />
-                <Route
-                  path="cab/airport-confirm"
-                  element={<AirportCabConfirm />}
-                />
-                <Route path="cab/spiritual" element={<SpiritualTrip />} />
-                <Route
-                  path="cab/spiritual-vehicle"
-                  element={<SpiritualTripVehicle />}
-                />
-                <Route
-                  path="cab/spiritual-confirm"
-                  element={<SpiritualTripConfirm />}
-                />
                 <Route path="bus" element={<BusHome />} />
                 <Route path="bus/list" element={<BusList />} />
                 <Route path="bus/seats" element={<BusSeats />} />
                 <Route path="bus/details" element={<BusDetails />} />
                 <Route path="bus/confirm" element={<BusConfirm />} />
-                <Route path="tours" element={<ComingSoon />} />
 
                 <Route path="activity" element={<Activity />} />
                 <Route path="profile" element={<Profile />} />
@@ -871,6 +843,7 @@ function TaxiApp() {
                   path="user/parcel/detail/:id"
                   element={<RideDetail />}
                 />
+                <Route path="user/parcel/chat" element={<Chat />} />
 
                 {POOLING_ENABLED ? (
                   <>
@@ -878,28 +851,6 @@ function TaxiApp() {
                     <Route path="user/pooling/list" element={<UserPoolingList />} />
                     <Route path="user/pooling/seats/:id" element={<UserPoolingSeats />} />
                     <Route path="user/pooling/confirm" element={<UserPoolingConfirm />} />
-                  </>
-                ) : null}
-                {RENTAL_ENABLED ? (
-                  <>
-                    <Route path="user/rental" element={<BikeRentalHome />} />
-                    <Route
-                      path="user/rental/vehicle"
-                      element={<RentalVehicleDetail />}
-                    />
-                    <Route
-                      path="user/rental/schedule"
-                      element={<RentalSchedule />}
-                    />
-                    <Route path="user/rental/kyc" element={<RentalKYC />} />
-                    <Route
-                      path="user/rental/deposit"
-                      element={<RentalDeposit />}
-                    />
-                    <Route
-                      path="user/rental/confirmed"
-                      element={<RentalConfirmed />}
-                    />
                   </>
                 ) : null}
                 <Route path="user/intercity" element={<IntercityHome />} />
@@ -926,30 +877,12 @@ function TaxiApp() {
                   path="user/cab/shared/confirm"
                   element={<SharedTaxiConfirm />}
                 />
-                <Route path="user/cab/airport" element={<AirportCab />} />
-                <Route
-                  path="user/cab/airport-confirm"
-                  element={<AirportCabConfirm />}
-                />
-                <Route
-                  path="user/cab/spiritual"
-                  element={<SpiritualTrip />}
-                />
-                <Route
-                  path="user/cab/spiritual-vehicle"
-                  element={<SpiritualTripVehicle />}
-                />
-                <Route
-                  path="user/cab/spiritual-confirm"
-                  element={<SpiritualTripConfirm />}
-                />
                 <Route path="user/bus" element={<UserMainTabKeepAlive />} />
                 <Route path="user/bus/list" element={<BusList />} />
                 <Route path="user/bus/seats" element={<BusSeats />} />
                 <Route path="user/bus/details" element={<BusPreview />} />
                 <Route path="user/bus/checkout" element={<BusDetails />} />
                 <Route path="user/bus/confirm" element={<BusConfirm />} />
-                <Route path="user/tours" element={<ComingSoon />} />
 
                 <Route path="user/activity" element={<UserMainTabKeepAlive />} />
                 <Route path="user/profile" element={<UserMainTabKeepAlive />} />
@@ -1031,18 +964,22 @@ function TaxiApp() {
 
                 <Route path="home" element={<DriverHome />} />
                 <Route path="bus-home" element={<BusDriverHome />} />
+                <Route path="bus-home/live-route" element={<BusDriverLiveRoute />} />
+                <Route path="select-role" element={<RoleSelection />} />
+                <Route path="role-signup" element={<RoleSpecificOnboarding />} />
+                <Route path="role-signup/bus-builder/*" element={<BusSignupBuilderPage />} />
+                <Route path="pooling/onboarding" element={<PoolingDriverOnboarding />} />
+                <Route path="pooling/status" element={<PoolingDriverPendingStatus />} />
+                <Route path="pooling" element={<PoolingDriverDashboard />} />
+                <Route path="pooling/bookings" element={<PoolingDriverBookings />} />
+                <Route path="terms" element={<LegalPage />} />
+                <Route path="privacy" element={<LegalPage />} />
                 <Route path="dashboard" element={<DriverHome />} />
                 <Route path="active-trip" element={<ActiveTrip />} />
                 <Route path="chat" element={<Chat />} />
                 <Route path="wallet" element={<DriverWallet />} />
                 <Route path="profile" element={<DriverProfile />} />
-                {RENTAL_ENABLED ? (
-                  <>
-                    <Route path="service-center" element={<ServiceCenterDashboard />} />
-                    <Route path="service-center/vehicles/new" element={<ServiceCenterVehicleDetails />} />
-                    <Route path="service-center/vehicles/:vehicleId" element={<ServiceCenterVehicleDetails />} />
-                  </>
-                ) : null}
+                <Route path="profile/bank-details" element={<DriverBankDetailsPage />} />
                 <Route path="history" element={<RideRequests />} />
                 <Route path="incentives" element={<DriverIncentives />} />
 
@@ -1098,8 +1035,14 @@ function TaxiApp() {
                 <Route path="bus-service/:id" element={<OwnerBusServicePage />} />
                 <Route path="bus-bookings" element={<OwnerBusBookingsPage />} />
                 <Route path="profile" element={<DriverProfile />} />
+                <Route path="profile/bank-details" element={<DriverBankDetailsPage />} />
+                <Route path="pooling-vehicles" element={<OwnerPoolingVehicles />} />
+                <Route path="pooling-vehicles/create" element={<OwnerPoolingVehicleForm />} />
+                <Route path="pooling-vehicles/edit/:id" element={<OwnerPoolingVehicleForm />} />
                 <Route path="wallet" element={<DriverWallet />} />
                 <Route path="history" element={<RideRequests />} />
+                <Route path="terms" element={<LegalPage />} />
+                <Route path="privacy" element={<LegalPage />} />
                 <Route path="edit-profile" element={<EditProfile />} />
                 <Route path="documents" element={<DriverDocuments />} />
                 <Route path="notifications" element={<Notifications />} />
@@ -1412,22 +1355,6 @@ function TaxiApp() {
                     path="service-location/edit/:id"
                     element={<AdminServiceLocation mode="edit" />}
                   />
-                  {RENTAL_ENABLED ? (
-                    <>
-                      <Route
-                        path="service-stores"
-                        element={<AdminServiceStores />}
-                      />
-                      <Route
-                        path="service-stores/add"
-                        element={<AdminServiceStores mode="create" />}
-                      />
-                      <Route
-                        path="service-stores/edit/:id"
-                        element={<AdminServiceStores mode="edit" />}
-                      />
-                    </>
-                  ) : null}
                   <Route path="app-modules" element={<AdminAppModules />} />
                   <Route
                     path="app-modules/create"
@@ -1446,15 +1373,6 @@ function TaxiApp() {
                     path="zone/edit/:id"
                     element={<AdminZoneManagement mode="edit" />}
                   />
-                  <Route path="airport" element={<AdminAirportManagement />} />
-                  <Route
-                    path="airport/create"
-                    element={<AdminAirportManagement mode="create" />}
-                  />
-                  <Route
-                    path="airport/edit/:id"
-                    element={<AdminAirportManagement mode="edit" />}
-                  />
                   <Route path="vehicle-type" element={<AdminVehicleType />} />
                   <Route
                     path="vehicle-type/create"
@@ -1465,53 +1383,17 @@ function TaxiApp() {
                     element={<AdminVehicleType mode="edit" />}
                   />
                   <Route
-                    path="rental-packages"
-                    element={<AdminRentalPackageTypes />}
+                    path="package-types"
+                    element={<AdminPackageTypes />}
                   />
                   <Route
-                    path="rental-packages/create"
-                    element={<AdminRentalPackageTypes mode="create" />}
+                    path="package-types/create"
+                    element={<AdminPackageTypes mode="create" />}
                   />
                   <Route
-                    path="rental-packages/edit/:id"
-                    element={<AdminRentalPackageTypes mode="edit" />}
+                    path="package-types/edit/:id"
+                    element={<AdminPackageTypes mode="edit" />}
                   />
-                  {RENTAL_ENABLED ? (
-                    <>
-                      <Route
-                        path="rental-vehicles"
-                        element={<AdminRentalVehicleTypes />}
-                      />
-                      <Route
-                        path="rental-vehicles/create"
-                        element={<AdminRentalVehicleTypes mode="create" />}
-                      />
-                      <Route
-                        path="rental-vehicles/edit/:id"
-                        element={<AdminRentalVehicleTypes mode="edit" />}
-                      />
-                      <Route
-                        path="rental-vehicles/view/:id"
-                        element={<AdminRentalVehicleTypes mode="view" />}
-                      />
-                      <Route
-                        path="rental-tracking"
-                        element={<AdminRentalTracking />}
-                      />
-                      <Route
-                        path="rental-tracking/:id"
-                        element={<AdminRentalTrackingDetail />}
-                      />
-                      <Route
-                        path="rental-requests"
-                        element={<AdminRentalBookingRequests />}
-                      />
-                      <Route
-                        path="rental-quotes"
-                        element={<AdminRentalQuoteRequests />}
-                      />
-                    </>
-                  ) : null}
                   <Route path="set-price" element={<AdminSetPrices />} />
                   <Route
                     path="set-price/create"

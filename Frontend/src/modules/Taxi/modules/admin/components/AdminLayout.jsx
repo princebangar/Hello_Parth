@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useRef, useState, startTransition, Suspense 
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   FOOD_ADMIN_HOME,
+  GLOBAL_ADMIN_HOME,
   TAXI_ADMIN_HOME,
   prefetchFoodAdmin,
   prefetchTaxiAdmin,
 } from '@/shared/utils/activeModule.js';
-import { POOLING_ENABLED, RENTAL_ENABLED } from '../../../shared/featureFlags';
+import { getAdminHomePath, getModuleAccess } from '@/shared/utils/adminAccess.js';
+import { POOLING_ENABLED } from '../../../shared/featureFlags';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
@@ -641,13 +643,12 @@ const AdminLayout = () => {
   const userMenuRef = useRef(null);
   const notificationsMenuRef = useRef(null);
   const [adminProfile, setAdminProfile] = useState(() => readAdminProfile());
-  const showFoodTab = adminProfile.adminLevel === "platform_superadmin" || 
-                       adminProfile.adminLevel === "food_superadmin" || 
-                       (adminProfile.adminLevel === "subadmin" && adminProfile.module === "food");
-
-  const showTaxiTab = adminProfile.adminLevel === "platform_superadmin" || 
-                       adminProfile.adminLevel === "taxi_superadmin" || 
-                       (adminProfile.adminLevel === "subadmin" && adminProfile.module === "taxi");
+  // Which modules this admin may open (Food / Taxi / Global) — from the server-computed access, so a global
+  // sub-admin with only some of them sees only those tabs.
+  const moduleAccess = getModuleAccess(adminProfile);
+  const showFoodTab = moduleAccess.food;
+  const showTaxiTab = moduleAccess.taxi;
+  const showGlobalTab = moduleAccess.global;
 
   const appName = settings.general?.app_name || 'App';
 
@@ -663,7 +664,8 @@ const AdminLayout = () => {
     };
 
     // Wait for sibling chunks so the first Food ↔ Taxi switch has no blank flash.
-    if (path === FOOD_ADMIN_HOME) {
+    // Global lives in the Food admin shell, so it needs the same chunk warm-up.
+    if (path === FOOD_ADMIN_HOME || path === GLOBAL_ADMIN_HOME) {
       Promise.resolve(prefetchFoodAdmin()).finally(go);
       return;
     }
@@ -673,6 +675,13 @@ const AdminLayout = () => {
     }
     go();
   };
+
+  // An admin without Taxi access (for example a Food-only sub admin) is sent to its own part of the panel.
+  useEffect(() => {
+    if (!moduleAccess.taxi) {
+      navigate(getAdminHomePath(adminProfile), { replace: true });
+    }
+  }, [moduleAccess.taxi, adminProfile, navigate]);
 
   useEffect(() => {
     const syncAdminProfile = () => setAdminProfile(readAdminProfile());
@@ -790,25 +799,10 @@ const AdminLayout = () => {
             subItems: [
               { label: 'Service Location', path: '/taxi/admin/pricing/service-location', permission: 'service_locations.view' },
               { label: 'Zone', path: '/taxi/admin/pricing/zone', permission: 'zones.view' },
-              { label: 'Airport', path: '/taxi/admin/pricing/airport', permission: 'airports.view' },
               { label: 'App Modules', path: '/taxi/admin/pricing/app-modules', permission: 'settings.view' },
               { label: 'Vehicle Type', path: '/taxi/admin/pricing/vehicle-type', permission: 'vehicle_types.view' },
-              { label: 'Rental Package Types', path: '/taxi/admin/pricing/rental-packages', permission: 'rental.view' },
+              { label: 'Package Types', path: '/taxi/admin/pricing/package-types', permission: 'rental.view' },
               { label: 'Package Pricing', path: '/taxi/admin/pricing/package-pricing', permission: 'rental.view' },
-              ...(RENTAL_ENABLED
-                ? [
-                    {
-                      label: 'Rental',
-                      subItems: [
-                        { label: 'Service Stores', path: '/taxi/admin/pricing/service-stores', permission: 'service_stores.view' },
-                        { label: 'Rental Vehicles', path: '/taxi/admin/pricing/rental-vehicles', permission: 'rental.view' },
-                        { label: 'Track Vehicles', path: '/taxi/admin/pricing/rental-tracking', permission: 'rental.view' },
-                        { label: 'Rental Requests', path: '/taxi/admin/pricing/rental-requests', permission: 'rental.view' },
-                        { label: 'Rental Quote Requests', path: '/taxi/admin/pricing/rental-quotes', permission: 'rental.view' },
-                      ],
-                    },
-                  ]
-                : []),
               { label: 'Set Price', path: '/taxi/admin/pricing/set-price', permission: 'set_prices.view' },
               { label: 'Goods Types', path: '/taxi/admin/pricing/goods-types', permission: 'goods_types.view' },
             ],
@@ -1494,6 +1488,23 @@ const AdminLayout = () => {
                   </button>
                 )}
               </div>
+          )}
+
+          {/* Global (only for admins that were given Global access) */}
+          {!isCollapsed && showGlobalTab && (
+            <button
+              type="button"
+              onClick={() => switchAdminModule(GLOBAL_ADMIN_HOME)}
+              onMouseEnter={prefetchFoodAdmin}
+              onFocus={prefetchFoodAdmin}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 py-2 mb-4 -mt-2 text-xs font-bold rounded-lg border transition-all duration-300",
+                "text-neutral-300 border-white/10 bg-neutral-800/40 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              Global
+            </button>
           )}
 
             {!isCollapsed && (

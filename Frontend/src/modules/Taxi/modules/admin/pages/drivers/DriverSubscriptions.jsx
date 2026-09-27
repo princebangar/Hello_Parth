@@ -9,11 +9,25 @@ import {
   Car,
   MoreVertical,
   List,
-  LayoutGrid
+  LayoutGrid,
+  Loader2
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+
+const ToggleSwitch = ({ label, enabled, onToggle }) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm"
+  >
+    <span className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}>
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+    </span>
+    <span className="text-[12px] font-bold text-gray-700">{label}</span>
+  </button>
+);
 
 const DriverSubscriptions = () => {
   const navigate = useNavigate();
