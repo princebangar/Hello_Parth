@@ -12,7 +12,8 @@ const isConsumerAppPath = (pathname = "") => {
   if (path.startsWith("/login")) return true
   if (path.startsWith("/food/user") || path === "/food" || path.startsWith("/food/")) return true
   if (path.startsWith("/taxi/user") || path === "/taxi" || path.startsWith("/taxi/")) return true
-  return path === "/"
+  // "/" is the public marketing landing page for guests — it has no location-based content of its own.
+  return false
 }
 
 export default function LocationPrompt() {

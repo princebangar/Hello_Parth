@@ -21,6 +21,17 @@ export const globalAdminAPI = {
   getCustomerById: (id) => apiClient.get(`/admin/global/customers/${String(id)}`, admin),
   updateCustomerStatus: (id, isActive) =>
     apiClient.patch(`/admin/global/customers/${String(id)}/status`, { isActive: isActive !== false }, admin),
+
+  getOtherServices: () => apiClient.get("/admin/global/landing/other-services", admin),
+  createOtherService: (body) => apiClient.post("/admin/global/landing/other-services", body, admin),
+  updateOtherService: (id, body) =>
+    apiClient.patch(`/admin/global/landing/other-services/${String(id)}`, body, admin),
+  deleteOtherService: (id) => apiClient.delete(`/admin/global/landing/other-services/${String(id)}`, admin),
+}
+
+/** Public "Other Service" cards for the marketing landing page (no auth). */
+export const publicLandingAPI = {
+  getOtherServices: () => apiClient.get("/landing/other-services"),
 }
 
 /** Server message from an axios error, for toasts. */

@@ -5,6 +5,7 @@ import {
   rememberLoginReturnTo,
   syncActiveModule,
   resolveAppColdStartRoute,
+  isConsumerLoggedIn,
   prefetchFoodUser,
   prefetchTaxiUser,
   prefetchFoodAdmin,
@@ -17,6 +18,7 @@ import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
 const FoodApp = lazy(() => import('../modules/Food/routes'))
 const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp'))
 const AuthApp = lazy(() => import('../modules/auth/routes'))
+const PlatformLanding = lazy(() => import('../modules/Landing/pages/PlatformLanding'))
 
 // Auth only — Food and Taxi get a real skeleton below instead (see
 // FoodAppWrapper/TaxiAppWrapper).
@@ -51,6 +53,20 @@ const TaxiAppWrapper = () => (
 const RedirectToFood = () => {
   const location = useLocation()
   return <Navigate to={`/food${location.pathname}${location.search}`} replace />
+}
+
+// `/` is the public marketing landing page. A guest sees it; someone already signed into Food or Taxi is
+// sent straight into the app instead, same as before this page existed.
+const RootGate = () => {
+  if (isConsumerLoggedIn()) {
+    return <Navigate to={resolveAppColdStartRoute()} replace />
+  }
+
+  return (
+    <Suspense fallback={<SoftFallback />}>
+      <PlatformLanding />
+    </Suspense>
+  )
 }
 
 const AppRoutes = () => {
@@ -143,7 +159,7 @@ const AppRoutes = () => {
       <AdminModulesKeepAlive />
 
       <Routes>
-        <Route path="/" element={<Navigate to={resolveAppColdStartRoute()} replace />} />
+        <Route path="/" element={<RootGate />} />
         <Route path="/login/*" element={<Suspense fallback={<SoftFallback />}><AuthApp /></Suspense>} />
         <Route path="/food/*" element={<FoodAppWrapper />} />
         {/* More specific than /taxi/* — UI comes from AdminModulesKeepAlive. */}

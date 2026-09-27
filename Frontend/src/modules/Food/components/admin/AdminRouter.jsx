@@ -11,6 +11,7 @@ const GlobalAdminHome = lazy(() => import("@/modules/Global/pages/GlobalAdminHom
 const GlobalAdminLayout = lazy(() => import("@/modules/Global/components/GlobalAdminLayout"));
 const GlobalSectionRoute = lazy(() => import("@/modules/Global/components/GlobalSectionRoute"));
 const GlobalCustomers = lazy(() => import("@/modules/Global/pages/GlobalCustomers"));
+const GlobalLandingManagement = lazy(() => import("@/modules/Global/pages/GlobalLandingManagement"));
 const GlobalSubAdmins = lazy(() => import("@/modules/Global/pages/GlobalSubAdmins"));
 const GlobalSubAdminAccess = lazy(() => import("@/modules/Global/pages/GlobalSubAdminAccess"));
 const PointOfSale = lazy(() => import("@food/pages/admin/PointOfSale"));
@@ -168,6 +169,7 @@ export default function AdminRouter() {
         >
           <Route index element={<GlobalSectionRoute section="overview"><GlobalAdminHome /></GlobalSectionRoute>} />
           <Route path="customers" element={<GlobalSectionRoute section="customers"><GlobalCustomers /></GlobalSectionRoute>} />
+          <Route path="landing" element={<GlobalSectionRoute section="landing"><GlobalLandingManagement /></GlobalSectionRoute>} />
           <Route path="sub-admins" element={<GlobalSectionRoute platformOnly><GlobalSubAdmins /></GlobalSectionRoute>} />
           <Route path="sub-admins/:id/access" element={<GlobalSectionRoute platformOnly><GlobalSubAdminAccess /></GlobalSectionRoute>} />
           <Route path="profile" element={<AdminProfile />} />
