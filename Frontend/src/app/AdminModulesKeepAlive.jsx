@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useState } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
-import { prefetchFoodAdmin, prefetchTaxiAdmin } from '@/shared/utils/activeModule.js'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { prefetchFoodAdmin, prefetchTaxiAdmin, resolveLegacyTaxiAdminPath } from '@/shared/utils/activeModule.js'
 
 const FoodAdminRouter = lazy(() => import('../modules/Food/components/admin/AdminRouter.jsx'))
 const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp.jsx'))
@@ -11,7 +11,8 @@ const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp.jsx'))
  */
 export default function AdminModulesKeepAlive() {
   const location = useLocation()
-  const isFoodAdmin = String(location.pathname || '').startsWith('/admin')
+  const legacyTaxiTarget = resolveLegacyTaxiAdminPath(location.pathname)
+  const isFoodAdmin = !legacyTaxiTarget && String(location.pathname || '').startsWith('/admin')
   const isTaxiAdmin = String(location.pathname || '').startsWith('/taxi/admin')
   const active = isFoodAdmin ? 'food' : isTaxiAdmin ? 'taxi' : null
 
@@ -49,6 +50,11 @@ export default function AdminModulesKeepAlive() {
     prefetchFoodAdmin()
     prefetchTaxiAdmin()
   }, [active])
+
+  // Old-Taxi links (/admin/drivers/…) -> real Taxi admin URL, without ever mounting the Food shell.
+  if (legacyTaxiTarget) {
+    return <Navigate to={`${legacyTaxiTarget}${location.search}${location.hash}`} replace />
+  }
 
   if (!active) return null
 

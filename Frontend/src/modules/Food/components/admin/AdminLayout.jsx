@@ -4,13 +4,14 @@ import { ArrowLeft } from "lucide-react"
 import AdminSidebar from "./AdminSidebar"
 import AdminNavbar from "./AdminNavbar"
 import { API_BASE_URL } from "@food/api/config"
-import { adminAPI } from "@food/api"
-import { getCurrentUser, getModuleToken, setAuthData, getModuleRefreshToken } from "@food/utils/auth"
+import { getCurrentUser } from "@food/utils/auth"
 import {
   canAccessPath,
   getFirstAllowedPath,
   isSubAdmin,
 } from "@food/utils/subAdminPermissions"
+import { getAdminHomePath, getModuleAccess, isPlatformAdmin } from "@/shared/utils/adminAccess.js"
+import { refreshAdminProfile } from "@/modules/Global/utils/adminSession"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -25,32 +26,14 @@ export default function AdminLayout() {
   const mainRef = useRef(null);
   const user = getCurrentUser("admin");
 
-  // Keep SUB_ADMIN permissions in sync (so permission changes apply without re-login)
+  // Keep sub-admin access in sync (permission / module changes apply without re-login).
+  // refreshAdminProfile only rewrites the stored profile when something actually changed.
   useEffect(() => {
-    if (!isSubAdmin(user)) return
+    if (isPlatformAdmin(user)) return
     let cancelled = false
-    adminAPI
-      .getAdminProfile()
-      .then((res) => {
-        if (cancelled) return
-        const fresh =
-          res?.data?.data?.admin ||
-          res?.data?.admin ||
-          res?.data?.data?.user ||
-          null
-        if (!fresh) return
-        const prevPerms = JSON.stringify(user?.permissions || {})
-        const nextPerms = JSON.stringify(fresh.permissions || {})
-        // Avoid rewriting localStorage (and remounting sidebar) when nothing changed
-        if (prevPerms === nextPerms && String(user?.role) === String(fresh.role) && user?.isActive === fresh.isActive) {
-          return
-        }
-        const token = getModuleToken("admin")
-        const refresh = getModuleRefreshToken("admin")
-        if (token) {
-          setAuthData("admin", token, { ...user, ...fresh }, refresh)
-          setUserVersion((v) => v + 1)
-        }
+    refreshAdminProfile()
+      .then((changed) => {
+        if (changed && !cancelled) setUserVersion((v) => v + 1)
       })
       .catch(() => {})
     return () => {
@@ -67,13 +50,20 @@ export default function AdminLayout() {
     }
   }, [location.pathname]);
 
-  // Block SUB_ADMIN from routes they don't have permission for
+  // Where this admin has to be sent instead of showing the Food shell, or null to stay:
+  // - an admin without Food access (for example a Taxi-only sub admin) goes to its own part of the panel;
+  // - a SUB_ADMIN on a page it has no permission for goes to the first page it may open.
+  // It is only resolved here and acted on after the last hook below: returning <Navigate> before the
+  // remaining hooks changes the hook order between renders ("Rendered more hooks than during the previous
+  // render") and blanks the whole page.
   const latestUser = getCurrentUser("admin") || user
-  if (isSubAdmin(latestUser) && !canAccessPath(latestUser, location.pathname)) {
-    const fallback = getFirstAllowedPath(latestUser);
-    if (fallback !== location.pathname) {
-      return <Navigate to={fallback} replace />;
-    }
+  let redirectTo = null
+  if (!getModuleAccess(latestUser || {}).food) {
+    const home = getAdminHomePath(latestUser || {})
+    if (home !== "/admin/login") redirectTo = home
+  } else if (isSubAdmin(latestUser) && !canAccessPath(latestUser, location.pathname)) {
+    const fallback = getFirstAllowedPath(latestUser)
+    if (fallback !== location.pathname) redirectTo = fallback
   }
 
   const normalizedPath = location.pathname.replace(/\/+$/, "") || "/"
@@ -240,6 +230,10 @@ export default function AdminLayout() {
       clearTimeout(timeout);
     };
   }, [location.pathname, showBackButton]);
+
+  if (redirectTo) {
+    return <Navigate to={redirectTo} replace />
+  }
 
   return (
     <div className="h-screen bg-neutral-200 flex overflow-hidden admin-module-container">

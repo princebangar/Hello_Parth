@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom"
 import { isModuleAuthenticated } from "@food/utils/auth"
+import { getAdminHomePath } from "@/shared/utils/adminAccess.js"
 
 function getRestaurantPendingRedirect() {
   const userStr = localStorage.getItem("restaurant_user")
@@ -43,7 +44,11 @@ export default function AuthRedirect({ children, module, redirectTo = null }) {
       }
     }
 
-    const homePath = redirectTo || moduleHomePages[module] || "/food"
+    const homePath = redirectTo || (module === "admin" ? getAdminHomePath() : moduleHomePages[module]) || "/food"
+    // An admin with no reachable area stays on the login page instead of bouncing back and forth.
+    if (module === "admin" && homePath === "/admin/login") {
+      return <>{children}</>
+    }
     return <Navigate to={homePath} replace />
   }
 

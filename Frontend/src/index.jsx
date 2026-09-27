@@ -55,7 +55,6 @@ function resolveNativeInitialRoute() {
     '/ride/tracking', '/ride/complete', '/ride/chat',
     '/parcel/searching', '/parcel/tracking', '/parcel/details', '/parcel/contacts',
     '/intercity/details', '/intercity/confirm',
-    '/rental/vehicle', '/rental/schedule', '/rental/kyc', '/rental/deposit', '/rental/confirmed',
   ]
   const isTransient = (r) => TRANSIENT_SEGMENTS.some((s) => r.includes(s))
 

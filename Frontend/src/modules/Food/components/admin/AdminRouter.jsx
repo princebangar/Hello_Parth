@@ -7,6 +7,12 @@ import AuthRedirect from "@food/components/AuthRedirect";
 import Loader from "@food/components/Loader";
 
 const AdminHome = lazy(() => import("@food/pages/admin/AdminHome"));
+const GlobalAdminHome = lazy(() => import("@/modules/Global/pages/GlobalAdminHome"));
+const GlobalAdminLayout = lazy(() => import("@/modules/Global/components/GlobalAdminLayout"));
+const GlobalSectionRoute = lazy(() => import("@/modules/Global/components/GlobalSectionRoute"));
+const GlobalCustomers = lazy(() => import("@/modules/Global/pages/GlobalCustomers"));
+const GlobalSubAdmins = lazy(() => import("@/modules/Global/pages/GlobalSubAdmins"));
+const GlobalSubAdminAccess = lazy(() => import("@/modules/Global/pages/GlobalSubAdminAccess"));
 const PointOfSale = lazy(() => import("@food/pages/admin/PointOfSale"));
 const AdminProfile = lazy(() => import("@food/pages/admin/AdminProfile"));
 const AdminSettings = lazy(() => import("@food/pages/admin/AdminSettings"));
@@ -150,6 +156,23 @@ export default function AdminRouter() {
         <Route path="login" element={<AuthRedirect module="admin"><AdminLogin /></AuthRedirect>} />
         <Route path="forgot-password" element={<AuthRedirect module="admin"><AdminForgotPassword /></AuthRedirect>} />
         <Route path="signup" element={<AuthRedirect module="admin"><AdminSignup /></AuthRedirect>} />
+
+        {/* GLOBAL ADMIN - its own shell (sidebar + top bar); it never renders the Food layout or menu */}
+        <Route
+          path="global"
+          element={
+            <ProtectedRoute>
+              <GlobalAdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<GlobalSectionRoute section="overview"><GlobalAdminHome /></GlobalSectionRoute>} />
+          <Route path="customers" element={<GlobalSectionRoute section="customers"><GlobalCustomers /></GlobalSectionRoute>} />
+          <Route path="sub-admins" element={<GlobalSectionRoute platformOnly><GlobalSubAdmins /></GlobalSectionRoute>} />
+          <Route path="sub-admins/:id/access" element={<GlobalSectionRoute platformOnly><GlobalSubAdminAccess /></GlobalSectionRoute>} />
+          <Route path="profile" element={<AdminProfile />} />
+          <Route path="*" element={<Navigate to="/admin/global" replace />} />
+        </Route>
 
         {/* Protected Routes - With Layout */}
         <Route

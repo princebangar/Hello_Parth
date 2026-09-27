@@ -120,11 +120,6 @@ const AppRoutes = () => {
       '/parcel/contacts',
       '/intercity/details',
       '/intercity/confirm',
-      '/rental/vehicle',
-      '/rental/schedule',
-      '/rental/kyc',
-      '/rental/deposit',
-      '/rental/confirmed',
     ]
     const isTransient = TRANSIENT_ROUTE_SEGMENTS.some(seg => route.includes(seg))
     if (isTransient) {
