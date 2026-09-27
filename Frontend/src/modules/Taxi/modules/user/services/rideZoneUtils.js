@@ -171,7 +171,7 @@ export const resolveServiceLocationIdFromCoords = (coords, zones = []) => {
 };
 
 export const fetchActiveRideZones = async (api, serviceLocationId = '') => {
-  const response = await api.get('/admin/zones');
+  const response = await api.get('/users/zones');
   const zones = unwrapZoneResults(response).filter(isZoneActive);
 
   if (!serviceLocationId) {
