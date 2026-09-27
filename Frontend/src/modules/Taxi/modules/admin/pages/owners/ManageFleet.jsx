@@ -18,10 +18,11 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 
 const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
 const MotionDiv = motion.div;
-const FILE_BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ || '';
+const FILE_BASE = BACKEND_ORIGIN || '';
 
 const resolveFleetDocumentUrl = (value = '') => {
   const raw = String(value || '').trim();

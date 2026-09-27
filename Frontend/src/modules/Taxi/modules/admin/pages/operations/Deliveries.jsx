@@ -479,7 +479,7 @@ const Deliveries = () => {
                 )}
               </button>
               <button 
-                onClick={() => handleNotImplemented('Refresh')}
+                onClick={() => window.location.reload()}
                 className="hidden sm:flex h-8 items-center justify-center px-3 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Refresh

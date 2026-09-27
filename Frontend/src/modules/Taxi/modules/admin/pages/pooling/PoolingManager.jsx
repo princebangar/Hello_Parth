@@ -813,8 +813,6 @@ const PoolingManager = ({ mode: propMode }) => {
                           <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                             <button
                               onClick={() => {
-                                setPropMode('editor');
-                                setPropEditId(item.id || item._id);
                                 navigate(`/admin/pooling/edit/${item.id || item._id}`);
                               }}
                               className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[10px] font-bold text-slate-600 transition hover:bg-slate-100"
