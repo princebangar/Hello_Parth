@@ -9,9 +9,6 @@ import {
   approveOwner,
   approveOwnerSignupFromDriver,
   approveBusDriverSignup,
-  approveServiceCenterStaffSignup,
-  approveServiceStoreSignup,
-  createAirport,
   createAdminAccount,
   createAdminBusBooking,
   createBusService,
@@ -31,9 +28,6 @@ import {
   createPaymentMethod,
   createPoolingRoute,
   createServiceLocation,
-  createServiceStore,
-  createServiceStoreStaff,
-  createRentalVehicleType,
   createSetPrice,
   createSubscriptionPlan,
   createCustomerSubscriptionPlan,
@@ -57,10 +51,8 @@ import {
   deleteRole,
   deletePaymentMethod,
   deletePoolingRoute,
-  deleteRentalVehicleType,
   deleteSetPrice,
   deleteServiceLocation,
-  deleteServiceStore,
   deleteUser,
   deleteZone,
   downloadDriverDutyReport,
@@ -74,10 +66,7 @@ import {
   getAdminBusBookingCalendar,
   getAdminBusBookings,
   getAdminEarnings,
-  getAirports,
   getPendingBusDriverSignups,
-  getPendingServiceCenterStaffSignups,
-  getPendingServiceStoreSignups,
   getBusServices,
   getAppModules,
   getCancelChart,
@@ -127,11 +116,7 @@ import {
   getPaymentMethods,
   getPaymentSettings,
   getPoolingRoutes,
-  getRentalBookingRequests,
-  getRentalTrackingDashboard,
-  getRentalQuoteRequests,
   getPreferences,
-  getRentalVehicleTypes,
   getRideModules,
   getRoles,
   getReferralSettings,
@@ -140,7 +125,6 @@ import {
   getSetPriceById,
   getSetPrices,
   getServiceLocations,
-  getServiceStores,
   getSmsSettings,
   getSubscriptionPlans,
   getCustomerSubscriptionPlans,
@@ -159,8 +143,6 @@ import {
   getRideRequests,
   rejectDriverDeletionRequest,
   rejectBusDriverSignup,
-  rejectServiceCenterStaffSignup,
-  rejectServiceStoreSignup,
   getUserRequests,
   getUserWalletHistory,
   getVehiclePreferenceOptions,
@@ -181,7 +163,6 @@ import {
   listOwnerWalletHistory,
   adjustOwnerWallet,
   updateAppModule,
-  updateAirport,
   updateAdminAccount,
   updateBusService,
   updateDriver,
@@ -194,6 +175,9 @@ import {
   updateRentalPackageType,
   updateGeneralSettingsCategory,
   updateLanguageStatus,
+  createLanguage,
+  updateLanguage,
+  getCancellationAnalytics,
   updateMailSettings,
   updateMapSettings,
   updateRechargeApiSettings,
@@ -204,14 +188,10 @@ import {
   updatePaymentSettings,
   updatePaymentMethod,
   updatePoolingRoute,
-  updateRentalBookingRequest,
-  updateRentalQuoteRequest,
   updatePreferenceStatus,
   updateReferralTranslation,
-  updateRentalVehicleType,
   updateSetPrice,
   updateServiceLocation,
-  updateServiceStore,
   updateSmsSettings,
   updateUser,
   updateVehicleType,
@@ -221,7 +201,6 @@ import {
   createVehicleType,
   createFleetVehicle,
   cancelAdminBusBookingSeats,
-  deleteAirport,
   deleteAdminAccount,
   deleteVehicleType,
   getAdminPermissions,
@@ -325,17 +304,6 @@ adminRouter.get('/admin/service-locations/nearby', getNearbyServiceLocations);
 adminRouter.post('/admin/service-locations', createServiceLocation);
 adminRouter.patch('/admin/service-locations/:id', updateServiceLocation);
 adminRouter.delete('/admin/service-locations/:id', deleteServiceLocation);
-adminRouter.get('/admin/service-stores', getServiceStores);
-adminRouter.get('/admin/service-stores/pending', getPendingServiceStoreSignups);
-adminRouter.get('/admin/service-stores/pending-staff', getPendingServiceCenterStaffSignups);
-adminRouter.post('/admin/service-stores', createServiceStore);
-adminRouter.patch('/admin/service-stores/:id', updateServiceStore);
-adminRouter.post('/admin/service-stores/:id/staff', createServiceStoreStaff);
-adminRouter.patch('/admin/service-stores/:id/approve', approveServiceStoreSignup);
-adminRouter.patch('/admin/service-stores/:id/reject', rejectServiceStoreSignup);
-adminRouter.patch('/admin/service-stores/staff/:id/approve', approveServiceCenterStaffSignup);
-adminRouter.patch('/admin/service-stores/staff/:id/reject', rejectServiceCenterStaffSignup);
-adminRouter.delete('/admin/service-stores/:id', deleteServiceStore);
 adminRouter.get('/common/ride_modules', getRideModules);
 adminRouter.get('/admin/types/vehicle-types/list', getVehicleTypes);
 adminRouter.get('/admin/types/vehicle-types', getVehicleTypeCatalog);
@@ -348,10 +316,6 @@ adminRouter.get('/admin/types/set-prices/:id', getSetPriceById);
 adminRouter.post('/admin/types/set-prices', createSetPrice);
 adminRouter.patch('/admin/types/set-prices/:id', updateSetPrice);
 adminRouter.delete('/admin/types/set-prices/:id', deleteSetPrice);
-adminRouter.get('/admin/airports', getAirports);
-adminRouter.post('/admin/airports', createAirport);
-adminRouter.patch('/admin/airports/:id', updateAirport);
-adminRouter.delete('/admin/airports/:id', deleteAirport);
 adminRouter.get('/admin/bus-services', getBusServices);
 adminRouter.get('/admin/bus-services/pending-drivers', getPendingBusDriverSignups);
 adminRouter.post('/admin/bus-services', createBusService);
@@ -363,10 +327,6 @@ adminRouter.get('/admin/bus-bookings', getAdminBusBookings);
 adminRouter.get('/admin/bus-bookings/calendar', getAdminBusBookingCalendar);
 adminRouter.post('/admin/bus-bookings/manual', createAdminBusBooking);
 adminRouter.post('/admin/bus-bookings/:id/cancel', cancelAdminBusBookingSeats);
-adminRouter.get('/admin/types/rental-vehicles', getRentalVehicleTypes);
-adminRouter.post('/admin/types/rental-vehicles', createRentalVehicleType);
-adminRouter.patch('/admin/types/rental-vehicles/:id', updateRentalVehicleType);
-adminRouter.delete('/admin/types/rental-vehicles/:id', deleteRentalVehicleType);
 adminRouter.get('/admin/pooling-routes', getPoolingRoutes);
 adminRouter.post('/admin/pooling-routes', createPoolingRoute);
 adminRouter.patch('/admin/pooling-routes/:id', updatePoolingRoute);
@@ -382,11 +342,6 @@ adminRouter.get('/admin/pooling-bookings', getPoolingBookings);
 adminRouter.patch('/admin/pooling-bookings/:id/status', updatePoolingBookingStatus);
 
 adminRouter.post('/admin/upload-image', uploadImage);
-adminRouter.get('/admin/rental-booking-requests', getRentalBookingRequests);
-adminRouter.get('/admin/rental-tracking', getRentalTrackingDashboard);
-adminRouter.patch('/admin/rental-booking-requests/:id', updateRentalBookingRequest);
-adminRouter.get('/admin/rental-quote-requests', getRentalQuoteRequests);
-adminRouter.patch('/admin/rental-quote-requests/:id', updateRentalQuoteRequest);
 adminRouter.get('/admin/goods-types', getGoodsTypes);
 adminRouter.post('/admin/goods-types', createGoodsType);
 adminRouter.patch('/admin/goods-types/:id', updateGoodsType);
@@ -453,7 +408,10 @@ adminRouter.delete('/admin/zones/:id', deleteZone);
 adminRouter.patch('/admin/zones/:id/toggle-status', toggleZoneStatus);
 
 adminRouter.get('/admin/languages', getLanguages);
+adminRouter.post('/admin/languages', createLanguage);
 adminRouter.patch('/admin/languages/:id/status', updateLanguageStatus);
+adminRouter.patch('/admin/languages/:id', updateLanguage);
+adminRouter.get('/admin/cancellation-analytics', getCancellationAnalytics);
 adminRouter.delete('/admin/languages/:id', deleteLanguage);
 
 adminRouter.get('/admin/preferences', getPreferences);
