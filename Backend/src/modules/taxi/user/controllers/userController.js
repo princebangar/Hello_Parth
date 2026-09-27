@@ -24,17 +24,12 @@ import {
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
-import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
-import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
-import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
-import { ServiceStore } from '../../admin/models/ServiceStore.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
 import { emitToDriver } from '../../services/dispatchService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
-import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../services/rentalTrackingService.js';
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
-import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
+import { listSetPrices, listZones } from '../../admin/services/adminService.js';
 import {
   findActiveEmployeeByCode,
   normalizeEmployeeCode,
@@ -136,44 +131,8 @@ const resolvePhonePeCredentials = async () => {
   return resolveConfiguredGatewayCredentials('phone_pay');
 };
 
-const isActiveEntity = (item = {}) =>
-  item?.active !== false && String(item?.status || 'active').toLowerCase() === 'active';
-
 export const listPublicServiceLocations = async (_req, res) => {
   const results = await listDriverServiceLocations();
-
-  res.json({
-    success: true,
-    data: {
-      results,
-    },
-  });
-};
-
-export const listPublicServiceStores = async (_req, res) => {
-  const results = (await listServiceStores())
-    .filter(isActiveEntity)
-    .map((store) => {
-      const resolvedServiceLocationId =
-        store.service_location_id ||
-        store.zone_id?.service_location_id ||
-        null;
-
-      return {
-        _id: store._id,
-        id: store.id || store._id,
-        name: store.name || '',
-        address: store.address || '',
-        owner_name: store.owner_name || '',
-        owner_phone: store.owner_phone || '',
-        service_location_id: resolvedServiceLocationId,
-        zone_id: store.zone_id,
-        latitude: Number(store.latitude ?? null),
-        longitude: Number(store.longitude ?? null),
-        status: store.status || 'active',
-        active: store.active !== false,
-      };
-    });
 
   res.json({
     success: true,
@@ -1126,260 +1085,9 @@ const serializeBusBooking = (booking, busService = null) => {
   };
 };
 
-const serializeRentalQuoteRequest = (item = {}) => ({
-  id: String(item._id || item.id || ''),
-  vehicleTypeId: item.vehicleTypeId ? String(item.vehicleTypeId) : '',
-  vehicleName: item.vehicleName || '',
-  contactName: item.contactName || '',
-  contactPhone: item.contactPhone || '',
-  contactEmail: item.contactEmail || '',
-  requestedHours: Number(item.requestedHours || 0),
-  pickupDateTime: item.pickupDateTime || null,
-  returnDateTime: item.returnDateTime || null,
-  seatsNeeded: Number(item.seatsNeeded || 1),
-  luggageNeeded: Number(item.luggageNeeded || 0),
-  pickupLocation: item.pickupLocation || '',
-  dropLocation: item.dropLocation || '',
-  specialRequirements: item.specialRequirements || '',
-  status: item.status || 'pending',
-  adminQuotedAmount: Number(item.adminQuotedAmount || 0),
-  adminNote: item.adminNote || '',
-  createdAt: item.createdAt || null,
-});
-
-const serializeRentalBookingRequest = (item = {}) => ({
-  id: String(item._id || item.id || ''),
-  bookingReference: item.bookingReference || '',
-  userId: item.userId ? String(item.userId) : '',
-  vehicleTypeId: item.vehicleTypeId ? String(item.vehicleTypeId) : '',
-  vehicleName: item.vehicleName || '',
-  vehicleCategory: item.vehicleCategory || '',
-  vehicleImage: item.vehicleImage || '',
-  selectedPackage: {
-    packageId: item.selectedPackage?.packageId || '',
-    label: item.selectedPackage?.label || '',
-    durationHours: Number(item.selectedPackage?.durationHours || 0),
-    price: Number(item.selectedPackage?.price || 0),
-    extraHourPrice: Number(item.selectedPackage?.extraHourPrice || 0),
-  },
-  serviceLocation: {
-    locationId: item.serviceLocation?.locationId || '',
-    name: item.serviceLocation?.name || '',
-    address: item.serviceLocation?.address || '',
-    city: item.serviceLocation?.city || '',
-    latitude: item.serviceLocation?.latitude ?? null,
-    longitude: item.serviceLocation?.longitude ?? null,
-    distanceKm: item.serviceLocation?.distanceKm ?? null,
-  },
-  pickupDateTime: item.pickupDateTime || null,
-  returnDateTime: item.returnDateTime || null,
-  requestedHours: Number(item.requestedHours || 0),
-  totalCost: Number(item.totalCost || 0),
-  payableNow: Number(item.payableNow || 0),
-  advancePaymentLabel: item.advancePaymentLabel || '',
-  paymentStatus: item.paymentStatus || 'pending',
-  paymentMethod: item.paymentMethod || '',
-  paymentMethodLabel: item.paymentMethodLabel || '',
-  payment: {
-    provider: item.payment?.provider || '',
-    status: item.payment?.status || '',
-    amount: Number(item.payment?.amount || 0),
-    currency: item.payment?.currency || 'INR',
-    orderId: item.payment?.orderId || '',
-    paymentId: item.payment?.paymentId || '',
-    signature: item.payment?.signature || '',
-  },
-  contactName: item.contactName || '',
-  contactPhone: item.contactPhone || '',
-  contactEmail: item.contactEmail || '',
-  kycCompleted: Boolean(item.kycCompleted),
-  kycDocuments: {
-    drivingLicense: {
-      imageUrl: item.kycDocuments?.drivingLicense?.imageUrl || '',
-      fileName: item.kycDocuments?.drivingLicense?.fileName || '',
-      uploadedAt: item.kycDocuments?.drivingLicense?.uploadedAt || null,
-    },
-    aadhaarCard: {
-      imageUrl: item.kycDocuments?.aadhaarCard?.imageUrl || '',
-      fileName: item.kycDocuments?.aadhaarCard?.fileName || '',
-      uploadedAt: item.kycDocuments?.aadhaarCard?.uploadedAt || null,
-    },
-  },
-  assignedVehicle: {
-    vehicleId: item.assignedVehicle?.vehicleId ? String(item.assignedVehicle.vehicleId) : '',
-    name: item.assignedVehicle?.name || '',
-    vehicleCategory: item.assignedVehicle?.vehicleCategory || '',
-    image: item.assignedVehicle?.image || '',
-  },
-  commissionSnapshot: {
-    serviceStoreId: item.commissionSnapshot?.serviceStoreId
-      ? String(item.commissionSnapshot.serviceStoreId)
-      : '',
-    serviceStoreName: item.commissionSnapshot?.serviceStoreName || '',
-    ownerName: item.commissionSnapshot?.ownerName || '',
-    serviceStoreCommissionType:
-      item.commissionSnapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage',
-    serviceStoreCommissionValue: Number(item.commissionSnapshot?.serviceStoreCommissionValue || 0),
-    ownerCommissionType:
-      item.commissionSnapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage',
-    ownerCommissionValue: Number(item.commissionSnapshot?.ownerCommissionValue || 0),
-    serviceTaxPercentage: Math.max(0, Number(item.commissionSnapshot?.serviceTaxPercentage || 0)),
-  },
-  status: item.status || 'pending',
-  adminNote: item.adminNote || '',
-  assignedAt: item.assignedAt || null,
-  completionRequestedAt: item.completionRequestedAt || null,
-  completedAt: item.completedAt || null,
-  finalCharge: Number(item.finalCharge || 0),
-  finalElapsedMinutes: Number(item.finalElapsedMinutes || 0),
-  createdAt: item.createdAt || null,
-  updatedAt: item.updatedAt || null,
-  rentalTracking: buildRentalTrackingSnapshot(item),
-});
-
-const computeRentalCommissionBreakdown = (snapshot = {}, grossAmount = 0) => {
-  const baseAmount = Math.max(0, Number(grossAmount || 0));
-  const serviceStoreType =
-    snapshot?.serviceStoreCommissionType === 'fixed' ? 'fixed' : 'percentage';
-  const ownerType = snapshot?.ownerCommissionType === 'fixed' ? 'fixed' : 'percentage';
-  const serviceStoreValue = Math.max(0, Number(snapshot?.serviceStoreCommissionValue || 0));
-  const ownerValue = Math.max(0, Number(snapshot?.ownerCommissionValue || 0));
-  const calculateAmount = (amount, type, value) =>
-    type === 'fixed'
-      ? Math.min(amount, value)
-      : Math.min(amount, Math.max(0, (amount * value) / 100));
-  const serviceStoreAmountRaw = calculateAmount(baseAmount, serviceStoreType, serviceStoreValue);
-  const ownerAmountRaw = calculateAmount(
-    Math.max(0, baseAmount - serviceStoreAmountRaw),
-    ownerType,
-    ownerValue,
-  );
-  const adminAmountRaw = Math.max(0, baseAmount - serviceStoreAmountRaw - ownerAmountRaw);
-  const serviceTaxPercentage = Math.max(0, Number(snapshot?.serviceTaxPercentage || 0));
-  const serviceTaxAmountRaw = (baseAmount * serviceTaxPercentage) / 100;
-  const round = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
-
-  return {
-    grossAmount: round(baseAmount),
-    grossAmountWithTax: round(baseAmount + serviceTaxAmountRaw),
-    serviceTax: {
-      percentage: round(serviceTaxPercentage),
-      amount: round(serviceTaxAmountRaw),
-    },
-    serviceStore: {
-      id: snapshot?.serviceStoreId ? String(snapshot.serviceStoreId) : '',
-      name: snapshot?.serviceStoreName || '',
-      type: serviceStoreType,
-      value: round(serviceStoreValue),
-      amount: round(serviceStoreAmountRaw),
-    },
-    owner: {
-      name: snapshot?.ownerName || '',
-      type: ownerType,
-      value: round(ownerValue),
-      amount: round(ownerAmountRaw),
-    },
-    admin: {
-      amount: round(adminAmountRaw),
-    },
-  };
-};
-
-const resolveRentalSelectedPackagePricing = (item = {}) => {
-  const selectedPackage = item.selectedPackage || {};
-  const normalizedPackageId = String(selectedPackage.packageId || '').trim();
-  const vehiclePricing = Array.isArray(item.vehicleTypeId?.pricing) ? item.vehicleTypeId.pricing : [];
-  const matchedPackage = vehiclePricing.find((entry) => String(entry?.id || entry?.packageId || '').trim() === normalizedPackageId);
-
-  const includedHours = Math.max(
-    Number(selectedPackage.durationHours || 0),
-    Number(matchedPackage?.durationHours || 0),
-    1,
-  );
-  const basePrice = Math.max(
-    Number(selectedPackage.price || 0),
-    Number(matchedPackage?.price || 0),
-    0,
-  );
-  const extraHourPrice = Math.max(
-    Number(selectedPackage.extraHourPrice || 0),
-    Number(matchedPackage?.extraHourPrice || 0),
-    0,
-  );
-
-  return {
-    includedHours,
-    basePrice,
-    extraHourPrice,
-  };
-};
-
-const computeRentalRideMetrics = (item = {}, endedAt = null) => {
-  const startDate = item.assignedAt || item.pickupDateTime || item.createdAt;
-  const startMs = startDate ? new Date(startDate).getTime() : NaN;
-  const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
-  const { includedHours, basePrice, extraHourPrice } = resolveRentalSelectedPackagePricing(item);
-  const hourlyRate = includedHours > 0 ? basePrice / includedHours : 0;
-
-  if (!Number.isFinite(startMs)) {
-    return {
-      hourlyRate: Math.max(0, hourlyRate),
-      includedHours,
-      basePrice,
-      extraHourRate: extraHourPrice,
-      elapsedMinutes: 0,
-      elapsedHours: 0,
-      currentCharge: Math.max(basePrice, Number(item.payableNow || 0)),
-      remainingDue: Math.max(0, Math.max(basePrice, Number(item.payableNow || 0)) - Number(item.payableNow || 0)),
-    };
-  }
-
-  const elapsedMs = Math.max(0, endMs - startMs);
-  const elapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
-  const elapsedHours = elapsedMs / 3600000;
-  const elapsedChargeWithinPackage = elapsedHours <= includedHours
-    ? basePrice
-    : basePrice + Math.ceil(Math.max(0, elapsedHours - includedHours)) * extraHourPrice;
-  const uncappedCharge = Math.max(Number(item.payableNow || 0), elapsedChargeWithinPackage);
-  const currentCharge = Math.round((uncappedCharge + Number.EPSILON) * 100) / 100;
-  const remainingDue = Math.max(0, Math.round((currentCharge - Number(item.payableNow || 0) + Number.EPSILON) * 100) / 100);
-
-  return {
-    hourlyRate: Math.max(0, Math.round((hourlyRate + Number.EPSILON) * 100) / 100),
-    includedHours,
-    basePrice: Math.round((basePrice + Number.EPSILON) * 100) / 100,
-    extraHourRate: Math.round((extraHourPrice + Number.EPSILON) * 100) / 100,
-    elapsedMinutes,
-    elapsedHours: Math.round((elapsedHours + Number.EPSILON) * 100) / 100,
-    currentCharge,
-    remainingDue,
-  };
-};
-
-const resolveAuthenticatedUserObjectId = (req) => {
-  const userId = String(req.auth?.sub || '').trim();
-  return mongoose.Types.ObjectId.isValid(userId) ? userId : '';
-};
-
 const toPositiveInteger = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const buildPagination = ({ page = 1, limit = 10, total = 0 }) => {
-  const safeLimit = Math.max(1, Number(limit) || 10);
-  const safeTotal = Math.max(0, Number(total) || 0);
-  const totalPages = Math.max(1, Math.ceil(safeTotal / safeLimit));
-  const safePage = Math.min(Math.max(1, Number(page) || 1), totalPages);
-
-  return {
-    page: safePage,
-    limit: safeLimit,
-    total: safeTotal,
-    totalPages,
-    hasNextPage: safePage < totalPages,
-    hasPrevPage: safePage > 1,
-  };
 };
 
 const toUserPayload = (user, options = {}) => ({
@@ -1465,22 +1173,6 @@ const normalizeGovernmentIdProof = (input = {}, { required = false } = {}) => {
         ? new Date(input.backUploadedAt)
         : new Date()
       : null,
-  };
-};
-
-const buildRentalBookingResponse = (item = {}, endedAt = null) => {
-  const rideMetrics = computeRentalRideMetrics(item, endedAt);
-
-  return {
-    ...serializeRentalBookingRequest(item),
-    rideMetrics,
-    commissionBreakdown: {
-      estimated: computeRentalCommissionBreakdown(item.commissionSnapshot, Number(item.totalCost || 0)),
-      live: computeRentalCommissionBreakdown(
-        item.commissionSnapshot,
-        Number(item.finalCharge || rideMetrics.currentCharge || item.totalCost || 0),
-      ),
-    },
   };
 };
 
@@ -1856,49 +1548,34 @@ export const loginUser = async (req, res) => {
   });
 };
 
-export const verifyUserPhoneForOtpLogin = async (req, res) => {
-  const phone = normalizePhone(req.body.phone);
-  validatePhone(phone);
-
-  const user = await User.findOne({ phone }).lean();
-
-  if (!user || user.deletedAt) {
-    res.json({
-      success: true,
-      data: {
-        exists: false,
-        user: null,
-      },
-    });
-    return;
-  }
-
-  ensureUserCanLogin(user);
-
-  res.json({
-    success: true,
-    data: {
-      exists: true,
-      ...(await createUserSession(user)),
-    },
-  });
-};
-
 export const saveUserFcmToken = async (req, res) => {
-  const user = await User.findById(req.auth?.sub);
+  let saved = null;
 
-  if (!user) {
-    throw new ApiError(404, 'User not found');
+  // The app registers its token from several places at once; concurrent saves of the same
+  // document raise a VersionError, so re-read and retry instead of failing the request.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const user = await User.findById(req.auth?.sub);
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    ensureUserCanLogin(user);
+
+    saved = assignPushTokenToEntity(user, {
+      token: req.body?.token,
+      platform: req.body?.platform,
+    });
+
+    try {
+      await user.save();
+      break;
+    } catch (error) {
+      if (error?.name !== 'VersionError' || attempt === 2) {
+        throw error;
+      }
+    }
   }
-
-  ensureUserCanLogin(user);
-
-  const saved = assignPushTokenToEntity(user, {
-    token: req.body?.token,
-    platform: req.body?.platform,
-  });
-
-  await user.save();
 
   res.json({
     success: true,
@@ -2082,44 +1759,6 @@ export const getUserWallet = async (req, res) => {
   res.json({
     success: true,
     data: buildUserWalletPayload({ ...wallet, transactions }),
-  });
-};
-
-export const topupUserWallet = async (req, res) => {
-  const amount = normalizeMoneyAmount(req.body?.amount);
-  const userId = req.auth?.sub;
-  const user = await User.findById(userId).select('_id').lean();
-
-  if (!user) {
-    throw new ApiError(404, 'User not found');
-  }
-
-  const tx = {
-    kind: 'credit',
-    amount,
-    title: 'Wallet Refilled',
-    provider: 'manual',
-  };
-
-  await ensureUserWallet(userId);
-
-  await UserWallet.updateOne(
-    { userId },
-    {
-      $inc: { balance: amount },
-      $push: { transactions: { $each: [tx], $slice: -50 } },
-    },
-  );
-
-  const updatedWallet = await UserWallet.findOne({ userId }).select('balance transactions').slice('transactions', -10).lean();
-  const updatedWalletWithRefund = updatedWallet
-    ? { ...updatedWallet, refundWallet: Number(updatedWallet.refundWallet || 0) }
-    : updatedWallet;
-  const transactions = Array.isArray(updatedWallet?.transactions) ? updatedWallet.transactions : [];
-
-  res.status(201).json({
-    success: true,
-    data: buildUserWalletPayload({ ...updatedWalletWithRefund, transactions }),
   });
 };
 
@@ -2448,155 +2087,6 @@ const verifyAndApplyUserRazorpayWalletTopup = async ({
   return buildUserWalletPayload(wallet);
 };
 
-export const createRentalAdvancePaymentOrder = async (req, res) => {
-  const amount = normalizeMoneyAmount(req.body?.amount);
-  const vehicleId = String(req.body?.vehicleId || '').trim();
-  const vehicleName = String(req.body?.vehicleName || 'Rental booking').trim();
-  const pickup = String(req.body?.pickup || '').trim();
-  const returnTime = String(req.body?.returnTime || '').trim();
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
-
-  const amountPaise = Math.round(amount * 100);
-  const userId = String(req.auth?.sub || '');
-  const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'guest';
-  const receipt = `rentadv_${compactUserId}_${Date.now().toString(36)}`;
-
-  const order = await razorpayRequest({
-    method: 'POST',
-    path: '/orders',
-    body: {
-      amount: amountPaise,
-      currency: 'INR',
-      receipt,
-      notes: {
-        userId,
-        vehicleId,
-        vehicleName,
-        pickup,
-        returnTime,
-        purpose: 'rental_advance_payment',
-      },
-    },
-    keyId,
-    keySecret,
-  });
-
-  res.status(201).json({
-    success: true,
-    data: {
-      keyId,
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency || 'INR',
-      bookingReference: `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`,
-    },
-  });
-};
-
-export const createPhonePeRentalAdvancePaymentOrder = async (req, res) => {
-  const amount = normalizeMoneyAmount(req.body?.amount);
-  const vehicleId = String(req.body?.vehicleId || '').trim();
-  const vehicleName = String(req.body?.vehicleName || 'Rental booking').trim();
-  const pickup = String(req.body?.pickup || '').trim();
-  const returnTime = String(req.body?.returnTime || '').trim();
-  const bookingReference =
-    toCleanString(req.body?.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
-  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
-  const userId = String(req.auth?.sub || '');
-  const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
-  const merchantTransactionId = `URNT${Date.now()}${compactUserId}`.slice(0, 34);
-  const frontendBaseUrl = getFrontendBaseUrl(req);
-  const redirectUrl = `${frontendBaseUrl}/phonepe/status?flow=user-rental&phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
-  const user = userId ? await User.findById(userId).select('phone').lean() : null;
-  logPaymentDiagnostic({
-    provider: 'phonepe',
-    scope: 'user-rental',
-    stage: 'create-order-start',
-    merchantTransactionId,
-    bookingReference,
-    amountRupees: amount,
-    request: buildPaymentRequestContext(req),
-    metadata: {
-      vehicleId,
-      vehicleName,
-      pickup,
-      returnTime,
-      redirectUrl: summarizeCheckoutUrl(redirectUrl),
-    },
-  });
-  const payload = await phonePeRequest({
-    method: 'POST',
-    path: '/checkout/v2/pay',
-    body: {
-      merchantOrderId: merchantTransactionId,
-      amount: Math.round(amount * 100),
-      expireAfter: 1200,
-      paymentFlow: {
-        type: 'PG_CHECKOUT',
-        merchantUrls: {
-          redirectUrl,
-        },
-        message: 'Rental advance payment',
-      },
-      metaInfo: {
-        udf1: vehicleId || 'rental',
-        udf2: vehicleName.slice(0, 120) || 'Rental booking',
-        udf3: bookingReference,
-      },
-      prefillUserLoginDetails: normalizePhone(user?.phone || '')
-        ? { phoneNumber: normalizePhone(user?.phone || '') }
-        : undefined,
-    },
-    clientId,
-    clientSecret,
-    clientVersion,
-    environment,
-  });
-
-  const checkoutUrl = payload?.redirectUrl || '';
-  if (!checkoutUrl) {
-    logPaymentDiagnostic({
-      provider: 'phonepe',
-      scope: 'user-rental',
-      stage: 'create-order-missing-checkout-url',
-      level: 'error',
-      merchantTransactionId,
-      bookingReference,
-      response: summarizePhonePePayload(payload || {}),
-    });
-    throw new ApiError(502, 'PhonePe payment URL was not returned');
-  }
-
-  logPaymentDiagnostic({
-    provider: 'phonepe',
-    scope: 'user-rental',
-    stage: 'create-order-success',
-    merchantTransactionId,
-    bookingReference,
-    amountPaise: Math.round(amount * 100),
-    checkoutUrl: summarizeCheckoutUrl(checkoutUrl),
-    response: summarizePhonePePayload(payload || {}),
-  });
-
-  res.status(201).json({
-    success: true,
-    data: {
-      gateway: 'phonepe',
-      merchantTransactionId,
-      bookingReference,
-      amount: Math.round(amount * 100),
-      currency: 'INR',
-      checkoutUrl,
-      metadata: {
-        vehicleId,
-        vehicleName,
-        pickup,
-        returnTime,
-      },
-    },
-  });
-};
-
 export const createPhonePeWalletTopupOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
   const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
@@ -2674,66 +2164,6 @@ export const createPhonePeWalletTopupOrder = async (req, res) => {
       checkoutUrl,
       method: payload?.data?.instrumentResponse?.redirectInfo?.method || 'GET',
     },
-  });
-};
-
-export const payRentalAdvanceWithWallet = async (req, res) => {
-  const amount = normalizeMoneyAmount(req.body?.amount);
-  const bookingReference =
-    toCleanString(req.body?.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
-  const userId = req.auth?.sub;
-
-  await ensureUserWallet(userId);
-
-  const wallet = await UserWallet.findOne({ userId });
-  if (!wallet) {
-    throw new ApiError(404, 'User wallet not found');
-  }
-
-  const referenceKey = `rental_advance_${bookingReference}`;
-  const existingTransaction = Array.isArray(wallet.transactions)
-    ? wallet.transactions.find(
-        (item) => item?.kind === 'debit' && String(item.referenceKey || '') === referenceKey,
-      )
-    : null;
-
-  if (!existingTransaction) {
-    if (Number(wallet.balance || 0) < amount) {
-      throw new ApiError(400, 'Insufficient wallet balance');
-    }
-
-    wallet.balance = Math.round((Number(wallet.balance || 0) - amount) * 100) / 100;
-    wallet.transactions.push({
-      kind: 'debit',
-      amount,
-      title: 'Rental Advance Payment',
-      provider: 'wallet',
-      providerPaymentId: bookingReference,
-      referenceKey,
-    });
-
-    if (wallet.transactions.length > 50) {
-      wallet.transactions = wallet.transactions.slice(-50);
-    }
-
-    await wallet.save();
-  }
-
-  res.status(201).json({
-    success: true,
-    data: {
-      provider: 'wallet',
-      status: 'paid',
-      amount,
-      currency: 'INR',
-      orderId: '',
-      paymentId: bookingReference,
-      signature: '',
-      referenceKey,
-      bookingReference,
-      balance: Number(wallet.balance || 0),
-    },
-    message: 'Rental advance payment collected from wallet successfully',
   });
 };
 
@@ -2961,193 +2391,6 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
       providerMessage,
     },
     message: providerMessage,
-  });
-};
-
-export const verifyRentalAdvancePayment = async (req, res) => {
-  const orderId = String(req.body?.razorpay_order_id || '').trim();
-  const paymentId = String(req.body?.razorpay_payment_id || '').trim();
-  const signature = String(req.body?.razorpay_signature || '').trim();
-
-  if (!orderId || !paymentId || !signature) {
-    throw new ApiError(400, 'Payment verification fields are required');
-  }
-
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
-
-  const expectedSignature = crypto
-    .createHmac('sha256', keySecret)
-    .update(`${orderId}|${paymentId}`)
-    .digest('hex');
-
-  if (expectedSignature !== signature) {
-    throw new ApiError(400, 'Invalid payment signature');
-  }
-
-  const order = await razorpayRequest({
-    method: 'GET',
-    path: `/orders/${encodeURIComponent(orderId)}`,
-    keyId,
-    keySecret,
-  });
-
-  const amountPaise = Number(order?.amount);
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
-    throw new ApiError(400, 'Invalid order amount');
-  }
-
-  res.status(201).json({
-    success: true,
-    data: {
-      provider: 'razorpay',
-      status: 'paid',
-      amount: Math.round(amountPaise) / 100,
-      currency: order.currency || 'INR',
-      orderId,
-      paymentId,
-      signature,
-      notes: order?.notes || {},
-    },
-    message: 'Rental advance payment verified successfully',
-  });
-};
-
-export const verifyPhonePeRentalAdvancePayment = async (req, res) => {
-  const merchantTransactionId = toCleanString(
-    req.params?.merchantTransactionId || req.query?.merchantTransactionId || req.query?.transactionId,
-  );
-
-  if (!merchantTransactionId) {
-    throw new ApiError(400, 'merchantTransactionId is required');
-  }
-
-  logPaymentDiagnostic({
-    provider: 'phonepe',
-    scope: 'user-rental',
-    stage: 'verify-start',
-    merchantTransactionId,
-    request: buildPaymentRequestContext(req),
-  });
-
-  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
-  const payload = await phonePeRequest({
-    method: 'GET',
-    path: `/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status?details=false`,
-    clientId,
-    clientSecret,
-    clientVersion,
-    environment,
-  });
-
-  const paymentDetails = Array.isArray(payload?.paymentDetails) ? payload.paymentDetails : [];
-  const latestPayment = paymentDetails[0] || {};
-  const paymentState = String(payload?.state || latestPayment?.state || '').trim().toUpperCase();
-  const paymentId = toCleanString(latestPayment?.transactionId || latestPayment?.paymentTransactionId || merchantTransactionId);
-  const amount = Math.round(Number(payload?.amount || latestPayment?.amount || 0)) / 100;
-  const bookingReference = toCleanString(payload?.metaInfo?.udf3 || latestPayment?.metaInfo?.udf3);
-
-  logPaymentDiagnostic({
-    provider: 'phonepe',
-    scope: 'user-rental',
-    stage: 'verify-response',
-    merchantTransactionId,
-    bookingReference,
-    paymentState,
-    paymentId,
-    amountRupees: amount,
-    response: summarizePhonePePayload(payload || {}),
-  });
-
-  if (paymentState === 'COMPLETED') {
-    logPaymentDiagnostic({
-      provider: 'phonepe',
-      scope: 'user-rental',
-      stage: 'verify-paid',
-      merchantTransactionId,
-      bookingReference,
-      paymentId,
-      amountRupees: amount,
-    });
-    res.json({
-      success: true,
-      data: {
-        provider: 'phonepe',
-        gateway: 'phonepe',
-        status: 'paid',
-        amount,
-        currency: payload?.currency || 'INR',
-        merchantTransactionId,
-        transactionId: paymentId,
-        bookingReference,
-      },
-      message: 'Rental advance payment verified successfully',
-    });
-    return;
-  }
-
-  if (paymentState === 'PENDING') {
-    logPaymentDiagnostic({
-      provider: 'phonepe',
-      scope: 'user-rental',
-      stage: 'verify-pending',
-      merchantTransactionId,
-      bookingReference,
-      paymentId,
-      amountRupees: amount,
-    });
-    res.json({
-      success: true,
-      data: {
-        provider: 'phonepe',
-        gateway: 'phonepe',
-        status: 'pending',
-        merchantTransactionId,
-        transactionId: paymentId,
-        bookingReference,
-      },
-      message: payload?.message || 'PhonePe payment is still pending',
-    });
-    return;
-  }
-
-  logPaymentDiagnostic({
-    provider: 'phonepe',
-    scope: 'user-rental',
-    stage: 'verify-failed',
-    level: 'warn',
-    merchantTransactionId,
-    bookingReference,
-    paymentId,
-    paymentState,
-    amountRupees: amount,
-    code: payload?.code || latestPayment?.responseCode || '',
-    providerMessage:
-      payload?.message ||
-      latestPayment?.responseCodeDescription ||
-      latestPayment?.detailedErrorCode ||
-      '',
-    response: summarizePhonePePayload(payload || {}),
-  });
-  const rentalProviderCode = payload?.code || latestPayment?.responseCode || '';
-  const rentalProviderMessage =
-    payload?.message ||
-    latestPayment?.responseCodeDescription ||
-    latestPayment?.detailedErrorCode ||
-    'PhonePe payment was not completed';
-  res.json({
-    success: true,
-    data: {
-      provider: 'phonepe',
-      gateway: 'phonepe',
-      status: 'failed',
-      merchantTransactionId,
-      transactionId: paymentId,
-      bookingReference,
-      code: rentalProviderCode,
-      state: paymentState,
-      providerMessage: rentalProviderMessage,
-    },
-    message: rentalProviderMessage,
   });
 };
 
@@ -3496,6 +2739,25 @@ export const createBusBookingOrder = async (req, res) => {
   });
 };
 
+const refundCapturedBusPayment = async (booking, paymentId) => {
+  try {
+    const { keyId, keySecret } = await resolveRazorpayCredentials();
+    const refund = await razorpayRequest({
+      method: 'POST',
+      path: `/payments/${paymentId}/refund`,
+      body: { amount: Math.round(Number(booking.amount || 0) * 100), notes: { bookingCode: booking.bookingCode || '', reason: 'seat hold lost before confirmation' } },
+      keyId,
+      keySecret,
+    });
+    booking.payment.refundId = refund?.id || '';
+    booking.payment.status = 'refunded';
+    return true;
+  } catch (error) {
+    console.error('Bus auto-refund failed', paymentId, error?.message);
+    return false;
+  }
+};
+
 export const verifyBusBookingPayment = async (req, res) => {
   await ensureBusServiceEnabled();
   await cleanupExpiredBusSeatHolds();
@@ -3547,9 +2809,11 @@ export const verifyBusBookingPayment = async (req, res) => {
   if (booking.expiresAt && booking.expiresAt <= new Date()) {
     booking.status = 'expired';
     booking.payment.status = 'expired';
+    booking.payment.paymentId = paymentId;
+    const refundedExpired = await refundCapturedBusPayment(booking, paymentId);
     await booking.save();
     await BusSeatHold.deleteMany({ bookingId: booking._id, status: 'held' });
-    throw new ApiError(409, 'Seat hold expired before payment verification');
+    throw new ApiError(409, `Seat hold expired before payment verification. ${refundedExpired ? 'Your payment is being refunded.' : 'Our team will refund your payment shortly.'}`);
   }
 
   const holds = await BusSeatHold.find({
@@ -3561,9 +2825,11 @@ export const verifyBusBookingPayment = async (req, res) => {
   if (holds.length !== booking.seatIds.length) {
     booking.status = 'failed';
     booking.payment.status = 'seat_conflict';
+    booking.payment.paymentId = paymentId;
+    const refundedConflict = await refundCapturedBusPayment(booking, paymentId);
     await booking.save();
     await BusSeatHold.deleteMany({ bookingId: booking._id, status: 'held' });
-    throw new ApiError(409, 'Some selected seats are no longer reserved for this payment');
+    throw new ApiError(409, `Some selected seats are no longer reserved for this payment. ${refundedConflict ? 'Your payment is being refunded.' : 'Our team will refund your payment shortly.'}`);
   }
 
   booking.status = 'confirmed';
@@ -3855,480 +3121,6 @@ export const cancelMyBusBooking = async (req, res) => {
         : (remainingActiveSeatCount <= 0
           ? 'Bus booking cancelled successfully.'
           : 'Selected seats cancelled successfully.'),
-  });
-};
-
-export const createRentalQuoteRequest = async (req, res) => {
-  const payload = req.body || {};
-  const vehicleTypeId = String(payload.vehicleTypeId || '').trim();
-  const contactName = toCleanString(payload.contactName);
-  const contactPhone = normalizePhone(payload.contactPhone);
-  const contactEmail = normalizeEmail(payload.contactEmail);
-  const specialRequirements = toCleanString(payload.specialRequirements);
-  const pickupLocation = toCleanString(payload.pickupLocation);
-  const dropLocation = toCleanString(payload.dropLocation);
-  const requestedHours = Math.max(0, Number(payload.requestedHours || 0));
-  const seatsNeeded = Math.max(1, Number(payload.seatsNeeded || 1));
-  const luggageNeeded = Math.max(0, Number(payload.luggageNeeded || 0));
-
-  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
-    throw new ApiError(400, 'Valid rental vehicle is required');
-  }
-
-  if (!contactName || contactName.length < 2) {
-    throw new ApiError(400, 'Contact name is required');
-  }
-
-  validatePhone(contactPhone);
-  validateEmail(contactEmail);
-
-  const vehicle = await RentalVehicleType.findById(vehicleTypeId).lean();
-  if (!vehicle || vehicle.active === false || vehicle.status !== 'active') {
-    throw new ApiError(404, 'Rental vehicle not found');
-  }
-
-  const pickupDateTime = payload.pickupDateTime ? new Date(payload.pickupDateTime) : null;
-  const returnDateTime = payload.returnDateTime ? new Date(payload.returnDateTime) : null;
-
-  const request = await RentalQuoteRequest.create({
-    userId: req.auth?.sub && mongoose.Types.ObjectId.isValid(req.auth.sub) ? req.auth.sub : null,
-    vehicleTypeId,
-    vehicleName: vehicle.name || '',
-    vehicleCategory: vehicle.vehicleCategory || '',
-    contactName,
-    contactPhone,
-    contactEmail,
-    requestedHours,
-    pickupDateTime: pickupDateTime && !Number.isNaN(pickupDateTime.getTime()) ? pickupDateTime : null,
-    returnDateTime: returnDateTime && !Number.isNaN(returnDateTime.getTime()) ? returnDateTime : null,
-    seatsNeeded,
-    luggageNeeded,
-    pickupLocation,
-    dropLocation,
-    specialRequirements,
-    status: 'pending',
-  });
-
-  return res.status(201).json({
-    success: true,
-    data: serializeRentalQuoteRequest(request.toObject()),
-    message: 'Rental quote request submitted successfully',
-  });
-};
-
-export const createRentalBookingRequest = async (req, res) => {
-  const payload = req.body || {};
-  const vehicleTypeId = String(payload.vehicleTypeId || payload.vehicleId || '').trim();
-  const bookingReference = toCleanString(payload.bookingReference) || `RNT-${Date.now().toString(36).slice(-6).toUpperCase()}`;
-  const paymentStatus = toCleanString(payload.paymentStatus).toLowerCase() || 'pending';
-  const paymentMethod = toCleanString(payload.paymentMethod).toLowerCase();
-  const paymentMethodLabel = toCleanString(payload.paymentMethodLabel);
-  const kycCompleted = Boolean(payload.kycCompleted);
-
-  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
-    throw new ApiError(400, 'Valid rental vehicle is required');
-  }
-
-  if (!['pending', 'paid', 'not_required', 'failed'].includes(paymentStatus)) {
-    throw new ApiError(400, 'Invalid rental payment status');
-  }
-
-  const pickupDateTime = payload.pickupDateTime ? new Date(payload.pickupDateTime) : null;
-  const returnDateTime = payload.returnDateTime ? new Date(payload.returnDateTime) : null;
-
-  if (!pickupDateTime || Number.isNaN(pickupDateTime.getTime())) {
-    throw new ApiError(400, 'Valid pickup date and time is required');
-  }
-
-  if (!returnDateTime || Number.isNaN(returnDateTime.getTime())) {
-    throw new ApiError(400, 'Valid return date and time is required');
-  }
-
-  if (returnDateTime <= pickupDateTime) {
-    throw new ApiError(400, 'Return date and time must be after pickup');
-  }
-
-  const [vehicle, user] = await Promise.all([
-    RentalVehicleType.findById(vehicleTypeId).lean(),
-    User.findById(req.auth?.sub).lean(),
-  ]);
-
-  if (!vehicle || vehicle.active === false || vehicle.status !== 'active') {
-    throw new ApiError(404, 'Rental vehicle not found');
-  }
-
-  if (!user) {
-    throw new ApiError(404, 'User not found');
-  }
-
-  const requestedHours = Math.max(
-    0,
-    Math.round((((returnDateTime.getTime() - pickupDateTime.getTime()) / 3600000) + Number.EPSILON) * 100) / 100,
-  );
-
-  const selectedPackage = payload.selectedPackage || {};
-  const serviceLocation = payload.serviceLocation || {};
-  const paymentPayload = payload.payment || {};
-  const kycDocumentsPayload = payload.kycDocuments || {};
-  const matchedPackage = Array.isArray(vehicle.pricing)
-    ? vehicle.pricing.find(
-        (item) => String(item?.id || item?.packageId || '').trim() ===
-          String(selectedPackage.id || selectedPackage.packageId || '').trim(),
-      ) || null
-    : null;
-
-  if (!matchedPackage) {
-    throw new ApiError(400, 'Selected rental package is invalid');
-  }
-
-  const totalCost = Math.max(0, Number(matchedPackage.price || 0));
-  const advancePaymentConfig = vehicle.advancePayment || {};
-  const advancePaymentMode = String(advancePaymentConfig.paymentMode || '').trim().toLowerCase();
-  const advancePaymentLabel =
-    toCleanString(advancePaymentConfig.label) ||
-    toCleanString(payload.advancePaymentLabel) ||
-    'Advance booking payment';
-  const advanceAmountRaw = advancePaymentConfig.enabled
-    ? advancePaymentMode === 'full'
-      ? totalCost
-      : advancePaymentMode === 'percentage'
-        ? (totalCost * Math.max(0, Number(advancePaymentConfig.amount || 0))) / 100
-        : Math.max(0, Number(advancePaymentConfig.amount || 0))
-    : 0;
-  const payableNow = Math.min(
-    totalCost,
-    Math.round((Math.max(0, advanceAmountRaw) + Number.EPSILON) * 100) / 100,
-  );
-  const normalizedPaymentStatus = payableNow > 0
-    ? paymentStatus === 'paid'
-      ? 'paid'
-      : paymentStatus === 'failed'
-        ? 'failed'
-        : 'pending'
-    : 'not_required';
-
-  const normalizedDrivingLicenseUrl = toCleanString(
-    kycDocumentsPayload.drivingLicense?.imageUrl ||
-      kycDocumentsPayload.drivingLicense?.secureUrl ||
-      kycDocumentsPayload.drivingLicense?.url ||
-      '',
-  );
-  const normalizedAadhaarUrl = toCleanString(
-    kycDocumentsPayload.aadhaarCard?.imageUrl ||
-      kycDocumentsPayload.aadhaarCard?.secureUrl ||
-      kycDocumentsPayload.aadhaarCard?.url ||
-      '',
-  );
-  const requestedLocationId = toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || '');
-  const allowedServiceStoreIds = Array.isArray(vehicle.serviceStoreIds)
-    ? vehicle.serviceStoreIds.filter((item) => mongoose.Types.ObjectId.isValid(item))
-    : [];
-  const matchingServiceCenters = allowedServiceStoreIds.length
-    ? await ServiceStore.find({
-        _id: { $in: allowedServiceStoreIds },
-        ...(requestedLocationId ? { service_location_id: requestedLocationId } : {}),
-      })
-        .select('_id name owner_name rentalCommission')
-        .sort({ name: 1, _id: 1 })
-        .lean()
-    : [];
-
-  if (matchingServiceCenters.length === 0) {
-    throw new ApiError(
-      400,
-      requestedLocationId
-        ? 'No rental service store is configured for this vehicle in the selected service location'
-        : 'No rental service store is configured for this vehicle',
-    );
-  }
-
-  const primaryServiceCenter = matchingServiceCenters[0] || null;
-
-  const update = {
-    userId: user._id,
-    bookingReference,
-    vehicleTypeId,
-    vehicleName: vehicle.name || '',
-    vehicleCategory: vehicle.vehicleCategory || '',
-    vehicleImage: vehicle.image || '',
-    serviceCenterIds: matchingServiceCenters.map((item) => item._id),
-    commissionSnapshot: {
-      serviceStoreId: primaryServiceCenter?._id || null,
-      serviceStoreName: toCleanString(primaryServiceCenter?.name),
-      ownerName: toCleanString(primaryServiceCenter?.owner_name),
-      serviceStoreCommissionType:
-        primaryServiceCenter?.rentalCommission?.serviceStore?.type === 'fixed'
-          ? 'fixed'
-          : 'percentage',
-      serviceStoreCommissionValue: Math.max(
-        0,
-        Number(primaryServiceCenter?.rentalCommission?.serviceStore?.value || 0),
-      ),
-      ownerCommissionType:
-        primaryServiceCenter?.rentalCommission?.owner?.type === 'fixed'
-          ? 'fixed'
-          : 'percentage',
-      ownerCommissionValue: Math.max(
-        0,
-        Number(primaryServiceCenter?.rentalCommission?.owner?.value || 0),
-      ),
-      serviceTaxPercentage: Math.max(
-        0,
-        Number(primaryServiceCenter?.rentalCommission?.serviceTaxPercentage || 0),
-      ),
-    },
-    selectedPackage: {
-      packageId: toCleanString(selectedPackage.id || selectedPackage.packageId || ''),
-      label: toCleanString(matchedPackage.label || selectedPackage.label),
-      durationHours: Math.max(0, Number(matchedPackage.durationHours || selectedPackage.durationHours || 0)),
-      price: totalCost,
-      extraHourPrice: Math.max(0, Number(matchedPackage.extraHourPrice || selectedPackage.extraHourPrice || 0)),
-    },
-    serviceLocation: {
-      locationId: toCleanString(serviceLocation.id || serviceLocation._id || serviceLocation.locationId || ''),
-      name: toCleanString(serviceLocation.name),
-      address: toCleanString(serviceLocation.address),
-      city: toCleanString(serviceLocation.city || serviceLocation.country),
-      latitude: Number.isFinite(Number(serviceLocation.latitude)) ? Number(serviceLocation.latitude) : null,
-      longitude: Number.isFinite(Number(serviceLocation.longitude)) ? Number(serviceLocation.longitude) : null,
-      distanceKm: Number.isFinite(Number(serviceLocation.distanceKm)) ? Number(serviceLocation.distanceKm) : null,
-    },
-    pickupDateTime,
-    returnDateTime,
-    requestedHours,
-    totalCost,
-    payableNow,
-    advancePaymentLabel,
-    paymentStatus: normalizedPaymentStatus,
-    paymentMethod,
-    paymentMethodLabel,
-    payment: {
-      provider: toCleanString(paymentPayload.provider),
-      status: toCleanString(paymentPayload.status) || normalizedPaymentStatus,
-      amount: normalizedPaymentStatus === 'not_required'
-        ? 0
-        : Math.max(0, Number(paymentPayload.amount || payableNow || 0)),
-      currency: toCleanString(paymentPayload.currency) || 'INR',
-      orderId: toCleanString(paymentPayload.orderId || paymentPayload.razorpay_order_id),
-      paymentId: toCleanString(paymentPayload.paymentId || paymentPayload.razorpay_payment_id),
-      signature: toCleanString(paymentPayload.signature || paymentPayload.razorpay_signature),
-    },
-    contactName: toCleanString(user.name),
-    contactPhone: toCleanString(user.phone),
-    contactEmail: toCleanString(user.email),
-    kycCompleted,
-    kycDocuments: {
-      drivingLicense: {
-        imageUrl: normalizedDrivingLicenseUrl,
-        fileName: toCleanString(
-          kycDocumentsPayload.drivingLicense?.fileName || 'driving-license',
-        ),
-        uploadedAt:
-          normalizedDrivingLicenseUrl &&
-          kycDocumentsPayload.drivingLicense?.uploadedAt
-            ? new Date(kycDocumentsPayload.drivingLicense.uploadedAt)
-            : normalizedDrivingLicenseUrl
-              ? new Date()
-              : null,
-      },
-      aadhaarCard: {
-        imageUrl: normalizedAadhaarUrl,
-        fileName: toCleanString(
-          kycDocumentsPayload.aadhaarCard?.fileName || 'aadhaar-card',
-        ),
-        uploadedAt:
-          normalizedAadhaarUrl &&
-          kycDocumentsPayload.aadhaarCard?.uploadedAt
-            ? new Date(kycDocumentsPayload.aadhaarCard.uploadedAt)
-            : normalizedAadhaarUrl
-              ? new Date()
-              : null,
-      },
-    },
-  };
-
-  const request = await RentalBookingRequest.findOneAndUpdate(
-    { bookingReference, userId: user._id },
-    {
-      $set: update,
-      $setOnInsert: {
-        status: 'pending',
-        adminNote: '',
-      },
-    },
-    {
-      new: true,
-      upsert: true,
-      setDefaultsOnInsert: true,
-    },
-  ).lean();
-
-  return res.status(201).json({
-    success: true,
-    data: buildRentalBookingResponse(request),
-    message: 'Rental booking request submitted successfully',
-  });
-};
-
-export const getMyActiveRentalBooking = async (req, res) => {
-  const userId = resolveAuthenticatedUserObjectId(req);
-
-  if (!userId) {
-    return res.status(200).json({
-      success: true,
-      data: null,
-    });
-  }
-
-  const item = await RentalBookingRequest.findOne({
-    userId,
-    status: { $in: ['assigned', 'confirmed', 'end_requested'] },
-  })
-    .populate('vehicleTypeId', 'pricing')
-    .sort({ updatedAt: -1, createdAt: -1 })
-    .lean();
-
-  if (!item) {
-    return res.status(200).json({
-      success: true,
-      data: null,
-    });
-  }
-
-  const metrics = computeRentalRideMetrics(item);
-  const effectiveMetrics = ['end_requested', 'completed'].includes(String(item.status || ''))
-    ? computeRentalRideMetrics(item, item.completionRequestedAt || item.completedAt || new Date())
-    : metrics;
-
-  return res.status(200).json({
-    success: true,
-    data: {
-      ...buildRentalBookingResponse(item, item.completionRequestedAt || item.completedAt || null),
-      rideMetrics: effectiveMetrics,
-    },
-  });
-};
-
-export const listMyRentalBookings = async (req, res) => {
-  const page = toPositiveInteger(req.query?.page, 1);
-  const limit = Math.min(20, toPositiveInteger(req.query?.limit, 10));
-  const userId = resolveAuthenticatedUserObjectId(req);
-
-  if (!userId) {
-    return res.status(200).json({
-      success: true,
-      data: {
-        results: [],
-        pagination: buildPagination({ page, limit, total: 0 }),
-      },
-    });
-  }
-
-  const query = {
-    userId,
-  };
-
-  const [items, total] = await Promise.all([
-    RentalBookingRequest.find(query)
-      .sort({ updatedAt: -1, createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean(),
-    RentalBookingRequest.countDocuments(query),
-  ]);
-
-  return res.status(200).json({
-    success: true,
-    data: {
-      results: items.map((item) => buildRentalBookingResponse(item)),
-      pagination: buildPagination({ page, limit, total }),
-    },
-  });
-};
-
-export const endMyActiveRentalRide = async (req, res) => {
-  const bookingId = String(req.params?.id || '').trim();
-  const userId = resolveAuthenticatedUserObjectId(req);
-
-  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-    throw new ApiError(400, 'Valid rental booking id is required');
-  }
-
-  if (!userId) {
-    throw new ApiError(401, 'Authenticated user id is invalid');
-  }
-
-  const item = await RentalBookingRequest.findOne({
-    _id: bookingId,
-    userId,
-  });
-
-  if (!item) {
-    throw new ApiError(404, 'Rental booking not found');
-  }
-
-  if (!['assigned', 'confirmed'].includes(String(item.status || ''))) {
-    throw new ApiError(409, 'This rental ride cannot be ended right now');
-  }
-
-  const completionRequestedAt = new Date();
-  const metrics = computeRentalRideMetrics(item, completionRequestedAt);
-
-  const transportSettings = await getTransportRideSettings();
-  const requireApproval = String(transportSettings.require_admin_approval_to_end_rental || '0') === '1';
-
-  if (requireApproval) {
-    item.status = 'end_requested';
-    item.completionRequestedAt = completionRequestedAt;
-    item.completedAt = null;
-  } else {
-    item.status = 'completed';
-    item.completionRequestedAt = null;
-    item.completedAt = completionRequestedAt;
-  }
-
-  item.finalCharge = metrics.currentCharge;
-  item.finalElapsedMinutes = metrics.elapsedMinutes;
-
-  await item.save();
-
-  return res.status(200).json({
-    success: true,
-    data: {
-      ...buildRentalBookingResponse(item.toObject(), requireApproval ? completionRequestedAt : null),
-      rideMetrics: {
-        ...metrics,
-        currentCharge: item.finalCharge,
-      },
-    },
-    message: requireApproval 
-      ? 'Rental ride end request sent for admin review'
-      : 'Rental ride ended successfully',
-  });
-};
-
-export const updateMyActiveRentalLocation = async (req, res) => {
-  const userId = resolveAuthenticatedUserObjectId(req);
-
-  if (!userId) {
-    throw new ApiError(401, 'Authenticated user id is invalid');
-  }
-
-  const payload = await updateUserRentalTracking({
-    bookingId: String(req.params?.id || '').trim(),
-    userId,
-    status: req.body?.status,
-    coordinates: req.body?.coordinates,
-    heading: req.body?.heading,
-    speed: req.body?.speed,
-    accuracyMeters: req.body?.accuracyMeters,
-    capturedAt: req.body?.capturedAt,
-  });
-
-  return res.status(200).json({
-    success: true,
-    data: payload,
-    message: 'Rental tracking updated successfully',
   });
 };
 

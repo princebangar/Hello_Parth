@@ -32,7 +32,8 @@ import {
   startDispatchFlow,
 } from '../../services/dispatchService.js';
 import { getTipSettings } from '../../services/appSettingsService.js';
-import { matchDrivers } from '../../services/matchingService.js';
+import { findZoneByPickup, matchDrivers } from '../../services/matchingService.js';
+import { Zone } from '../../driver/models/Zone.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
 
@@ -303,17 +304,22 @@ export const createRide = async (req, res) => {
     throw new ApiError(400, 'pickup and drop are required');
   }
 
-  console.log('--- TEMPORARY DEBUG LOG ---');
-  console.log('backend received vehicleType (ID):', vehicleTypeId);
-
   const resolvedVehicleTypeId = vehicleTypeId || (Array.isArray(vehicleTypeIds) ? vehicleTypeIds[0] : null);
   if (!resolvedVehicleTypeId) {
     throw new ApiError(400, 'vehicleTypeId is required');
   }
 
+  const pickupCoords = normalizePoint(pickup, 'pickup');
+  if ((await Zone.countDocuments({ active: { $ne: false }, status: { $ne: 'inactive' } })) > 0) {
+    const pickupZone = await findZoneByPickup(pickupCoords);
+    if (!pickupZone) {
+      throw new ApiError(400, 'Service is not available at the selected pickup location yet');
+    }
+  }
+
   const ride = await createRideRecord({
     userId: req.auth.sub,
-    pickupCoords: normalizePoint(pickup, 'pickup'),
+    pickupCoords,
     dropCoords: normalizePoint(drop, 'drop'),
     pickupAddress,
     dropAddress,
@@ -413,6 +419,7 @@ export const updateRideStatus = async (req, res) => {
     driverId: req.auth.sub,
     nextStatus,
     paymentMethod: req.body.paymentMethod,
+    otp: req.body.otp,
   });
 
   try {

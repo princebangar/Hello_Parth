@@ -175,6 +175,7 @@ const busBookingSchema = new mongoose.Schema(
       signature: { type: String, default: '' },
       status: { type: String, default: 'pending' },
       paidAt: { type: Date, default: null },
+      refundId: { type: String, default: '' },
     },
     cancelledAt: {
       type: Date,

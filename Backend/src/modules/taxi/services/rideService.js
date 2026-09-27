@@ -874,6 +874,45 @@ const syncDeliveryWithRide = async (ride) => {
   return delivery;
 };
 
+const straightLineKm = (from = [], to = []) => {
+  const [lng1, lat1] = from.map(Number);
+  const [lng2, lat2] = to.map(Number);
+  if (![lng1, lat1, lng2, lat2].every(Number.isFinite)) {
+    return 0;
+  }
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+// Lower bound of what the server would charge: straight-line distance is never longer than the
+// road distance the client prices with, so a legitimate fare is always at or above this figure.
+const FARE_TOLERANCE = 0.9;
+const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, pickupCoords, dropCoords }) => {
+  if (serviceType === 'ride' && pricingRule) {
+    const baseDistance = Math.max(0, Number(pricingRule.base_distance || 0));
+    const extraKm = Math.max(0, straightLineKm(pickupCoords, dropCoords) - baseDistance);
+    const subtotal = Math.max(0, Number(pricingRule.base_price || 0)) + extraKm * Math.max(0, Number(pricingRule.price_per_distance || 0));
+    const minimumFare = subtotal * (1 + Math.max(0, Number(pricingRule.service_tax || 0)) / 100);
+    if (minimumFare > 0 && fare < Math.floor(minimumFare * FARE_TOLERANCE)) {
+      throw new ApiError(400, 'Fare is lower than the configured price for this trip. Please refresh the fare and try again.');
+    }
+  }
+
+  if (serviceType === 'parcel') {
+    const minimumFare = Math.max(0, Number(vehicle?.delivery_distance_pricing?.base_price || 0));
+    if (minimumFare > 0 && fare < Math.floor(minimumFare * FARE_TOLERANCE)) {
+      throw new ApiError(400, 'Fare is lower than the configured delivery price. Please refresh the fare and try again.');
+    }
+  }
+
+  if (fare <= 0) {
+    throw new ApiError(400, 'Fare is not available for this trip yet. Please contact support if this continues.');
+  }
+};
+
 export const createRideRecord = async ({
   userId,
   pickupCoords,
@@ -924,7 +963,7 @@ export const createRideRecord = async ({
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
   const primaryVehicle = primaryVehicleTypeId
-    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
+    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type delivery_distance_pricing admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
   const resolvedVehicleIconUrl = String(
     vehicleIconUrl || primaryVehicle?.image || primaryVehicle?.map_icon || primaryVehicle?.icon || '',
@@ -951,6 +990,14 @@ export const createRideRecord = async ({
   const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
   const requestedBookingMode = String(bookingMode || '').trim().toLowerCase();
   const normalizedServiceType = normalizeServiceType(serviceType);
+  assertFareIsNotBelowMinimum({
+    fare: safeFare,
+    serviceType: normalizedServiceType,
+    pricingRule,
+    vehicle: primaryVehicle,
+    pickupCoords,
+    dropCoords,
+  });
   const bidRideSettings = await getBidRideSettings();
   const fareIncreaseWaitMinutes = toPositiveNumber(
     bidRideSettings.user_fare_increase_wait_minutes,
@@ -1654,11 +1701,11 @@ const rideStatusConfig = {
   },
   [RIDE_LIVE_STATUS.COMPLETED]: {
     persistedStatus: RIDE_STATUS.COMPLETED,
-    allowedCurrent: [RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.ARRIVED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.ACCEPTED],
+    allowedCurrent: [RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.ARRIVED, RIDE_LIVE_STATUS.COMPLETED],
   },
 };
 
-export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod }) => {
+export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod, otp }) => {
   const config = rideStatusConfig[nextStatus];
 
   if (!config) {
@@ -1673,6 +1720,12 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
   if (!config.allowedCurrent.includes(ride.liveStatus)) {
     throw new ApiError(409, `Ride cannot move from ${ride.liveStatus} to ${nextStatus}`);
+  }
+
+  if (nextStatus === RIDE_LIVE_STATUS.STARTED && ride.liveStatus !== RIDE_LIVE_STATUS.STARTED && ride.otp) {
+    if (String(otp || '').trim() !== String(ride.otp)) {
+      throw new ApiError(400, 'Invalid ride PIN');
+    }
   }
 
   ride.liveStatus = nextStatus;
