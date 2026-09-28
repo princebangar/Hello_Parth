@@ -28,6 +28,7 @@ const serialize = (doc = {}) => ({
   id: String(doc._id),
   name: doc.name || '',
   url: doc.url || '',
+  image: doc.image || '',
   description: doc.description || '',
   isActive: doc.isActive !== false,
   sortOrder: Number(doc.sortOrder || 0),
@@ -35,7 +36,7 @@ const serialize = (doc = {}) => ({
   updatedAt: doc.updatedAt || null,
 });
 
-const validatePayload = ({ name, url, description }, { partial = false } = {}) => {
+const validatePayload = ({ name, url, image, description }, { partial = false } = {}) => {
   const result = {};
 
   if (name !== undefined || !partial) {
@@ -51,6 +52,11 @@ const validatePayload = ({ name, url, description }, { partial = false } = {}) =
       throw new ValidationError('A valid website URL is required');
     }
     result.url = normalizedUrl;
+  }
+
+  // Optional — a card can be posted without a banner image.
+  if (image !== undefined) {
+    result.image = String(image || '').trim();
   }
 
   if (description !== undefined) {
@@ -77,6 +83,7 @@ export async function listPublicOtherServices() {
     id: String(doc._id),
     name: doc.name || '',
     url: doc.url || '',
+    image: doc.image || '',
     description: doc.description || '',
   }));
 }

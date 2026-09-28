@@ -1,22 +1,29 @@
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   ArrowRight,
-  Bike,
-  Bus,
+  BadgeCheck,
   Car,
-  ExternalLink,
+  ChevronRight,
+  CreditCard,
+  Headphones,
+  MapPin,
+  MapPinned,
   Menu,
-  Package,
-  ShieldCheck,
-  Users as UsersIcon,
+  Smartphone,
+  Star,
+  Tag,
+  UserRound,
   UtensilsCrossed,
-  Wallet,
   X,
-  Zap,
 } from "lucide-react"
+import { FaApple } from "react-icons/fa"
 import { publicLandingAPI } from "@/modules/Global/api/globalAdminAPI"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
+import heroTaxiCar from "@/modules/Taxi/assets/ride-removebg-preview.png"
+import ctaRoadBg from "@/modules/Taxi/assets/images/premium-taxi-bg.png"
+
+const HERO_FOOD_IMAGE = "/food/veg_biryani_aromatic.png"
 
 /**
  * Public marketing site at `/`. Shown only to guests — a logged-in visitor is sent straight into the app
@@ -24,45 +31,166 @@ import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
  * dynamic, admin-managed list of outside links (Global admin → Landing Page).
  */
 
-const FOOD_POINTS = [
-  { Icon: UtensilsCrossed, text: "Thousands of restaurants, one tap away" },
-  { Icon: Zap, text: "Live order tracking, fast delivery" },
-  { Icon: Wallet, text: "Wallet, offers and easy checkout" },
+const NAV_LINKS = [
+  { href: "#top", label: "Home" },
+  { href: "#why-us", label: "Features" },
+  { href: "#services", label: "About" },
+  { href: "#download", label: "Download" },
 ]
 
-const TAXI_POINTS = [
-  { Icon: Car, text: "Bike, auto, sedan and SUV rides" },
-  { Icon: Package, text: "Same-city parcel delivery" },
-  { Icon: Bus, text: "Bus tickets and shared pooling rides" },
+const WHY_CHOOSE = [
+  { Icon: UtensilsCrossed, title: "Wide Restaurant Choice", desc: "From local favourites to popular brands, all in one place." },
+  { Icon: Car, title: "Fast & Reliable Rides", desc: "Quick booking, live tracking and safer journeys." },
+  { Icon: CreditCard, title: "Secure Payments", desc: "UPI, cards and wallet — pick what suits you." },
+  { Icon: MapPinned, title: "Real-time Tracking", desc: "Track your food or ride from the moment it's confirmed." },
+  { Icon: Tag, title: "Best Offers & Discounts", desc: "Save more with wallet credits and running deals." },
+  { Icon: Headphones, title: "24/7 Support", desc: "We're here whenever you need a hand." },
 ]
 
-const FLEET_BADGES = [
-  { Icon: Car, label: "Cabs", tint: "rgba(245,158,11,0.14)", color: "#d97706" },
-  { Icon: Bus, label: "Bus", tint: "rgba(14,165,233,0.14)", color: "#0284c7" },
-  { Icon: UsersIcon, label: "Pooling", tint: "rgba(139,92,246,0.14)", color: "#7c3aed" },
-  { Icon: Bike, label: "Parcel", tint: "rgba(16,185,129,0.14)", color: "#059669" },
+const HOW_IT_WORKS = [
+  { Icon: Smartphone, step: "1", title: "Open the App", desc: "Download Hello Parth and create your account." },
+  { Icon: UtensilsCrossed, step: "2", title: "Choose Service", desc: "Pick Food or Taxi as per your need." },
+  { Icon: MapPin, step: "3", title: "Make a Booking", desc: "Select location, place order or book a ride." },
+  { Icon: BadgeCheck, step: "4", title: "Relax & Enjoy", desc: "Sit back and let us handle the rest." },
 ]
 
-const BASE_NAV_LINKS = [
-  { href: "#food", label: "Food" },
-  { href: "#taxi", label: "Taxi" },
+const APP_PREVIEW_ICONS = [
+  { Icon: UtensilsCrossed, label: "Food" },
+  { Icon: Car, label: "Taxi" },
+  { Icon: Tag, label: "Offers" },
+  { Icon: UserRound, label: "Profile" },
+]
+
+/** Data-driven so the numbers can be updated later without touching the markup. */
+const IMPACT_STATS = [
+  { id: "restaurants", Icon: UtensilsCrossed, value: "10K+", label: "Restaurants" },
+  { id: "rides", Icon: Car, value: "50K+", label: "Rides Daily" },
+  { id: "users", Icon: UserRound, value: "1M+", label: "Happy Users" },
+  { id: "rating", Icon: Star, value: "4.8 ★", label: "Average Rating" },
 ]
 
 const scrollToId = (id) => {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
 }
 
-const Logo = ({ className = "h-9" }) => (
-  <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className={`${className} w-auto object-contain`} />
-)
+/** The official 4-colour Google Play triangle mark, drawn flat since react-icons only ships it monochrome. */
+function GooglePlayIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true">
+      <polygon points="92,70 340,200 340,256 92,256" fill="#01c3f4" />
+      <polygon points="340,200 446,256 340,256" fill="#fe3944" />
+      <polygon points="92,256 340,256 340,312 92,442" fill="#1ecb62" />
+      <polygon points="340,256 340,312 446,256" fill="#ffce00" />
+    </svg>
+  )
+}
+
+function Logo({ light = false }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-11 w-11 shrink-0 object-contain sm:h-12 sm:w-12" />
+      <span className={`text-xl font-extrabold tracking-tight sm:text-2xl ${light ? "text-white" : "text-[#0b1220]"}`}>
+        Hello <span className="text-[#ea580c]">Parth</span>
+      </span>
+    </span>
+  )
+}
+
+/** Reusable device frame used across the hero / services / app-preview sections. */
+function PhoneFrame({ children, width = "w-56", className = "" }) {
+  return (
+    <div className={`relative ${width} shrink-0 ${className}`} aria-hidden="true">
+      <div className="rounded-[2.5rem] border-[6px] border-[#0b1220] bg-[#0b1220] shadow-2xl">
+        <div className="absolute left-1/2 top-0 z-10 h-5 w-24 -translate-x-1/2 rounded-b-2xl bg-[#0b1220]" />
+        <div className="aspect-[9/18.5] overflow-hidden rounded-[2rem] bg-white">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function HeroPhoneScreen() {
+  return (
+    <div className="flex h-full flex-col bg-gradient-to-b from-[#fff7ed] to-white px-4 pb-5 pt-2">
+      <div className="flex items-center justify-between px-1 text-[9px] font-bold text-[#0b1220]">
+        <span>9:41</span>
+        <div className="flex items-center gap-1">
+          <div className="flex items-end gap-0.5">
+            <span className="h-1 w-0.5 rounded-full bg-[#0b1220]" />
+            <span className="h-1.5 w-0.5 rounded-full bg-[#0b1220]" />
+            <span className="h-2 w-0.5 rounded-full bg-[#0b1220]" />
+          </div>
+          <div className="h-2.5 w-4 rounded-[2px] border border-[#0b1220]" />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0b1220] text-[#f97316] shadow-lg">
+          <MapPinned size={22} strokeWidth={2.4} />
+        </span>
+        <p className="text-base font-extrabold text-[#0b1220]">
+          Hello <span className="text-[#ea580c]">Parth</span>
+        </p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">Food • Taxi</p>
+      </div>
+      <div className="mt-auto space-y-2.5">
+        <div className="flex items-center justify-center gap-2 rounded-xl bg-[#ea580c] py-2.5 text-xs font-bold text-white shadow-md">
+          <UtensilsCrossed size={14} />
+          Order Food
+        </div>
+        <div className="flex items-center justify-center gap-2 rounded-xl bg-[#fbbf24] py-2.5 text-xs font-bold text-[#0b1220] shadow-md">
+          <Car size={14} />
+          Book Taxi
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FoodAppScreen() {
+  return (
+    <div className="flex h-full flex-col gap-2.5 bg-white px-3 pb-4 pt-6">
+      <p className="text-[11px] font-bold text-[#0b1220]">Good food, good mood</p>
+      <div className="h-6 rounded-lg bg-[#f1f5f9]" />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="h-14 rounded-lg bg-gradient-to-br from-[#fed7aa] to-[#fdba74]" />
+        <div className="h-14 rounded-lg bg-gradient-to-br from-[#fecaca] to-[#fca5a5]" />
+      </div>
+      <div className="space-y-1.5">
+        <div className="h-2 w-3/4 rounded-full bg-[#e2e8f0]" />
+        <div className="h-2 w-1/2 rounded-full bg-[#e2e8f0]" />
+      </div>
+      <div className="mt-auto flex items-center justify-between rounded-xl bg-[#f8fafc] px-2 py-2">
+        {[UtensilsCrossed, Tag, UserRound].map((Icon, index) => (
+          <Icon key={index} size={14} className={index === 0 ? "text-[#ea580c]" : "text-[#94a3b8]"} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TaxiAppScreen() {
+  return (
+    <div className="relative flex h-full flex-col bg-[#eef2f7] px-3 pb-4 pt-6">
+      <p className="text-[11px] font-bold text-[#0b1220]">Your ride is on the way</p>
+      <svg viewBox="0 0 100 120" className="mt-2 h-24 w-full" aria-hidden="true">
+        <path d="M10 100 C 30 70, 40 50, 70 40 S 90 15, 92 10" fill="none" stroke="#fbbf24" strokeWidth="3" strokeDasharray="1 8" strokeLinecap="round" />
+        <circle cx="10" cy="100" r="4" fill="#0b1220" />
+        <circle cx="92" cy="10" r="4" fill="#ea580c" />
+      </svg>
+      <div className="mt-auto rounded-xl bg-white px-2.5 py-2 shadow-sm">
+        <p className="text-[10px] font-bold text-[#0b1220]">Arriving in 2 min</p>
+        <p className="text-[9px] text-[#94a3b8]">Sedan • Live tracking</p>
+      </div>
+    </div>
+  )
+}
 
 function Navbar({ showOtherServices }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const navLinks = showOtherServices
-    ? [...BASE_NAV_LINKS, { href: "#other-services", label: "Other Services" }]
-    : BASE_NAV_LINKS
+    ? [...NAV_LINKS, { href: "#other-services", label: "Other Services" }]
+    : NAV_LINKS
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -77,9 +205,9 @@ function Navbar({ showOtherServices }) {
         scrolled ? "bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm" : "bg-transparent"
       }`}
     >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+      <div className="mx-auto flex h-14 max-w-[1320px] items-center justify-between px-5 sm:px-8">
         <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="shrink-0">
-          <Logo className="h-8 sm:h-9" />
+          <Logo />
         </button>
 
         <nav className="hidden md:flex items-center gap-8">
@@ -99,9 +227,9 @@ function Navbar({ showOtherServices }) {
           <button
             type="button"
             onClick={() => navigate("/login")}
-            className="rounded-xl border-2 border-[#0b1220] px-4 py-2 text-sm font-semibold text-[#0b1220] hover:bg-[#0b1220] hover:text-white transition-colors"
+            className="rounded-full bg-[#ea580c] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_-10px_rgba(234,88,12,0.7)] transition-transform hover:brightness-105 active:scale-[0.98]"
           >
-            Log in
+            Get Started
           </button>
         </div>
 
@@ -133,9 +261,9 @@ function Navbar({ showOtherServices }) {
           <button
             type="button"
             onClick={() => navigate("/login")}
-            className="mt-2 block w-full rounded-xl bg-[#0b1220] px-3 py-3 text-center text-sm font-semibold text-white"
+            className="mt-2 block w-full rounded-full bg-[#ea580c] px-3 py-3 text-center text-sm font-semibold text-white"
           >
-            Log in
+            Get Started
           </button>
         </div>
       )}
@@ -143,65 +271,277 @@ function Navbar({ showOtherServices }) {
   )
 }
 
+function StoreBadge({ Icon, small, big, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#0b1220] px-5 text-white shadow-[0_14px_28px_-14px_rgba(11,18,32,0.7)] transition-transform active:scale-[0.99] sm:w-auto sm:justify-start"
+    >
+      <Icon size={22} />
+      <span className="text-left leading-tight">
+        <span className="block text-[10px] font-medium text-slate-300">{small}</span>
+        <span className="block text-sm font-bold">{big}</span>
+      </span>
+    </button>
+  )
+}
+
+/** Hand-drawn-style curved arrow used next to the hero's cursive annotations. */
+function CurvedArrow({ flip = false, className = "" }) {
+  return (
+    <svg
+      width="34"
+      height="46"
+      viewBox="0 0 34 46"
+      fill="none"
+      className={`${flip ? "-scale-x-100" : ""} ${className}`}
+      aria-hidden="true"
+    >
+      <path
+        d="M4 4 C 4 22, 4 30, 27 39"
+        stroke="#0b1220"
+        strokeOpacity="0.55"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeDasharray="1 5"
+      />
+      <path
+        d="M19 35 L29 41 L25 31"
+        stroke="#0b1220"
+        strokeOpacity="0.55"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  )
+}
+
 function Hero() {
   const navigate = useNavigate()
 
   return (
-    <section className="relative overflow-hidden bg-[#f6f7fb]">
+    <section id="top" className="relative overflow-hidden bg-[#fff8f0]">
       <div
-        className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[64rem] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
-        style={{ background: "radial-gradient(closest-side, #ffc400, transparent)" }}
+        className="pointer-events-none absolute -top-32 right-[-10rem] h-[32rem] w-[32rem] rounded-full opacity-50 blur-3xl"
+        style={{ background: "radial-gradient(closest-side, #fed7aa, transparent)" }}
         aria-hidden="true"
       />
-      <div className="relative mx-auto max-w-4xl px-5 pb-16 pt-16 text-center sm:px-8 sm:pb-24 sm:pt-24">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#fde68a] bg-[#fffbeb] px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#b45309]">
-          <ShieldCheck size={14} />
-          One account, two apps
-        </span>
+      <div className="relative mx-auto grid max-w-[1320px] grid-cols-1 items-center gap-8 px-5 py-8 sm:px-8 sm:py-12 lg:grid-cols-2 lg:gap-8 lg:py-14">
+        <div className="text-center lg:text-left">
+          <p className="text-sm font-extrabold tracking-wide text-[#ea580c]">Food • Taxi</p>
+          <h1 className="mt-3 text-5xl font-extrabold leading-[1.05] tracking-tight text-[#0b1220] sm:text-6xl">
+            Hello <span className="text-[#ea580c]">Parth</span>
+          </h1>
+          <p className="mt-1 text-3xl font-extrabold tracking-tight text-[#0b1220] sm:text-4xl">Your Everyday Partner</p>
 
-        <h1 className="mt-6 text-4xl font-bold leading-[1.1] tracking-tight text-[#0b1220] sm:text-5xl lg:text-6xl">
-          Food delivered.
-          <br />
-          Rides booked.
-          <br />
-          <span className="text-[#d97706]">All in one place.</span>
-        </h1>
+          <p className="mx-auto mt-5 max-w-md text-base leading-7 text-[#64748b] lg:mx-0">
+            Craving food? Need a ride? Hello Parth brings it all together — Food, Taxi and more, in one simple app.
+          </p>
 
-        <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#475569] sm:text-lg">
-          Hello Parth brings restaurants, cabs, parcels, bus tickets and pooling rides together — sign in once,
-          switch between Food and Taxi whenever you like.
-        </p>
-
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => navigate("/food/user")}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#0b1220] px-7 text-base font-semibold text-white shadow-[0_14px_28px_-14px_rgba(11,18,32,0.7)] transition-transform active:scale-[0.99] sm:w-auto"
-          >
-            <UtensilsCrossed size={20} />
-            Order Food
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/login")}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#0b1220] px-7 text-base font-semibold text-[#0b1220] transition-colors hover:bg-[#0b1220] hover:text-white sm:w-auto"
-          >
-            <Car size={20} />
-            Book a Ride
-          </button>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
+            <StoreBadge Icon={GooglePlayIcon} small="GET IT ON" big="Google Play" onClick={() => navigate("/login")} />
+            <StoreBadge Icon={FaApple} small="Download on the" big="App Store" onClick={() => navigate("/login")} />
+          </div>
         </div>
 
-        <div className="mx-auto mt-12 grid max-w-lg grid-cols-4 gap-3">
-          {FLEET_BADGES.map(({ Icon, label, tint, color }) => (
-            <div key={label} className="flex flex-col items-center gap-2">
-              <span
-                className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm"
-                style={{ backgroundColor: tint, color }}
-              >
-                <Icon size={22} strokeWidth={2.2} />
-              </span>
-              <span className="text-xs font-semibold text-[#475569]">{label}</span>
-            </div>
+        <div className="relative mx-auto flex w-full max-w-lg items-center justify-center pb-6 pt-24 lg:max-w-none lg:pb-8 lg:pt-20">
+          <div
+            className="pointer-events-none absolute h-80 w-80 rounded-full opacity-60 blur-2xl"
+            style={{ background: "radial-gradient(closest-side, #fde68a, transparent)" }}
+            aria-hidden="true"
+          />
+
+          <div className="absolute left-0 top-0 z-30 flex flex-col items-start">
+            <span
+              className="-rotate-6 text-2xl leading-6 text-[#0b1220] sm:text-3xl sm:leading-7"
+              style={{ fontFamily: "'Caveat', cursive" }}
+            >
+              Delicious
+              <br />
+              Food
+            </span>
+            <CurvedArrow className="ml-8 mt-0.5" />
+          </div>
+
+          <div className="absolute right-0 top-0 z-30 flex flex-col items-end">
+            <span
+              className="rotate-6 text-2xl leading-6 text-[#0b1220] sm:text-3xl sm:leading-7"
+              style={{ fontFamily: "'Caveat', cursive" }}
+            >
+              Fast &amp; Safe
+              <br />
+              Rides
+            </span>
+            <CurvedArrow flip className="mr-8 mt-0.5" />
+          </div>
+
+          <div className="relative flex items-center">
+            <img
+              src={HERO_FOOD_IMAGE}
+              alt="A bowl of delicious vegetarian biryani"
+              className="relative z-10 -mr-8 h-28 w-28 shrink-0 self-end rounded-full object-cover shadow-2xl ring-4 ring-white sm:-mr-10 sm:h-36 sm:w-36"
+            />
+
+            <PhoneFrame width="w-48 sm:w-56" className="relative z-20 shrink-0">
+              <HeroPhoneScreen />
+            </PhoneFrame>
+
+            <img
+              src={heroTaxiCar}
+              alt="Hello Parth taxi car"
+              className="relative z-10 -ml-10 w-32 shrink-0 self-end drop-shadow-2xl sm:-ml-14 sm:w-44"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ServiceCard({ id, Icon, iconBg, iconColor = "#fff", title, desc, cta, onCta }) {
+  return (
+    <div id={id} className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg">
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
+        <Icon size={22} strokeWidth={2.2} />
+      </span>
+      <h3 className="mt-4 text-lg font-bold text-[#0b1220]">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-[#64748b]">{desc}</p>
+      <button
+        type="button"
+        onClick={onCta}
+        className="mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#fde8d5] text-[#ea580c] transition-transform hover:translate-x-0.5"
+        aria-label={cta}
+        title={cta}
+      >
+        <ArrowRight size={18} />
+      </button>
+    </div>
+  )
+}
+
+function ServicesOverview() {
+  const navigate = useNavigate()
+
+  return (
+    <section id="services" className="scroll-mt-16 bg-white py-14 sm:py-16">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
+        <div className="mx-auto max-w-xl text-center">
+          <h2 className="text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">Two Services in One App.</h2>
+          <p className="mt-4 text-base leading-7 text-[#475569]">
+            Whether it's your favourite food or your next ride, Hello Parth makes life easier, faster and better.
+          </p>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-12">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2 lg:gap-5">
+            <ServiceCard
+              id="food"
+              Icon={UtensilsCrossed}
+              iconBg="#ea580c"
+              iconColor="#ffffff"
+              title="Food Delivery"
+              desc="Explore top restaurants, your favourite dishes, and get them delivered to your doorstep."
+              cta="Explore Food"
+              onCta={() => navigate("/food/user")}
+            />
+            <ServiceCard
+              id="taxi"
+              Icon={Car}
+              iconBg="#ffc107"
+              iconColor="#171a1f"
+              title="Taxi Service"
+              desc="Book a ride anytime, anywhere with just a few taps. Safe, reliable and affordable."
+              cta="Continue to Taxi"
+              onCta={() => navigate("/login")}
+            />
+          </div>
+
+          <div className="relative flex items-center justify-center gap-4 py-6">
+            <div
+              className="pointer-events-none absolute h-64 w-64 rounded-full opacity-50 blur-2xl"
+              style={{ background: "radial-gradient(closest-side, #fed7aa, transparent)" }}
+              aria-hidden="true"
+            />
+            <PhoneFrame width="w-40 sm:w-48" className="relative z-10 -rotate-3">
+              <FoodAppScreen />
+            </PhoneFrame>
+            <PhoneFrame width="w-40 sm:w-48" className="relative z-20 mt-10 rotate-3">
+              <TaxiAppScreen />
+            </PhoneFrame>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function WhyChooseUs() {
+  return (
+    <section id="why-us" className="scroll-mt-16 bg-[#0b1220] py-14 sm:py-16">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,280px)_1fr] lg:gap-12">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#ea580c]">Why Choose Us</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Why Choose <span className="text-[#ea580c]">Hello Parth?</span>
+            </h2>
+            <p className="mt-4 text-base leading-7 text-slate-400">
+              We focus on what matters — your comfort, convenience and satisfaction.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+            {WHY_CHOOSE.map(({ Icon, title, desc }) => (
+              <div key={title}>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#ea580c]/40 bg-[#ea580c]/10 text-[#ea580c]">
+                  <Icon size={19} strokeWidth={2.2} />
+                </span>
+                <h3 className="mt-4 text-base font-bold text-white">{title}</h3>
+                <p className="mt-1.5 text-sm leading-6 text-slate-400">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function HowItWorks() {
+  return (
+    <section id="how-it-works" className="scroll-mt-16 bg-white py-14 sm:py-16">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
+        <div className="max-w-xl">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#ea580c]">Simple Steps</p>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">How It Works</h2>
+          <p className="mt-4 text-base leading-7 text-[#475569]">
+            Get started in just a few taps and enjoy a seamless experience.
+          </p>
+        </div>
+
+        <div className="mt-12 grid grid-cols-1 gap-10 sm:grid-cols-2 sm:gap-8 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-start lg:gap-3">
+          {HOW_IT_WORKS.map(({ Icon, step, title, desc }, index) => (
+            <Fragment key={title}>
+              <div className="flex flex-col items-center text-center">
+                <div className="relative shrink-0">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#fff3e8] text-[#ea580c]">
+                    <Icon size={26} strokeWidth={2.2} />
+                  </span>
+                  <span className="absolute -left-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#ea580c] text-xs font-bold text-white shadow">
+                    {step}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-base font-bold text-[#0b1220]">{title}</h3>
+                <p className="mt-1 max-w-[11rem] text-sm leading-6 text-[#64748b]">{desc}</p>
+              </div>
+
+              {index < HOW_IT_WORKS.length - 1 && (
+                <ChevronRight className="mt-8 hidden shrink-0 self-start text-slate-300 lg:block" size={22} />
+              )}
+            </Fragment>
           ))}
         </div>
       </div>
@@ -209,55 +549,63 @@ function Hero() {
   )
 }
 
-function ServiceSection({ id, eyebrow, title, description, points, image, imageAlt, cta, onCta, reverse, accent }) {
+function AppPreviewImpact() {
   return (
-    <section id={id} className="bg-white py-16 sm:py-20">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className={`grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16 ${reverse ? "lg:[&>*:first-child]:order-2" : ""}`}>
+    <section id="app-preview" className="scroll-mt-16 bg-[#fff8f0] py-14 sm:py-16">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
+        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_0.9fr_1fr] lg:gap-8">
           <div>
-            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: accent }}>
-              {eyebrow}
-            </span>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">{title}</h2>
-            <p className="mt-4 text-base leading-7 text-[#475569]">{description}</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#ea580c]">App Preview</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">Explore the App</h2>
+            <p className="mt-4 max-w-sm text-base leading-7 text-[#475569]">
+              A smooth and simple interface designed for the best experience.
+            </p>
 
-            <ul className="mt-6 space-y-3">
-              {points.map(({ Icon, text }) => (
-                <li key={text} className="flex items-center gap-3">
-                  <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: `${accent}1f`, color: accent }}
-                  >
-                    <Icon size={17} strokeWidth={2.2} />
+            <div className="mt-8 flex gap-3 sm:gap-4">
+              {APP_PREVIEW_ICONS.map(({ Icon, label }) => (
+                <div key={label} className="flex flex-col items-center gap-2">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#ea580c] shadow-sm">
+                    <Icon size={20} strokeWidth={2.2} />
                   </span>
-                  <span className="text-sm font-medium text-[#334155]">{text}</span>
-                </li>
+                  <span className="text-xs font-semibold text-[#475569]">{label}</span>
+                </div>
               ))}
-            </ul>
-
-            <button
-              type="button"
-              onClick={onCta}
-              className="mt-8 inline-flex h-13 items-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold text-white shadow-lg transition-transform active:scale-[0.99]"
-              style={{ backgroundColor: accent, boxShadow: `0 14px 28px -14px ${accent}` }}
-            >
-              {cta}
-              <ArrowRight size={17} />
-            </button>
+            </div>
           </div>
 
-          <div className="relative">
+          <div className="relative flex items-center justify-center gap-3 py-6">
             <div
-              className="absolute -inset-4 rounded-[2rem] opacity-70 blur-2xl"
-              style={{ background: `radial-gradient(closest-side, ${accent}33, transparent)` }}
+              className="pointer-events-none absolute h-64 w-64 rounded-full opacity-50 blur-2xl"
+              style={{ background: "radial-gradient(closest-side, #fed7aa, transparent)" }}
               aria-hidden="true"
             />
-            <img
-              src={image}
-              alt={imageAlt}
-              loading="lazy"
-              className="relative w-full rounded-[1.75rem] object-cover shadow-2xl"
-            />
+            <PhoneFrame width="w-36 sm:w-44" className="relative z-10 -rotate-6">
+              <FoodAppScreen />
+            </PhoneFrame>
+            <PhoneFrame width="w-36 sm:w-44" className="relative z-20 mt-8 rotate-6">
+              <TaxiAppScreen />
+            </PhoneFrame>
+          </div>
+
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#ea580c]">Our Impact</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">
+              Making Life Better Every Day
+            </h2>
+
+            <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-6">
+              {IMPACT_STATS.map(({ id, Icon, value, label }) => (
+                <div key={id} className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-[#ea580c] shadow-sm">
+                    <Icon size={20} strokeWidth={2.2} />
+                  </span>
+                  <span>
+                    <span className="block text-lg font-extrabold text-[#0b1220]">{value}</span>
+                    <span className="block text-xs text-[#64748b]">{label}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -267,37 +615,81 @@ function ServiceSection({ id, eyebrow, title, description, points, image, imageA
 
 function OtherServices({ services }) {
   return (
-    <section id="other-services" className="bg-[#f6f7fb] py-16 sm:py-20">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8">
+    <section id="other-services" className="scroll-mt-16 bg-[#fff3e8] py-14 sm:py-16">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
         <div className="text-center">
-          <span className="text-xs font-bold uppercase tracking-widest text-[#7c3aed]">More from us</span>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">Other Services</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">Other Services</h2>
           <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-[#475569]">
-            A few more places worth a visit.
+            A few more places worth exploring, all from the Hello Parth team.
           </p>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {services.map((service) => (
             <a
               key={service.id}
               href={service.url}
               target="_blank"
               rel="noreferrer"
-              className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+              className="group flex flex-col overflow-hidden rounded-2xl border-2 border-transparent bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#ea580c] hover:shadow-lg"
             >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fffbeb] text-lg font-bold uppercase text-[#b45309]">
-                  {service.name.charAt(0) || "?"}
-                </span>
-                <ExternalLink size={16} className="mt-1 shrink-0 text-slate-300 transition-colors group-hover:text-[#0b1220]" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold text-[#0b1220]">{service.name}</h3>
-              {service.description && (
-                <p className="mt-1.5 text-sm leading-6 text-[#64748b] line-clamp-3">{service.description}</p>
+              {service.image && (
+                <div className="aspect-[16/9] w-full overflow-hidden bg-slate-100">
+                  <img
+                    src={service.image}
+                    alt={service.name}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                </div>
               )}
+              <div className="flex flex-1 flex-col p-5">
+                <h3 className="text-base font-semibold text-[#0b1220]">{service.name}</h3>
+                {service.description && (
+                  <p className="mt-1.5 text-sm leading-6 text-[#64748b] line-clamp-3">{service.description}</p>
+                )}
+                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#ea580c] transition-all group-hover:gap-2.5">
+                  Explore More
+                  <ArrowRight size={16} />
+                </span>
+              </div>
             </a>
           ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function CTABanner() {
+  const navigate = useNavigate()
+
+  return (
+    <section id="download" className="scroll-mt-16 bg-[#fff8f0] px-5 py-14 sm:px-8 sm:py-16">
+      <div
+        className="relative mx-auto max-w-[1320px] overflow-hidden rounded-[2rem] bg-cover bg-center sm:rounded-[2.5rem]"
+        style={{
+          backgroundImage: `linear-gradient(100deg, rgba(11,18,32,0.94) 0%, rgba(11,18,32,0.78) 45%, rgba(11,18,32,0.55) 100%), url(${ctaRoadBg})`,
+        }}
+      >
+        <div className="relative flex flex-col items-center gap-8 px-6 py-12 text-center sm:px-10 sm:py-14 lg:flex-row lg:items-center lg:justify-between lg:gap-10 lg:text-left">
+          <div className="flex flex-col items-center gap-1 lg:items-start">
+            <p className="text-2xl font-extrabold text-white">
+              Hello <span className="text-[#ea580c]">Parth</span>
+            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Food • Taxi</p>
+          </div>
+
+          <div className="max-w-md">
+            <h2 className="text-2xl font-bold text-white sm:text-3xl">Ready to make your day easier?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-300">
+              Download Hello Parth now and enjoy the best food &amp; taxi services at your fingertips.
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
+            <StoreBadge Icon={GooglePlayIcon} small="GET IT ON" big="Google Play" onClick={() => navigate("/login")} />
+            <StoreBadge Icon={FaApple} small="Download on the" big="App Store" onClick={() => navigate("/login")} />
+          </div>
         </div>
       </div>
     </section>
@@ -309,32 +701,29 @@ function Footer() {
   const year = new Date().getFullYear()
 
   return (
-    <footer className="border-t border-slate-200 bg-white py-10">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start sm:justify-between">
+    <footer className="bg-[#171a1f] py-8">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-8">
+        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col items-center gap-2 sm:items-start">
-            <Logo className="h-8" />
-            <p className="text-sm text-[#64748b]">Food and taxi, one app.</p>
+            <Logo light />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-medium text-[#475569]">
-            <button type="button" onClick={() => navigate("/taxi/about")} className="hover:text-[#0b1220]">About</button>
-            <button type="button" onClick={() => navigate("/taxi/contact")} className="hover:text-[#0b1220]">Contact</button>
-            <button type="button" onClick={() => navigate("/taxi/terms")} className="hover:text-[#0b1220]">Terms</button>
-            <button type="button" onClick={() => navigate("/taxi/privacy")} className="hover:text-[#0b1220]">Privacy</button>
-          </div>
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-medium text-slate-300">
+            <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="hover:text-white">Home</button>
+            <button type="button" onClick={() => scrollToId("why-us")} className="hover:text-white">Features</button>
+            <button type="button" onClick={() => scrollToId("services")} className="hover:text-white">About</button>
+            <button type="button" onClick={() => navigate("/taxi/privacy")} className="hover:text-white">Privacy</button>
+            <button type="button" onClick={() => navigate("/taxi/terms")} className="hover:text-white">Terms</button>
+          </nav>
+
+          <p className="text-xs text-slate-500">© {year} Hello Parth. All rights reserved.</p>
         </div>
-
-        <p className="mt-8 text-center text-xs text-[#94a3b8] sm:text-left">
-          © {year} Hello Parth. All rights reserved.
-        </p>
       </div>
     </footer>
   )
 }
 
 export default function PlatformLanding() {
-  const navigate = useNavigate()
   const [otherServices, setOtherServices] = useState([])
 
   useEffect(() => {
@@ -350,36 +739,18 @@ export default function PlatformLanding() {
     }
   }, [])
 
+  const showOtherServices = otherServices.length > 0
+
   return (
-    <div className="min-h-dvh w-full bg-white text-[#0b1220]">
-      <Navbar showOtherServices={otherServices.length > 0} />
+    <div className="min-h-dvh w-full bg-white text-[#0b1220]" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      <Navbar showOtherServices={showOtherServices} />
       <Hero />
-      <ServiceSection
-        id="food"
-        eyebrow="Food"
-        title="Everything you're craving, delivered fast"
-        description="Order from your favourite local restaurants and get it delivered hot, with live tracking every step of the way."
-        points={FOOD_POINTS}
-        image="/bg_food.png"
-        imageAlt="Food delivery"
-        cta="Explore Food"
-        onCta={() => navigate("/food/user")}
-        accent="#ea580c"
-      />
-      <ServiceSection
-        id="taxi"
-        eyebrow="Taxi"
-        title="Rides, parcels, bus and pooling — one tap away"
-        description="Book a cab across town, send a parcel, reserve a bus seat or share a pooling ride, all from the same app."
-        points={TAXI_POINTS}
-        image="/bg_ride.png"
-        imageAlt="Taxi and rides"
-        cta="Continue to Taxi"
-        onCta={() => navigate("/login")}
-        accent="#0284c7"
-        reverse
-      />
-      {otherServices.length > 0 && <OtherServices services={otherServices} />}
+      <ServicesOverview />
+      {showOtherServices && <OtherServices services={otherServices} />}
+      <WhyChooseUs />
+      <HowItWorks />
+      <AppPreviewImpact />
+      <CTABanner />
       <Footer />
     </div>
   )

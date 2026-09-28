@@ -27,6 +27,13 @@ export const globalAdminAPI = {
   updateOtherService: (id, body) =>
     apiClient.patch(`/admin/global/landing/other-services/${String(id)}`, body, admin),
   deleteOtherService: (id) => apiClient.delete(`/admin/global/landing/other-services/${String(id)}`, admin),
+  uploadOtherServiceImage: (file, previousUrl) => {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("folder", "landing/other-services")
+    if (previousUrl) formData.append("replaceUrl", previousUrl)
+    return apiClient.post("/uploads/image", formData, admin)
+  },
 }
 
 /** Public "Other Service" cards for the marketing landing page (no auth). */

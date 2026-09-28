@@ -18,6 +18,11 @@ const otherServiceSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    image: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     description: {
       type: String,
       default: '',
