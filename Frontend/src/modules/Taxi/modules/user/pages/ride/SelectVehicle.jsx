@@ -1181,6 +1181,7 @@ const SelectVehicle = () => {
   const scrollRef = React.useRef(null);
   const availabilityHistoryRef = useRef({});
   const selectedVehicleIdRef = useRef('');
+  const vehiclePickedByUserRef = useRef(false);
   const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
   const { settings } = useSettings();
@@ -1872,9 +1873,16 @@ const SelectVehicle = () => {
       return;
     }
 
-    const firstAvailable = displayedVehicles.find((vehicle) => (availabilityByVehicleId[vehicle.id]?.totalDrivers || 0) > 0) || displayedVehicles[0];
+    const hasDrivers = (id) => (availabilityByVehicleId[id]?.totalDrivers || 0) > 0;
+    const firstAvailable = displayedVehicles.find((vehicle) => hasDrivers(vehicle.id)) || displayedVehicles[0];
 
-    if (!selected && firstAvailable) {
+    if (!firstAvailable) {
+      return;
+    }
+
+    // The list preselects its first entry before availability is known; move off it to a vehicle
+    // that actually has drivers, unless the rider already picked one themselves.
+    if (!selected || (!vehiclePickedByUserRef.current && !hasDrivers(selected) && hasDrivers(firstAvailable.id))) {
       setSelected(firstAvailable.id);
     }
   }, [availabilityByVehicleId, displayedVehicles, hasAvailabilityResults, rideMode, selected]);
@@ -2293,6 +2301,7 @@ const SelectVehicle = () => {
                     tabIndex={canSelectVehicle ? 0 : undefined}
                     onClick={() => {
                       if (canSelectVehicle) {
+                        vehiclePickedByUserRef.current = true;
                         setSelected(v.id);
                       }
                     }}
@@ -2303,6 +2312,7 @@ const SelectVehicle = () => {
 
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
+                        vehiclePickedByUserRef.current = true;
                         setSelected(v.id);
                       }
                     }}

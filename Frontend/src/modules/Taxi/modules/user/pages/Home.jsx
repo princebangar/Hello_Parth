@@ -859,8 +859,10 @@ const Home = () => {
         return;
       }
 
+      // `mount` is exempt: lastSyncAtRef outlives a quick unmount/remount (StrictMode, coming back
+      // to Home within the cooldown), and skipping here would leave no sync timer running at all.
       if (
-        reason !== 'timer' &&
+        reason === 'focus' &&
         Date.now() - lastSyncAtRef.current < FORCED_SYNC_COOLDOWN_MS
       ) {
         return;

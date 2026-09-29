@@ -3,20 +3,6 @@ import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
 import heroImage from '../../../../assets/images/driver-login-bg.png';
 import './AuthShell.css';
 
-// The partner sign-in screens are always light, whatever theme the customer app is set to. The taxi theme
-// layer remaps utility classes (bg-white, text-slate-*, inputs...) onto these variables, so pinning them
-// here keeps every screen inside the shell readable in both themes.
-const LIGHT_SCOPE = {
-  '--user-bg': '#f6f7fb',
-  '--user-card-bg': '#ffffff',
-  '--user-card-soft': '#f1f3f8',
-  '--user-text-primary': '#0b1220',
-  '--user-text-secondary': '#334155',
-  '--user-text-muted': '#64748b',
-  '--user-border': 'rgba(15, 23, 42, 0.12)',
-  '--user-accent': '#ffc400',
-};
-
 const BRAND_POINTS = [
   {
     Icon: UsersIcon,
@@ -70,7 +56,6 @@ const FleetStrip = ({ tone = 'dark' }) => (
 const AuthShell = ({ eyebrow, title, subtitle, onBack, backLabel = 'Back', children, footer }) => {
   return (
     <div
-      style={LIGHT_SCOPE}
       className="relative isolate min-h-dvh w-full overflow-x-hidden bg-[#f6f7fb] text-[#0b1220] lg:grid lg:grid-cols-[1.05fr_1fr]"
     >
       {/* Brand panel — desktop only */}

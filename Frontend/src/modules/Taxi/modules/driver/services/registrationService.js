@@ -541,25 +541,7 @@ export const updateDriverVehicle = (payload) =>
 export const deleteDriverVehicle = (vehicleId) =>
   api.delete(`/drivers/vehicle/${vehicleId}`, withDriverAuth());
 
-export const getDriverVehicleTypes = async () => {
-  const authConfig = withDriverAuth();
-  const hasDriverAuthorization = Boolean(
-    authConfig?.headers?.Authorization || authConfig?.headers?.authorization,
-  );
-
-  if (hasDriverAuthorization) {
-    try {
-      return await api.get("/admin/types/vehicle-types", authConfig);
-    } catch (error) {
-      const status = Number(error?.response?.status || 0);
-      if (status && status !== 401 && status !== 403) {
-        throw error;
-      }
-    }
-  }
-
-  return api.get("/users/vehicle-types");
-};
+export const getDriverVehicleTypes = () => api.get("/users/vehicle-types");
 
 export const getDriverApprovalStatus = () => {
   return api.get(

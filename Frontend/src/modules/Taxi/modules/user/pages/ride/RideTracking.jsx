@@ -43,6 +43,15 @@ const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
 
+// The route effect depends on routePath itself, so it must never swap in a fresh-but-identical array.
+const keepRouteIfSame = (current, next) => (
+  Array.isArray(current) &&
+  current.length === next.length &&
+  current.every((point, index) => arePositionsNearlyEqual(point, next[index], 0.000001))
+    ? current
+    : next
+);
+
 const toRadians = (value) => Number(value || 0) * (Math.PI / 180);
 
 const getDistanceMeters = (first, second) => {
@@ -187,6 +196,11 @@ const resolveAssetUrl = (value = '') => {
   }
 
   if (/^(https?:|data:image\/|blob:)/i.test(raw)) {
+    return raw;
+  }
+
+  // Root-level files like `/4_Taxi.png` are served from the frontend's public/ folder.
+  if (/^\/[^/]+\.(png|jpe?g|svg|webp|gif)$/i.test(raw)) {
     return raw;
   }
 
@@ -644,7 +658,9 @@ const RideTracking = () => {
 
   const completeTracking = useMemo(
     () => (statusValue = 'completed') => {
-      const completedRideSnapshot = {
+      // JSON round-trip: API data arrives wrapped in Proxies (axiosInstance), and history.state
+      // can't structured-clone a Proxy — navigate() would throw DataCloneError.
+      const completedRideSnapshot = JSON.parse(JSON.stringify({
         ...state,
         rideId,
         fare,
@@ -658,7 +674,7 @@ const RideTracking = () => {
         feedback: rideRealtime?.feedback || state.feedback || null,
         arrivedAt: rideRealtime?.arrivedAt || state.arrivedAt || '',
         completedAt: rideRealtime?.completedAt || rideRealtime?.arrivedAt || state.arrivedAt || Date.now(),
-      };
+      }));
 
       saveCurrentRide(completedRideSnapshot);
       navigate(routeComplete, {
@@ -1141,7 +1157,7 @@ const RideTracking = () => {
 
   useEffect(() => {
     if (isScheduledUpcoming && !hasLiveDriverLocation) {
-      setRoutePath([]);
+      setRoutePath((current) => keepRouteIfSame(current, []));
       setRouteError('');
       lastResolvedRouteRef.current = {
         origin: null,
@@ -1152,13 +1168,13 @@ const RideTracking = () => {
     }
 
     if (!isLoaded || !window.google?.maps?.importLibrary) {
-      setRoutePath([driverPosition, activeDestination]);
+      setRoutePath((current) => keepRouteIfSame(current, [driverPosition, activeDestination]));
       setRouteError('');
       return;
     }
 
     if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
-      setRoutePath([driverPosition]);
+      setRoutePath((current) => keepRouteIfSame(current, [driverPosition]));
       setRouteError('');
       return;
     }

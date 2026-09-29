@@ -1,43 +1,38 @@
-/*
- * Partner sign-in screens.
- * The taxi theme layer (Taxi/index.css) force-styles every <input> inside `.user-app-theme` — background,
- * border colour and a focus ring, all !important. The inputs on the sign-in screens sit inside field
- * wrappers / OTP boxes that draw their own chrome, so they need these higher-specificity resets.
- */
+/* Partner sign-in screens. */
 
 /* Borderless text input living inside a styled wrapper (phone field). */
-.user-app-theme input.dauth-bare,
-.user-app-theme input.dauth-bare:focus,
-.user-app-theme input.dauth-bare:focus-visible {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
+input.dauth-bare,
+input.dauth-bare:focus,
+input.dauth-bare:focus-visible {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
 }
 
 /* One-digit OTP box. */
-.user-app-theme input.dauth-otp {
-  background: #ffffff !important;
-  border: 2px solid #e2e8f0 !important;
-  border-radius: 1rem !important;
-  color: #0b1220 !important;
-  box-shadow: none !important;
-  outline: none !important;
+input.dauth-otp {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 1rem;
+  color: #0b1220;
+  box-shadow: none;
+  outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.user-app-theme input.dauth-otp:focus {
-  border-color: #0b1220 !important;
-  box-shadow: 0 0 0 4px rgba(255, 196, 0, 0.35) !important;
+input.dauth-otp:focus {
+  border-color: #0b1220;
+  box-shadow: 0 0 0 4px rgba(255, 196, 0, 0.35);
 }
 
-.user-app-theme input.dauth-otp[data-filled='true'] {
-  border-color: #0b1220 !important;
+input.dauth-otp[data-filled='true'] {
+  border-color: #0b1220;
 }
 
-.user-app-theme input.dauth-otp[data-invalid='true'] {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15) !important;
+input.dauth-otp[data-invalid='true'] {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
 }
 
 @keyframes dauth-shake {

@@ -358,6 +358,7 @@ const AdminSectionPlaceholder = () => {
 };
 
 const PARTNER_AUTH_PATH = /^\/taxi\/(driver|owner)\/(login|reg-phone|otp-verify|select-role)\/?$/;
+const PARTNER_PORTAL_PATH = /^\/taxi\/(driver|owner)(\/|$)/;
 
 // A wrapper to handle conditional layouts (Mobile for User/Driver, Full for Admin)
 const MainLayout = ({ children }) => {
@@ -367,7 +368,8 @@ const MainLayout = ({ children }) => {
   const isAdminPath =
     location.pathname.startsWith('/taxi/admin') ||
     location.pathname.startsWith('/taxi/user-import') ||
-    location.pathname.startsWith('/taxi/driver-import');
+    location.pathname.startsWith('/taxi/driver-import') ||
+    location.pathname === '/taxi/owner/create';
 
   if (isAdminPath) {
     return <div className="redigo-admin-root h-screen bg-gray-50 overflow-hidden">{children}</div>;
@@ -381,6 +383,21 @@ const MainLayout = ({ children }) => {
     );
   }
 
+  // Driver/owner portal is light-only and must stay outside `user-app-theme`: that scope's
+  // !important overrides remap slate/white colours to the customer's dark/light palette.
+  if (PARTNER_PORTAL_PATH.test(location.pathname)) {
+    const isPartnerAuth = PARTNER_AUTH_PATH.test(location.pathname);
+    return (
+      <div className="redigo-app driver-app-root light min-h-screen bg-slate-100 text-slate-900">
+        <main
+          className={`min-h-screen relative overflow-x-hidden bg-white ${isPartnerAuth ? 'w-full' : 'max-w-lg mx-auto shadow-2xl'}`}
+        >
+          {children}
+        </main>
+      </div>
+    );
+  }
+
   // `user-app-theme` (id="taxi-app-root") activates index.css's --user-*
   // CSS variables and its !important light/dark overrides for the whole
   // taxi user app. The `dark`/`light` class itself is applied directly to
@@ -390,14 +407,10 @@ const MainLayout = ({ children }) => {
   // it: all 5 kept-alive tabs), so it updates in one paint instead of
   // waiting for the whole tree to catch up. Background comes from the same
   // --user-bg variable for the same reason — no JS-computed ternary here.
-  // Partner sign-in screens lay themselves out for phone / tablet / desktop (AuthShell), so they must
-  // not be squeezed into the phone-width column the rest of the taxi app uses.
-  const isPartnerAuthPath = PARTNER_AUTH_PATH.test(location.pathname);
-
   return (
     <div id="taxi-app-root" className="redigo-app user-app-theme min-h-screen" style={{ backgroundColor: 'var(--user-bg)' }}>
       <main
-        className={`min-h-screen relative overflow-x-hidden ${isPartnerAuthPath ? 'w-full' : 'max-w-lg mx-auto shadow-2xl'}`}
+        className="min-h-screen relative overflow-x-hidden max-w-lg mx-auto shadow-2xl"
         style={{ backgroundColor: 'var(--user-bg)' }}
       >
         {children}

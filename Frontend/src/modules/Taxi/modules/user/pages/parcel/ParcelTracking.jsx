@@ -56,6 +56,15 @@ const arePositionsNearlyEqual = (first, second, threshold = 0.0002) => (
   Math.abs(Number(first?.lng ?? 0) - Number(second?.lng ?? 0)) < threshold
 );
 
+// The route effect depends on routePath itself, so it must never swap in a fresh-but-identical array.
+const keepRouteIfSame = (current, next) => (
+  Array.isArray(current) &&
+  current.length === next.length &&
+  current.every((point, index) => arePositionsNearlyEqual(point, next[index], 0.000001))
+    ? current
+    : next
+);
+
 const toRadians = (value) => Number(value || 0) * (Math.PI / 180);
 
 const getDistanceMeters = (first, second) => {
@@ -155,6 +164,8 @@ const resolveAssetUrl = (value = '') => {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (/^(https?:|data:image\/|blob:)/i.test(raw)) return raw;
+  // Root-level files like `/4_Taxi.png` are served from the frontend's public/ folder.
+  if (/^\/[^/]+\.(png|jpe?g|svg|webp|gif)$/i.test(raw)) return raw;
   if (raw.startsWith('/')) return `${BACKEND_ORIGIN}${raw}`;
   return `${BACKEND_ORIGIN}/${raw.replace(/^\/+/, '')}`;
 };
@@ -717,12 +728,13 @@ const ParcelTracking = () => {
   // Route Path Update
   useEffect(() => {
     if (!isLoaded || !window.google?.maps?.importLibrary) {
-      setRoutePath(arePositionsNearlyEqual(driverPosition, activeDestination) ? [driverPosition] : [driverPosition, activeDestination]);
+      const nextPath = arePositionsNearlyEqual(driverPosition, activeDestination) ? [driverPosition] : [driverPosition, activeDestination];
+      setRoutePath((current) => keepRouteIfSame(current, nextPath));
       return;
     }
 
     if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
-      setRoutePath([driverPosition]);
+      setRoutePath((current) => keepRouteIfSame(current, [driverPosition]));
       return;
     }
 

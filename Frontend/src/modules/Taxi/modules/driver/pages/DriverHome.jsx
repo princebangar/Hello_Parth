@@ -209,6 +209,10 @@ const getMapIconForVehicle = (iconType = '') => {
     if (/^(https?:|data:image\/|blob:)/.test(raw)) {
         return raw;
     }
+    // Root-level files like `/4_Taxi.png` are served from the frontend's public/ folder.
+    if (/^\/[^/]+\.(png|jpe?g|svg|webp|gif)$/i.test(raw)) {
+        return raw;
+    }
     if (raw.startsWith('/')) {
         return `${BACKEND_ORIGIN}${raw}`;
     }

@@ -174,6 +174,11 @@ const resolveVehiclePreviewIcon = (iconUrl = '', fallback = carIcon) => {
         return raw;
     }
 
+    // Root-level files like `/4_Taxi.png` live in the frontend's public/ folder, not on the backend.
+    if (/^\/[^/]+\.(png|jpe?g|svg|webp|gif)$/i.test(raw)) {
+        return raw;
+    }
+
     if (raw.startsWith('/')) {
         return `${BACKEND_ORIGIN}${raw}`;
     }
@@ -2364,6 +2369,8 @@ const ActiveTrip = () => {
                     </div>
                 )}
 
+                {/* Fake-GPS test tool: dev builds only, so real drivers can't simulate a trip. */}
+                {import.meta.env.DEV && (
                 <div className="absolute top-44 left-4 z-40 w-[190px] rounded-2xl border border-white/80 bg-white/94 px-3 py-3 shadow-lg backdrop-blur-md">
                     <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="min-w-0">
@@ -2405,6 +2412,7 @@ const ActiveTrip = () => {
                         Test mode emits live location events along this polyline.
                     </p>
                 </div>
+                )}
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 z-40">

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { applyTheme, getFoodUserTheme, saveFoodUserTheme, THEME_CHANGE_EVENT } from '@/shared/utils/theme';
 
 const UserThemeContext = createContext({
@@ -8,6 +9,7 @@ const UserThemeContext = createContext({
 
 // The div carrying the `user-app-theme` scope in TaxiApp.jsx's MainLayout.
 const TAXI_APP_ROOT_ID = 'taxi-app-root';
+const LIGHT_ONLY_PATH = /^\/taxi\/(driver|owner|admin|user-import|driver-import)(\/|$)/;
 
 export const UserThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => getFoodUserTheme());
@@ -45,8 +47,16 @@ export const UserThemeProvider = ({ children }) => {
   // landed in two stages. A direct classList toggle updates every
   // `--user-*` CSS variable (and everything reading them) in one paint,
   // independent of how long the rest of the tree takes to reconcile.
+  // Driver/owner/admin screens are light-only; the customer's saved theme must not reach them.
+  const { pathname } = useLocation();
+  const appliesUserTheme = !LIGHT_ONLY_PATH.test(pathname);
+
   useLayoutEffect(() => {
     if (typeof document === 'undefined') return;
+    if (!appliesUserTheme) {
+      applyTheme('light');
+      return undefined;
+    }
     const root = document.getElementById(TAXI_APP_ROOT_ID);
     if (root) {
       root.classList.remove('dark', 'light');
@@ -57,7 +67,7 @@ export const UserThemeProvider = ({ children }) => {
     return () => {
       document.body.style.backgroundColor = '';
     };
-  }, [theme]);
+  }, [theme, appliesUserTheme, pathname]);
 
   return (
     <UserThemeContext.Provider value={{ theme, toggleTheme }}>

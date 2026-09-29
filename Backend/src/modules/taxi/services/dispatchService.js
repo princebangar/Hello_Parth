@@ -742,6 +742,7 @@ const emitRideRequestToDrivers = async ({
       fareIncreaseWaitMinutes: Number(ride.fareIncreaseWaitMinutes || 0),
       nextFareIncreaseAt: ride.nextFareIncreaseAt || null,
       paymentMethod: ride.paymentMethod,
+      pricingSnapshot: ride.pricingSnapshot || null,
       parcel: ride.parcel || null,
       intercity: ride.intercity || null,
       radius: effectiveRadius,
