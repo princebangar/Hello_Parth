@@ -445,7 +445,7 @@ function ServicesOverview() {
               title="Food Delivery"
               desc="Explore top restaurants, your favourite dishes, and get them delivered to your doorstep."
               cta="Explore Food"
-              onCta={() => navigate("/food/user")}
+              onCta={() => navigate("/login")}
             />
             <ServiceCard
               id="taxi"

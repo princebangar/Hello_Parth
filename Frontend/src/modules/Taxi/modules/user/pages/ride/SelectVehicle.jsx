@@ -577,9 +577,9 @@ const getCapacity = (type) => {
 
 const AVERAGE_CITY_SPEED_KMPH = 24;
 
-const calculateDistanceMeters = (fromCoords = [], toCoords = []) => {
-  const [fromLng, fromLat] = fromCoords;
-  const [toLng, toLat] = toCoords;
+const calculateDistanceMeters = (fromCoords, toCoords) => {
+  const [fromLng, fromLat] = Array.isArray(fromCoords) ? fromCoords : [];
+  const [toLng, toLat] = Array.isArray(toCoords) ? toCoords : [];
 
   if (![fromLng, fromLat, toLng, toLat].every((value) => Number.isFinite(Number(value)))) {
     return 0;
@@ -1164,10 +1164,11 @@ const SelectVehicle = () => {
       };
     }
 
-    const fallbackDistanceMeters = calculateDistanceMeters(
-      routeState?.pickupCoords || [75.9048, 22.7039],
-      routeState?.dropCoords || [75.8937, 22.7533],
-    );
+    if (!Array.isArray(routeState?.pickupCoords) || !Array.isArray(routeState?.dropCoords)) {
+      return { distanceMeters: 0, durationMinutes: 0 };
+    }
+
+    const fallbackDistanceMeters = calculateDistanceMeters(routeState.pickupCoords, routeState.dropCoords);
 
     return {
       distanceMeters: fallbackDistanceMeters,
@@ -1183,10 +1184,17 @@ const SelectVehicle = () => {
   const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const pickup = routeState.pickup || 'Pipaliyahana, Indore';
-  const drop = routeState.drop || 'Vijay Nagar, Indore';
-  const pickupCoords = useMemo(() => routeState.pickupCoords || [75.9048, 22.7039], [routeState.pickupCoords]);
-  const dropCoords = useMemo(() => routeState.dropCoords || [75.8937, 22.7533], [routeState.dropCoords]);
+  const pickup = routeState.pickup || '';
+  const drop = routeState.drop || '';
+  const pickupCoords = useMemo(
+    () => (Array.isArray(routeState.pickupCoords) ? routeState.pickupCoords : null),
+    [routeState.pickupCoords],
+  );
+  const dropCoords = useMemo(
+    () => (Array.isArray(routeState.dropCoords) ? routeState.dropCoords : null),
+    [routeState.dropCoords],
+  );
+  const hasCompleteRideContext = Boolean(pickup && drop && pickupCoords && dropCoords);
   const stops = useMemo(
     () => (Array.isArray(routeState.stops) ? routeState.stops : []),
     [routeState.stops],
@@ -1210,6 +1218,16 @@ const SelectVehicle = () => {
   const { isLoaded: isMapLoaded, loadError: mapLoadError } = useBaseGoogleMapsLoader();
   const minScheduledAt = useMemo(() => getMinScheduledDateTime(), []);
   const maxScheduledAt = useMemo(() => getMaxScheduledDateTime(), []);
+
+  // Never fabricate a ride between fake default points — if pickup/drop state
+  // is missing (e.g. a hard page reload wiped router state), send the user
+  // back to pick a real location instead of silently booking the wrong trip.
+  useEffect(() => {
+    if (!hasCompleteRideContext) {
+      navigate(`${routePrefix}/ride/select-location`, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (hasCompleteRouteZoneContext) {
@@ -1865,7 +1883,7 @@ const SelectVehicle = () => {
     let active = true;
     let intervalId;
 
-    if (isResolvingServiceLocation) {
+    if (isResolvingServiceLocation || !Array.isArray(pickupCoords)) {
       setHasLoadedAvailability(false);
       return undefined;
     }

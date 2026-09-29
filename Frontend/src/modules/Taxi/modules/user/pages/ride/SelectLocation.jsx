@@ -7,27 +7,7 @@ import { useAppGoogleMapsLoader, INDIA_CENTER, HAS_VALID_GOOGLE_MAPS_KEY } from 
 import api from '../../../../shared/api/axiosInstance';
 import { getSavedLocation, getSavedLocationCoords, saveLocation } from '../../services/locationStore';
 
-const LOCATION_COORDS = {
-  'Pipaliyahana, Indore': [75.9048, 22.7039],
-  'Vijay Nagar': [75.8937, 22.7533],
-  'Vijay Nagar Square': [75.8947, 22.7518],
-  'Vijayawada': [80.6480, 16.5062],
-  'Vijay Nagar Police Station': [75.8934, 22.7506],
-  'Rajwada': [75.8553, 22.7187],
-  'Bhawarkua': [75.8586, 22.6926],
-  'MG Road': [75.8721, 22.7196],
-  'Palasia Square': [75.8863, 22.7242],
-  'LIG Colony': [75.8904, 22.7322],
-  'Scheme No 54': [75.8978, 22.7567],
-  'Bhangadh': [75.8438, 22.7552],
-  'AB Road': [75.8878, 22.7423],
-  'Geeta Bhawan': [75.8834, 22.7208],
-  'Sapna Sangeeta': [75.8587, 22.6984],
-  'Mahalaxmi Nagar': [75.9114, 22.7676],
-};
-
-const getCoords = (title, fallback = [75.8577, 22.7196]) => LOCATION_COORDS[title] || fallback;
-const DEFAULT_COORDS = [75.8577, 22.7196];
+const DEFAULT_COORDS = [INDIA_CENTER.lng, INDIA_CENTER.lat];
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
 const getLatLngCacheKey = (coords, precision = 5) =>
   `${Number(coords?.lat || 0).toFixed(precision)},${Number(coords?.lng || 0).toFixed(precision)}`;
@@ -194,9 +174,12 @@ const SelectLocation = () => {
   const savedLocation = getSavedLocation();
   const savedPickupLabel = String(savedLocation?.address || '').trim();
   const savedPickupCoords = getSavedLocationCoords();
-  const [pickup, setPickup] = useState(() => routeState.pickup || savedPickupLabel || 'Pipaliyahana, Indore');
+  const [pickup, setPickup] = useState(() => routeState.pickup || savedPickupLabel || '');
   const [drop, setDrop] = useState(() => routeState.drop || '');
-  const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || savedPickupCoords || getCoords(routeState.pickup || savedPickupLabel || 'Pipaliyahana, Indore'));
+  const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || savedPickupCoords || null);
+  const [locationError, setLocationError] = useState('');
+  const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
+  const [nearbyPopular, setNearbyPopular] = useState([]);
   const [dropCoords, setDropCoords] = useState(() => routeState.dropCoords || null);
   const [stops, setStops] = useState(() => routeState.stops || []);          // array of stop strings
   const [activeInput, setActiveInput] = useState(routeActiveInput); // 'pickup' | 'drop' | stopIdx
@@ -227,25 +210,6 @@ const SelectLocation = () => {
   const navigate = useNavigate();
   const routePrefix = window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
   const parcelReturnPath = routeState.returnTo || `${routePrefix}/parcel/details`;
-
-  // All known locations â€” filtered live as user types
-  const allResults = [
-    { title: 'Vijay Nagar', address: 'Vijay Nagar, Indore, Madhya Pradesh' },
-    { title: 'Vijay Nagar Square', address: 'Vijay Nagar Square, Bhagyashree Colony, Indore' },
-    { title: 'Vijayawada', address: 'Vijayawada, Andhra Pradesh, India' },
-    { title: 'Vijay Nagar Police Station', address: 'Vijay Nagar Police Station, Sector D, Indore' },
-    { title: 'Rajwada', address: 'Rajwada, Old Palasia, Indore, MP' },
-    { title: 'Bhawarkua', address: 'Bhawarkua, Indore, Madhya Pradesh' },
-    { title: 'MG Road', address: 'MG Road, Indore, Madhya Pradesh' },
-    { title: 'Palasia Square', address: 'Palasia Square, AB Road, Indore' },
-    { title: 'LIG Colony', address: 'LIG Colony, Indore, Madhya Pradesh' },
-    { title: 'Scheme No 54', address: 'Scheme No 54, Vijay Nagar, Indore' },
-    { title: 'Bhangadh', address: 'Bhangadh, Indore, Madhya Pradesh' },
-    { title: 'AB Road', address: 'AB Road, Indore, Madhya Pradesh' },
-    { title: 'Geeta Bhawan', address: 'Geeta Bhawan, Indore, Madhya Pradesh' },
-    { title: 'Sapna Sangeeta', address: 'Sapna Sangeeta Road, Indore, MP' },
-    { title: 'Mahalaxmi Nagar', address: 'Mahalaxmi Nagar, Indore, Madhya Pradesh' },
-  ];
 
   const zoneBounds = useMemo(() => getBoundsFromPaths(zonePaths), [zonePaths]);
 
@@ -344,14 +308,127 @@ const SelectLocation = () => {
     return geocoderRef.current;
   };
 
+  // Pickup must always come from the device's real current location — never a hardcoded city default.
+  // If geolocation or the Maps API is unavailable, surface an error instead of silently faking a place.
+  useEffect(() => {
+    if (pickup || isParcelFlow) {
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationError('Location access is not supported on this device. Please select your pickup manually.');
+      return;
+    }
+
+    if (!HAS_VALID_GOOGLE_MAPS_KEY || loadError) {
+      setLocationError('Map service is unavailable right now. Please select your pickup location manually.');
+      return;
+    }
+
+    if (!isLoaded) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsResolvingCurrentLocation(true);
+    setLocationError('');
+
+    const handleSuccess = (pos) => {
+      if (cancelled) return;
+      const { latitude, longitude } = pos.coords;
+      const coords = [longitude, latitude];
+      const geocoder = getGeocoder();
+
+      if (!geocoder) {
+        setIsResolvingCurrentLocation(false);
+        setLocationError('Map service is unavailable right now. Please select your pickup location manually.');
+        return;
+      }
+
+      geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
+        if (cancelled) return;
+        setIsResolvingCurrentLocation(false);
+
+        if (status === 'OK' && results?.[0]?.formatted_address) {
+          const addr = results[0].formatted_address;
+          setPickup(addr);
+          setPickupCoords(coords);
+          saveLocation({ address: addr, lat: latitude, lon: longitude });
+          return;
+        }
+
+        setLocationError('Could not determine your address. Please select your pickup location manually.');
+      });
+    };
+
+    const handleFailure = () => {
+      if (cancelled) return;
+      setIsResolvingCurrentLocation(false);
+      setLocationError('Could not access your current location. Please allow location access or select manually.');
+    };
+
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleFailure, {
+      enableHighAccuracy: true,
+      timeout: 8000,
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pickup, isParcelFlow, isLoaded, loadError]);
+
+  // "Popular Locations" must reflect places near the user's own current location, never a fixed city.
+  useEffect(() => {
+    if (!isLoaded || !Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
+      return;
+    }
+
+    const placesService = getPlacesService();
+    if (!placesService) {
+      return;
+    }
+
+    const [lng, lat] = pickupCoords;
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+      return;
+    }
+
+    let cancelled = false;
+
+    placesService.nearbySearch(
+      {
+        location: { lat: Number(lat), lng: Number(lng) },
+        radius: 5000,
+        type: 'point_of_interest',
+      },
+      (results, status) => {
+        if (cancelled) return;
+
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && Array.isArray(results)) {
+          const mapped = results
+            .filter((place) => place?.geometry?.location)
+            .slice(0, 6)
+            .map((place) => ({
+              title: place.name,
+              address: place.vicinity || place.formatted_address || place.name,
+              coords: [place.geometry.location.lng(), place.geometry.location.lat()],
+              placeId: place.place_id,
+            }));
+          setNearbyPopular(mapped);
+        } else {
+          setNearbyPopular([]);
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, pickupCoords]);
+
   const resolveCoords = async (label, fallback = DEFAULT_COORDS) => {
     if (!label || !String(label).trim()) {
       return fallback;
-    }
-
-    const knownCoords = LOCATION_COORDS[label];
-    if (knownCoords) {
-      return knownCoords;
     }
 
     const cacheKey = String(label).trim().toLowerCase();
@@ -498,7 +575,7 @@ const SelectLocation = () => {
   const query = getQuery();
   const currentZone = useMemo(() => findMatchingZone(pickupCoords, zones), [pickupCoords, zones]);
 
-  const popularSuggestions = useMemo(() => allResults.slice(0, 6), []);
+  const popularSuggestions = nearbyPopular;
 
   const isInitialDefault = useMemo(() => {
     const trimmedQuery = query.trim();
@@ -524,14 +601,7 @@ const SelectLocation = () => {
   }, [query, activeInput, routeState.pickup, routeState.drop, routeState.stops, savedPickupLabel]);
 
   const localSearchResults = useMemo(
-    () =>
-      query.trim().length >= 1 && !isInitialDefault
-        ? allResults.filter(
-          (result) =>
-            result.title.toLowerCase().includes(query.toLowerCase())
-            || result.address.toLowerCase().includes(query.toLowerCase()),
-        )
-        : popularSuggestions,
+    () => (query.trim().length >= 1 && !isInitialDefault ? [] : popularSuggestions),
     [popularSuggestions, query, isInitialDefault],
   );
 
@@ -760,8 +830,9 @@ const SelectLocation = () => {
 
   const handleConfirmNavigate = async (optionalDrop, optionalDropCoords = null) => {
     const finalDrop = optionalDrop || drop;
-    const finalPickup = pickup || 'Pipaliyahana, Indore';
+    const finalPickup = pickup;
 
+    if (!finalPickup || finalPickup.trim().length === 0) return;
     if (!finalDrop || finalDrop.trim().length === 0) return;
 
     const resolvedPickupCoords = pickupCoords || await resolveCoords(finalPickup);
@@ -1194,16 +1265,26 @@ const SelectLocation = () => {
                     value={pickup}
                     onChange={(e) => setPickup(sanitizeLocationInput(e.target.value))}
                     onFocus={() => setActiveInput('pickup')}
-                    placeholder="Your pickup location"
+                    placeholder={isResolvingCurrentLocation ? 'Detecting your location...' : 'Your pickup location'}
                     className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
                   />
-                  {pickup.length > 0 && (
+                  {isResolvingCurrentLocation && (
+                    <LoaderCircle size={16} className="ml-2 shrink-0 animate-spin text-slate-300" />
+                  )}
+                  {!isResolvingCurrentLocation && pickup.length > 0 && (
                     <button onClick={() => setPickup('')} className="ml-2 shrink-0">
                       <X size={16} className="text-slate-300 hover:text-slate-600 transition-colors" />
                     </button>
                   )}
                 </div>
               </div>
+
+              {!pickup && locationError && (
+                <div className="ml-8 flex items-start gap-1.5 text-[12px] font-semibold text-rose-500">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                  <span>{locationError}</span>
+                </div>
+              )}
 
               {/* Dotted connector */}
               <div className="ml-[9px] h-2 w-[1.5px] border-l-[1.5px] border-dotted border-slate-300/70" />
@@ -1337,57 +1418,64 @@ const SelectLocation = () => {
             {query.trim().length > 0 ? 'Search Results' : currentZone?.name ? `${currentZone.name} Suggestions` : 'Popular Locations'}
           </h2>
 
-          {searchResults.length > 0 ? (
-            <div className="bg-white/75 backdrop-blur-md rounded-2xl border border-white/80 lg:bg-white lg:border-slate-100 overflow-hidden shadow-[0_14px_34px_rgba(15,23,42,0.06)] lg:shadow-sm">
-              {/* Quick Go to Current Location */}
-              <motion.button
-                whileTap={{ scale: 0.99 }}
-                onClick={handleUseCurrentLocationResult}
-                className="w-full text-left flex items-center gap-3 px-4 py-3.5 border-b border-white/70 lg:border-slate-100 bg-emerald-50/30 hover:bg-emerald-50/50 transition-colors group"
-              >
-                <div className="w-10 h-10 rounded-2xl bg-white border border-emerald-100 shadow-sm flex items-center justify-center shrink-0">
-                  {isLocating ? (
-                    <LoaderCircle size={18} className="animate-spin text-emerald-500" />
-                  ) : (
-                    <Navigation size={18} className="text-emerald-500 fill-emerald-50" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-[15px] font-bold text-slate-900 leading-tight group-hover:text-emerald-600 transition-colors">Use Current Location</h4>
-                  <p className="text-[12px] text-slate-400 font-medium mt-0.5">Perfect for accurate pickup</p>
-                </div>
-                <ChevronRight size={16} className="text-slate-300" />
-              </motion.button>
-
-              {searchResults.map((result, idx) => (
-                <motion.button
-                  key={idx}
-                  type="button"
-                  whileTap={{ scale: 0.99 }}
-                  onClick={() => handleSelectResult(result)}
-                  className="w-full text-left flex items-start gap-3 px-4 py-3 border-b border-white/70 lg:border-slate-100 last:border-none hover:bg-white/60 transition-colors"
-                >
-                  <div className="mt-0.5 w-10 h-10 rounded-2xl bg-white/70 lg:bg-slate-50 border border-white/80 lg:border-slate-100 shadow-sm flex items-center justify-center shrink-0 text-slate-500">
-                    <MapPin size={18} strokeWidth={2.6} />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-[15px] font-semibold text-slate-900 leading-tight">{result.title}</h4>
-                    <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">{result.address}</p>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <div className="w-14 h-14 rounded-3xl bg-white/80 border border-white/80 shadow-sm flex items-center justify-center mx-auto text-slate-400 text-[22px] font-bold">
-                —
+          <div className="bg-white/75 backdrop-blur-md rounded-2xl border border-white/80 lg:bg-white lg:border-slate-100 overflow-hidden shadow-[0_14px_34px_rgba(15,23,42,0.06)] lg:shadow-sm">
+            {/* Quick Go to Current Location */}
+            <motion.button
+              whileTap={{ scale: 0.99 }}
+              onClick={handleUseCurrentLocationResult}
+              className="w-full text-left flex items-center gap-3 px-4 py-3.5 border-b border-white/70 lg:border-slate-100 bg-emerald-50/30 hover:bg-emerald-50/50 transition-colors group"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-white border border-emerald-100 shadow-sm flex items-center justify-center shrink-0">
+                {isLocating ? (
+                  <LoaderCircle size={18} className="animate-spin text-emerald-500" />
+                ) : (
+                  <Navigation size={18} className="text-emerald-500 fill-emerald-50" />
+                )}
               </div>
-              <p className="mt-3 text-[15px] font-semibold text-slate-600">
-                No results for <span className="text-slate-900">"{query}"</span>
-              </p>
-              <p className="text-[13px] font-medium text-slate-400 mt-1">Try a different search term</p>
-            </div>
-          )}
+              <div className="flex-1">
+                <h4 className="text-[15px] font-bold text-slate-900 leading-tight group-hover:text-emerald-600 transition-colors">Use Current Location</h4>
+                <p className="text-[12px] text-slate-400 font-medium mt-0.5">Perfect for accurate pickup</p>
+              </div>
+              <ChevronRight size={16} className="text-slate-300" />
+            </motion.button>
+
+            {searchResults.map((result, idx) => (
+              <motion.button
+                key={idx}
+                type="button"
+                whileTap={{ scale: 0.99 }}
+                onClick={() => handleSelectResult(result)}
+                className="w-full text-left flex items-start gap-3 px-4 py-3 border-b border-white/70 lg:border-slate-100 last:border-none hover:bg-white/60 transition-colors"
+              >
+                <div className="mt-0.5 w-10 h-10 rounded-2xl bg-white/70 lg:bg-slate-50 border border-white/80 lg:border-slate-100 shadow-sm flex items-center justify-center shrink-0 text-slate-500">
+                  <MapPin size={18} strokeWidth={2.6} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-[15px] font-semibold text-slate-900 leading-tight">{result.title}</h4>
+                  <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">{result.address}</p>
+                </div>
+              </motion.button>
+            ))}
+
+            {searchResults.length === 0 && (
+              <div className="text-center py-10 px-4">
+                {query.trim().length > 0 ? (
+                  <>
+                    <p className="text-[15px] font-semibold text-slate-600">
+                      No results for <span className="text-slate-900">"{query}"</span>
+                    </p>
+                    <p className="text-[13px] font-medium text-slate-400 mt-1">Try a different search term</p>
+                  </>
+                ) : (
+                  <p className="text-[13px] font-medium text-slate-400">
+                    {isResolvingCurrentLocation
+                      ? 'Finding places near you...'
+                      : locationError || 'Search for a location to get started.'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
           {query.trim().length >= 3 && (
             <div className="mt-3 px-1">
               <p className="text-[11px] font-bold text-slate-400">

@@ -3,6 +3,38 @@ import { useEffect } from 'react';
 const CHECK_INTERVAL_MS = 60 * 1000;
 const INITIAL_CHECK_DELAY_MS = 1500;
 
+// Screens where an unannounced full-page reload would wipe in-progress, un-persisted
+// booking state (pickup/drop, selected vehicle, live tracking). A stray reload here is
+// what produced the "white flash then back to the previous screen" report in production —
+// mid-flow the router state (pickup/drop/coords) doesn't survive a hard reload, so the next
+// page bounces the user back. Defer the update instead of interrupting these flows; the
+// periodic/focus/pageshow checks below simply retry once the user reaches a safe screen.
+const CRITICAL_FLOW_SEGMENTS = [
+  '/ride/select-location',
+  '/ride/select-vehicle',
+  '/ride/searching',
+  '/ride/tracking',
+  '/ride/complete',
+  '/ride/chat',
+  '/parcel/searching',
+  '/parcel/tracking',
+  '/parcel/details',
+  '/parcel/contacts',
+  '/intercity/details',
+  '/intercity/confirm',
+  '/food/user/checkout',
+  '/food/user/cart',
+];
+
+const isOnCriticalFlow = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const path = String(window.location?.pathname || '');
+  return CRITICAL_FLOW_SEGMENTS.some((segment) => path.includes(segment));
+};
+
 const getCurrentEntryScript = () => {
   if (typeof document === 'undefined') {
     return '';
@@ -40,7 +72,7 @@ const AppAutoUpdater = () => {
         const html = await response.text();
         const nextEntryScript = getEntryScriptFromHtml(html);
 
-        if (nextEntryScript && nextEntryScript !== currentEntryScript) {
+        if (nextEntryScript && nextEntryScript !== currentEntryScript && !isOnCriticalFlow()) {
           window.location.reload();
         }
       } catch {
