@@ -35,6 +35,12 @@ const aboutPageSchema = new mongoose.Schema(
     { _id: false }
 );
 
+/**
+ * Shared policy-content store: Terms/Privacy/Support (User, Restaurant, Delivery, Captain — managed by the
+ * Global admin) plus a handful of Food-only pages (About/Refund/Shipping/Cancellation, still managed from
+ * the Food admin). Lives under Global now since Terms/Privacy/Support are no longer Food-specific — the
+ * consumer login is shared across Food and Taxi.
+ */
 const pageContentSchema = new mongoose.Schema(
     {
         key: {
@@ -43,10 +49,10 @@ const pageContentSchema = new mongoose.Schema(
             unique: true,
             index: true,
             enum: [
-                'terms', 'terms_user', 'terms_restaurant', 'terms_delivery',
-                'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery',
+                'terms', 'terms_user', 'terms_restaurant', 'terms_delivery', 'terms_driver',
+                'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery', 'privacy_driver',
                 'refund', 'shipping', 'cancellation', 'about',
-                'support_user', 'support_restaurant', 'support_delivery'
+                'support_user', 'support_restaurant', 'support_delivery', 'support_driver'
             ]
         },
         legal: { type: legalPageSchema, default: undefined },
@@ -54,8 +60,7 @@ const pageContentSchema = new mongoose.Schema(
         updatedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
         updatedByRole: { type: String, default: 'ADMIN' }
     },
-    { collection: 'food_page_contents', timestamps: true }
+    { collection: 'policy_contents', timestamps: true }
 );
 
-export const FoodPageContent = mongoose.model('FoodPageContent', pageContentSchema);
-
+export const PolicyContent = mongoose.model('PolicyContent', pageContentSchema);

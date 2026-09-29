@@ -14,15 +14,25 @@
     <script>
       (function() {
         try {
-          // 'userTheme' is the single current key (see shared/utils/theme.js);
-          // the rest are only checked as a fallback for old saved values.
-          var keys = ['userTheme', 'foodUserTheme', 'appTheme', 'userAppTheme'];
+          // Only the Food/Taxi consumer app has a real dark mode toggle. Admin, login and the
+          // driver/owner portals are light-only (no dark: styling anywhere in their markup) — this
+          // must match isUserAppPath() in shared/utils/theme.js, or a saved consumer dark-mode
+          // preference leaks into admin on a hard load/refresh, before React gets a chance to
+          // correct it, leaving native form bits (text caret, hover I-beam cursor) rendered in
+          // their dark-mode colour on an all-white admin page.
+          var path = window.location.pathname || '';
+          var isUserAppPath = path.indexOf('/food/') === 0 || path.indexOf('/taxi/user') === 0;
           var theme = 'light';
-          for (var i = 0; i < keys.length; i++) {
-            var v = localStorage.getItem(keys[i]);
-            if (v) {
-              theme = String(v).trim().toLowerCase() === 'dark' ? 'dark' : 'light';
-              break;
+          if (isUserAppPath) {
+            // 'userTheme' is the single current key (see shared/utils/theme.js);
+            // the rest are only checked as a fallback for old saved values.
+            var keys = ['userTheme', 'foodUserTheme', 'appTheme', 'userAppTheme'];
+            for (var i = 0; i < keys.length; i++) {
+              var v = localStorage.getItem(keys[i]);
+              if (v) {
+                theme = String(v).trim().toLowerCase() === 'dark' ? 'dark' : 'light';
+                break;
+              }
             }
           }
           var root = document.documentElement;

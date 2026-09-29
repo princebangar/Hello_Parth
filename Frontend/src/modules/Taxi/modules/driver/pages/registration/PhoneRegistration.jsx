@@ -85,7 +85,6 @@ const PhoneRegistration = () => {
 
     return candidates.find(isDriverRole) || DEFAULT_DRIVER_ROLE;
   });
-  const [agreed, setAgreed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -93,7 +92,7 @@ const PhoneRegistration = () => {
   const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
   const entryPath = `${routePrefix}/login`;
   const selectedRole = getDriverRole(role);
-  const canSubmit = phone.length === 10 && agreed;
+  const canSubmit = phone.length === 10;
 
   useEffect(() => {
     let active = true;
@@ -241,11 +240,6 @@ const PhoneRegistration = () => {
       return;
     }
 
-    if (!agreed) {
-      setError('Accept the Terms and Privacy Policy to continue');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
@@ -323,37 +317,6 @@ const PhoneRegistration = () => {
           </p>
         </div>
 
-        <label className="flex cursor-pointer items-start gap-3 text-sm leading-5 text-[#64748b]">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(event) => {
-              setAgreed(event.target.checked);
-              if (error) setError('');
-            }}
-            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[#0b1220]"
-          />
-          <span>
-            I agree to the{' '}
-            <button
-              type="button"
-              onClick={() => navigate(`${routePrefix}/terms`)}
-              className="font-semibold text-[#0b1220] underline underline-offset-2"
-            >
-              Terms
-            </button>{' '}
-            and{' '}
-            <button
-              type="button"
-              onClick={() => navigate(`${routePrefix}/privacy`)}
-              className="font-semibold text-[#0b1220] underline underline-offset-2"
-            >
-              Privacy Policy
-            </button>
-            .
-          </span>
-        </label>
-
         {error && (
           <div role="alert" className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm font-medium leading-5 text-[#b91c1c]">
             {error}
@@ -379,15 +342,32 @@ const PhoneRegistration = () => {
           )}
         </button>
 
-        <p className="text-center text-sm text-[#64748b]">
-          Need help?{' '}
+        <p className="text-center text-sm leading-5 text-[#64748b]">
+          By continuing, you agree to our{' '}
           <button
             type="button"
-            onClick={() => navigate(`${routePrefix}/support`)}
+            onClick={() => navigate(`${routePrefix}/legal/terms`)}
             className="font-semibold text-[#0b1220] underline underline-offset-2"
           >
-            Contact support
+            Terms
           </button>
+          ,{' '}
+          <button
+            type="button"
+            onClick={() => navigate(`${routePrefix}/legal/privacy`)}
+            className="font-semibold text-[#0b1220] underline underline-offset-2"
+          >
+            Privacy Policy
+          </button>{' '}
+          and{' '}
+          <button
+            type="button"
+            onClick={() => navigate(`${routePrefix}/legal/support`)}
+            className="font-semibold text-[#0b1220] underline underline-offset-2"
+          >
+            Support
+          </button>
+          .
         </p>
       </form>
     </AuthShell>

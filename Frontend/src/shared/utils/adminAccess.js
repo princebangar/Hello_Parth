@@ -23,6 +23,13 @@ export const GLOBAL_SECTIONS = [
     actions: ['view', 'create', 'edit', 'delete'],
     hint: 'Manage the "Other Service" cards shown on the public landing page',
   },
+  {
+    key: 'pagesSocialMedia',
+    label: 'Pages & Social Media',
+    path: `${GLOBAL_ADMIN_HOME}/pages-social-media`,
+    actions: ['view', 'create', 'edit', 'delete'],
+    hint: 'Terms, Privacy and Support content shown on User/Restaurant/Delivery/Captain login screens',
+  },
 ]
 
 export function readAdminProfile() {

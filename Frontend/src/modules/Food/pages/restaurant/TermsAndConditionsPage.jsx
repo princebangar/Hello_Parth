@@ -6,7 +6,7 @@ export default function TermsAndConditionsPage() {
   const goBack = useRestaurantBackNavigation()
   return (
     <CMSPage
-      endpoint={API_ENDPOINTS.ADMIN.TERMS_PUBLIC}
+      endpoint={API_ENDPOINTS.ADMIN.TERMS_RESTAURANT_PUBLIC}
       title="Terms of Service"
       module="RESTAURANT"
       goBack={goBack}

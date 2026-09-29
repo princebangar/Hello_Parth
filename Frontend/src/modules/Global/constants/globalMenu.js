@@ -1,4 +1,4 @@
-import { LayoutDashboard, Link2, User, UserCog, Users } from "lucide-react"
+import { FileText, LayoutDashboard, Link2, Lock, Headset, User, UserCog, Users } from "lucide-react"
 import { GLOBAL_ADMIN_HOME } from "@/shared/utils/activeModule.js"
 import { hasGlobalSection, isPlatformAdmin } from "@/shared/utils/adminAccess.js"
 
@@ -24,6 +24,14 @@ export const GLOBAL_MENU = [
     label: "Content",
     items: [
       { label: "Landing Page", path: `${GLOBAL_ADMIN_HOME}/landing`, icon: Link2, section: "landing" },
+    ],
+  },
+  {
+    label: "Pages & Social Media",
+    items: [
+      { label: "Terms & Conditions", path: `${GLOBAL_ADMIN_HOME}/pages-social-media/terms`, icon: FileText, section: "pagesSocialMedia" },
+      { label: "Privacy Policy", path: `${GLOBAL_ADMIN_HOME}/pages-social-media/privacy`, icon: Lock, section: "pagesSocialMedia" },
+      { label: "Support", path: `${GLOBAL_ADMIN_HOME}/pages-social-media/support`, icon: Headset, section: "pagesSocialMedia" },
     ],
   },
   {

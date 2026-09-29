@@ -6,7 +6,7 @@ export default function TermsAndConditionsV2() {
   const goBack = useDeliveryBackNavigation()
   return (
     <CMSPage
-      endpoint={API_ENDPOINTS.ADMIN.TERMS_PUBLIC}
+      endpoint={API_ENDPOINTS.ADMIN.TERMS_DELIVERY_PUBLIC}
       title="Terms of Service"
       module="DELIVERY"
       goBack={goBack}

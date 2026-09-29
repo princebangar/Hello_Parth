@@ -55,6 +55,9 @@ const Wallet = lazy(() => import('./modules/user/pages/Wallet'));
 
 const LegalPage = lazy(() => import('./modules/shared/pages/LegalPage'));
 const LandingPage = lazy(() => import('./modules/shared/pages/LandingPage'));
+const DriverLegalTerms = lazy(() => import('./modules/shared/pages/DriverLegalTerms'));
+const DriverLegalPrivacy = lazy(() => import('./modules/shared/pages/DriverLegalPrivacy'));
+const DriverLegalSupport = lazy(() => import('./modules/shared/pages/DriverLegalSupport'));
 const AboutPage = lazy(() => import('./modules/shared/pages/AboutPage'));
 const ContactPage = lazy(() => import('./modules/shared/pages/ContactPage'));
 const FaqPage = lazy(() => import('./modules/shared/pages/FaqPage'));
@@ -974,6 +977,9 @@ function TaxiApp() {
                 <Route path="pooling/bookings" element={<PoolingDriverBookings />} />
                 <Route path="terms" element={<LegalPage />} />
                 <Route path="privacy" element={<LegalPage />} />
+                <Route path="legal/terms" element={<DriverLegalTerms />} />
+                <Route path="legal/privacy" element={<DriverLegalPrivacy />} />
+                <Route path="legal/support" element={<DriverLegalSupport />} />
                 <Route path="dashboard" element={<DriverHome />} />
                 <Route path="active-trip" element={<ActiveTrip />} />
                 <Route path="chat" element={<Chat />} />
@@ -1043,6 +1049,9 @@ function TaxiApp() {
                 <Route path="history" element={<RideRequests />} />
                 <Route path="terms" element={<LegalPage />} />
                 <Route path="privacy" element={<LegalPage />} />
+                <Route path="legal/terms" element={<DriverLegalTerms />} />
+                <Route path="legal/privacy" element={<DriverLegalPrivacy />} />
+                <Route path="legal/support" element={<DriverLegalSupport />} />
                 <Route path="edit-profile" element={<EditProfile />} />
                 <Route path="documents" element={<DriverDocuments />} />
                 <Route path="notifications" element={<Notifications />} />

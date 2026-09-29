@@ -3,6 +3,7 @@ import { requireGlobalAccess } from '../../../core/admin/adminAccess.middleware.
 import * as subAdminController from './globalSubAdmin.controller.js';
 import * as customerController from './globalCustomer.controller.js';
 import * as otherServiceController from '../landing/otherService.controller.js';
+import * as pageContentController from './globalPageContent.controller.js';
 
 const router = express.Router();
 
@@ -23,6 +24,10 @@ router.delete('/sub-admins/:id', platformOnly, subAdminController.deleteSubAdmin
 router.get('/customers', requireGlobalAccess({ section: 'customers', action: 'view' }), customerController.listCustomers);
 router.get('/customers/:id', requireGlobalAccess({ section: 'customers', action: 'view' }), customerController.getCustomerById);
 router.patch('/customers/:id/status', requireGlobalAccess({ section: 'customers', action: 'edit' }), customerController.updateCustomerStatus);
+
+// Terms & Conditions / Privacy Policy / Support — User, Restaurant, Delivery and Captain (driver) content.
+router.get('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSocialMedia', action: 'view' }), pageContentController.getPageController);
+router.put('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSocialMedia', action: 'edit' }), pageContentController.upsertPageController);
 
 // Landing page "Other Service" cards (public site content, admin-managed).
 router.get('/landing/other-services', requireGlobalAccess({ section: 'landing', action: 'view' }), otherServiceController.listOtherServices);

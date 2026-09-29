@@ -14,6 +14,9 @@ const GlobalCustomers = lazy(() => import("@/modules/Global/pages/GlobalCustomer
 const GlobalLandingManagement = lazy(() => import("@/modules/Global/pages/GlobalLandingManagement"));
 const GlobalSubAdmins = lazy(() => import("@/modules/Global/pages/GlobalSubAdmins"));
 const GlobalSubAdminAccess = lazy(() => import("@/modules/Global/pages/GlobalSubAdminAccess"));
+const GlobalTerms = lazy(() => import("@/modules/Global/pages/pages-social-media/GlobalTerms"));
+const GlobalPrivacy = lazy(() => import("@/modules/Global/pages/pages-social-media/GlobalPrivacy"));
+const GlobalSupport = lazy(() => import("@/modules/Global/pages/pages-social-media/GlobalSupport"));
 const PointOfSale = lazy(() => import("@food/pages/admin/PointOfSale"));
 const AdminProfile = lazy(() => import("@food/pages/admin/AdminProfile"));
 const AdminSettings = lazy(() => import("@food/pages/admin/AdminSettings"));
@@ -111,13 +114,10 @@ const EmailTemplate = lazy(() => import("@food/pages/admin/settings/EmailTemplat
 const ThemeSettings = lazy(() => import("@food/pages/admin/settings/ThemeSettings"));
 const Gallery = lazy(() => import("@food/pages/admin/settings/Gallery"));
 const LoginSetup = lazy(() => import("@food/pages/admin/settings/LoginSetup"));
-const TermsAndCondition = lazy(() => import("@food/pages/admin/settings/LegalTerms"));
-const PrivacyPolicy = lazy(() => import("@food/pages/admin/settings/LegalPrivacy"));
 const AboutUs = lazy(() => import("@food/pages/admin/settings/AboutUs"));
 const RefundPolicy = lazy(() => import("@food/pages/admin/settings/RefundPolicy"));
 const ShippingPolicy = lazy(() => import("@food/pages/admin/settings/ShippingPolicy"));
 const CancellationPolicy = lazy(() => import("@food/pages/admin/settings/CancellationPolicy"));
-const SupportCMS = lazy(() => import("@food/pages/admin/settings/SupportCMS"));
 const ReactRegistration = lazy(() => import("@food/pages/admin/settings/ReactRegistration"));
 // System Settings
 const ThirdParty = lazy(() => import("@food/pages/admin/system/ThirdParty"));
@@ -170,6 +170,9 @@ export default function AdminRouter() {
           <Route index element={<GlobalSectionRoute section="overview"><GlobalAdminHome /></GlobalSectionRoute>} />
           <Route path="customers" element={<GlobalSectionRoute section="customers"><GlobalCustomers /></GlobalSectionRoute>} />
           <Route path="landing" element={<GlobalSectionRoute section="landing"><GlobalLandingManagement /></GlobalSectionRoute>} />
+          <Route path="pages-social-media/terms" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalTerms /></GlobalSectionRoute>} />
+          <Route path="pages-social-media/privacy" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalPrivacy /></GlobalSectionRoute>} />
+          <Route path="pages-social-media/support" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalSupport /></GlobalSectionRoute>} />
           <Route path="sub-admins" element={<GlobalSectionRoute platformOnly><GlobalSubAdmins /></GlobalSectionRoute>} />
           <Route path="sub-admins/:id/access" element={<GlobalSectionRoute platformOnly><GlobalSubAdminAccess /></GlobalSectionRoute>} />
           <Route path="profile" element={<AdminProfile />} />
@@ -325,13 +328,10 @@ export default function AdminRouter() {
             <Route path="gallery" element={<Gallery />} />
             <Route path="login-setup" element={<LoginSetup />} />
             <Route path="business-settings/fcm-index" element={<FirebaseNotification />} />
-            <Route path="pages-social-media/terms" element={<TermsAndCondition />} />
-            <Route path="pages-social-media/privacy" element={<PrivacyPolicy />} />
             <Route path="pages-social-media/about" element={<AboutUs />} />
             <Route path="pages-social-media/refund" element={<RefundPolicy />} />
             <Route path="pages-social-media/shipping" element={<ShippingPolicy />} />
             <Route path="pages-social-media/cancellation" element={<CancellationPolicy />} />
-            <Route path="pages-social-media/support" element={<SupportCMS />} />
             <Route path="pages-social-media/react-registration" element={<ReactRegistration />} />
             
             <Route path="3rd-party-configurations/party" element={<ThirdParty />} />

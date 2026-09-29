@@ -4,56 +4,60 @@ import api from "@food/api";
 import { Textarea } from "@food/components/ui/textarea";
 import { legalHtmlToPlainText, plainTextToLegalHtml } from "@food/utils/legalContentFormat";
 
-export default function PrivacyPolicy() {
+const ROLES = ["user", "restaurant", "delivery", "driver"];
+const ROLE_LABELS = { user: "User", restaurant: "Restaurant", delivery: "Delivery", driver: "Captain" };
+const getRoleLabel = (role) => ROLE_LABELS[role] || role;
+
+export default function GlobalTerms() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("edit"); // "edit" | "preview"
-  const [activeRole, setActiveRole] = useState("user"); // "user" | "restaurant" | "delivery"
-  const [privacyData, setPrivacyData] = useState({
-    title: "Privacy Policy",
+  const [activeRole, setActiveRole] = useState("user");
+  const [termsData, setTermsData] = useState({
+    title: "Terms and Conditions",
     content: "",
   });
   const [initialData, setInitialData] = useState({
-    title: "Privacy Policy",
+    title: "Terms and Conditions",
     content: "",
   });
 
-  const hasChanges = JSON.stringify(privacyData) !== JSON.stringify(initialData);
+  const hasChanges = JSON.stringify(termsData) !== JSON.stringify(initialData);
 
   useEffect(() => {
-    fetchPrivacyData();
+    fetchTermsData();
   }, [activeRole]);
 
-  const fetchPrivacyData = async () => {
+  const fetchTermsData = async () => {
     try {
       setLoading(true);
-      const key = activeRole === "user" ? "privacy" : `privacy_${activeRole}`;
-      const response = await api.get(`/food/admin/pages-social-media/${key}`, { contextModule: "admin" });
+      const key = activeRole === "user" ? "terms" : `terms_${activeRole}`;
+      const response = await api.get(`/admin/global/pages-social-media/${key}`, { contextModule: "admin" });
 
       if (response.data.success && response.data.data) {
         const content = response.data.data.content || "";
         const textContent = legalHtmlToPlainText(content);
         const fetchedData = {
-          title: response.data.data.title || `Privacy Policy - ${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)}`,
+          title: response.data.data.title || `Terms and Conditions - ${getRoleLabel(activeRole)}`,
           content: textContent,
         };
-        setPrivacyData(fetchedData);
+        setTermsData(fetchedData);
         setInitialData(fetchedData);
       } else {
         const defaultData = {
-          title: `Privacy Policy - ${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)}`,
+          title: `Terms and Conditions - ${getRoleLabel(activeRole)}`,
           content: "",
         };
-        setPrivacyData(defaultData);
+        setTermsData(defaultData);
         setInitialData(defaultData);
       }
     } catch (error) {
-      console.error("Error fetching privacy data:", error);
+      console.error("Error fetching terms data:", error);
       const errorData = {
-        title: `Privacy Policy - ${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)}`,
+        title: `Terms and Conditions - ${getRoleLabel(activeRole)}`,
         content: "",
       };
-      setPrivacyData(errorData);
+      setTermsData(errorData);
       setInitialData(errorData);
     } finally {
       setLoading(false);
@@ -64,47 +68,45 @@ export default function PrivacyPolicy() {
     e.preventDefault();
     try {
       setSaving(true);
-      const htmlContent = plainTextToLegalHtml(privacyData.content);
-      const key = activeRole === "user" ? "privacy" : `privacy_${activeRole}`;
+      const htmlContent = plainTextToLegalHtml(termsData.content);
+      const key = activeRole === "user" ? "terms" : `terms_${activeRole}`;
 
       const response = await api.put(
-        `/food/admin/pages-social-media/${key}`,
-        { title: privacyData.title, content: htmlContent },
+        `/admin/global/pages-social-media/${key}`,
+        { title: termsData.title, content: htmlContent },
         { contextModule: "admin" }
       );
 
       if (response.data.success) {
-        toast.success(`${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)} privacy policy updated successfully`);
+        toast.success(`${getRoleLabel(activeRole)} terms updated successfully`);
         const content = response.data.data.content || "";
         const textContent = legalHtmlToPlainText(content);
         const savedData = {
           ...response.data.data,
           content: textContent,
         };
-        setPrivacyData(savedData);
+        setTermsData(savedData);
         setInitialData(savedData);
       }
     } catch (error) {
-      console.error("Error saving privacy policy:", error);
-      toast.error(error.response?.data?.message || "Failed to save privacy policy");
+      console.error("Error saving terms:", error);
+      toast.error(error.response?.data?.message || "Failed to save terms and conditions");
     } finally {
       setSaving(false);
     }
   };
-
-  const getRoleLabel = (role) => role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50 p-4 lg:p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Privacy Policy</h1>
-            <p className="text-sm text-slate-600 mt-1">Manage Privacy Policy content across all roles</p>
+            <h1 className="text-2xl font-bold text-slate-900">Terms and Conditions</h1>
+            <p className="text-sm text-slate-600 mt-1">Manage Terms and Conditions content for different roles</p>
           </div>
 
           <div className="inline-flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm">
-            {["user", "restaurant", "delivery"].map((role) => (
+            {ROLES.map((role) => (
               <button
                 key={role}
                 onClick={() => setActiveRole(role)}
@@ -125,7 +127,7 @@ export default function PrivacyPolicy() {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
               <span className="text-sm font-medium text-slate-700">
-                {viewMode === "preview" ? "Previewing" : "Editing"} {getRoleLabel(activeRole)} Portal Privacy
+                {viewMode === "preview" ? "Previewing" : "Editing"} {getRoleLabel(activeRole)} Portal Terms
               </span>
             </div>
 
@@ -166,8 +168,8 @@ export default function PrivacyPolicy() {
                     </label>
                     <input
                       type="text"
-                      value={privacyData.title}
-                      onChange={(e) => setPrivacyData((prev) => ({ ...prev, title: e.target.value }))}
+                      value={termsData.title}
+                      onChange={(e) => setTermsData((prev) => ({ ...prev, title: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-slate-700 font-medium"
                     />
                   </div>
@@ -176,9 +178,9 @@ export default function PrivacyPolicy() {
                 {viewMode === "edit" ? (
                   <div className="relative group">
                     <Textarea
-                      value={privacyData.content}
-                      onChange={(e) => setPrivacyData((prev) => ({ ...prev, content: e.target.value }))}
-                      placeholder={`Enter privacy policy for ${activeRole} here...`}
+                      value={termsData.content}
+                      onChange={(e) => setTermsData((prev) => ({ ...prev, content: e.target.value }))}
+                      placeholder={`Enter terms and conditions for ${activeRole} here...`}
                       className="min-h-[150px] w-full text-sm text-slate-700 leading-relaxed resize-y border-slate-200 group-focus-within:border-orange-500 transition-colors bg-slate-50/30"
                     />
                   </div>
@@ -186,7 +188,7 @@ export default function PrivacyPolicy() {
                   <div className="min-h-[150px] w-full bg-white">
                     <div
                       className="prose prose-orange max-w-none prose-headings:text-slate-900 prose-headings:font-bold prose-p:text-slate-600 prose-p:leading-7 prose-strong:text-slate-900 prose-ul:text-slate-600 prose-li:my-2 bg-slate-50/30 rounded-xl border border-slate-100 p-8"
-                      dangerouslySetInnerHTML={{ __html: plainTextToLegalHtml(privacyData.content) }}
+                      dangerouslySetInnerHTML={{ __html: plainTextToLegalHtml(termsData.content) }}
                     />
                   </div>
                 )}

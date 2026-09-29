@@ -38,8 +38,14 @@ export const API_ENDPOINTS = {
     // CMS pages (admin auth + public)
     TERMS: "/food/admin/pages-social-media/terms",
     TERMS_PUBLIC: "/food/pages/terms",
+    TERMS_RESTAURANT_PUBLIC: "/food/pages/terms_restaurant",
+    TERMS_DELIVERY_PUBLIC: "/food/pages/terms_delivery",
+    TERMS_DRIVER_PUBLIC: "/food/pages/terms_driver",
     PRIVACY: "/food/admin/pages-social-media/privacy",
     PRIVACY_PUBLIC: "/food/pages/privacy",
+    PRIVACY_RESTAURANT_PUBLIC: "/food/pages/privacy_restaurant",
+    PRIVACY_DELIVERY_PUBLIC: "/food/pages/privacy_delivery",
+    PRIVACY_DRIVER_PUBLIC: "/food/pages/privacy_driver",
     ABOUT: "/food/admin/pages-social-media/about",
     ABOUT_PUBLIC: "/food/pages/about",
     REFUND: "/food/admin/pages-social-media/refund",
@@ -51,6 +57,7 @@ export const API_ENDPOINTS = {
     SUPPORT_USER_PUBLIC: "/food/pages/support_user",
     SUPPORT_RESTAURANT_PUBLIC: "/food/pages/support_restaurant",
     SUPPORT_DELIVERY_PUBLIC: "/food/pages/support_delivery",
+    SUPPORT_DRIVER_PUBLIC: "/food/pages/support_driver",
     FEEDBACK_CREATE: "", FEEDBACK_EXPERIENCE: "/food/admin/feedback-experiences", FEEDBACK_EXPERIENCE_CREATE: "/food/restaurant/feedback-experience", FEEDBACK_EXPERIENCE_BY_ID: "",
     SAFETY_EMERGENCY: "/food/admin/safety-emergency-reports",
     // User creates reports via USER context; kept for legacy imports.

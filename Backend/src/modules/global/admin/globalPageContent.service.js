@@ -1,5 +1,5 @@
-import { FoodPageContent } from '../models/pageContent.model.js';
-import { ValidationError } from '../../../../core/auth/errors.js';
+import { PolicyContent } from './models/pageContent.model.js';
+import { ValidationError } from '../../../core/auth/errors.js';
 
 const normalizeKey = (key) => String(key || '').trim().toLowerCase();
 
@@ -42,7 +42,7 @@ const normalizeAboutForResponse = (about) => {
 
 export const getPublicPageByKey = async (key) => {
     const k = normalizeKey(key);
-    const doc = await FoodPageContent.findOne({ key: k }).lean();
+    const doc = await PolicyContent.findOne({ key: k }).lean();
     if (!doc) {
         if (k === 'about') return { key: k, data: null };
         return { key: k, data: normalizeLegalForResponse({ ...EMPTY_LEGAL }) };
@@ -56,10 +56,10 @@ export const getAdminPageByKey = async (key) => getPublicPageByKey(key);
 export const upsertLegalPage = async (key, payload, updatedBy) => {
     const k = normalizeKey(key);
     const allowedKeys = [
-        'terms', 'terms_user', 'terms_restaurant', 'terms_delivery',
-        'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery',
+        'terms', 'terms_user', 'terms_restaurant', 'terms_delivery', 'terms_driver',
+        'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery', 'privacy_driver',
         'refund', 'shipping', 'cancellation',
-        'support_user', 'support_restaurant', 'support_delivery'
+        'support_user', 'support_restaurant', 'support_delivery', 'support_driver'
     ];
     if (!allowedKeys.includes(k)) {
         throw new ValidationError('Invalid page key');
@@ -70,7 +70,7 @@ export const upsertLegalPage = async (key, payload, updatedBy) => {
     const mobile = String(payload?.mobile || '').trim();
     const faq = decodeHtmlEntities(String(payload?.faq || '')).trim();
 
-    const doc = await FoodPageContent.findOneAndUpdate(
+    const doc = await PolicyContent.findOneAndUpdate(
         { key: k },
         {
             $set: {
@@ -104,7 +104,7 @@ export const upsertAboutPage = async (payload, updatedBy) => {
         order: Number.isFinite(Number(f?.order)) ? Number(f.order) : idx
     }));
 
-    const doc = await FoodPageContent.findOneAndUpdate(
+    const doc = await PolicyContent.findOneAndUpdate(
         { key: 'about' },
         {
             $set: {
@@ -120,4 +120,3 @@ export const upsertAboutPage = async (payload, updatedBy) => {
 
     return { key: 'about', data: normalizeAboutForResponse(doc?.about || null) };
 };
-

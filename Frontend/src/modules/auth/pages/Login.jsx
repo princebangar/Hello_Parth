@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from "react"
 import { motion } from "framer-motion"
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"
-import { ShieldCheck, Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
+import { Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
 import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
 import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/moduleAuth"
@@ -843,13 +843,6 @@ export default function UnifiedOTPFastLogin() {
                 </div>
 
                 <div className="mt-6 pt-2 flex flex-col items-center">
-                  <p className="text-center text-[13px] text-gray-800 mb-5 px-4 font-medium leading-relaxed max-w-[30ch]">
-                    By continuing, you agree to our{" "}
-                    <Link to="/terms" className="font-bold text-slate-900 hover:underline">Terms</Link>
-                    {" "}and{" "}
-                    <Link to="/privacy" className="font-bold text-slate-900 hover:underline">Privacy Policy</Link>.
-                  </p>
-
                   {step !== 4 && (
                     <button
                       type="submit"
@@ -895,16 +888,14 @@ export default function UnifiedOTPFastLogin() {
                     </button>
                   )}
 
-                  <div className="mt-6 mb-2 flex flex-col items-center justify-center gap-3">
-                    <div className="flex items-center gap-2 text-[12px] font-medium text-gray-700">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span className="tracking-wide">SECURELY ENCRYPTED</span>
-                    </div>
-
-                    <div className="flex items-center text-[14px] font-medium text-gray-800">
-                      <Link to="/support" className="hover:text-black transition-colors">Help & Support</Link>
-                    </div>
-                  </div>
+                  <p className="mt-6 text-center text-[13px] text-gray-800 px-4 font-medium leading-relaxed max-w-[30ch]">
+                    By continuing, you agree to our{" "}
+                    <Link to="/food/user/profile/terms" className="font-bold text-slate-900 hover:underline">Terms</Link>
+                    {", "}
+                    <Link to="/food/user/profile/privacy" className="font-bold text-slate-900 hover:underline">Privacy Policy</Link>
+                    {" "}and{" "}
+                    <Link to="/food/user/profile/support-info" className="font-bold text-slate-900 hover:underline">Support</Link>.
+                  </p>
                 </div>
               </form>
             </motion.div>

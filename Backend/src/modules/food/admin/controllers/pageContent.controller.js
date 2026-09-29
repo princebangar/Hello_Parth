@@ -5,7 +5,12 @@ import {
     getAdminPageByKey,
     upsertLegalPage,
     upsertAboutPage
-} from '../services/pageContent.service.js';
+} from '../../../global/admin/globalPageContent.service.js';
+
+// Terms/Privacy/Support (User, Restaurant, Delivery, Captain) moved to the Global admin — this controller
+// keeps only the Food-specific pages. Public reads for ALL keys still go through getPublicPageController
+// below (unauthenticated, used by every login screen regardless of which admin manages the content).
+const FOOD_ONLY_LEGAL_KEYS = ['refund', 'shipping', 'cancellation'];
 
 const parseKeyFromParam = (req) => String(req.params?.key || '').trim().toLowerCase();
 
@@ -38,13 +43,7 @@ export const upsertAdminPageController = async (req, res, next) => {
             const result = await upsertAboutPage(req.body ?? {}, updatedBy);
             return sendResponse(res, 200, 'Page updated successfully', result.data);
         }
-        const allowedLegalKeys = [
-            'terms', 'terms_user', 'terms_restaurant', 'terms_delivery',
-            'privacy', 'privacy_user', 'privacy_restaurant', 'privacy_delivery',
-            'refund', 'shipping', 'cancellation',
-            'support_user', 'support_restaurant', 'support_delivery'
-        ];
-        if (allowedLegalKeys.includes(key)) {
+        if (FOOD_ONLY_LEGAL_KEYS.includes(key)) {
             const result = await upsertLegalPage(key, req.body ?? {}, updatedBy);
             return sendResponse(res, 200, 'Page updated successfully', result.data);
         }
@@ -53,4 +52,3 @@ export const upsertAdminPageController = async (req, res, next) => {
         next(error);
     }
 };
-

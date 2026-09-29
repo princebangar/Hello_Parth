@@ -6,7 +6,7 @@ export default function PrivacyPolicyPage() {
   const goBack = useRestaurantBackNavigation()
   return (
     <CMSPage
-      endpoint={API_ENDPOINTS.ADMIN.PRIVACY_PUBLIC}
+      endpoint={API_ENDPOINTS.ADMIN.PRIVACY_RESTAURANT_PUBLIC}
       title="Privacy Policy"
       module="RESTAURANT"
       goBack={goBack}

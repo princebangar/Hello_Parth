@@ -4,13 +4,17 @@ import api from "@food/api";
 import { Textarea } from "@food/components/ui/textarea";
 import { legalHtmlToPlainText, plainTextToLegalHtml } from "@food/utils/legalContentFormat";
 
+const ROLES = ["user", "restaurant", "delivery", "driver"];
+const ROLE_LABELS = { user: "User", restaurant: "Restaurant", delivery: "Delivery", driver: "Captain" };
+const getRoleLabel = (role) => ROLE_LABELS[role] || role;
+
 const debugError = (...args) => {};
 
-export default function SupportCMS() {
+export default function GlobalSupport() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("edit"); // "edit" | "preview"
-  const [activeRole, setActiveRole] = useState("user"); // "user" | "restaurant" | "delivery"
+  const [activeRole, setActiveRole] = useState("user");
   const [supportData, setSupportData] = useState({
     title: "Help & Support",
     content: "",
@@ -36,7 +40,7 @@ export default function SupportCMS() {
     try {
       setLoading(true);
       const key = `support_${activeRole}`;
-      const response = await api.get(`/food/admin/pages-social-media/${key}`, {
+      const response = await api.get(`/admin/global/pages-social-media/${key}`, {
         contextModule: "admin",
       });
 
@@ -80,7 +84,7 @@ export default function SupportCMS() {
       const key = `support_${activeRole}`;
 
       const response = await api.put(
-        `/food/admin/pages-social-media/${key}`,
+        `/admin/global/pages-social-media/${key}`,
         {
           title: supportData.title,
           content: htmlContent,
@@ -92,9 +96,7 @@ export default function SupportCMS() {
       );
 
       if (response.data.success) {
-        toast.success(
-          `${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)} support content updated successfully`
-        );
+        toast.success(`${getRoleLabel(activeRole)} support content updated successfully`);
         const raw = response.data.data;
         const textContent = legalHtmlToPlainText(raw.content || "");
         const savedData = {
@@ -115,8 +117,6 @@ export default function SupportCMS() {
     }
   };
 
-  const getRoleLabel = (role) => role.charAt(0).toUpperCase() + role.slice(1);
-
   return (
     <div className="h-full overflow-y-auto bg-slate-50 p-4 lg:p-6">
       <div className="max-w-6xl mx-auto">
@@ -129,9 +129,8 @@ export default function SupportCMS() {
             </p>
           </div>
 
-          {/* Module Selector - same style as LegalTerms */}
           <div className="inline-flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm">
-            {["user", "restaurant", "delivery"].map((role) => (
+            {ROLES.map((role) => (
               <button
                 key={role}
                 onClick={() => setActiveRole(role)}

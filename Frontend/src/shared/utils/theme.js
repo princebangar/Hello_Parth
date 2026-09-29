@@ -196,14 +196,14 @@ export function saveFoodUserTheme(theme) {
   return normalizedTheme;
 }
 
+// Admin, driver/owner and auth screens are light-mode only — nothing in their markup has a `dark:`
+// variant. APP_THEME_KEY is a legacy key nothing writes anymore (see note above); trusting a stale
+// "dark" value left over from it used to flip `color-scheme` to dark across these screens, which makes
+// the browser render native form-field carets (and sometimes autofill text) light-on-light — invisible
+// inside every white input. These screens never had a dark mode, so always force light here.
 export function applySavedTheme() {
-  const savedTheme =
-    typeof localStorage !== "undefined"
-      ? normalizeTheme(localStorage.getItem(APP_THEME_KEY))
-      : "light";
-
-  applyTheme(savedTheme);
-  return savedTheme;
+  applyTheme("light");
+  return "light";
 }
 
 export function reassertFoodUserTheme() {

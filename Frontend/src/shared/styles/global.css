@@ -123,6 +123,24 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
+/* Chromium's "auto" caret color can drift to a light/white caret under some color-scheme + oklch
+   combinations even when the field's text is dark, leaving the blinking cursor invisible on a
+   white input. Force it directly on every text field instead of relying on inheritance, so no
+   intermediate style or stale color-scheme value can bring the white caret back.
+   :not(.caret-transparent) excludes the couple of custom OTP boxes that intentionally hide their
+   real <input>'s caret behind decorative digit tiles. */
+input:not(.caret-transparent),
+textarea:not(.caret-transparent),
+[contenteditable="true"]:not(.caret-transparent) {
+  caret-color: #0f172a !important;
+}
+
+html[data-theme="dark"] input:not(.caret-transparent),
+html[data-theme="dark"] textarea:not(.caret-transparent),
+html[data-theme="dark"] [contenteditable="true"]:not(.caret-transparent) {
+  caret-color: #ffffff !important;
+}
+
 html[data-theme="dark"] {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
