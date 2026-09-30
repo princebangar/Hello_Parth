@@ -1421,9 +1421,6 @@ export const toggleChannelMail = asyncHandler(async (req, res) =>
   ),
 );
 
-export const getPaymentGateways = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listPaymentGateways() }),
-);
 export const getPaymentMethods = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listPaymentMethods() }),
 );
@@ -1437,41 +1434,6 @@ export const deletePaymentMethod = asyncHandler(async (req, res) => {
   await adminService.deletePaymentMethod(req.params.id);
   ok(res, { deleted: true });
 });
-export const getPaymentSettings = asyncHandler(async (_req, res) =>
-  ok(res, await adminService.getPaymentSettings()),
-);
-export const updatePaymentSettings = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updatePaymentSettings(req.body)),
-);
-
-export const getSmsSettings = asyncHandler(async (_req, res) =>
-  ok(res, await adminService.getSMSSettings()),
-);
-export const updateSmsSettings = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateSMSSettings(req.body)),
-);
-
-export const getFirebaseSettings = asyncHandler(async (_req, res) =>
-  ok(res, { settings: await adminService.getFirebaseSettings() }),
-);
-export const updateFirebaseSettings = asyncHandler(async (req, res) =>
-  ok(res, { settings: await adminService.updateFirebaseSettings(req.body) }),
-);
-
-export const getMapSettings = asyncHandler(async (_req, res) =>
-  ok(res, { settings: await adminService.getMapSettings() }),
-);
-export const updateMapSettings = asyncHandler(async (req, res) =>
-  ok(res, { settings: await adminService.updateMapSettings(req.body) }),
-);
-
-export const getMailSettings = asyncHandler(async (_req, res) =>
-  ok(res, { settings: await adminService.getMailSettings() }),
-);
-export const updateMailSettings = asyncHandler(async (req, res) =>
-  ok(res, { settings: await adminService.updateMailSettings(req.body) }),
-);
-
 export const getRechargeApiSettings = asyncHandler(async (_req, res) =>
   ok(res, await adminService.getRechargeApiSettings()),
 );

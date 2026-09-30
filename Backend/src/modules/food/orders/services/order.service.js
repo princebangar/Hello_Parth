@@ -37,6 +37,7 @@ import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
 import { detectZoneIdForPoint } from '../../utils/zoneGeo.js';
+import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
 import {
   enqueueOrderEvent,
   assertRestaurantDeliversToZone,
@@ -124,6 +125,10 @@ export async function initiateOnlinePayment(userId, dto) {
 
   const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
   if (onlineConfig && onlineConfig.value === false) {
+    throw new ValidationError("Online payment is currently disabled");
+  }
+  // Global admin > Customization Settings can switch Razorpay off for the whole app.
+  if (!(await isPaymentGatewayActive("razorpay"))) {
     throw new ValidationError("Online payment is currently disabled");
   }
 

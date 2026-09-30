@@ -3,6 +3,7 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodUserWallet, ensureSharedUserWallet } from '../models/userWallet.model.js';
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature, fetchRazorpayPayment, assertRazorpayPaymentMatches } from '../../orders/helpers/razorpay.helper.js';
 import { config } from '../../../../config/env.js';
+import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
 
 const ensureWallet = async (userId) => {
     const wallet = await ensureSharedUserWallet(userId);
@@ -60,6 +61,11 @@ export const createWalletTopupOrder = async (userId, amountInr) => {
     }
     if (amount > 50000) {
         throw new ValidationError('Maximum amount is 50,000');
+    }
+
+    // Global admin > Customization Settings can switch Razorpay off for the whole app.
+    if (isRazorpayConfigured() && !(await isPaymentGatewayActive('razorpay'))) {
+        throw new ValidationError('Online payment is currently disabled');
     }
 
     const amountPaise = Math.round(amount * 100);

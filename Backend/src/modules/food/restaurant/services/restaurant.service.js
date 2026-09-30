@@ -319,6 +319,24 @@ const notifyAdminsAboutRestaurantProfileReview = async (restaurantId, restaurant
     }
 };
 
+/**
+ * Profile edits by an already-approved restaurant apply directly (no re-approval, status untouched).
+ * Restaurants that are not approved yet (pending / rejected) go back to admin review.
+ */
+const buildProfileUpdateOps = (currentStatus, fields) => {
+    if (currentStatus === 'approved') {
+        return { ops: { $set: fields }, notifyAdmins: false };
+    }
+    const $set = { ...fields, status: 'pending' };
+    if (currentStatus !== 'pending') {
+        $set.pendingApprovalType = 'changes';
+    }
+    return {
+        ops: { $set, $unset: { approvedAt: 1, rejectedAt: 1, rejectionReason: 1 } },
+        notifyAdmins: currentStatus !== 'pending',
+    };
+};
+
 export const registerRestaurant = async (payload, files) => {
     const {
         restaurantName,
@@ -1144,22 +1162,12 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         return getCurrentRestaurantProfile(restaurantId);
     }
 
-    update.status = 'pending';
-    if (currentRestaurant.status !== 'pending') {
-        update.pendingApprovalType = 'changes';
-    }
+    const { ops: profileOps, notifyAdmins } = buildProfileUpdateOps(currentRestaurant.status, update);
 
     try {
         const doc = await FoodRestaurant.findByIdAndUpdate(
             restaurantId,
-            {
-                $set: update,
-                $unset: {
-                    approvedAt: 1,
-                    rejectedAt: 1,
-                    rejectionReason: 1
-                }
-            },
+            profileOps,
             {
                 new: true,
                 runValidators: true,
@@ -1224,7 +1232,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
             update.upiQrImage !== undefined ? deleteReplacedAssets(currentRestaurant.upiQrImage, update.upiQrImage) : null
         ]);
 
-        if (currentRestaurant.status !== 'pending') {
+        if (notifyAdmins) {
             const restaurantNameForNotification =
                 update.restaurantName || currentRestaurant.restaurantName || doc?.restaurantName;
             void notifyAdminsAboutRestaurantProfileReview(restaurantId, restaurantNameForNotification);
@@ -1251,29 +1259,16 @@ export const uploadRestaurantProfileImage = async (restaurantId, file) => {
     const url = await uploadImageBuffer(file.buffer, 'food/restaurants/profile', {
         replaceUrl: currentRestaurant.profileImage
     });
-    const profileUpdate = {
-        profileImage: url,
-        status: 'pending'
-    };
-    if (currentRestaurant.status !== 'pending') {
-        profileUpdate.pendingApprovalType = 'changes';
-    }
+    const { ops: profileOps, notifyAdmins } = buildProfileUpdateOps(currentRestaurant.status, { profileImage: url });
     const doc = await FoodRestaurant.findByIdAndUpdate(
         restaurantId,
-        {
-            $set: profileUpdate,
-            $unset: {
-                approvedAt: 1,
-                rejectedAt: 1,
-                rejectionReason: 1
-            }
-        },
+        profileOps,
         { new: true, projection: 'profileImage coverImages restaurantName cuisines location menuImages addressLine1 addressLine2 area city state pincode landmark ownerName ownerEmail ownerPhone primaryContactNumber pureVegRestaurant openingTime closingTime openDays status createdAt updatedAt' }
     ).lean();
 
     if (!doc) throw new ValidationError('Restaurant not found');
 
-    if (currentRestaurant.status !== 'pending') {
+    if (notifyAdmins) {
         void notifyAdminsAboutRestaurantProfileReview(restaurantId, currentRestaurant.restaurantName || doc.restaurantName);
     }
 
@@ -1315,31 +1310,21 @@ export const uploadRestaurantCoverImages = async (restaurantId, files = []) => {
     });
 
     const update = {
-        coverImages: nextCoverImages.slice(0, 20),
-        status: 'pending'
+        coverImages: nextCoverImages.slice(0, 20)
     };
-    if (currentRestaurant.status !== 'pending') {
-        update.pendingApprovalType = 'changes';
-    }
 
     if (!toUrl(currentRestaurant.profileImage) && uploadedUrls[0]) {
         update.profileImage = uploadedUrls[0];
     }
 
+    const { ops: coverOps, notifyAdmins } = buildProfileUpdateOps(currentRestaurant.status, update);
     await FoodRestaurant.findByIdAndUpdate(
         restaurantId,
-        {
-            $set: update,
-            $unset: {
-                approvedAt: 1,
-                rejectedAt: 1,
-                rejectionReason: 1
-            }
-        },
+        coverOps,
         { new: true }
     ).lean();
 
-    if (currentRestaurant.status !== 'pending') {
+    if (notifyAdmins) {
         void notifyAdminsAboutRestaurantProfileReview(restaurantId, currentRestaurant.restaurantName || '');
     }
 
@@ -1377,28 +1362,17 @@ export const uploadRestaurantMenuImages = async (restaurantId, files = []) => {
         if (!nextMenuImages.includes(url)) nextMenuImages.push(url);
     });
 
-    const menuUpdate = {
-        menuImages: nextMenuImages.slice(0, 20),
-        status: 'pending'
-    };
-    if (currentRestaurant.status !== 'pending') {
-        menuUpdate.pendingApprovalType = 'changes';
-    }
+    const { ops: menuOps, notifyAdmins } = buildProfileUpdateOps(currentRestaurant.status, {
+        menuImages: nextMenuImages.slice(0, 20)
+    });
 
     await FoodRestaurant.findByIdAndUpdate(
         restaurantId,
-        {
-            $set: menuUpdate,
-            $unset: {
-                approvedAt: 1,
-                rejectedAt: 1,
-                rejectionReason: 1
-            }
-        },
+        menuOps,
         { new: true }
     ).lean();
 
-    if (currentRestaurant.status !== 'pending') {
+    if (notifyAdmins) {
         void notifyAdminsAboutRestaurantProfileReview(restaurantId, currentRestaurant.restaurantName || '');
     }
 

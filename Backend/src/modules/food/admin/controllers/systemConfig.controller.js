@@ -1,6 +1,7 @@
 import { FoodSystemConfig } from '../models/systemConfig.model.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import { invalidateMaintenanceModeCache } from '../services/maintenanceMode.service.js';
+import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
 
 // Customization toggles live in FoodSystemConfig as individual keys.
 const CUSTOMIZATION_TOGGLES = [
@@ -69,6 +70,24 @@ export async function getCustomizationSettings(req, res) {
     for (const t of CUSTOMIZATION_TOGGLES) {
         data[t.key] = resolveToggleValue(map.get(t.key) || null, t.defaultValue);
     }
+
+    res.json({ success: true, data });
+}
+
+// What the customer apps see: Food's own "Online Payment" toggle AND the Global Razorpay switch.
+export async function getPublicCustomizationSettings(req, res) {
+    const keys = getCustomizationAllowlist();
+    const [docs, razorpayActive] = await Promise.all([
+        FoodSystemConfig.find({ key: { $in: keys } }).lean(),
+        isPaymentGatewayActive('razorpay')
+    ]);
+    const map = new Map(docs.map(d => [d.key, d]));
+
+    const data = {};
+    for (const t of CUSTOMIZATION_TOGGLES) {
+        data[t.key] = resolveToggleValue(map.get(t.key) || null, t.defaultValue);
+    }
+    data.online_payment_enabled = data.online_payment_enabled === true && razorpayActive;
 
     res.json({ success: true, data });
 }

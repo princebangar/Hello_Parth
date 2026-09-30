@@ -4,6 +4,7 @@ import * as subAdminController from './globalSubAdmin.controller.js';
 import * as customerController from './globalCustomer.controller.js';
 import * as otherServiceController from '../landing/otherService.controller.js';
 import * as pageContentController from './globalPageContent.controller.js';
+import * as customizationController from './globalCustomization.controller.js';
 
 const router = express.Router();
 
@@ -28,6 +29,10 @@ router.patch('/customers/:id/status', requireGlobalAccess({ section: 'customers'
 // Terms & Conditions / Privacy Policy / Support — User, Restaurant, Delivery and Captain (driver) content.
 router.get('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSocialMedia', action: 'view' }), pageContentController.getPageController);
 router.put('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSocialMedia', action: 'edit' }), pageContentController.upsertPageController);
+
+// Customization Settings — payment gateway on/off for the whole app. Keys are read from Backend/.env only.
+router.get('/customization', requireGlobalAccess({ section: 'customization', action: 'view' }), customizationController.getCustomizationSettings);
+router.patch('/customization/payment-gateways', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updatePaymentGateways);
 
 // Landing page "Other Service" cards (public site content, admin-managed).
 router.get('/landing/other-services', requireGlobalAccess({ section: 'landing', action: 'view' }), otherServiceController.listOtherServices);
