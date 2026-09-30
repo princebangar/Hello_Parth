@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  ChevronRight,
   Crown,
   FileSearch,
   Loader2,
@@ -24,17 +23,14 @@ import {
   AlertTriangle,
   UserMinus,
   Lock,
-  CheckCircle,
   Eye,
   KeyRound,
   X,
   Sparkles,
   Info,
   Calendar,
-  Clock,
   Laptop,
   Check,
-  FileText,
   Key
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -351,10 +347,8 @@ const Admins = () => {
   // Security score
   const securityScore = useMemo(() => {
     if (stats.total === 0) return 0;
-    const mfaRatio = stats.mfaEnabled / stats.total;
-    const activeRatio = stats.active / stats.total;
-    let score = 55 + (mfaRatio * 25) + (activeRatio * 20);
-    return Math.max(0, Math.min(100, Math.round(score)));
+    // Share of admin accounts protected by MFA.
+    return Math.round((stats.mfaEnabled / stats.total) * 100);
   }, [stats]);
 
   // Form Field Updater
@@ -646,14 +640,12 @@ const Admins = () => {
         </motion.div>
 
         {/* KPI CARDS ROW */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
-            { label: "Total Admins", value: stats.total, icon: Users, cardBg: "!bg-violet-500", trend: "+2 from last month", isTrendPositive: true },
-            { label: "Login Success Rate", value: "98.6%", icon: CheckCircle, cardBg: "!bg-emerald-500", trend: "↑ 1.3% from last month", isTrendPositive: true },
-            { label: "Active Sessions", value: stats.active, icon: Laptop, cardBg: "!bg-blue-500", trend: "↑ 2 active now", isTrendPositive: true },
-            { label: "Password Resets", value: "4", icon: KeyRound, cardBg: "!bg-fuchsia-500", trend: "— 0% from last month", isTrendPositive: false },
-            { label: "Permission Changes", value: "12", icon: Info, cardBg: "!bg-orange-500", trend: "↑ 33% from last month", isTrendPositive: true },
-            { label: "Suspended Today", value: stats.suspended, icon: UserMinus, cardBg: "!bg-rose-500", trend: "↑ 1 from last month", isTrendPositive: false }
+            { label: "Total Admins", value: stats.total, icon: Users, cardBg: "!bg-violet-500", trend: `${stats.superadmins} super · ${stats.subadmins} sub` },
+            { label: "Active Admins", value: stats.active, icon: Laptop, cardBg: "!bg-blue-500", trend: "Accounts enabled" },
+            { label: "MFA Enabled", value: stats.mfaEnabled, icon: KeyRound, cardBg: "!bg-emerald-500", trend: `of ${stats.total} admins` },
+            { label: "Suspended", value: stats.suspended, icon: UserMinus, cardBg: "!bg-rose-500", trend: "Accounts disabled" }
           ].map((insight, idx) => (
             <motion.div
               key={idx}
@@ -846,7 +838,7 @@ const Admins = () => {
                 <h3 className="text-xs text-[#0B1220] uppercase tracking-wider font-bold">Security Health</h3>
                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               </div>
-              <p className="text-[11px] text-[#64748B] mb-3">Real-time authentication scoring.</p>
+              <p className="text-[11px] text-[#64748B] mb-3">Share of admins with MFA turned on.</p>
             </div>
 
             {/* Gauge */}
@@ -860,7 +852,7 @@ const Admins = () => {
               </svg>
               <div className="absolute text-center">
                 <span className="text-sm font-bold text-[#0B1220] block leading-none">{securityScore}%</span>
-                <span className="text-[8px] text-emerald-600 font-bold block mt-0.5">Good</span>
+                <span className={`text-[8px] font-bold block mt-0.5 ${securityScore >= 80 ? 'text-emerald-600' : securityScore >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>{securityScore >= 80 ? 'Good' : securityScore >= 50 ? 'Fair' : 'Low'}</span>
               </div>
             </div>
 
@@ -875,132 +867,8 @@ const Admins = () => {
                 <span className="font-semibold text-[#0B1220]">{stats.locked}</span>
               </div>
               <div className="flex justify-between">
-                <span className="flex items-center gap-1"><ShieldCheck size={10} className="text-[#64748B]" /> Failed Logins</span>
-                <span className="font-semibold text-[#0B1220]">2</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1"><Clock size={10} className="text-[#64748B]" /> Password Expiring</span>
-                <span className="font-semibold text-[#0B1220]">1</span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => toast.success('Security reports are up to date.')}
-              className="admin-btn-secondary w-full text-[10px] h-8 justify-center gap-1.5 mt-3"
-            >
-              <FileText size={12} />
-              <span>View Full Security Report</span>
-              <ChevronRight size={10} />
-            </button>
-          </div>
-        </motion.div>
-
-        {/* SECONDARY INSIGHTS ROW */}
-        <motion.div 
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.2 }}
-          className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4"
-        >
-          {/* Recent Activity */}
-          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs text-[#0B1220] uppercase tracking-wider font-bold">Recent Activity</h3>
-                <span className="text-[9px] text-[#64748B] hover:underline cursor-pointer">View All</span>
-              </div>
-              <div className="space-y-3.5 max-h-[160px] overflow-y-auto pr-1">
-                {[
-                  { title: "Rydon Superadmin", desc: "Super Admin logged in", time: "Just now", type: "login" },
-                  { title: "Finance Admin", desc: "Updated pricing permissions", time: "12 mins ago", type: "role" },
-                  { title: "Support Admin", desc: "Created new admin account", time: "28 mins ago", type: "create" },
-                  { title: "Operations Admin", desc: "Reset password for admin@test.com", time: "45 mins ago", type: "reset" },
-                  { title: "Security Admin", desc: "Enabled MFA for 3 admins", time: "1 hour ago", type: "mfa" }
-                ].map((act, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5 text-[11px] border-l border-[#E5E7EB] pl-3 relative ml-1.5">
-                    <div className="absolute -left-[3.5px] top-1 w-1.5 h-1.5 rounded-full bg-[#FFC400]" />
-                    <div className="flex-1">
-                      <p className="font-semibold text-[#0B1220]">{act.title}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{act.desc} · {act.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Insights */}
-          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div>
-              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Quick Insights</h3>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "New Admins", value: "2", desc: "This week" },
-                  { label: "Total Admins", value: stats.total, desc: "Nodes" },
-                  { label: "Active Sessions", value: stats.active, desc: "Now" },
-                  { label: "Login Success", value: "98.6%", desc: "Rate" },
-                  { label: "Password Resets", value: "4", desc: "Completed" },
-                  { label: "Permission Changes", value: "12", desc: "Logs" }
-                ].map((qi, i) => (
-                  <div key={i} className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
-                    <span className="text-[8px] text-[#64748B] block truncate">{qi.label}</span>
-                    <span className="text-xs font-bold text-[#0B1220] block mt-0.5">{qi.value}</span>
-                    <span className="text-[8px] text-slate-400 block mt-0.5 truncate">{qi.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Top Departments */}
-          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div>
-              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Top Departments</h3>
-              <div className="space-y-3">
-                {[
-                  { label: "Operations", count: 5, color: "bg-[#FFC400]", percent: 80 },
-                  { label: "Finance", count: 3, color: "bg-blue-500", percent: 55 },
-                  { label: "Support", count: 2, color: "bg-emerald-500", percent: 35 },
-                  { label: "Engineering", count: 2, color: "bg-purple-500", percent: 35 },
-                  { label: "HR", count: 1, color: "bg-pink-500", percent: 15 },
-                  { label: "Marketing", count: 1, color: "bg-slate-400", percent: 15 }
-                ].map((dept, i) => (
-                  <div key={i} className="text-[10px]">
-                    <div className="flex justify-between mb-1 text-slate-600">
-                      <span>{dept.label}</span>
-                      <span className="font-semibold text-[#0B1220]">{dept.count}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1.5">
-                      <div className={`h-1.5 rounded-full ${dept.color}`} style={{ width: `${dept.percent}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Access by Module */}
-          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div>
-              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Access by Module</h3>
-              <div className="space-y-3">
-                {[
-                  { label: "Dashboard", percent: 100, color: "bg-indigo-500" },
-                  { label: "Users", percent: 92, color: "bg-blue-500" },
-                  { label: "Bookings", percent: 85, color: "bg-emerald-500" },
-                  { label: "Finance", percent: 70, color: "bg-purple-500" },
-                  { label: "Drivers", percent: 63, color: "bg-pink-500" }
-                ].map((mod, i) => (
-                  <div key={i} className="text-[10px]">
-                    <div className="flex justify-between mb-1 text-slate-600">
-                      <span>{mod.label}</span>
-                      <span className="font-semibold text-[#0B1220]">{mod.percent}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1.5">
-                      <div className={`h-1.5 rounded-full ${mod.color}`} style={{ width: `${mod.percent}%` }} />
-                    </div>
-                  </div>
-                ))}
+                <span className="flex items-center gap-1"><ShieldCheck size={10} className="text-[#64748B]" /> Suspended Accounts</span>
+                <span className="font-semibold text-[#0B1220]">{stats.suspended}</span>
               </div>
             </div>
           </div>
@@ -1220,7 +1088,7 @@ const Admins = () => {
 
                         {/* Employee ID */}
                         <td>
-                          <span className="text-xs font-medium text-[#0B1220]">{admin.employeeId || 'EMP-00' + Math.floor(Math.random() * 9 + 1)}</span>
+                          <span className="text-xs font-medium text-[#0B1220]">{admin.employeeId || '—'}</span>
                         </td>
 
                         {/* Role */}
@@ -1239,7 +1107,7 @@ const Admins = () => {
 
                         {/* Department */}
                         <td>
-                          <span className="text-xs text-[#0B1220] font-medium">{admin.department || 'Operations'}</span>
+                          <span className="text-xs text-[#0B1220] font-medium">{admin.department || '—'}</span>
                         </td>
 
                         {/* Permissions */}
@@ -1269,7 +1137,7 @@ const Admins = () => {
                         {/* Last Login */}
                         <td>
                           <span className="text-xs text-[#64748B] font-medium">
-                            {admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : 'Just now'}
+                            {admin.lastLogin ? new Date(admin.lastLogin).toLocaleDateString() : '—'}
                           </span>
                         </td>
 
@@ -1349,7 +1217,7 @@ const Admins = () => {
                                 </div>
                                 <div>
                                   <span className="text-[#64748B] block font-medium">Department</span>
-                                  <span className="font-bold block mt-0.5">{selectedAdmin.department || 'Operations'}</span>
+                                  <span className="font-bold block mt-0.5">{selectedAdmin.department || '—'}</span>
                                 </div>
                                 <div>
                                   <span className="text-[#64748B] block font-medium">Designation</span>
@@ -1372,7 +1240,7 @@ const Admins = () => {
                                 <div>
                                   <span className="text-[#64748B] block font-medium">Last Login</span>
                                   <span className="font-bold block mt-0.5">
-                                    {selectedAdmin.lastLogin ? new Date(selectedAdmin.lastLogin).toLocaleDateString() : 'Just now'}
+                                    {selectedAdmin.lastLogin ? new Date(selectedAdmin.lastLogin).toLocaleDateString() : '—'}
                                   </span>
                                 </div>
                               </div>

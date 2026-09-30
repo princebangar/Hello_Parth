@@ -2567,9 +2567,12 @@ const BusServiceManager = ({
                   <div>
                     <label className={labelClassName}>Distance / Duration</label>
                     <div className="grid grid-cols-2 gap-3">
-                      <input className={fieldClassName} value={draft.route.distanceKm} onChange={(event) => updateRouteField('distanceKm', event.target.value)} placeholder="195 km" />
-                      <input className={fieldClassName} value={draft.route.durationHours} onChange={(event) => updateRouteField('durationHours', event.target.value)} placeholder="4h 45m" />
+                      <input className={fieldClassName} value={draft.route.distanceKm} onChange={(event) => updateRouteField('distanceKm', event.target.value)} placeholder="Auto from map" />
+                      <input className={fieldClassName} value={draft.route.durationHours} onChange={(event) => updateRouteField('durationHours', event.target.value)} placeholder="Auto from schedule" />
                     </div>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-400">
+                      On save, distance is taken from Google Maps (road) between origin and destination, and duration from the first active schedule. Stop times must fall inside that schedule.
+                    </p>
                   </div>
                   <div>
                     <label className={labelClassName}>Origin City</label>

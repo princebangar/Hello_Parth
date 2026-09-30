@@ -244,7 +244,7 @@ export default function HubMenu() {
       // Only log and show toast if it's not a network/timeout error
       if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
       debugError('Error fetching menu:', error)
-        toast.error('Failed to load menu')
+        toast.error(error?.response?.data?.message || 'Failed to load menu')
       } else if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
         // Silently handle network errors - backend is not running
         // The axios interceptor already handles these with proper error messages

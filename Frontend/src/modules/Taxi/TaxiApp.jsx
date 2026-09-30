@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import api from './shared/api/axiosInstance';
 import { socketService } from './shared/api/socket';
 import { installLegacyBackendShim } from './shared/api/legacyBackendShim';
+import { installHistoryStateGuard } from './shared/api/historyStateGuard';
 import { SettingsProvider, useSettings } from './shared/context/SettingsContext';
 import { UserThemeProvider } from './shared/context/UserThemeContext';
 import AppAutoUpdater from './modules/shared/components/AppAutoUpdater';
@@ -28,6 +29,7 @@ import './index.css';
 
 // Old-Taxi admin screens still call fetch(`${__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/...`); route them to /api/v1/taxi.
 installLegacyBackendShim();
+installHistoryStateGuard();
 
 
 // Lazy loading pages for performance
@@ -54,16 +56,9 @@ const Profile = lazy(() => import('./modules/user/pages/Profile'));
 const Wallet = lazy(() => import('./modules/user/pages/Wallet'));
 
 const LegalPage = lazy(() => import('./modules/shared/pages/LegalPage'));
-const LandingPage = lazy(() => import('./modules/shared/pages/LandingPage'));
 const DriverLegalTerms = lazy(() => import('./modules/shared/pages/DriverLegalTerms'));
 const DriverLegalPrivacy = lazy(() => import('./modules/shared/pages/DriverLegalPrivacy'));
 const DriverLegalSupport = lazy(() => import('./modules/shared/pages/DriverLegalSupport'));
-const AboutPage = lazy(() => import('./modules/shared/pages/AboutPage'));
-const ContactPage = lazy(() => import('./modules/shared/pages/ContactPage'));
-const FaqPage = lazy(() => import('./modules/shared/pages/FaqPage'));
-const ServicesPage = lazy(() => import('./modules/shared/pages/ServicesPage'));
-const BlogPage = lazy(() => import('./modules/shared/pages/BlogPage'));
-const LinksPage = lazy(() => import('./modules/shared/pages/LinksPage'));
 
 // Phase 1 — Parcel flow completions
 const ParcelSearchingDriver = lazy(() => import('./modules/user/pages/parcel/ParcelSearchingDriver'));
@@ -101,7 +96,6 @@ const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 
 // New Feature Pages
 const IntercityHome = lazy(() => import('./modules/user/pages/intercity/IntercityHome'));
-const CabSharing = lazy(() => import('./modules/user/pages/cabsharing/CabSharing'));
 
 // Car Pooling flow
 const UserPoolingHome = lazy(() => import('./modules/user/pages/pooling/PoolingHome'));
@@ -141,6 +135,7 @@ const OwnerBusServicePage = lazy(() => import('./modules/driver/pages/OwnerBusSe
 const OwnerBusBookingsPage = lazy(() => import('./modules/driver/pages/OwnerBusBookingsPage'));
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
+const OwnerWallet = lazy(() => import('./modules/driver/pages/OwnerWallet'));
 const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
 const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
 const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
@@ -161,7 +156,6 @@ const BusSignupBuilderPage = lazy(() => import('./modules/driver/pages/registrat
 const EditProfile = lazy(() => import('./modules/driver/pages/settings/EditProfile'));
 const DriverDocuments = lazy(() => import('./modules/driver/pages/settings/DriverDocuments'));
 const Notifications = lazy(() => import('./modules/driver/pages/settings/Notifications'));
-const PayoutMethods = lazy(() => import('./modules/driver/pages/settings/PayoutMethods'));
 const Referral = lazy(() => import('./modules/driver/pages/settings/Referral'));
 const DriverDeleteAccount = lazy(() => import('./modules/driver/pages/settings/DeleteAccount'));
 const SecuritySOS = lazy(() => import('./modules/driver/pages/settings/SecuritySOS'));
@@ -200,7 +194,6 @@ const AdminDriverSubscriptions = lazy(() => import('./modules/admin/pages/driver
 const AdminDriverSubscriptionCreate = lazy(() => import('./modules/admin/pages/drivers/DriverSubscriptionCreate'));
 const AdminDriverRatings = lazy(() => import('./modules/admin/pages/drivers/DriverRatings'));
 const AdminDriverRatingDetail = lazy(() => import('./modules/admin/pages/drivers/DriverRatingDetail'));
-const AdminDriverWallet = lazy(() => import('./modules/admin/pages/drivers/DriverWallet'));
 const AdminNegativeBalanceDrivers = lazy(() => import('./modules/admin/pages/drivers/NegativeBalanceDrivers'));
 const AdminWithdrawalRequestDrivers = lazy(() => import('./modules/admin/pages/drivers/WithdrawalRequestDrivers'));
 const AdminWithdrawalRequestDetail = lazy(() => import('./modules/admin/pages/drivers/WithdrawalRequestDetail'));
@@ -276,8 +269,6 @@ const AdminGodsEye = lazy(() => import('./modules/admin/pages/geo/GodsEye'));
 const AdminFinance = lazy(() => import('./modules/admin/pages/finance/Finance'));
 const AdminFareConfig = lazy(() => import('./modules/admin/pages/finance/FareConfiguration'));
 const AdminSafetyCenter = lazy(() => import('./modules/admin/pages/safety/SafetyCenter'));
-const AdminCMSBuilder = lazy(() => import('./modules/admin/pages/cms/CMSBuilder'));
-const AdminHeaderFooter = lazy(() => import('./modules/admin/pages/cms/HeaderFooter'));
 const AdminGlobalSettings = lazy(() => import('./modules/admin/pages/settings/GlobalSettings'));
 const AdminGeneralSettings = lazy(() => import('./modules/admin/pages/settings/GeneralSettings'));
 const AdminCustomizationSettings = lazy(() => import('./modules/admin/pages/settings/CustomizationSettings'));
@@ -287,11 +278,6 @@ const AdminWalletSettings = lazy(() => import('./modules/admin/pages/settings/Wa
 const AdminTipSettings = lazy(() => import('./modules/admin/pages/settings/TipSettings'));
 const AdminAppModules = lazy(() => import('./modules/admin/pages/settings/AppModules'));
 const AdminOnboardingScreens = lazy(() => import('./modules/admin/pages/settings/OnboardingScreens'));
-const AdminPaymentGateways = lazy(() => import('./modules/admin/pages/settings/PaymentGateways'));
-const AdminSMSGateways = lazy(() => import('./modules/admin/pages/settings/SMSGateways'));
-const AdminFirebaseSettings = lazy(() => import('./modules/admin/pages/settings/FirebaseSettings'));
-const AdminMapSettings = lazy(() => import('./modules/admin/pages/settings/MapSettings'));
-const AdminMailSettings = lazy(() => import('./modules/admin/pages/settings/MailSettings'));
 const AdminNotificationChannels = lazy(() => import('./modules/admin/pages/settings/NotificationChannels'));
 const AdminDispatcherAddons = lazy(() => import('./modules/admin/pages/settings/DispatcherAddons'));
 const AdminCountryManagement = lazy(() => import('./modules/admin/pages/masters/CountryManagement'));
@@ -725,14 +711,14 @@ function TaxiApp() {
           <Suspense fallback={<RouteSoftFallback />}>
             <Toaster position="top-right" closeButton />
             <Routes>
-              {/* Static / Public routes */}
-              <Route index element={<LandingPage />} />
-              <Route path="about" element={<AboutPage />} />
-              <Route path="contact" element={<ContactPage />} />
-              <Route path="faq" element={<FaqPage />} />
-              <Route path="services" element={<ServicesPage />} />
-              <Route path="blog" element={<BlogPage />} />
-              <Route path="links" element={<LinksPage />} />
+              {/* Static / Public routes — the old template marketing site lived here; the real one is "/" now. */}
+              <Route index element={<Navigate to="/" replace />} />
+              <Route path="about" element={<Navigate to="/" replace />} />
+              <Route path="contact" element={<Navigate to="/" replace />} />
+              <Route path="faq" element={<Navigate to="/" replace />} />
+              <Route path="services" element={<Navigate to="/" replace />} />
+              <Route path="blog" element={<Navigate to="/" replace />} />
+              <Route path="links" element={<Navigate to="/" replace />} />
               <Route path="terms" element={<LegalPage />} />
               <Route path="terms-and-conditions" element={<LegalPage />} />
               <Route path="privacy" element={<LegalPage />} />
@@ -769,7 +755,6 @@ function TaxiApp() {
                 <Route path="intercity/vehicle" element={<IntercityVehicle />} />
                 <Route path="intercity/details" element={<IntercityDetails />} />
                 <Route path="intercity/confirm" element={<IntercityConfirm />} />
-                <Route path="cab-sharing" element={<CabSharing />} />
                 <Route path="cab" element={<CabHome />} />
                 <Route path="cab/shared" element={<SharedTaxi />} />
                 <Route path="cab/shared/seats" element={<SharedTaxiSeats />} />
@@ -882,7 +867,6 @@ function TaxiApp() {
                   path="user/intercity/confirm"
                   element={<IntercityConfirm />}
                 />
-                <Route path="user/cab-sharing" element={<CabSharing />} />
                 <Route path="user/cab" element={<CabHome />} />
                 <Route path="user/cab/shared" element={<SharedTaxi />} />
                 <Route
@@ -1005,7 +989,7 @@ function TaxiApp() {
                 <Route path="edit-profile" element={<EditProfile />} />
                 <Route path="documents" element={<DriverDocuments />} />
                 <Route path="notifications" element={<Notifications />} />
-                <Route path="payout-methods" element={<PayoutMethods />} />
+                <Route path="payout-methods" element={<Navigate to="../profile/bank-details" replace />} />
                 <Route path="referral" element={<Referral />} />
                 <Route
                   path="delete-account"
@@ -1058,7 +1042,7 @@ function TaxiApp() {
                 <Route path="pooling-vehicles" element={<OwnerPoolingVehicles />} />
                 <Route path="pooling-vehicles/create" element={<OwnerPoolingVehicleForm />} />
                 <Route path="pooling-vehicles/edit/:id" element={<OwnerPoolingVehicleForm />} />
-                <Route path="wallet" element={<DriverWallet />} />
+                <Route path="wallet" element={<OwnerWallet />} />
                 <Route path="history" element={<RideRequests />} />
                 <Route path="terms" element={<LegalPage />} />
                 <Route path="privacy" element={<LegalPage />} />
@@ -1068,7 +1052,7 @@ function TaxiApp() {
                 <Route path="edit-profile" element={<EditProfile />} />
                 <Route path="documents" element={<DriverDocuments />} />
                 <Route path="notifications" element={<Notifications />} />
-                <Route path="payout-methods" element={<PayoutMethods />} />
+                <Route path="payout-methods" element={<Navigate to="../profile/bank-details" replace />} />
                 <Route path="referral" element={<Referral />} />
                 <Route path="delete-account" element={<DriverDeleteAccount />} />
                 <Route path="security" element={<SecuritySOS />} />
@@ -1183,7 +1167,7 @@ function TaxiApp() {
                   path="drivers/ratings/:id"
                   element={<AdminDriverRatingDetail />}
                 />
-                <Route path="drivers/wallet" element={<AdminDriverWallet />} />
+                <Route path="drivers/wallet" element={<Navigate to="/taxi/admin/drivers/wallet/withdrawals" replace />} />
                 <Route
                   path="drivers/wallet/negative"
                   element={<AdminNegativeBalanceDrivers />}
@@ -1468,11 +1452,6 @@ function TaxiApp() {
                   />
                 </Route>
                 <Route path="safety" element={<AdminSafetyCenter />} />
-                <Route path="cms" element={<AdminCMSBuilder />} />
-                <Route
-                  path="settings/cms/header-footer"
-                  element={<AdminHeaderFooter />}
-                />
                 <Route
                   path="support/ticket-title"
                   element={<AdminSupportTicketTitle />}
@@ -1556,26 +1535,6 @@ function TaxiApp() {
                 />
 
                 <Route
-                  path="settings/third-party/payment"
-                  element={<AdminPaymentGateways />}
-                />
-                <Route
-                  path="settings/third-party/sms"
-                  element={<AdminSMSGateways />}
-                />
-                <Route
-                  path="settings/third-party/firebase"
-                  element={<AdminFirebaseSettings />}
-                />
-                <Route
-                  path="settings/third-party/map-apis"
-                  element={<AdminMapSettings />}
-                />
-                <Route
-                  path="settings/third-party/mail"
-                  element={<AdminMailSettings />}
-                />
-                <Route
                   path="settings/third-party/notification-channel"
                   element={<AdminNotificationChannels />}
                 />
@@ -1586,10 +1545,6 @@ function TaxiApp() {
                 <Route
                   path="settings/addons/*"
                   element={<AdminReportPlaceholder title="Addons Management" />}
-                />
-                <Route
-                  path="settings/cms/*"
-                  element={<AdminReportPlaceholder title="CMS Management" />}
                 />
               </Route>
 

@@ -915,7 +915,7 @@ export default function EditOwner() {
       const response = await restaurantAPI.updateProfile(updatePayload)
 
       if (response?.data?.success || response?.data?.data) {
-        toast.success("Profile details updated and submitted for approval")
+        toast.success("Profile details updated successfully")
         try {
           sessionStorage.removeItem(EDIT_OWNER_DRAFT_KEY)
         } catch {

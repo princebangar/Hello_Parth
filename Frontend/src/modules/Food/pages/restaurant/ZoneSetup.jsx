@@ -420,7 +420,7 @@ export default function ZoneSetup() {
 
       if (response?.data?.data?.restaurant) {
         setRestaurantData(response.data.data.restaurant)
-        toast.success("Location saved successfully. Awaiting admin approval.", { duration: 4000 })
+        toast.success("Location saved successfully", { duration: 4000 })
         dispatchRestaurantLocationUpdated()
       } else {
         throw new Error("Failed to save location")

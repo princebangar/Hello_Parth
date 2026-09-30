@@ -22,6 +22,9 @@ export const globalAdminAPI = {
   updateCustomerStatus: (id, isActive) =>
     apiClient.patch(`/admin/global/customers/${String(id)}/status`, { isActive: isActive !== false }, admin),
 
+  getCustomizationSettings: () => apiClient.get("/admin/global/customization", admin),
+  updatePaymentGateways: (body) => apiClient.patch("/admin/global/customization/payment-gateways", body, admin),
+
   getOtherServices: () => apiClient.get("/admin/global/landing/other-services", admin),
   createOtherService: (body) => apiClient.post("/admin/global/landing/other-services", body, admin),
   updateOtherService: (id, body) =>

@@ -24,12 +24,9 @@ import {
   BarChart3,
   RefreshCw,
   Server,
-  Database,
-  Cpu,
   Mail,
   MessageSquare,
   MapPin,
-  Map,
   Shield,
   FileText,
   AlertTriangle,
@@ -103,7 +100,6 @@ const MainDashboard = () => {
   const pendingWithdrawals = dashboard?.pendingWithdrawals || 0;
   const openSupportTickets = dashboard?.openSupportTickets || 0;
   const topDrivers = Array.isArray(dashboard?.topDrivers) ? dashboard.topDrivers : [];
-  const systemHealth = Array.isArray(dashboard?.systemHealth) ? dashboard.systemHealth : [];
 
   const formatUptime = (seconds) => {
     const total = Math.max(0, Number(seconds) || 0);
@@ -113,14 +109,6 @@ const MainDashboard = () => {
     if (days > 0) return `${days}d ${hours}h`;
     if (hours > 0) return `${hours}h ${minutes}m`;
     return `${minutes}m`;
-  };
-  const healthIcon = (name = '') => {
-    const key = name.toLowerCase();
-    if (key.includes('database')) return Database;
-    if (key.includes('socket')) return Activity;
-    if (key.includes('redis')) return Cpu;
-    if (key.includes('map')) return Map;
-    return Server;
   };
 
   // Operational metrics calculations
@@ -265,7 +253,7 @@ const MainDashboard = () => {
         </div>
 
         {/* REVENUE & BOOKING ANALYTICS ROW */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           
           {/* 2. Interactive Revenue Analytics */}
           <div className="admin-card lg:col-span-2 flex flex-col justify-between hover:shadow-md transition-shadow">
@@ -422,36 +410,6 @@ const MainDashboard = () => {
             )}
           </div>
 
-          {/* 16. Platform Health Diagnostics */}
-          <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div>
-              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-1 font-bold">Platform Diagnostic Health</h3>
-              <p className="text-[11px] text-[#64748B] mb-3">Real-time gateway status checks.</p>
-            </div>
-
-            <div className="space-y-2 text-[10px] text-slate-600">
-              {systemHealth.length === 0 ? (
-                <p className="text-center text-[#64748B] py-4">Checking…</p>
-              ) : systemHealth.map((item) => {
-                const Icon = healthIcon(item.name);
-                return (
-                  <div key={item.name} className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5">
-                    <span className="flex items-center gap-1.5">
-                      <Icon size={11} className="text-[#64748B]" />
-                      <span>{item.name}</span>
-                    </span>
-                    <span className={`font-bold ${item.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{item.status}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="bg-[#F8FAFC] border border-[#E5E7EB] rounded-lg p-2 text-center text-[9px] text-[#64748B] mt-2.5">
-              {systemHealth.length > 0 && systemHealth.every((item) => item.ok)
-                ? 'All checks passing.'
-                : 'Some checks need attention.'}
-            </div>
-          </div>
         </div>
 
         {/* SECONDARY ROW (Leaderboards, Activity Feed, MAP, SOS) */}
@@ -547,6 +505,7 @@ const MainDashboard = () => {
               <div className="space-y-2">
                 {[
                   { label: 'Drivers awaiting approval', value: declinedDrivers, path: '/taxi/admin/drivers/pending' },
+                  { label: 'Owner vehicles awaiting approval', value: Number(dashboard?.pendingFleetVehicles || 0), path: '/taxi/admin/fleet/manage?status=pending' },
                   { label: 'Withdrawal requests', value: pendingWithdrawals, path: '/taxi/admin/drivers/wallet/withdrawals' },
                   { label: 'Open support tickets', value: openSupportTickets, path: '/taxi/admin/support/tickets' },
                   { label: 'Active SOS alerts', value: Number(notifiedSos.total || 0), path: '/taxi/admin/safety' },
