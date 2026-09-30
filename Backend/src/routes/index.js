@@ -33,7 +33,7 @@ router.get('/v1/health', (req, res) => {
     res.status(200).json({ status: 'UP', message: 'Server is healthy' });
 });
 
-router.get('/v1/food/public/customization-settings', systemConfigController.getCustomizationSettings);
+router.get('/v1/food/public/customization-settings', systemConfigController.getPublicCustomizationSettings);
 router.get('/v1/food/public/restaurant-settings', systemConfigController.getRestaurantSettings);
 router.get('/v1/food/admin/business-settings/public', businessSettingsController.getBusinessSettings);
 

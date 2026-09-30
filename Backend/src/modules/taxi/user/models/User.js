@@ -216,6 +216,16 @@ const userSchema = new mongoose.Schema(
       type: [userAddressSchema],
       default: [],
     },
+    // Taxi Safety > SOS Contacts (max 5).
+    emergencyContacts: {
+      type: [
+        {
+          name: { type: String, required: true, trim: true },
+          phone: { type: String, required: true, trim: true },
+        },
+      ],
+      default: [],
+    },
     active: {
       type: Boolean,
       default: true,

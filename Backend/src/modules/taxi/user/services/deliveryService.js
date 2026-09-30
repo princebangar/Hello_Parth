@@ -107,7 +107,18 @@ const calculateDistanceKm = (fromCoords = [], toCoords = []) => {
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoords = [] }) => {
+/**
+ * Distance a parcel is priced on. The app quotes on the Google road route; the server only has the straight
+ * line. A road distance is accepted when it is plausible (never shorter than the straight line, at most ~3x
+ * it), so the fare charged and the km shown match the quote; anything else falls back to the straight line.
+ */
+const resolveDeliveryDistanceKm = ({ pickupCoords, dropCoords, estimatedDistanceMeters }) => {
+  const airKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
+  const roadKm = Math.max(0, Number(estimatedDistanceMeters || 0)) / 1000;
+  return roadKm >= airKm && roadKm <= airKm * 3 + 2 ? roadKm : airKm;
+};
+
+const computeDeliveryFareBreakdown = ({ vehicle = {}, distanceKm = 0 }) => {
   const pricing = vehicle?.delivery_distance_pricing || {};
   const enabled = Boolean(
     pricing?.enabled ||
@@ -124,7 +135,6 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
     };
   }
 
-  const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
   const basePrice = Math.max(0, Number(pricing?.base_price || 0));
   const baseDistance = Math.max(0, Number(pricing?.base_distance ?? pricing?.free_distance ?? 0));
   const distancePrice = Math.max(0, Number(pricing?.distance_price || 0));
@@ -162,6 +172,7 @@ export const createDeliveryRecord = async ({
   pickupAddress,
   dropAddress,
   fare,
+  estimatedDistanceMeters,
   vehicleTypeId,
   vehicleTypeIds,
   vehicleIconType,
@@ -175,7 +186,8 @@ export const createDeliveryRecord = async ({
   const vehicle = vehicleTypeId
     ? await Vehicle.findById(vehicleTypeId).select('delivery_distance_pricing service_tax').lean()
     : null;
-  const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, pickupCoords, dropCoords });
+  const distanceKm = resolveDeliveryDistanceKm({ pickupCoords, dropCoords, estimatedDistanceMeters });
+  const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, distanceKm });
   const resolvedFare = fareBreakdown.total > 0 ? fareBreakdown.total : Number(fare || 0);
 
   const ride = await createRideRecord({
@@ -185,6 +197,7 @@ export const createDeliveryRecord = async ({
     pickupAddress,
     dropAddress,
     fare: resolvedFare,
+    estimatedDistanceMeters: Math.round(distanceKm * 1000),
     vehicleTypeId,
     vehicleTypeIds,
     vehicleIconType,

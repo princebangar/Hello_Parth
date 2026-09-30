@@ -19,6 +19,9 @@ import {
   listMyBusBookings,
   getUserWallet,
   getCurrentUser,
+  getUserEmergencyContacts,
+  addUserEmergencyContact,
+  deleteUserEmergencyContact,
   getUserNotifications,
   deleteUserNotification,
   getIntercityPackageCatalog,
@@ -82,6 +85,9 @@ userRouter.get('/subscriptions/plans', authenticate(['user']), asyncHandler(getA
 userRouter.get('/subscriptions/me', authenticate(['user']), asyncHandler(getMySubscriptions));
 userRouter.post('/subscriptions/purchase', authenticate(['user']), asyncHandler(buySubscription));
 userRouter.post('/me/delete-request', authenticate(['user']), asyncHandler(requestAccountDeletion));
+userRouter.get('/me/emergency-contacts', authenticate(['user']), asyncHandler(getUserEmergencyContacts));
+userRouter.post('/me/emergency-contacts', authenticate(['user']), asyncHandler(addUserEmergencyContact));
+userRouter.delete('/me/emergency-contacts/:contactId', authenticate(['user']), asyncHandler(deleteUserEmergencyContact));
 userRouter.get('/notifications', authenticate(['user']), asyncHandler(getUserNotifications));
 userRouter.delete('/notifications/:id', authenticate(['user']), asyncHandler(deleteUserNotification));
 userRouter.delete('/notifications', authenticate(['user']), asyncHandler(clearAllUserNotifications));

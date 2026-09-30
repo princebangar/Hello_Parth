@@ -29,7 +29,7 @@ import {
 export const rideRouter = Router();
 
 rideRouter.post('/', authenticate(['user']), rideCreationRateLimit, asyncHandler(createRide));
-rideRouter.get('/', authenticate(['user', 'driver']), asyncHandler(listMyRides));
+rideRouter.get('/', authenticate(['user', 'driver', 'owner']), asyncHandler(listMyRides));
 rideRouter.get('/app-settings/tip', asyncHandler(getRideAppTipSettings));
 rideRouter.get('/available-drivers', authenticate(['user']), availableDriversRateLimit, asyncHandler(listAvailableDrivers));
 rideRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getMyActiveRide));

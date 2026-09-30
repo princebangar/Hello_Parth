@@ -123,12 +123,12 @@ const buildUserWalletPayload = (wallet) => {
   };
 };
 
-const resolveRazorpayCredentials = async () => {
-  return resolveConfiguredGatewayCredentials('razor_pay');
+const resolveRazorpayCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials('razor_pay', options);
 };
 
-const resolvePhonePeCredentials = async () => {
-  return resolveConfiguredGatewayCredentials('phone_pay');
+const resolvePhonePeCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials('phone_pay', options);
 };
 
 export const listPublicServiceLocations = async (_req, res) => {
@@ -1587,6 +1587,83 @@ export const saveUserFcmToken = async (req, res) => {
   });
 };
 
+const MAX_USER_EMERGENCY_CONTACTS = 5;
+const toEmergencyPhone = (value) => String(value || '').replace(/\D/g, '').slice(-10);
+const serializeUserEmergencyContact = (contact = {}) => ({
+  id: String(contact._id || ''),
+  name: String(contact.name || '').trim(),
+  phone: toEmergencyPhone(contact.phone),
+});
+
+export const getUserEmergencyContacts = async (req, res) => {
+  const user = await User.findById(req.auth.sub).select('emergencyContacts').lean();
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  res.json({
+    success: true,
+    data: {
+      results: (user.emergencyContacts || []).map(serializeUserEmergencyContact),
+      limit: MAX_USER_EMERGENCY_CONTACTS,
+    },
+  });
+};
+
+export const addUserEmergencyContact = async (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 80);
+  const phone = toEmergencyPhone(req.body?.phone);
+
+  if (!name) {
+    throw new ApiError(400, 'Contact name is required');
+  }
+  if (!/^[6-9]\d{9}$/.test(phone)) {
+    throw new ApiError(400, 'Enter a valid 10-digit mobile number');
+  }
+
+  const user = await User.findById(req.auth.sub);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const contacts = Array.isArray(user.emergencyContacts) ? user.emergencyContacts : [];
+  if (contacts.length >= MAX_USER_EMERGENCY_CONTACTS) {
+    throw new ApiError(400, `You can add up to ${MAX_USER_EMERGENCY_CONTACTS} emergency contacts`);
+  }
+  if (contacts.some((contact) => toEmergencyPhone(contact.phone) === phone)) {
+    throw new ApiError(409, 'This number is already added');
+  }
+
+  user.emergencyContacts.push({ name, phone });
+  await user.save();
+
+  res.status(201).json({
+    success: true,
+    data: serializeUserEmergencyContact(user.emergencyContacts[user.emergencyContacts.length - 1]),
+  });
+};
+
+export const deleteUserEmergencyContact = async (req, res) => {
+  const user = await User.findById(req.auth.sub);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const contacts = Array.isArray(user.emergencyContacts) ? user.emergencyContacts : [];
+  const nextContacts = contacts.filter((contact) => String(contact._id) !== String(req.params.contactId));
+  if (nextContacts.length === contacts.length) {
+    throw new ApiError(404, 'Emergency contact not found');
+  }
+
+  user.emergencyContacts = nextContacts;
+  await user.save();
+
+  res.json({
+    success: true,
+    data: { deleted: true, results: user.emergencyContacts.map(serializeUserEmergencyContact) },
+  });
+};
+
 export const getCurrentUser = async (req, res) => {
   const user = await User.findById(req.auth?.sub);
 
@@ -1961,7 +2038,7 @@ export const transferUserWalletToDriver = async (req, res) => {
 
 export const createRazorpayWalletTopupOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
 
   const amountPaise = Math.round(amount * 100);
   const userId = String(req.auth?.sub || '');
@@ -1970,7 +2047,7 @@ export const createRazorpayWalletTopupOrder = async (req, res) => {
   const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
   const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
   const backendOrigin = `${proto}://${host}`;
-  const callbackUrl = `${backendOrigin}/api/v1/users/wallet/razorpay/callback`;
+  const callbackUrl = `${backendOrigin}/api/v1/taxi/users/wallet/razorpay/callback`;
 
   const order = await razorpayRequest({
     method: 'POST',
@@ -2089,7 +2166,7 @@ const verifyAndApplyUserRazorpayWalletTopup = async ({
 
 export const createPhonePeWalletTopupOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
-  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials({ forNewPayment: true });
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const merchantTransactionId = `UWAL${Date.now()}${compactUserId}`.slice(0, 34);
@@ -2640,7 +2717,7 @@ export const createBusBookingOrder = async (req, res) => {
   const serviceTaxAmount = Math.round(((baseAmount * serviceTaxPercentage) / 100) * 100) / 100;
   const amount = Math.round((baseAmount + serviceTaxAmount) * 100) / 100;
 
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const amountPaise = Math.round(amount * 100);
   const compactUserId = String(userId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const receipt = `ubus_${compactUserId}_${Date.now().toString(36)}`;

@@ -46,7 +46,7 @@ const CUSTOMIZATION_TOGGLES = [
     key: "online_payment_enabled",
     label: "Online Payment",
     description:
-      "Controls visibility of Razorpay online payment at checkout.",
+      "Controls visibility of Razorpay online payment at checkout. Razorpay must also be ON in Global > Customization Settings.",
     defaultValue: true,
   },
   {

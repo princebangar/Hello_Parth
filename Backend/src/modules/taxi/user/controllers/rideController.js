@@ -273,8 +273,8 @@ const finalizeRideCompletion = async ({
   };
 };
 
-const resolveRazorpayCredentials = async () => {
-  return resolveConfiguredGatewayCredentials('razor_pay');
+const resolveRazorpayCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials('razor_pay', options);
 };
 
 const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
@@ -490,7 +490,7 @@ export const createRazorpayRideCompletionOrder = async (req, res) => {
     throw new ApiError(409, 'Feedback already submitted for this ride');
   }
 
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const paymentAmounts = buildCompletionAmounts(ride, tipAmount);
 
   if (paymentAmounts.totalCharge <= 0) {
@@ -782,7 +782,7 @@ export const createRazorpayRideTipOrder = async (req, res) => {
     throw new ApiError(409, 'Feedback already submitted for this ride');
   }
 
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const amountPaise = Math.round(tipAmount * 100);
   const compactRideId = rideId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'ride';
   const compactUserId = String(req.auth?.sub || '').replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
@@ -894,6 +894,10 @@ export const verifyRazorpayRideTip = async (req, res) => {
   const amountPaise = Number(order?.amount);
   if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
     throw new ApiError(400, 'Invalid order amount');
+  }
+
+  if (String(order?.notes?.kind || '') !== 'ride_tip' || String(order?.notes?.rideId || '') !== rideId) {
+    throw new ApiError(400, 'This payment is not a tip for this ride');
   }
 
   const verifiedTipAmount = Math.round(amountPaise) / 100;
