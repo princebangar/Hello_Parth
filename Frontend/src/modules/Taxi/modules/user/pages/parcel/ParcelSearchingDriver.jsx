@@ -46,7 +46,7 @@ const unwrapLoginPayload = (response) => {
 };
 
 const generateOTP = () => String(Math.floor(1000 + Math.random() * 9000));
-const DRIVER_PLACEHOLDER = { name: 'Delivery Captain', rating: '4.9', vehicle: 'Bike', plate: 'Assigned', phone: '', eta: 2 };
+const DRIVER_PLACEHOLDER = { name: 'Delivery Captain', rating: '', vehicle: 'Bike', plate: 'Assigned', phone: '', eta: 2 };
 const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted' };
 const ACTIVE_DELIVERY_POLL_MS = 8000;
 const ACTIVE_DELIVERY_POLL_DELAY_MS = 6000;
@@ -220,7 +220,7 @@ const BlinkingVehicleMarker = ({ marker, iconUrl }) => (
 
 const normalizeDriver = (driver = {}) => ({
   name: driver.name || 'Delivery Captain',
-  rating: driver.rating || '4.9',
+  rating: driver.rating || '',
   vehicle: driver.vehicle || driver.vehicleType || driver.vehicle_type || 'Bike',
   vehicleType: driver.vehicleType || driver.vehicle_type || driver.vehicle || 'Bike',
   plate: driver.plate || driver.vehicleNumber || driver.vehicle_number || 'Assigned',
@@ -697,12 +697,17 @@ const ParcelSearchingDriver = () => {
         };
 
         const socket = socketService.connect({ role: 'user', token: userToken });
+        if (!resolvedPickupCoords || !resolvedDropCoords) {
+          throw new Error('Pickup and drop locations are missing. Please pick them again.');
+        }
+
         const response = await api.post('/deliveries', {
-          pickup: resolvedPickupCoords || [75.9048, 22.7039],
-          drop: resolvedDropCoords || [75.8937, 22.7533],
+          pickup: resolvedPickupCoords,
+          drop: resolvedDropCoords,
           pickupAddress: routeState.pickup || '',
           dropAddress: routeState.drop || '',
           fare: routeState.fare ?? routeState.estimatedFare?.min ?? null,
+          estimatedDistanceMeters: Math.round(Number(routeState.estimatedDistanceKm || 0) * 1000),
           vehicleTypeId: selectedVehicleTypeIds[0],
           vehicleTypeIds: selectedVehicleTypeIds,
           vehicleIconType: selectedVehicleType.icon_types || 'bike',
@@ -1015,7 +1020,7 @@ const ParcelSearchingDriver = () => {
                         <span className="text-[14px] font-black text-slate-400 uppercase tracking-widest">{driver.name || 'Captain'}</span>
                         <div className="flex items-center gap-1 bg-yellow-400/10 px-1.5 py-0.5 rounded-full border border-yellow-400/20">
                           <Star size={10} className="fill-yellow-500 text-yellow-500" />
-                          <span className="text-[11px] font-black text-yellow-700">{driver.rating || '4.7'}</span>
+                          <span className="text-[11px] font-black text-yellow-700">{driver.rating || 'New'}</span>
                         </div>
                       </div>
 

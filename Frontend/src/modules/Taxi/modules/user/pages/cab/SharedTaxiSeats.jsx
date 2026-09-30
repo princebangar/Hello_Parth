@@ -4,17 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, MapPin, Clock, Users, ChevronRight, Star, Armchair } from 'lucide-react';
 import { userService } from '../../services/userService';
 
-const INIT_SEATS = [
-  { id: '1', label: 'A1', status: 'available' },
-  { id: '2', label: 'A2', status: 'available' },
-  { id: '3', label: 'B1', status: 'available' },
-  { id: '4', label: 'B2', status: 'available' },
-  { id: '5', label: 'C1', status: 'available' },
-  { id: '6', label: 'C2', status: 'available' },
-  { id: '7', label: 'D1', status: 'available' },
-  { id: '8', label: 'D2', status: 'available' },
-];
-
 const SharedTaxiSeats = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -59,18 +48,12 @@ const SharedTaxiSeats = () => {
           });
           setSeats(mappedSeats);
         } else {
-          const mappedMock = INIT_SEATS.map((s) => {
-            const seatId = String(s.id);
-            return {
-              ...s,
-              status: bookedIds.includes(seatId) ? 'booked' : 'available'
-            };
-          });
-          setSeats(mappedMock);
+          // No seat layout configured for this vehicle — never invent seats that could be booked.
+          setSeats([]);
         }
       } catch (error) {
         console.error('Failed to load seats details:', error);
-        setSeats(INIT_SEATS.map(s => ({ ...s })));
+        setSeats([]);
       } finally {
         setLoading(false);
       }
@@ -105,7 +88,7 @@ const SharedTaxiSeats = () => {
           return cA - cB;
         });
       });
-    return sortedRows.length > 0 ? sortedRows : [[seats[0],seats[1]],[seats[2],seats[3]],[seats[4],seats[5]],[seats[6],seats[7]]];
+    return sortedRows;
   }, [seats]);
 
   const basePath = location.pathname.includes('/taxi/user') ? '/taxi/user' : '';
@@ -198,6 +181,9 @@ const SharedTaxiSeats = () => {
 
             {/* Seats */}
             <div className="space-y-2.5">
+              {rows.length === 0 && (
+                <p className="py-8 text-center text-xs font-bold text-slate-400">Seat layout is not available for this route right now.</p>
+              )}
               {rows.map((row, ri) => (
                 <div key={ri} className="flex items-center justify-center gap-2">
                   {row.slice(0, 2).map(seat => seat ? (

@@ -177,7 +177,7 @@ const mergeDriverSnapshot = (baseDriver = {}, incomingDriver = {}) => ({
   vehicleImage: incomingDriver.vehicleImage || baseDriver.vehicleImage || '',
   name: incomingDriver.name || baseDriver.name || 'Delivery Captain',
   phone: incomingDriver.phone || baseDriver.phone || '',
-  rating: incomingDriver.rating || baseDriver.rating || '4.9',
+  rating: incomingDriver.rating || baseDriver.rating || '',
   plate: incomingDriver.plate || baseDriver.plate || incomingDriver.vehicleNumber || baseDriver.vehicleNumber || 'Assigned',
 });
 
@@ -300,7 +300,7 @@ const ParcelTracking = () => {
       calculateBearing(driverPosition, activeDestination),
     );
   }, [activeDestination, driverPosition, rideRealtime?.driverLocation?.heading, routePath]);
-  const fare = rideRealtime?.fare || state.fare || 45;
+  const fare = rideRealtime?.fare || state.fare || 0;
   const otp = String(rideRealtime?.otp || state.otp || '');
   const completedAt = rideRealtime?.completedAt || state.completedAt || Date.now();
   const isDeliveryCompleted = COMPLETED_TRACKING_STATUSES.has(tripStatus);
@@ -1028,7 +1028,7 @@ const ParcelTracking = () => {
                     <p className="truncate text-[11px] font-bold text-slate-500">{driver.plate || 'Assigned'} · {driver.vehicle || 'Delivery Agent'}</p>
                     <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-black text-slate-800">
                       <Star size={10} className="fill-yellow-500 text-yellow-500" />
-                      {driver.rating || '4.9'}
+                      {driver.rating || 'New'}
                     </div>
                   </div>
                 </div>
@@ -1176,7 +1176,7 @@ const ParcelTracking = () => {
                 </div>
                 <div className="absolute -bottom-1 -right-1 bg-white px-2 py-0.5 rounded-full border border-gray-100 flex items-center gap-1 shadow-sm">
                   <Star size={10} className="text-amber-400 fill-amber-400" />
-                  <span className="text-[10px] font-black text-gray-900">{driver.rating}</span>
+                  <span className="text-[10px] font-black text-gray-900">{driver.rating || 'New'}</span>
                 </div>
               </div>
               <div className="min-w-0">

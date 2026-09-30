@@ -229,7 +229,8 @@ const BusDetails = () => {
   const handleContinue = async () => {
     if (isPaying) return;
 
-    if (!name || !age || !phone || !email) {
+    // Email is optional (only used to mail the e-ticket); the backend accepts a booking without it.
+    if (!name || !age || !phone) {
       setError('Please fill in all passenger details.');
       return;
     }

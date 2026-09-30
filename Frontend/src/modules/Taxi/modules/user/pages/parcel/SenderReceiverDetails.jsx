@@ -52,7 +52,8 @@ const POPULAR_LOCATIONS = Object.keys(LOCATION_COORDS);
 const DEFAULT_COORDS = { lat: 22.7196, lng: 75.8577 };
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 
-const getCoords = (title, fallback = [75.8577, 22.7196]) => LOCATION_COORDS[title] || fallback;
+// Unknown place names return null so the address gets geocoded — never a silent default point.
+const getCoords = (title, fallback = null) => LOCATION_COORDS[title] || fallback;
 
 const unwrapResults = (response) => {
   const payload = response?.data?.data || response?.data || response;
@@ -1014,7 +1015,7 @@ const SenderReceiverDetails = () => {
   const [receiverMobile, setReceiverMobile] = useState(() => parcelState.receiverMobile || '');
   const [pickup, setPickup] = useState(() => parcelState.pickup || '');
   const [drop, setDrop] = useState(() => parcelState.drop || '');
-  const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || getCoords(parcelState.pickup || '', [75.8577, 22.7196]));
+  const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || getCoords(parcelState.pickup || ''));
   const [dropCoords, setDropCoords] = useState(() => parcelState.dropCoords || (parcelState.drop ? getCoords(parcelState.drop || '') : null));
   const [activeInput, setActiveInput] = useState(() => {
     if (location.state?.activeInput === 'pickup' || location.state?.editPickup) {
@@ -1663,6 +1664,16 @@ const SenderReceiverDetails = () => {
       }
     }
 
+    if (!resolvedPickupCoords || !resolvedDropCoords) {
+      setErrors((prev) => ({
+        ...prev,
+        ...(!resolvedPickupCoords ? { pickup: 'Could not find this pickup on the map. Pick it from the suggestions.' } : {}),
+        ...(!resolvedDropCoords ? { drop: 'Could not find this drop on the map. Pick it from the suggestions.' } : {}),
+      }));
+      setIsContactSheetOpen(false);
+      return;
+    }
+
     setIsContactSheetOpen(false);
     navigate(`${routePrefix}/parcel/searching`, {
       state: {
@@ -1678,7 +1689,8 @@ const SenderReceiverDetails = () => {
         paymentMethod: 'Cash',
         fare: estimatedFare?.approx ?? estimatedFare?.min ?? null,
         estimatedFare,
-        estimatedDistanceKm,
+        // Same distance the fare above was priced on (road route when available), so every screen shows one km.
+        estimatedDistanceKm: effectiveDistanceKm,
         deliveryScope: parcelState.deliveryScope || 'city',
         isOutstation: Boolean(parcelState.isOutstation || parcelState.deliveryScope === 'outstation'),
         parcel: {

@@ -284,7 +284,7 @@ const PoolingConfirm = () => {
                       </div>
                       <div>
                         <p className="text-sm font-black text-slate-900">
-                          {formatDateTime(confirmedBooking?.travelDate || travelDate, confirmedBooking?.scheduleId || schedule?.departureTime || '')}
+                          {formatDateTime(confirmedBooking?.travelDate || travelDate, schedule?.departureTime || '')}
                         </p>
                         <p className="mt-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Scheduled Departure</p>
                       </div>

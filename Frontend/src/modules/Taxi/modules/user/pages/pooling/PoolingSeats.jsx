@@ -42,6 +42,41 @@ const computePoolingFareBreakdown = (route, selectedVehicle, seatCount) => {
   return { baseFare, serviceTaxPercentage, serviceTaxAmount, totalFare };
 };
 
+const IST_OFFSET = '+05:30';
+
+const parseDepartureAt = (travelDate, departureTime) => {
+  const match = String(departureTime || '').trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (!match) return NaN;
+  let hours = Number(match[1]);
+  const meridiem = (match[3] || '').toLowerCase();
+  if (meridiem === 'pm' && hours < 12) hours += 12;
+  if (meridiem === 'am' && hours === 12) hours = 0;
+  return new Date(`${travelDate}T${String(hours).padStart(2, '0')}:${match[2]}:00${IST_OFFSET}`).getTime();
+};
+
+// Same rules the backend enforces at order time: runs on that weekday and booking has not closed yet.
+const pickBookableSchedule = (route, travelDate) => {
+  const schedules = (Array.isArray(route?.schedules) ? route.schedules : [])
+    .filter((item) => String(item?.status || 'active') === 'active');
+  if (!travelDate) {
+    return schedules[0] || null;
+  }
+
+  const weekday = new Date(`${travelDate}T12:00:00${IST_OFFSET}`)
+    .toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' })
+    .toLowerCase();
+  const bufferMs = Math.max(0, Number(route?.boardingBufferMinutes || 0)) * 60 * 1000;
+
+  return schedules
+    .filter((item) => {
+      const days = (Array.isArray(item?.activeDays) ? item.activeDays : []).map((day) => String(day).slice(0, 3).toLowerCase());
+      return days.length === 0 || days.includes(weekday);
+    })
+    .map((item) => ({ item, departureAt: parseDepartureAt(travelDate, item?.departureTime) }))
+    .filter(({ departureAt }) => !Number.isFinite(departureAt) || departureAt - bufferMs > Date.now())
+    .sort((left, right) => (left.departureAt || 0) - (right.departureAt || 0))[0]?.item || null;
+};
+
 const PoolingSeats = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -71,11 +106,7 @@ const PoolingSeats = () => {
         null;
       setSelectedVehicle(nextVehicle);
 
-      const activeSchedules = Array.isArray(routeData?.schedules) ? routeData.schedules : [];
-      const selectedSchedule =
-        activeSchedules.find((item) => String(item?.status || 'active') === 'active') ||
-        activeSchedules[0] ||
-        null;
+      const selectedSchedule = pickBookableSchedule(routeData, travelDate);
 
       const seatAvailability = routeData?.seatAvailability || {};
       const availabilityKey =
@@ -121,13 +152,9 @@ const PoolingSeats = () => {
       return;
     }
 
-    const activeSchedules = Array.isArray(route?.schedules) ? route.schedules : [];
-    const selectedSchedule =
-      activeSchedules.find((item) => String(item?.status || 'active') === 'active') ||
-      activeSchedules[0] ||
-      null;
+    const selectedSchedule = pickBookableSchedule(route, travelDate);
     if (!selectedSchedule?.id) {
-      toast.error('No active schedule is available for this route');
+      toast.error('No departures left on this date. Please pick another date.');
       return;
     }
 

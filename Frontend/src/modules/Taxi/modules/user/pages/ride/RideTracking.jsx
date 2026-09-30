@@ -466,10 +466,10 @@ const RideTracking = () => {
   const isScheduledUpcoming = isScheduledRide && scheduledTimestamp > waitingNow;
   const scheduledCountdown = getScheduledCountdownLabel(scheduledAt, waitingNow);
   const scheduledDateLabel = formatScheduledDateTime(scheduledAt);
-  const fare = rideRealtime?.fare || state.fare || 22;
+  const fare = rideRealtime?.fare || state.fare || 0;
   const paymentMethod = rideRealtime?.paymentMethod || state.paymentMethod || 'Cash';
   const fallbackDriver = useMemo(
-    () => state.driver || { name: 'Captain', rating: '4.9', vehicle: 'Taxi', plate: 'Assigned', phone: '', profileImage: '', vehicleImage: '' },
+    () => state.driver || { name: 'Captain', rating: '', vehicle: 'Taxi', plate: 'Assigned', phone: '', profileImage: '', vehicleImage: '' },
     [state.driver],
   );
   const pickupLabel = rideRealtime?.pickup?.address || state.pickup || 'Pickup location';
@@ -1640,7 +1640,7 @@ const RideTracking = () => {
                 {/* Rating Badge */}
                 <div className="absolute -bottom-1 -right-1 bg-yellow-400 px-1.5 py-0.5 rounded-full border-2 border-white flex items-center gap-0.5 shadow-md">
                   <Star size={9} className="text-slate-900 fill-slate-900" />
-                  <span className="text-[9px] font-black text-slate-900">{driver.rating || '4.9'}</span>
+                  <span className="text-[9px] font-black text-slate-900">{driver.rating || 'New'}</span>
                 </div>
               </div>
 
