@@ -53,6 +53,7 @@ import {
   saveDriverFcmToken,
   getOwnerFleetDrivers,
   getOwnerFleetDashboard,
+  getOwnerFleetWallet,
   getOwnerFleetZones,
   getOwnerBusBookingCalendar,
   getOwnerBusBookings,
@@ -267,17 +268,17 @@ driverRouter.post(
 );
 driverRouter.get(
   "/notifications",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(getDriverNotifications),
 );
 driverRouter.delete(
   "/notifications/:id",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(deleteDriverNotification),
 );
 driverRouter.delete(
   "/notifications",
-  authenticate(["driver"]),
+  authenticate(["driver", "owner"]),
   asyncHandler(clearAllDriverNotifications),
 );
 driverRouter.delete(
@@ -411,6 +412,11 @@ driverRouter.get(
   "/fleet/drivers",
   authenticate(["driver", "owner"]),
   asyncHandler(getOwnerFleetDrivers),
+);
+driverRouter.get(
+  "/fleet/wallet",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerFleetWallet),
 );
 driverRouter.get(
   "/fleet/zones",

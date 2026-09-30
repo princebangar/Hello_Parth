@@ -948,7 +948,10 @@ export const createRideRecord = async ({
   await clearUserActiveRideIfPresent(user);
 
   const safeFare = Number(fare);
-  const safeEstimatedDistanceMeters = Math.max(0, Number(estimatedDistanceMeters || 0));
+  // Intercity bookings (and any client that sends no estimate) fall back to the straight-line pickup → drop
+  // distance, so the driver's "Today" distance and the trip cards never read 0 km.
+  const safeEstimatedDistanceMeters =
+    Math.max(0, Number(estimatedDistanceMeters || 0)) || Math.round(straightLineKm(pickupCoords, dropCoords) * 1000);
   const safeEstimatedDurationMinutes = Math.max(0, Number(estimatedDurationMinutes || 0));
 
   if (!Number.isFinite(safeFare) || safeFare < 0) {
@@ -990,6 +993,12 @@ export const createRideRecord = async ({
   const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
   const requestedBookingMode = String(bookingMode || '').trim().toLowerCase();
   const normalizedServiceType = normalizeServiceType(serviceType);
+  const resolvedIntercity = normalizeIntercityPayload({
+    ...(intercity || {}),
+    distance:
+      Number(intercity?.distance || 0) ||
+      (normalizedServiceType === 'intercity' ? Math.round(safeEstimatedDistanceMeters / 100) / 10 : 0),
+  });
   assertFareIsNotBelowMinimum({
     fare: safeFare,
     serviceType: normalizedServiceType,
@@ -1168,7 +1177,7 @@ export const createRideRecord = async ({
       transport_type: normalizedTransportType,
       pricingSnapshot,
       parcel: normalizeParcelPayload(parcel),
-      intercity: normalizeIntercityPayload(intercity),
+      intercity: resolvedIntercity,
       scheduledAt: normalizedScheduledAt,
       status: RIDE_STATUS.SEARCHING,
       liveStatus: RIDE_LIVE_STATUS.SEARCHING,
@@ -1223,7 +1232,7 @@ export const createRideRecord = async ({
             transport_type: normalizedTransportType,
             pricingSnapshot,
             parcel: normalizeParcelPayload(parcel),
-            intercity: normalizeIntercityPayload(intercity),
+            intercity: resolvedIntercity,
             scheduledAt: normalizedScheduledAt,
             status: RIDE_STATUS.SEARCHING,
             liveStatus: RIDE_LIVE_STATUS.SEARCHING,
@@ -1449,13 +1458,21 @@ export const getActiveRideForIdentity = async ({ role, entityId }) => {
 };
 
 export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, page = 1, category = 'all' }) => {
-  if (!['user', 'driver'].includes(role)) {
-    throw new ApiError(403, 'Only riders and drivers can access ride history');
+  if (!['user', 'driver', 'owner'].includes(role)) {
+    throw new ApiError(403, 'Only riders, drivers and fleet owners can access ride history');
   }
 
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const safePage = Math.max(Number(page) || 1, 1);
-  const query = role === 'driver' ? { driverId: entityId } : { userId: entityId };
+  // A fleet owner's history is every ride driven by their fleet drivers.
+  const fleetDriverIds = role === 'owner'
+    ? await Driver.find({ owner_id: entityId }).distinct('_id')
+    : [];
+  const query = role === 'driver'
+    ? { driverId: entityId }
+    : role === 'owner'
+      ? { driverId: { $in: fleetDriverIds } }
+      : { userId: entityId };
   const normalizedCategory = String(category || 'all').trim().toLowerCase();
 
   if (normalizedCategory === 'rides') {
@@ -1482,9 +1499,9 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     query.scheduledAt = { $ne: null };
   }
 
-  const counterpartPath = role === 'driver' ? 'userId' : 'driverId';
+  const counterpartPath = role === 'user' ? 'driverId' : 'userId';
   const counterpartSelect =
-    role === 'driver'
+    role !== 'user'
       ? 'name phone profileImage'
       : 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating';
 
@@ -1538,6 +1555,10 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     ridesQuery.populate('deliveryId', 'parcel');
   }
 
+  if (role === 'owner') {
+    ridesQuery.populate('driverId', 'name phone vehicleNumber vehicleMake vehicleModel vehicleIconType');
+  }
+
   const [rides, total] = await Promise.all([
     ridesQuery,
     Ride.countDocuments(query),
@@ -1563,7 +1584,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
     estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
     paymentMethod: ride.paymentMethod,
-    otp: ride.otp || '',
+    otp: role === 'owner' ? '' : (ride.otp || ''),
     parcel: ride.deliveryId?.parcel || ride.parcel || null,
     intercity: ride.intercity || null,
     pricingSnapshot: ride.pricingSnapshot || null,
@@ -1584,8 +1605,8 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     feedback: ride.feedback || null,
     createdAt: ride.createdAt,
     updatedAt: ride.updatedAt,
-    user: role === 'driver' ? (ride.userId || null) : null,
-    driver: role === 'user' ? (ride.driverId || null) : null,
+    user: role !== 'user' ? (ride.userId || null) : null,
+    driver: role !== 'driver' ? (ride.driverId || null) : null,
     })),
     pagination: {
       page: safePage,
@@ -1728,6 +1749,11 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     }
   }
 
+  // The driver app re-sends `completed` while it collects payment; completion side effects
+  // (today's summary, wallet settlement, referral rewards) must only run on the first one.
+  const isFirstCompletion =
+    nextStatus === RIDE_LIVE_STATUS.COMPLETED && ride.liveStatus !== RIDE_LIVE_STATUS.COMPLETED;
+
   ride.liveStatus = nextStatus;
   ride.status = config.persistedStatus;
 
@@ -1747,7 +1773,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     ride.paymentMethod = normalizeRidePaymentMethod(paymentMethod);
   }
 
-  if (nextStatus === RIDE_LIVE_STATUS.COMPLETED) {
+  if (isFirstCompletion) {
     ride.completedAt = new Date();
   }
 
@@ -1756,7 +1782,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
   let walletUpdate = null;
 
-  if (nextStatus === RIDE_LIVE_STATUS.COMPLETED) {
+  if (isFirstCompletion) {
     await Promise.all([
       User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
       Driver.findByIdAndUpdate(driverId, { isOnRide: false }),

@@ -16,6 +16,7 @@
     "seed:default-credentials": "node scripts/seed-default-credentials.js",
     "seed:taxi-driver-default": "node scripts/seed-taxi-driver-default.js",
     "seed:taxi-config": "node scripts/seed-taxi-config.js",
+    "seed:taxi-demo-fleet": "node scripts/seed-taxi-demo-fleet.js",
     "seed:food-restaurant-delivery-default": "node scripts/seed-food-restaurant-delivery-default.js",
     "debug:taxi-promo-users": "node scripts/check-taxi-promo-users.js",
     "migrate:remove-restaurant-billing": "node scripts/remove-restaurant-billing-fields.js",

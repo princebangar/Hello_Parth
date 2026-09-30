@@ -15,15 +15,11 @@ export const validatePromo = async (req, res) => {
   res.json({ success: true, data: result });
 };
 
+// Without service_location_id this lists every live promo the user may use (profile > Promo Codes).
 export const getAvailablePromos = async (req, res) => {
-  const serviceLocationId = req.query.service_location_id;
-  if (!serviceLocationId) {
-    throw new ApiError(400, 'service_location_id is required');
-  }
-
   const result = await listAvailablePromosForUser({
     userId: req.auth?.sub,
-    service_location_id: serviceLocationId,
+    service_location_id: req.query.service_location_id,
     transport_type: req.query.transport_type,
     limit: req.query.limit,
   });

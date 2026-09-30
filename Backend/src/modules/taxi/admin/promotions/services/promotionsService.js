@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../../utils/ApiError.js';
 import { ServiceLocation } from '../../models/ServiceLocation.js';
-import { ensureAdminState } from '../../services/adminService.js';
 import { User } from '../../../user/models/User.js';
 import { Banner } from '../models/Banner.js';
 import { Notification } from '../models/Notification.js';
@@ -240,16 +239,11 @@ const ensurePromoCodeUnique = async (code, ignoreId = null) => {
 
 const normalizePromoPayload = async (payload, existing = null) => {
   const serviceLocationData = await normalizeServiceLocationIds(payload, existing);
-  const state = await ensureAdminState();
   const userSpecific = normalizeBoolean(payload.user_specific, existing?.user_specific ?? false);
   const userId = normalizeText(payload.user_id ?? existing?.user_id);
-  const realUser = userId
+  const user = userId
     ? await User.findById(toObjectIdOrThrow(userId, 'user id')).select('_id name phone').lean()
     : null;
-  const legacyUser = !realUser && userId
-    ? state.users.find((item) => String(item._id) === String(userId))
-    : null;
-  const user = realUser || legacyUser;
 
   if (userSpecific && (payload.user_id !== undefined || !existing || existing?.user_specific !== true)) {
     if (!userId) {

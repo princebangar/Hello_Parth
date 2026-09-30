@@ -32,8 +32,8 @@ const normalizeTravelDate = (value) => {
 
 const getCurrentUserId = (req) => String(req.auth?.sub || req.user?._id || '').trim();
 
-const resolveRazorpayCredentials = async () => {
-  return resolveConfiguredGatewayCredentials('razor_pay');
+const resolveRazorpayCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials('razor_pay', options);
 };
 
 const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
@@ -415,7 +415,7 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Seat ${conflictingSeatId} was already booked by another user`);
   }
 
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const order = await razorpayRequest({
     method: 'POST',

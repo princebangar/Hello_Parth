@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import { randomBytes } from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
-import { createDefaultAdminState } from '../data/defaultAdminState.js';
 import { Admin } from '../models/Admin.js';
 import { User } from '../../user/models/User.js';
 import { UserWallet } from '../../user/models/UserWallet.js';
@@ -42,14 +41,11 @@ import { TaxiAppModule } from '../models/TaxiAppModule.js';
 import { NotificationChannel } from '../models/NotificationChannel.js';
 import { UserPreference } from '../models/UserPreference.js';
 import { AdminRole } from '../models/AdminRole.js';
-import { PaymentGateway } from '../models/PaymentGateway.js';
 import { PaymentMethod } from '../models/PaymentMethod.js';
 import { OnboardingScreen } from '../models/OnboardingScreen.js';
 import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
 import { SupportTicket } from '../../support/models/SupportTicket.js';
 import { SafetyAlert } from '../../common/models/SafetyAlert.js';
-import { healthCheck } from '../../../../config/health.js';
-import { getIO } from '../../../../config/socket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
 import { comparePassword, hashPassword } from '../../driver/services/authService.js';
 import {
@@ -62,8 +58,8 @@ import {
   emitToDriver,
 } from '../../services/dispatchService.js';
 import { sendEmail } from '../../services/mailService.js';
-import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
+import { fetchRoadDistance } from '../../services/googleDistanceService.js';
 import {
   ADMIN_PERMISSIONS,
   SUPERADMIN_PERMISSION,
@@ -119,7 +115,7 @@ const buildRechargeApiCallbackUrl = () => {
     trimTrailingSlash(env.publicBackendUrl) ||
     `http://localhost:${env.port}`;
 
-  return `${baseOrigin}/api/v1/common/recharge-api/callback`;
+  return `${baseOrigin}/api/v1/taxi/common/recharge-api/callback`;
 };
 
 const normalizeRechargeApiSettings = (settings = {}) => {
@@ -211,7 +207,7 @@ const buildRechargeApiResponse = (settings = {}) => {
       ],
       sample_endpoints: {
         callback: resolvedCallbackUrl,
-        healthcheck: `${trimTrailingSlash(env.publicBackendUrl) || `http://localhost:${env.port}`}/api/v1/common/recharge-api/callback`,
+        healthcheck: `${trimTrailingSlash(env.publicBackendUrl) || `http://localhost:${env.port}`}/api/v1/taxi/common/recharge-api/callback`,
       },
       provider_endpoints: normalized.endpoints,
     },
@@ -716,6 +712,62 @@ const normalizeBusCancellationRule = (rule = {}, index = 0) => ({
   notes: sanitizeBusText(rule.notes),
 });
 
+const parseBusClockMinutes = (value = '') => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null;
+};
+
+const formatBusDuration = (totalMinutes) => {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+};
+
+/** Departure → arrival of the main (first active) schedule; an arrival earlier than departure is next day. */
+const getPrimaryBusScheduleWindow = (schedules = []) => {
+  const schedule = schedules.find((item) => item.status === 'active') || schedules[0];
+  const departure = parseBusClockMinutes(schedule?.departureTime);
+  const arrival = parseBusClockMinutes(schedule?.arrivalTime);
+  if (departure === null || arrival === null) return null;
+  const duration = (arrival - departure + 1440) % 1440;
+  return duration > 0 ? { schedule, departure, duration } : null;
+};
+
+/** Stop times are written for the main schedule, so each one has to fall between its departure and arrival. */
+const assertBusStopsWithinSchedule = (stops = [], window = null) => {
+  if (!window) return;
+  for (const stop of stops) {
+    for (const time of [stop.arrivalTime, stop.departureTime]) {
+      const minutes = parseBusClockMinutes(time);
+      if (minutes === null) continue;
+      if ((minutes - window.departure + 1440) % 1440 > window.duration) {
+        throw new ApiError(
+          400,
+          `${stop.pointName || stop.city || 'A stop'} time ${time} is outside the schedule ${window.schedule.departureTime} → ${window.schedule.arrivalTime}`,
+        );
+      }
+    }
+  }
+};
+
+/**
+ * Route distance comes from Google (road, driving) between the picked origin and destination, not from what was
+ * typed. If Google cannot answer, the typed value stays.
+ */
+const applyBusRoadDistances = async (normalizedPayload, legs = ['route', 'returnRoute']) => {
+  for (const legKey of legs) {
+    const leg = normalizedPayload[legKey];
+    if (!leg?.originCoords || !leg?.destinationCoords) continue;
+    const road = await fetchRoadDistance(leg.originCoords, leg.destinationCoords);
+    if (road) {
+      leg.distanceKm = `${road.km} km`;
+    }
+  }
+};
+
 const normalizeBusServicePayload = (payload = {}, existing = {}) => {
   const blueprint = {
     templateKey: sanitizeBusText(
@@ -765,6 +817,13 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
     : Array.isArray(existing.schedules)
       ? existing.schedules.map((schedule, index) => normalizeBusSchedule(schedule, index))
       : [];
+
+  // The schedule is the source of truth: route duration follows it and stop times must fit inside it.
+  const scheduleWindow = getPrimaryBusScheduleWindow(schedules);
+  if (scheduleWindow) {
+    route.durationHours = formatBusDuration(scheduleWindow.duration);
+  }
+  assertBusStopsWithinSchedule(route.stops, scheduleWindow);
 
   const cancellationRules = Array.isArray(payload.cancellationRules)
     ? payload.cancellationRules.map((rule, index) => normalizeBusCancellationRule(rule, index))
@@ -2249,402 +2308,7 @@ const syncSettingRows = (rows, payload) =>
     };
   });
 
-const DEFAULT_ADMIN_EMAIL = 'admin@gmail.com';
-const DEFAULT_ADMIN_PASSWORD = '12345';
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$/;
-
-const syncDefaultAdminRecord = async () => {
-  const now = new Date();
-  const existingAdmin = await Admin.findOne({ email: DEFAULT_ADMIN_EMAIL }).select('+password');
-  const nextPassword =
-    !existingAdmin || !BCRYPT_HASH_PATTERN.test(existingAdmin.password || '')
-      ? await hashPassword(DEFAULT_ADMIN_PASSWORD)
-      : undefined;
-
-  await Admin.collection.updateOne(
-    { email: DEFAULT_ADMIN_EMAIL },
-    {
-      $set: {
-        name: 'Super Admin',
-        email: DEFAULT_ADMIN_EMAIL,
-        phone: '9999999999',
-        role: 'superadmin',
-        admin_type: 'superadmin',
-        permissions: ['*'],
-        active: true,
-        status: 'active',
-        ...(nextPassword ? { password: nextPassword } : {}),
-        updatedAt: now,
-      },
-      $setOnInsert: {
-        createdAt: now,
-      },
-    },
-    { upsert: true },
-  );
-};
-
-const LEGACY_OWNER_SERVICE_LOCATION = {
-  legacy_id: '53027f5a-dad1-47fa-8417-b958dd520821',
-  company_key: null,
-  name: 'India',
-  service_location_name: 'India',
-  translation_dataset: '{"en":{"locale":"en","name":"India"}}',
-  currency_name: 'Indian rupee',
-  currency_code: 'INR',
-  currency_symbol: '₹',
-  currency_pointer: 'ltr',
-  timezone: 'Asia/Kolkata',
-  country: 102,
-  active: true,
-  status: 'active',
-  createdAt: new Date('2026-02-02T11:57:30.000Z'),
-  updatedAt: new Date('2026-02-02T11:57:30.000Z'),
-};
-
-const LEGACY_OWNER_ROLE = {
-  id: 3,
-  slug: 'owner',
-  name: 'Normal Owner',
-  description: 'Normal Owner with standard access',
-  all: 0,
-  locked: 1,
-  created_by: 1,
-  created_at: '2026-02-02T11:36:54.000000Z',
-  updated_at: '2026-02-07T15:55:24.000000Z',
-};
-
-const buildLegacyOwnerSeeds = (serviceLocationId) => [
-  {
-    legacy_id: '08e4823f-33df-480b-8419-91e8f49aa204',
-    user_id: 55,
-    transport_type: 'taxi',
-    service_location_id: serviceLocationId,
-    legacy_service_location_id: LEGACY_OWNER_SERVICE_LOCATION.legacy_id,
-    company_name: 'Taxi',
-    owner_name: null,
-    name: 'Demo owner',
-    surname: null,
-    email: 'owner@gmail.com',
-    password: '$2y$10$5P1q/uu.og/yMK1y5fHstuHPW1u7rD5x0CoGGvDoSW6Okjv1v/B0m',
-    mobile: '7470311227',
-    phone: null,
-    address: null,
-    postal_code: null,
-    city: null,
-    expiry_date: null,
-    no_of_vehicles: 0,
-    tax_number: null,
-    bank_name: null,
-    ifsc: null,
-    account_no: null,
-    iban: null,
-    bic: null,
-    active: true,
-    approve: true,
-    status: 'approved',
-    createdAt: new Date('2026-03-20T07:42:58.000Z'),
-    updatedAt: new Date('2026-04-09T07:47:17.000Z'),
-    area_snapshot: LEGACY_OWNER_SERVICE_LOCATION,
-    user_snapshot: {
-      id: 55,
-      name: 'Demo owner',
-      company_key: null,
-      username: null,
-      map_type: null,
-      email: 'owner@gmail.com',
-      mobile: '7470311227',
-      ride_otp: null,
-      gender: null,
-      profile_picture: 'https://zyder.co.in/assets/images/Male_default_image.png',
-      stripe_customer_id: null,
-      is_deleted_at: null,
-      country: 102,
-      timezone: null,
-      active: 1,
-      email_confirmed: 0,
-      mobile_confirmed: 0,
-      fcm_token: null,
-      apn_token: null,
-      refferal_code: null,
-      referred_by: null,
-      rating: 0,
-      lang: null,
-      zone_id: null,
-      current_lat: null,
-      current_lng: null,
-      rating_total: 0,
-      no_of_ratings: 0,
-      login_by: null,
-      last_known_ip: null,
-      last_login_at: null,
-      social_provider: null,
-      is_bid_app: 0,
-      social_nickname: null,
-      social_id: null,
-      social_token: null,
-      social_token_secret: null,
-      social_refresh_token: null,
-      social_expires_in: null,
-      social_avatar: null,
-      social_avatar_original: null,
-      created_at: '2026-03-20T07:42:58.000000Z',
-      updated_at: '2026-04-09T07:47:17.000000Z',
-      authorization_code: null,
-      deleted_at: null,
-      service_location_id: null,
-      country_name: 'India',
-      mobile_number: '+917470311227',
-      role_name: 'owner',
-      converted_deleted_at: null,
-      country_detail: {
-        id: 102,
-        name: 'India',
-        dial_code: '+91',
-        dial_min_length: 7,
-        dial_max_length: 14,
-        code: 'IN',
-        currency_name: 'Indian rupee',
-        currency_code: 'INR',
-        currency_symbol: '₹',
-        flag: 'https://zyder.co.in/image/country/flags/IN.png',
-        active: 1,
-        created_at: null,
-        updated_at: null,
-      },
-      roles: [{ ...LEGACY_OWNER_ROLE, pivot: { user_id: 55, role_id: 3 } }],
-    },
-  },
-  {
-    legacy_id: '941bb56f-2775-4685-818e-8326b44ead94',
-    user_id: 39,
-    transport_type: 'Both',
-    service_location_id: serviceLocationId,
-    legacy_service_location_id: LEGACY_OWNER_SERVICE_LOCATION.legacy_id,
-    company_name: 'itc',
-    owner_name: 'princess',
-    name: 'princess',
-    surname: null,
-    email: 'indra@gmail.com',
-    password: null,
-    mobile: '8072694803',
-    phone: null,
-    address: 'hgxbnmkchcufjbjbivjnvjv',
-    postal_code: '908899',
-    city: 'd6hf hmm kb',
-    expiry_date: null,
-    no_of_vehicles: 0,
-    tax_number: '578999bcv8988',
-    bank_name: null,
-    ifsc: null,
-    account_no: null,
-    iban: null,
-    bic: null,
-    active: true,
-    approve: true,
-    status: 'approved',
-    createdAt: new Date('2026-02-28T12:34:16.000Z'),
-    updatedAt: new Date('2026-02-28T13:36:28.000Z'),
-    area_snapshot: LEGACY_OWNER_SERVICE_LOCATION,
-    user_snapshot: {
-      id: 39,
-      name: 'princess',
-      company_key: null,
-      username: null,
-      map_type: null,
-      email: 'indra@gmail.com',
-      mobile: '8072694803',
-      ride_otp: null,
-      gender: 'female',
-      profile_picture: 'https://zyder.co.in/assets/images/Female_default_image.png',
-      stripe_customer_id: null,
-      is_deleted_at: null,
-      country: 102,
-      timezone: 'Asia/Kolkata',
-      active: 1,
-      email_confirmed: 0,
-      mobile_confirmed: 1,
-      fcm_token: 'dqw_CwtrSXa0l9p5oMxCLl:APA91bH1ZbjCzaE-crPxlDOfbU8LBDXg1gerLnzsrWB5Ky6hy9gRvT7LPZb2OSdK9AHh1w2RBSyj-fnuNIofm9FF6GfkdcfusbSMy2lmmjBQ2omVAXlgJQE',
-      apn_token: null,
-      refferal_code: 'v7CmOw',
-      referred_by: null,
-      rating: 0,
-      lang: 'en',
-      zone_id: '8d426929-591a-4bb7-bc60-256abb196363',
-      current_lat: 11.9190793,
-      current_lng: 79.8034286,
-      rating_total: 0,
-      no_of_ratings: 0,
-      login_by: 'android',
-      last_known_ip: null,
-      last_login_at: null,
-      social_provider: null,
-      is_bid_app: 0,
-      social_nickname: null,
-      social_id: null,
-      social_token: null,
-      social_token_secret: null,
-      social_refresh_token: null,
-      social_expires_in: null,
-      social_avatar: null,
-      social_avatar_original: null,
-      created_at: '2026-02-28T12:34:16.000000Z',
-      updated_at: '2026-02-28T13:10:44.000000Z',
-      authorization_code: null,
-      deleted_at: null,
-      service_location_id: LEGACY_OWNER_SERVICE_LOCATION.legacy_id,
-      country_name: 'India',
-      mobile_number: '+918072694803',
-      role_name: 'owner',
-      converted_deleted_at: null,
-      country_detail: {
-        id: 102,
-        name: 'India',
-        dial_code: '+91',
-        dial_min_length: 7,
-        dial_max_length: 14,
-        code: 'IN',
-        currency_name: 'Indian rupee',
-        currency_code: 'INR',
-        currency_symbol: '₹',
-        flag: 'https://zyder.co.in/image/country/flags/IN.png',
-        active: 1,
-        created_at: null,
-        updated_at: null,
-      },
-      roles: [{ ...LEGACY_OWNER_ROLE, pivot: { user_id: 39, role_id: 3 } }],
-    },
-  },
-];
-
-const seedInitialData = async () => {
-  const defaults = createDefaultAdminState();
-
-  // Seed Users
-  if (await User.countDocuments() === 0) {
-    await User.insertMany(defaults.users.map(u => ({ ...u, phone: u.mobile, password: 'password123' })));
-  }
-
-  // Seed Service Locations
-  if (await ServiceLocation.countDocuments() === 0) {
-    await ServiceLocation.insertMany(defaults.serviceLocations);
-  }
-
-  // Seed Drivers
-  if (await Driver.countDocuments() === 0) {
-    await Driver.insertMany(defaults.drivers.map(d => ({ ...d, phone: d.mobile })));
-  }
-
-  // Seed Languages
-  if (await AppLanguage.countDocuments() === 0) {
-    await AppLanguage.insertMany(defaults.languages);
-  }
-
-  // Seed Ride Modules
-  if (await RideModule.countDocuments() === 0) {
-    await RideModule.insertMany(defaults.rideModules);
-  }
-
-  // Seed App Modules removed (Migrated to AdminAppSetting)
-
-  // Seed Notification Channels
-  if (await NotificationChannel.countDocuments() === 0) {
-    await NotificationChannel.insertMany(defaults.notificationChannels);
-  }
-
-  // Seed Subscription Plans
-  if (await SubscriptionPlan.countDocuments() === 0) {
-    await SubscriptionPlan.insertMany(defaults.subscriptionPlans);
-  }
-
-  // Seed Preferences
-  if (await UserPreference.countDocuments() === 0) {
-    await UserPreference.insertMany(defaults.preferences);
-  }
-
-  // Seed Admin Roles
-  if (await AdminRole.countDocuments() === 0) {
-    await AdminRole.insertMany(defaults.roles);
-  }
-
-  // Seed Payment Gateways
-  if (await PaymentGateway.countDocuments() === 0) {
-    await PaymentGateway.insertMany(defaults.paymentGateways);
-  }
-
-  // Seed Onboarding Screens
-  if (await OnboardingScreen.countDocuments() === 0) {
-    await OnboardingScreen.insertMany(defaults.onboardingScreens);
-  }
-
-  await ensureFleetOwnersSeeded();
-};
-
-export const ensureServiceLocationsSeeded = async () => {
-  if (await ServiceLocation.countDocuments() === 0) {
-    const defaults = createDefaultAdminState();
-    await ServiceLocation.insertMany(defaults.serviceLocations);
-  }
-};
-
-export const ensureFleetOwnersSeeded = async () => {
-  const now = new Date();
-
-  const serviceLocation = await ServiceLocation.findOneAndUpdate(
-    {
-      $or: [
-        { legacy_id: LEGACY_OWNER_SERVICE_LOCATION.legacy_id },
-        { name: LEGACY_OWNER_SERVICE_LOCATION.name },
-      ],
-    },
-    {
-      $set: {
-        ...LEGACY_OWNER_SERVICE_LOCATION,
-        updatedAt: LEGACY_OWNER_SERVICE_LOCATION.updatedAt || now,
-      },
-      $setOnInsert: {
-        createdAt: LEGACY_OWNER_SERVICE_LOCATION.createdAt || now,
-      },
-    },
-    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
-  );
-
-  const ownerSeeds = buildLegacyOwnerSeeds(serviceLocation._id);
-
-  for (const seed of ownerSeeds) {
-    const existingOwner = await Owner.findOne({
-      $or: [
-        { legacy_id: seed.legacy_id },
-        { email: seed.email },
-        { mobile: seed.mobile },
-      ],
-    }).lean();
-
-    if (existingOwner) {
-      await Owner.updateOne(
-        { _id: existingOwner._id },
-        {
-          $set: {
-            ...seed,
-            updatedAt: seed.updatedAt || now,
-          },
-          $setOnInsert: {
-            createdAt: seed.createdAt || now,
-          },
-        },
-      );
-      continue;
-    }
-
-    await Owner.create(seed);
-  }
-};
-
-export const ensureAdminState = async () => {
-  await syncDefaultAdminRecord();
-  await seedInitialData();
-  return { ready: true };
-};
 
 export const getAdminModuleInfo = async () => {
   const [
@@ -4955,7 +4619,6 @@ export const listUserSubscriptionsByUserId = async (userId) => {
 };
 
 export const listServiceLocations = async (currentAdmin = null) => {
-  await ensureServiceLocationsSeeded();
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'service_locations.view', 'service locations');
   }
@@ -5004,13 +4667,11 @@ export const createServiceLocation = async (payload, currentAdmin = null) => {
     throw new ApiError(400, 'Service location name is required');
   }
 
-  await ensureServiceLocationsSeeded();
   const persistedLocation = await ServiceLocation.create(normalizeServiceLocationPayload(payload));
   return persistedLocation.toObject();
 };
 
 export const updateServiceLocation = async (id, payload, currentAdmin = null) => {
-  await ensureServiceLocationsSeeded();
   const persistedLocation = await ServiceLocation.findById(id);
   if (!persistedLocation) {
     throw new ApiError(404, 'Service location not found');
@@ -5022,29 +4683,9 @@ export const updateServiceLocation = async (id, payload, currentAdmin = null) =>
   Object.assign(persistedLocation, normalizeServiceLocationPayload(payload, persistedLocation.toObject()));
   await persistedLocation.save();
   return persistedLocation.toObject();
-
-  const state = await ensureAdminState();
-  const location = findById(state.serviceLocations, id);
-
-  if (!location) {
-    throw new ApiError(404, 'Service location not found');
-  }
-
-  Object.assign(location, payload, {
-    name: payload.name?.trim() || location.name,
-    service_location_name: payload.name?.trim() || location.service_location_name,
-    latitude: payload.latitude !== undefined ? Number(payload.latitude) : location.latitude,
-    longitude: payload.longitude !== undefined ? Number(payload.longitude) : location.longitude,
-    active: payload.status !== undefined ? payload.status === 'active' : location.active,
-    status: payload.status || location.status,
-  });
-
-  await state.save();
-  return location;
 };
 
 export const deleteServiceLocation = async (id, currentAdmin = null) => {
-  await ensureServiceLocationsSeeded();
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'service_locations.view', 'service locations');
     assertServiceLocationAccess(currentAdmin, id);
@@ -5054,15 +4695,9 @@ export const deleteServiceLocation = async (id, currentAdmin = null) => {
     throw new ApiError(404, 'Service location not found');
   }
   return true;
-
-  const state = await ensureAdminState();
-  state.serviceLocations = removeById(state.serviceLocations, id);
-  await state.save();
-  return true;
 };
 
 export const listNearbyServiceLocations = async ({ latitude, longitude, maxDistance = 50000, limit = 20 }) => {
-  await ensureServiceLocationsSeeded();
 
   const lat = Number(latitude);
   const lng = Number(longitude);
@@ -6659,7 +6294,6 @@ export const deleteSetPrice = async (id, currentAdmin = null) => {
 };
 
 export const listOwners = async (queryArgs = {}, currentAdmin = null) => {
-  await ensureFleetOwnersSeeded();
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'owners.view', 'owners');
   }
@@ -6683,7 +6317,6 @@ export const listOwners = async (queryArgs = {}, currentAdmin = null) => {
 };
 
 export const approveOwnerSignupFromDriver = async (driverId) => {
-  await ensureFleetOwnersSeeded();
 
   const id = String(driverId || '').trim();
   if (!id) {
@@ -6797,7 +6430,6 @@ export const approveOwnerSignupFromDriver = async (driverId) => {
 };
 
 export const getOwnerById = async (id, currentAdmin = null) => {
-  await ensureFleetOwnersSeeded();
 
   const ownerId = String(id || '').trim();
   if (!ownerId) throw new ApiError(400, 'Owner id is required');
@@ -6985,7 +6617,6 @@ export const approveOwner = async (id, payload) =>
   updateOwner(id, { approve: normalizeBoolean(payload.approve), active: true });
 
 export const listFleetVehicles = async () => {
-  await ensureFleetOwnersSeeded();
 
   const items = await FleetVehicle.find()
     .populate('owner_id', 'company_name owner_name name email mobile')
@@ -6998,7 +6629,6 @@ export const listFleetVehicles = async () => {
 };
 
 export const createFleetVehicle = async (payload = {}) => {
-  await ensureFleetOwnersSeeded();
 
   const ownerId = payload.owner_id || payload.ownerId;
   const serviceLocationId = payload.service_location_id || payload.serviceLocationId;
@@ -7048,7 +6678,6 @@ export const createFleetVehicle = async (payload = {}) => {
 };
 
 export const updateFleetVehicle = async (id, payload = {}) => {
-  await ensureFleetOwnersSeeded();
 
   const item = await FleetVehicle.findById(id);
   if (!item) throw new ApiError(404, 'Fleet vehicle not found');
@@ -7409,36 +7038,17 @@ export const getAdminEarnings = async (query = {}) => {
   };
 };
 
-const formatHealth = (name, ok, okLabel, badLabel) => ({ name, ok, status: ok ? okLabel : badLabel });
-
-/** Real checks (DB, sockets, Redis, maps key) — recomputed on every dashboard call, never cached. */
-const buildSystemHealth = async () => {
-  const health = await healthCheck().catch(() => ({ mongo: 'disconnected', redis: 'unavailable' }));
-  const io = getIO();
-  const socketClients = Number(io?.engine?.clientsCount ?? 0);
-  const redisState = health.redis;
-
-  return [
-    formatHealth('Application API', true, 'Active', 'Down'),
-    formatHealth('Database Cluster', health.mongo === 'connected', 'Connected', 'Disconnected'),
-    formatHealth('Socket Server', Boolean(io), `Running · ${socketClients} connected`, 'Not running'),
-    formatHealth('Redis Cache', redisState === 'ok' || redisState === 'disabled', redisState === 'disabled' ? 'Not used (single instance)' : 'Healthy', 'Unavailable'),
-    formatHealth('Google Maps key (server)', Boolean(String(process.env.GOOGLE_MAPS_API_KEY || '').trim()), 'Configured', 'Missing'),
-  ];
-};
-
-const withLiveHealth = async (snapshot) => ({
+const withServerUptime = async (snapshot) => ({
   ...snapshot,
-  systemHealth: await buildSystemHealth(),
   serverUptimeSeconds: Math.round(process.uptime()),
 });
 
 export const getDashboardData = async () => {
   if (dashboardCache.value && dashboardCache.expiresAt > Date.now()) {
-    return withLiveHealth(dashboardCache.value);
+    return withServerUptime(dashboardCache.value);
   }
 
-  const [totalUsers, totalDrivers, totalOwners, approvedDrivers, rides, supportTicketStats, onlineDrivers, pendingWithdrawals, sosStats, lastSos] = await Promise.all([
+  const [totalUsers, totalDrivers, totalOwners, approvedDrivers, rides, supportTicketStats, onlineDrivers, pendingWithdrawals, sosStats, lastSos, pendingFleetVehicles] = await Promise.all([
     User.countDocuments(),
     Driver.countDocuments(),
     Owner.countDocuments(),
@@ -7459,6 +7069,8 @@ export const getDashboardData = async () => {
     WithdrawalRequest.countDocuments({ status: 'pending' }),
     SafetyAlert.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
     SafetyAlert.findOne().sort({ createdAt: -1 }).select('createdAt').lean(),
+    // Owner-added vehicles wait here until an admin approves them in Manage Fleet.
+    FleetVehicle.countDocuments({ status: 'pending' }),
   ]);
 
   const now = new Date();
@@ -7642,6 +7254,7 @@ export const getDashboardData = async () => {
     total_earnings: Number(totalOverallFare.toFixed(2)),
     onlineDrivers,
     pendingWithdrawals,
+    pendingFleetVehicles,
     openSupportTickets: supportTicketCounts.pending + supportTicketCounts.assigned,
     topDrivers,
     notifiedSos: {
@@ -7695,7 +7308,7 @@ export const getDashboardData = async () => {
     value: snapshot,
   };
 
-  return withLiveHealth(snapshot);
+  return withServerUptime(snapshot);
 };
 
 export const getOverallEarnings = async () => (await getDashboardData()).overallEarnings;
@@ -7864,6 +7477,7 @@ export const listBusServices = async (options = {}) => {
 
 export const createBusService = async (payload = {}, options = {}) => {
   const normalizedPayload = normalizeBusServicePayload(payload);
+  await applyBusRoadDistances(normalizedPayload);
   const ownerId = toObjectId(options.ownerId) || toObjectId(payload.ownerId) || null;
 
   if (!normalizedPayload.operatorName) {
@@ -7902,6 +7516,11 @@ export const updateBusService = async (id, payload = {}, options = {}) => {
   }
 
   const normalizedPayload = normalizeBusServicePayload(payload, existingItem.toObject());
+  // Only ask Google again when the route itself was edited (not on status toggles etc.).
+  await applyBusRoadDistances(
+    normalizedPayload,
+    ['route', 'returnRoute'].filter((legKey) => payload[legKey] !== undefined),
+  );
 
   if (!normalizedPayload.operatorName) {
     throw new ApiError(400, 'Operator name is required');
@@ -8983,8 +8602,6 @@ export const toggleChannelMail = async (id, status) => {
   return channel.toObject();
 };
 
-export const listPaymentGateways = async () => PaymentGateway.find().sort({ name: 1 }).lean();
-
 export const listPaymentMethods = async () =>
   PaymentMethod.find().sort({ createdAt: -1 }).lean();
 
@@ -9059,80 +8676,6 @@ export const deletePaymentMethod = async (id) => {
     throw new ApiError(404, 'Payment method not found');
   }
   return true;
-};
-
-export const getPaymentSettings = async () => {
-  const settings = await ensureThirdPartySettings();
-  const activeGateway = await getActivePaymentGateway();
-  return { settings: settings.payment || {}, active_gateway: activeGateway };
-};
-
-export const updatePaymentSettings = async (payload) => {
-  const settings = await ensureThirdPartySettings();
-  settings.payment = normalizePaymentSettingsPayload(
-    settings.payment || {},
-    deepMerge(settings.payment || {}, payload),
-  );
-  settings.markModified('payment');
-  await settings.save();
-  const activeGateway = await getActivePaymentGateway();
-  return { settings: settings.payment, active_gateway: activeGateway };
-};
-
-export const getSMSSettings = async () => {
-  const settings = await ensureThirdPartySettings();
-  return { settings: settings.sms || {} };
-};
-
-export const updateSMSSettings = async (payload) => {
-  const settings = await ensureThirdPartySettings();
-  settings.sms = deepMerge(settings.sms || {}, payload);
-  settings.markModified('sms');
-  await settings.save();
-  return { settings: settings.sms };
-};
-
-export const getFirebaseSettings = async () => {
-  const settings = await ensureThirdPartySettings();
-  return { settings: settings.firebase || {} };
-};
-
-export const updateFirebaseSettings = async (payload) => {
-  const settings = await ensureThirdPartySettings();
-  settings.firebase = {
-    ...settings.firebase,
-    ...payload,
-    firebase_json_name: payload.firebase_json_name || settings.firebase.firebase_json_name,
-  };
-  settings.markModified('firebase');
-  await settings.save();
-  return { settings: settings.firebase };
-};
-
-export const getMapSettings = async () => {
-  const settings = await ensureThirdPartySettings();
-  return { settings: settings.map_apis || {} };
-};
-
-export const updateMapSettings = async (payload) => {
-  const settings = await ensureThirdPartySettings();
-  settings.map_apis = { ...settings.map_apis, ...payload };
-  settings.markModified('map_apis');
-  await settings.save();
-  return { settings: settings.map_apis };
-};
-
-export const getMailSettings = async () => {
-  const settings = await ensureThirdPartySettings();
-  return { settings: settings.mail || {} };
-};
-
-export const updateMailSettings = async (payload) => {
-  const settings = await ensureThirdPartySettings();
-  settings.mail = { ...settings.mail, ...payload };
-  settings.markModified('mail');
-  await settings.save();
-  return { settings: settings.mail };
 };
 
 export const getRechargeApiSettings = async () => {

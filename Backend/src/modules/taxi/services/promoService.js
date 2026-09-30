@@ -41,10 +41,14 @@ export const computePromoDiscount = ({ fare, promo, userCounter }) => {
   }
 
   const discountPercentage = clamp(Number(promo?.discount_percentage || 0), 0, 100);
-  const rawDiscount = safeFare * (discountPercentage / 100);
   const maximumDiscountAmount = Math.max(0, Number(promo?.maximum_discount_amount || 0));
+  // No percentage set means the admin configured a flat rupee discount — "Maximum Discount Amount" is that
+  // amount, not just a cap. (A promo with neither would already have been rejected on save.)
+  const rawDiscount = discountPercentage > 0 ? safeFare * (discountPercentage / 100) : maximumDiscountAmount;
 
-  const cappedDiscount = maximumDiscountAmount > 0 ? Math.min(rawDiscount, maximumDiscountAmount) : rawDiscount;
+  const cappedDiscount = discountPercentage > 0 && maximumDiscountAmount > 0
+    ? Math.min(rawDiscount, maximumDiscountAmount)
+    : rawDiscount;
 
   const cumulativeCap = Math.max(0, Number(promo?.cumulative_max_discount_amount || 0));
   const usedCumulative = Math.max(0, Number(userCounter?.cumulative_discount_amount || 0));
@@ -351,39 +355,75 @@ export const applyPromoToRideInTransaction = async ({
   return { promo: promoUpdated.toObject(), breakdown };
 };
 
+/**
+ * Booking screens pass a service location (and default to taxi promos); the "Promo Codes" list in the
+ * profile passes neither and gets every live promo the user may use.
+ */
 export const listAvailablePromosForUser = async ({
   userId,
   service_location_id,
-  transport_type = 'taxi',
+  transport_type,
   now = new Date(),
   limit = 50,
 }) => {
-  const serviceLocationId = toObjectIdOrThrow(service_location_id, 'service location id');
-  const transportType = normalizeTransportType(transport_type);
   const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+  const transportFilter = transport_type || (service_location_id ? 'taxi' : '');
 
   const query = {
     active: true,
     from_date: { $lte: now },
     to_date: { $gte: now },
-    transport_type: { $in: ['all', transportType] },
-    $and: [
-      {
-        $or: [
-          { service_location_id: serviceLocationId },
-          { service_location_ids: serviceLocationId },
-        ],
-      },
-    ],
+    $and: [],
   };
+
+  if (transportFilter) {
+    query.transport_type = { $in: ['all', normalizeTransportType(transportFilter)] };
+  }
+
+  if (service_location_id) {
+    const serviceLocationId = toObjectIdOrThrow(service_location_id, 'service location id');
+    query.$and.push({
+      $or: [
+        { service_location_id: serviceLocationId },
+        { service_location_ids: serviceLocationId },
+      ],
+    });
+  }
 
   if (userId) {
     query.$and.push({ $or: [{ user_specific: { $ne: true } }, { user_id: String(userId) }] });
   } else {
     query.user_specific = { $ne: true };
   }
+  // A promo everyone together has used up is not "available" to show, whatever the limit.
+  query.$and.push({ $or: [{ max_uses_total: { $lte: 0 } }, { $expr: { $lt: ['$usage_count', '$max_uses_total'] } }] });
+  if (query.$and.length === 0) {
+    delete query.$and;
+  }
 
-  const promos = await PromoCode.find(query).sort({ createdAt: -1 }).limit(safeLimit).lean();
+  // Fetch more than asked for, since a user's own used-up promos are dropped below before the limit is applied.
+  const candidates = await PromoCode.find(query).sort({ createdAt: -1 }).limit(safeLimit * 2).lean();
+
+  const usedUpPromoIds = new Set();
+  if (userId && mongoose.isValidObjectId(userId) && candidates.length > 0) {
+    const counters = await PromoUserCounter.find({
+      user_id: toObjectIdOrThrow(userId, 'user id'),
+      promo_id: { $in: candidates.map((promo) => promo._id) },
+    })
+      .select('promo_id uses_count')
+      .lean();
+    const usesById = new Map(counters.map((counter) => [String(counter.promo_id), Number(counter.uses_count || 0)]));
+
+    for (const promo of candidates) {
+      const usesPerUser = Math.max(1, Number(promo.uses_per_user || 1));
+      if ((usesById.get(String(promo._id)) || 0) >= usesPerUser) {
+        usedUpPromoIds.add(String(promo._id));
+      }
+    }
+  }
+
+  // A promo already used up isn't "available" either — this user just can't apply it again.
+  const promos = candidates.filter((promo) => !usedUpPromoIds.has(String(promo._id))).slice(0, safeLimit);
 
   return promos.map((promo) => ({
     _id: promo._id,

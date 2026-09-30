@@ -62,6 +62,7 @@ import {
   listDriverVehicleFieldTemplates,
   listBusServices,
   listOwnerNeededDocuments,
+  listOwnerWalletHistory,
   updateBusService,
   } from "../../admin/services/adminService.js";
 import { resolveConfiguredGatewayCredentials } from "../../services/paymentGatewayService.js";
@@ -882,8 +883,8 @@ const buildOwnerBusPartialCancellationQuote = ({
   };
 };
 
-const resolveOwnerRazorpayCredentials = async () => {
-  return resolveConfiguredGatewayCredentials("razor_pay");
+const resolveOwnerRazorpayCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials("razor_pay", options);
 };
 
 const ownerRazorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
@@ -1412,7 +1413,8 @@ const normalizePaymentAmount = (value) => {
 };
 
 const razorpayRequest = async ({ method, path, body }) => {
-  const { keyId, keySecret } = await resolveConfiguredGatewayCredentials("razor_pay");
+  // Every POST through here creates a QR or payment link (a new payment); GETs only poll one.
+  const { keyId, keySecret } = await resolveConfiguredGatewayCredentials("razor_pay", { forNewPayment: method === "POST" });
   const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   const response = await fetch(`https://api.razorpay.com/v1${path}`, {
     method,
@@ -2189,13 +2191,19 @@ export const getPoolingDriverBookings = async (req, res) => {
 
   const bookings = await PoolingBooking.find({ vehicle: req.auth.sub })
     .populate("user", "name phone email")
-    .populate("route", "routeName originLabel destinationLabel")
+    .populate("route", "routeName originLabel destinationLabel schedules")
     .sort({ travelDate: -1, createdAt: -1 })
     .lean();
 
   res.json({
     success: true,
-    data: bookings.map(serializePoolingDriverBooking),
+    data: bookings.map((booking) => ({
+      ...serializePoolingDriverBooking(booking),
+      departureTime: String(
+        (booking.route?.schedules || []).find((item) => String(item?.id || "") === String(booking.scheduleId || ""))
+          ?.departureTime || "",
+      ),
+    })),
   });
 };
 
@@ -2218,13 +2226,15 @@ export const getDriverEmergencyContacts = async (req, res) => {
 };
 
 export const getDriverNotifications = async (req, res) => {
-  const driver = await Driver.findById(req.auth.sub).lean();
+  const account = req.auth.role === "owner"
+    ? await resolveAuthenticatedOwner(req)
+    : await Driver.findById(req.auth.sub).lean();
 
-  if (!driver) {
+  if (!account) {
     throw new ApiError(404, "Driver not found");
   }
 
-  const serviceLocationId = driver.service_location_id || null;
+  const serviceLocationId = account.service_location_id || null;
   const query = {
     status: "sent",
     send_to: { $in: ["all", "drivers"] },
@@ -4214,12 +4224,12 @@ export const createDriverPaymentQr = async (req, res) => {
   });
 };
 
-const resolveRazorpayCredentials = async () => {
-  return resolveConfiguredGatewayCredentials("razor_pay");
+const resolveRazorpayCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials("razor_pay", options);
 };
 
-const resolvePhonePeCredentials = async () => {
-  return resolveConfiguredGatewayCredentials("phone_pay");
+const resolvePhonePeCredentials = async (options) => {
+  return resolveConfiguredGatewayCredentials("phone_pay", options);
 };
 
 const normalizeOriginCandidate = (value = "") => {
@@ -4569,7 +4579,7 @@ export const createDriverWalletTopupOrder = async (req, res) => {
     throw new ApiError(400, `Minimum top-up amount is Rs ${minTopUp}`);
   }
 
-  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
 
   const amountPaise = Math.round(amount * 100);
   const driverId = String(req.auth?.sub || "");
@@ -4580,7 +4590,7 @@ export const createDriverWalletTopupOrder = async (req, res) => {
   const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
   const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5000';
   const backendOrigin = `${proto}://${host}`;
-  const callbackUrl = `${backendOrigin}/api/v1/drivers/wallet/top-up/razorpay/callback`;
+  const callbackUrl = `${backendOrigin}/api/v1/taxi/drivers/wallet/top-up/razorpay/callback`;
 
   const userAgent = String(req.headers["user-agent"] || "");
   const isWebView = /; wv\)/i.test(userAgent) || /Version\/[\d.]+/i.test(userAgent) || req.body.usePaymentLink === true;
@@ -4889,7 +4899,7 @@ export const createDriverPhonePeWalletTopupOrder = async (req, res) => {
     throw new ApiError(400, `Minimum top-up amount is Rs ${minTopUp}`);
   }
 
-  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials();
+  const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials({ forNewPayment: true });
   const driverId = String(req.auth?.sub || "");
   const compactDriverId = driverId.replace(/[^a-zA-Z0-9]/g, "").slice(-8) || "drv";
   const merchantTransactionId = `DWAL${Date.now()}${compactDriverId}`.slice(0, 34);
@@ -5764,6 +5774,19 @@ export const getOwnerFleetVehicles = async (req, res) => {
   });
 };
 
+export const getOwnerFleetWallet = async (req, res) => {
+  const owner = await resolveAuthenticatedOwner(req);
+
+  if (!owner?._id) {
+    throw new ApiError(403, "Owner wallet is only available for owner accounts");
+  }
+
+  res.json({
+    success: true,
+    data: await listOwnerWalletHistory(owner._id),
+  });
+};
+
 export const getOwnerFleetZones = async (req, res) => {
   const owner = await resolveAuthenticatedOwner(req);
 
@@ -6214,6 +6237,12 @@ export const createOwnerFleetDriver = async (req, res) => {
     throw new ApiError(409, "Phone number is already registered");
   }
 
+  const assignment = await resolveOwnerFleetAssignment({
+    owner,
+    vehicleId: String(req.body?.assignedFleetVehicleId ?? req.body?.vehicleId ?? "").trim(),
+    zoneId: String(req.body?.zoneId ?? req.body?.zone_id ?? "").trim(),
+  });
+
   const serviceLocation = owner.service_location_id
     ? await ServiceLocation.findById(owner.service_location_id).lean()
     : null;
@@ -6235,7 +6264,7 @@ export const createOwnerFleetDriver = async (req, res) => {
 
   const tempPassword = crypto.randomUUID().slice(0, 12);
 
-  const driver = await Driver.create({
+  const driver = new Driver({
     owner_id: owner._id,
     service_location_id: owner.service_location_id || null,
     name,
@@ -6253,7 +6282,10 @@ export const createOwnerFleetDriver = async (req, res) => {
     approve: false,
     status: "pending",
     location: toPoint(coordinates, "location"),
+    documents: sanitizeOwnerFleetDriverDocuments(req.body?.documents),
   });
+  applyOwnerFleetAssignment(driver, assignment);
+  await driver.save();
 
   res.status(201).json({
     success: true,
@@ -7209,6 +7241,119 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
   });
 };
 
+const resolveOwnerFleetAssignment = async ({ owner, vehicleId = "", zoneId = "", excludeDriverId = null }) => {
+  let assignedVehicle = null;
+  let assignedZone = null;
+
+  if (vehicleId) {
+    if (!mongoose.isValidObjectId(vehicleId)) {
+      throw new ApiError(400, "A valid assigned vehicle id is required");
+    }
+
+    assignedVehicle = await FleetVehicle.findOne({
+      _id: vehicleId,
+      owner_id: owner._id,
+      active: true,
+    })
+      .populate("vehicle_type_id", "name type_name transport_type icon_types")
+      .lean();
+
+    if (!assignedVehicle) {
+      throw new ApiError(404, "Assigned vehicle not found for this owner");
+    }
+
+    const alreadyAssigned = await Driver.findOne({
+      owner_id: owner._id,
+      deletedAt: null,
+      assignedFleetVehicleId: assignedVehicle._id,
+      ...(excludeDriverId ? { _id: { $ne: excludeDriverId } } : {}),
+    })
+      .select("name")
+      .lean();
+
+    if (alreadyAssigned) {
+      throw new ApiError(
+        409,
+        `Vehicle is already assigned to ${alreadyAssigned.name || "another driver"}`,
+      );
+    }
+  }
+
+  if (zoneId) {
+    if (!mongoose.isValidObjectId(zoneId)) {
+      throw new ApiError(400, "A valid zone id is required");
+    }
+
+    const baseAssignedZoneQuery = {
+      _id: zoneId,
+      active: { $ne: false },
+      status: { $ne: "inactive" },
+    };
+
+    assignedZone = await Zone.findOne({
+      ...baseAssignedZoneQuery,
+      ...(owner.service_location_id
+        ? { service_location_id: owner.service_location_id }
+        : {}),
+    })
+      .select("_id name service_location_id")
+      .lean();
+
+    if (!assignedZone && owner.service_location_id) {
+      assignedZone = await Zone.findOne(baseAssignedZoneQuery)
+        .select("_id name service_location_id")
+        .lean();
+    }
+
+    if (!assignedZone) {
+      throw new ApiError(404, "Assigned zone not found for this owner");
+    }
+  }
+
+  return { assignedVehicle, assignedZone };
+};
+
+const applyOwnerFleetAssignment = (driver, { assignedVehicle, assignedZone }) => {
+  driver.assignedFleetVehicleId = assignedVehicle?._id || null;
+  driver.zoneId = assignedZone?._id || null;
+
+  if (assignedVehicle) {
+    driver.vehicleTypeId = assignedVehicle.vehicle_type_id?._id || null;
+    driver.vehicleMake = assignedVehicle.car_brand || "";
+    driver.vehicleModel = assignedVehicle.car_model || "";
+    driver.vehicleNumber = assignedVehicle.license_plate_number || "";
+    driver.vehicleColor = assignedVehicle.car_color || "";
+    driver.vehicleIconType =
+      assignedVehicle.vehicle_type_id?.icon_types || driver.vehicleIconType || "car";
+  } else {
+    driver.vehicleTypeId = null;
+    driver.vehicleMake = "";
+    driver.vehicleModel = "";
+    driver.vehicleNumber = "";
+    driver.vehicleColor = "";
+  }
+};
+
+// Only these identity documents are collected on the owner "add driver" form; anything else is ignored.
+const OWNER_FLEET_DRIVER_DOCUMENT_KEYS = ["aadhaar_front", "dl_front"];
+
+const sanitizeOwnerFleetDriverDocuments = (documents = {}) =>
+  Object.fromEntries(
+    OWNER_FLEET_DRIVER_DOCUMENT_KEYS.flatMap((key) => {
+      const url = String(documents?.[key]?.secureUrl || documents?.[key]?.url || "").trim();
+      if (!/^https?:\/\//i.test(url)) {
+        return [];
+      }
+      return [[key, {
+        secureUrl: url,
+        previewUrl: url,
+        fileName: String(documents[key].fileName || "").slice(0, 200),
+        mimeType: String(documents[key].mimeType || "").slice(0, 100),
+        uploaded: true,
+      }]];
+    }),
+  );
+
 export const updateOwnerFleetDriver = async (req, res) => {
   const owner = await resolveAuthenticatedOwner(req);
 
@@ -7276,96 +7421,19 @@ export const updateOwnerFleetDriver = async (req, res) => {
     throw new ApiError(409, "Phone number is already registered");
   }
 
-  let assignedVehicle = null;
-  let assignedZone = null;
-  if (requestedAssignedVehicleId) {
-    if (!mongoose.isValidObjectId(requestedAssignedVehicleId)) {
-      throw new ApiError(400, "A valid assigned vehicle id is required");
-    }
-
-    assignedVehicle = await FleetVehicle.findOne({
-      _id: requestedAssignedVehicleId,
-      owner_id: owner._id,
-      active: true,
-    })
-      .populate("vehicle_type_id", "name type_name transport_type icon_types")
-      .lean();
-
-    if (!assignedVehicle) {
-      throw new ApiError(404, "Assigned vehicle not found for this owner");
-    }
-
-    const alreadyAssigned = await Driver.findOne({
-      owner_id: owner._id,
-      deletedAt: null,
-      assignedFleetVehicleId: assignedVehicle._id,
-      _id: { $ne: driver._id },
-    })
-      .select("name")
-      .lean();
-
-    if (alreadyAssigned) {
-      throw new ApiError(
-        409,
-        `Vehicle is already assigned to ${alreadyAssigned.name || "another driver"}`,
-      );
-    }
-  }
-
-  if (requestedZoneId) {
-    if (!mongoose.isValidObjectId(requestedZoneId)) {
-      throw new ApiError(400, "A valid zone id is required");
-    }
-
-    const baseAssignedZoneQuery = {
-      _id: requestedZoneId,
-      active: { $ne: false },
-      status: { $ne: "inactive" },
-    };
-
-    assignedZone = await Zone.findOne({
-      ...baseAssignedZoneQuery,
-      ...(owner.service_location_id
-        ? { service_location_id: owner.service_location_id }
-        : {}),
-    })
-      .select("_id name service_location_id")
-      .lean();
-
-    if (!assignedZone && owner.service_location_id) {
-      assignedZone = await Zone.findOne(baseAssignedZoneQuery)
-        .select("_id name service_location_id")
-        .lean();
-    }
-
-    if (!assignedZone) {
-      throw new ApiError(404, "Assigned zone not found for this owner");
-    }
-  }
+  const { assignedVehicle, assignedZone } = await resolveOwnerFleetAssignment({
+    owner,
+    vehicleId: requestedAssignedVehicleId,
+    zoneId: requestedZoneId,
+    excludeDriverId: driver._id,
+  });
 
   driver.name = name;
   driver.phone = phone;
   driver.email = email;
   driver.city = city || driver.city || "";
   driver.salary = salaryValue;
-  driver.assignedFleetVehicleId = assignedVehicle?._id || null;
-  driver.zoneId = assignedZone?._id || null;
-
-  if (assignedVehicle) {
-    driver.vehicleTypeId = assignedVehicle.vehicle_type_id?._id || null;
-    driver.vehicleMake = assignedVehicle.car_brand || "";
-    driver.vehicleModel = assignedVehicle.car_model || "";
-    driver.vehicleNumber = assignedVehicle.license_plate_number || "";
-    driver.vehicleColor = assignedVehicle.car_color || "";
-    driver.vehicleIconType =
-      assignedVehicle.vehicle_type_id?.icon_types || driver.vehicleIconType || "car";
-  } else {
-    driver.vehicleTypeId = null;
-    driver.vehicleMake = "";
-    driver.vehicleModel = "";
-    driver.vehicleNumber = "";
-    driver.vehicleColor = "";
-  }
+  applyOwnerFleetAssignment(driver, { assignedVehicle, assignedZone });
 
   await driver.save();
 
