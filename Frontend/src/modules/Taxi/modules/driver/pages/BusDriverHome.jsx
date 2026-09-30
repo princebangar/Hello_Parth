@@ -549,6 +549,11 @@ const BusDriverHome = () => {
     [layout?.availableSeats, totalSeatCount],
   );
 
+  // Lapsed payment holds come back as `expired`; they never occupied a seat.
+  const liveBookingCount = useMemo(
+    () => bookings.filter((item) => !['expired', 'cancelled', 'failed'].includes(String(item?.status || '').toLowerCase())).length,
+    [bookings],
+  );
   const todaysManualReservations = useMemo(
     () => bookings.filter((item) => item.bookingSource === 'bus_driver').length,
     [bookings],
@@ -790,7 +795,7 @@ const BusDriverHome = () => {
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <StatCard label="Today's Bookings" value={bookings.length} Icon={Ticket} />
+        <StatCard label="Today's Bookings" value={liveBookingCount} Icon={Ticket} />
         <StatCard label="Manual Reserves" value={todaysManualReservations} tone="dark" Icon={Users} />
       </div>
 

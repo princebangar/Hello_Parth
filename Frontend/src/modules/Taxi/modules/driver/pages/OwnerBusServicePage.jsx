@@ -19,7 +19,11 @@ const isEnabledFlag = (value) => {
   return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value || '').trim().toLowerCase());
 };
 
+// Bus-driver signup approval is admin-only; without these the manager falls back to admin APIs (401).
 const ownerBusApi = {
+  getPendingBusDrivers: async () => ({ data: { data: { results: [] } } }),
+  approvePendingBusDriver: async () => true,
+  rejectPendingBusDriver: async () => true,
   deleteBus: deleteOwnerBusService,
   getBuses: async () => {
     const response = await getOwnerBusServices();

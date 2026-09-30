@@ -1037,6 +1037,7 @@ const ActiveTrip = () => {
     const [qrZoomed, setQrZoomed] = useState(true);
     const [arrivalGuardError, setArrivalGuardError] = useState('');
     const [localArrivedAt, setLocalArrivedAt] = useState('');
+    const [destinationReachedAt, setDestinationReachedAt] = useState('');
     const [waitingNow, setWaitingNow] = useState(Date.now());
     const [map, setMap] = useState(null);
     const [driverPosition, setDriverPosition] = useState(initialDriverPosition);
@@ -1388,7 +1389,7 @@ const ActiveTrip = () => {
     const tripData = isParcel ? {
         sender: {
             name: liveRaw.parcel?.senderName || 'Sender',
-            rating: '5.0',
+            rating: '',
             phone: liveRaw.parcel?.senderMobile || '',
         },
         receiver: {
@@ -1397,17 +1398,17 @@ const ActiveTrip = () => {
         },
         pickup: getAreaName(liveRaw.pickupAddress || liveRequest?.pickup, formatAddressFromPoint(liveRaw.pickupLocation, 'Pickup area')),
         drop: getAreaName(liveRaw.dropAddress || liveRequest?.drop, formatAddressFromPoint(liveRaw.dropLocation, 'Drop area')),
-        fare: `Rs ${liveRaw.fare || effectiveState?.fare || 120}`,
+        fare: `Rs ${liveRaw.fare || effectiveState?.fare || 0}`,
         payment: effectiveState?.paymentMethod || 'Online'
     } : {
         user: {
             name: liveRaw.user?.name || liveRequest?.user?.name || 'Passenger',
-            rating: liveRaw.user?.rating || liveRequest?.user?.rating || '4.8',
+            rating: liveRaw.user?.rating || liveRequest?.user?.rating || '',
             phone: liveRaw.user?.phone || liveRequest?.user?.phone || '',
         },
         pickup: getAreaName(liveRaw.pickupAddress || liveRequest?.pickup, formatAddressFromPoint(liveRaw.pickupLocation, 'Pickup area')),
         drop: getAreaName(liveRaw.dropAddress || liveRequest?.drop, formatAddressFromPoint(liveRaw.dropLocation, 'Drop area')),
-        fare: `Rs ${liveRaw.fare || effectiveState?.fare || 120}`,
+        fare: `Rs ${liveRaw.fare || effectiveState?.fare || 0}`,
         payment: liveRequest?.payment || effectiveState?.paymentMethod || 'Online'
     };
 
@@ -1439,7 +1440,8 @@ const ActiveTrip = () => {
     const pickupContact = isParcel ? tripData.sender : tripData.user;
     const destinationContact = isParcel ? tripData.receiver : tripData.user;
     const tripStartedAt = liveRaw?.startedAt || liveRequest?.raw?.startedAt || effectiveState?.startedAt || '';
-    const tripArrivedAt = localArrivedAt || liveRaw?.arrivedAt || liveRequest?.raw?.arrivedAt || effectiveState?.arrivedAt || '';
+    // `arrivedAt` on the ride is the arrival at *pickup*; the summary needs the drop-off time.
+    const tripArrivedAt = destinationReachedAt || liveRaw?.completedAt || liveRequest?.raw?.completedAt || effectiveState?.completedAt || '';
     const tripDurationLabel = formatDurationLabel(tripStartedAt, tripArrivedAt || Date.now());
     const tripSummaryTitle = isParcel ? 'Delivery Summary' : 'Ride Summary';
     const tripSummarySubtitle = isParcel ? 'Review the delivery details before you close the order.' : 'Review the trip details before you close the ride.';
@@ -2437,7 +2439,7 @@ const ActiveTrip = () => {
                                         <div className="flex items-center gap-1.5 opacity-60">
                                             <Star size={10} fill={routeStrokeColor} className="text-black" />
                                             <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">
-                                                {isParcel ? tripData.sender.rating : tripData.user.rating} • {riderDistanceLabel}
+                                                {(isParcel ? tripData.sender.rating : tripData.user.rating) || 'New'} • {riderDistanceLabel}
                                             </p>
                                         </div>
                                     </div>
@@ -2638,6 +2640,7 @@ const ActiveTrip = () => {
                                     }
 
                                     setArrivalGuardError('');
+                                    setDestinationReachedAt(new Date().toISOString());
                                     publishRideStatus('arrived');
                                     setSelectedPaymentMode('');
                                     setPaymentQr(null);

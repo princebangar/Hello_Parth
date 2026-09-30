@@ -351,7 +351,8 @@ const Deliveries = () => {
         if (payload?.stats) {
           setStats(payload.stats);
         } else {
-          // Mock stats derived from results for visual placeholder until backend API provides it
+          // Counts from the rows on this page until the API returns totals.
+          const todayKey = new Date().toDateString();
           const completed = results.filter(r => r.tripStatus === 'COMPLETED').length;
           const cancelled = results.filter(r => r.tripStatus === 'CANCELLED').length;
           const onTrip = results.filter(r => r.tripStatus === 'ON_TRIP' || r.tripStatus === 'ONGOING').length;
@@ -362,7 +363,7 @@ const Deliveries = () => {
             pending,
             cancelled,
             onTrip,
-            today: results.length > 0 ? Math.floor(results.length / 2) : 0, 
+            today: results.filter(r => r.date && new Date(r.date).toDateString() === todayKey).length,
           });
         }
       } catch (loadError) {

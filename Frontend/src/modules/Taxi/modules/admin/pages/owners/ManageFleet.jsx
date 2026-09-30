@@ -16,7 +16,7 @@ import {
   Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 
@@ -106,7 +106,11 @@ const ManageFleet = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchParams] = useSearchParams();
+  // Dashboard "Owner vehicles awaiting approval" opens this list already filtered to pending.
+  const [statusFilter, setStatusFilter] = useState(() =>
+    ['pending', 'approved', 'rejected'].includes(searchParams.get('status')) ? searchParams.get('status') : 'all',
+  );
 
   const [formData, setFormData] = useState({
     owner_id: '', // Added owner_id

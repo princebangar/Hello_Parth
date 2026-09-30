@@ -3,6 +3,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, UserPlus, CheckCircle2, ChevronRight, Upload, X, ShieldCheck, Mail, Phone, MapPin, IndianRupee } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { createOwnerFleetDriver, getOwnerFleetDrivers, getOwnerFleetVehicles, getOwnerFleetZones, updateOwnerFleetDriver } from '../../services/registrationService';
+import { uploadService } from '../../../../shared/services/uploadService';
+
+const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the selected file'));
+    reader.readAsDataURL(file);
+});
+
+const uploadDriverDocument = async (file) => {
+    const uploaded = await uploadService.uploadImage(await readFileAsDataUrl(file), 'driver-documents');
+    const data = uploaded?.data || uploaded || {};
+    return {
+        secureUrl: data.secureUrl || data.url || '',
+        fileName: file.name,
+        mimeType: file.type,
+    };
+};
 
 const AddDriver = () => {
     const navigate = useNavigate();
@@ -177,6 +195,14 @@ const AddDriver = () => {
                 assignedFleetVehicleId: formData.assignedFleetVehicleId || '',
                 zoneId: formData.zoneId || '',
             };
+
+            if (!isEditMode) {
+                const [aadhaar, license] = await Promise.all([
+                    uploadDriverDocument(formData.adhaarFile),
+                    uploadDriverDocument(formData.licenseFile),
+                ]);
+                payload.documents = { aadhaar_front: aadhaar, dl_front: license };
+            }
 
             if (isEditMode) {
                 await updateOwnerFleetDriver(driverId, payload);

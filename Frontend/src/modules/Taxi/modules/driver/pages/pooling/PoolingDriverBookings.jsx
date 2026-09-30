@@ -5,7 +5,8 @@ import { getPoolingDriverBookings } from '../../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 
-const formatDate = (value) => {
+// travelDate is a calendar date stored as UTC midnight; the actual time comes from the route schedule.
+const formatTravel = (value, departureTime = '') => {
   if (!value) {
     return 'N/A';
   }
@@ -15,12 +16,8 @@ const formatDate = (value) => {
     return 'N/A';
   }
 
-  return parsed.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const date = parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+  return departureTime ? `${date}, ${departureTime}` : date;
 };
 
 const PoolingDriverBookings = () => {
@@ -143,7 +140,7 @@ const PoolingDriverBookings = () => {
                         <CalendarDays size={12} />
                         Travel
                       </div>
-                      <p className="mt-2 text-sm font-bold text-slate-700">{formatDate(booking.travelDate)}</p>
+                      <p className="mt-2 text-sm font-bold text-slate-700">{formatTravel(booking.travelDate, booking.departureTime)}</p>
                     </div>
                     <div>
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">

@@ -329,15 +329,15 @@ Processing Time: Refunds are typically credited back to the original payment met
             items: [
                 { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: `${routePrefix}/referral` },
                 ...(!isOwner ? [{ id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: `${routePrefix}/incentives` }] : []),
-                { id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` },
+                ...(!isOwner ? [{ id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` }] : []),
             ]
         },
-        {
+        ...(!isOwner ? [{
             title: 'Preferences',
             items: [
                 { id: 'routeBooking', label: 'My Route Booking', sub: routeBookingSubtitle, icon: <Route size={20} />, type: 'toggle' },
             ]
-        },
+        }] : []),
         {
             title: 'Legal & Support',
             items: [
