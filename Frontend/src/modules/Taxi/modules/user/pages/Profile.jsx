@@ -3,7 +3,7 @@ import { useNavigate, useNavigationType } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
-  MapPin, Star, Package, Gift, Check, BusFront,
+  MapPin, Star, Package, Gift, Tag, Check, BusFront,
   CreditCard, History, Phone, Palette, Settings
 } from 'lucide-react';
 // ... removed BottomNavbar import ...
@@ -59,6 +59,7 @@ const menuSections = [
     heading: 'Rewards',
     items: [
       { icon: Gift, title: 'Refer & Earn', sub: 'Invite friends & get rewards', path: '/taxi/user/referral', bg: 'bg-rose-50 dark:bg-rose-950/30', color: 'text-rose-600 dark:text-rose-400' },
+      { icon: Tag, title: 'Promo Codes', sub: 'Offers you can use on a booking', path: '/taxi/user/promo', bg: 'bg-yellow-50 dark:bg-yellow-950/30', color: 'text-yellow-600 dark:text-yellow-400' },
     ],
   },
   {
@@ -105,7 +106,7 @@ const Profile = () => {
       profileImage: stored?.profileImage || '',
       stats: {
         trips: 0,
-        rating: 4.9,
+        rating: 0,
         wallet: 0
       }
     };
@@ -207,7 +208,6 @@ const Profile = () => {
           user.avgRating,
           user.average_rating,
           stored?.rating,
-          4.9,
         );
         
         setProfile({
@@ -397,7 +397,7 @@ const Profile = () => {
                 </p>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                  <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.rating}</p>
+                  <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.rating || '—'}</p>
                 </div>
               </div>
               <div className="text-center">

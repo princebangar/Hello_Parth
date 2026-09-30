@@ -2,7 +2,8 @@ const CURRENT_RIDE_STORAGE_KEY = 'Appzeto 24_current_ride';
 
 export const CURRENT_RIDE_UPDATED_EVENT = 'Appzeto 24:current-ride-updated';
 
-const ACTIVE_RIDE_STATUSES = new Set(['accepted', 'arriving', 'started', 'ongoing', 'assigned', 'confirmed', 'end_requested']);
+// `arrived` = driver reached the drop and is collecting payment; the ride is not finished yet.
+const ACTIVE_RIDE_STATUSES = new Set(['accepted', 'arriving', 'started', 'ongoing', 'arrived', 'assigned', 'confirmed', 'end_requested']);
 const TERMINAL_RIDE_STATUSES = new Set(['completed', 'cancelled', 'delivered']);
 
 const notifyCurrentRideChange = () => {

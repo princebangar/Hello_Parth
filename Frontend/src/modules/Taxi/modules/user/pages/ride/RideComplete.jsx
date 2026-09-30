@@ -101,7 +101,7 @@ const RideComplete = () => {
 
   const routeHome = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/';
   const rideId = state.rideId || '';
-  const fare = Number(state.fare || 22);
+  const fare = Number(state.fare || 0);
   const paymentMethod = state.paymentMethod || 'Cash';
   const paymentMethodLabel = PAYMENT_OPTIONS.find((option) => option.id === selectedPaymentMethod)?.label || paymentMethod;
   const pickup = state.pickup || 'Pickup';
@@ -109,7 +109,7 @@ const RideComplete = () => {
   const serviceType = String(state.serviceType || state.type || 'ride').toLowerCase();
   const driver = state.driver || {
     name: 'Captain',
-    rating: '4.9',
+    rating: '',
     vehicle: serviceType === 'parcel' ? 'Delivery' : 'Taxi',
     plate: 'Assigned',
     profileImage: '',
@@ -329,13 +329,22 @@ const RideComplete = () => {
 
       let response;
 
-      if (Number(payableNow || 0) > 0 && selectedPaymentMethod === 'online') {
+      const userInfo = (() => {
+        try {
+          return JSON.parse(localStorage.getItem('userInfo') || '{}');
+        } catch {
+          return {};
+        }
+      })();
+
+      // Opens Razorpay for an order the backend created, then verifies it; resolves with the verify response.
+      const payWithRazorpay = async ({ orderPath, verifyPath, description, cancelledMessage, failedMessage }) => {
         const scriptLoaded = await loadRazorpayScript();
         if (!scriptLoaded) {
           throw new Error('Razorpay SDK failed to load');
         }
 
-        const orderResponse = await api.post(`/rides/${rideId}/complete-payment/razorpay/order`, {
+        const orderResponse = await api.post(orderPath, {
           rating,
           comment,
           tipAmount: selectedTip || 0,
@@ -343,23 +352,16 @@ const RideComplete = () => {
         const order = orderResponse?.data || orderResponse || {};
 
         if (!order.keyId || !order.orderId) {
-          throw new Error('Unable to start ride payment');
+          throw new Error('Unable to start the payment');
         }
 
-        let userInfo = {};
-        try {
-          userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-        } catch {
-          userInfo = {};
-        }
-
-        response = await new Promise((resolve, reject) => {
+        return new Promise((resolve, reject) => {
           const rzp = new window.Razorpay({
             key: order.keyId,
             amount: order.amount,
             currency: order.currency || 'INR',
             name: appName,
-            description: `Ride payment for ${driver.name || 'driver'}`,
+            description,
             order_id: order.orderId,
             prefill: {
               name: userInfo?.name || '',
@@ -367,11 +369,11 @@ const RideComplete = () => {
               contact: userInfo?.phone ? `+91${userInfo.phone}` : '',
             },
             modal: {
-              ondismiss: () => reject(new Error('Ride payment was cancelled')),
+              ondismiss: () => reject(new Error(cancelledMessage)),
             },
             handler: async (paymentResponse) => {
               try {
-                const verifyResponse = await api.post(`/rides/${rideId}/complete-payment/razorpay/verify`, {
+                const verifyResponse = await api.post(verifyPath, {
                   ...paymentResponse,
                   rating,
                   comment,
@@ -379,7 +381,7 @@ const RideComplete = () => {
                 });
                 resolve(verifyResponse);
               } catch (verifyError) {
-                reject(new Error(verifyError?.message || 'Ride payment verification failed'));
+                reject(new Error(verifyError?.message || 'Payment verification failed'));
               }
             },
             theme: {
@@ -388,16 +390,35 @@ const RideComplete = () => {
           });
 
           rzp.on('payment.failed', (event) => {
-            reject(new Error(event?.error?.description || event?.error?.reason || 'Ride payment failed'));
+            reject(new Error(event?.error?.description || event?.error?.reason || failedMessage));
           });
 
           rzp.open();
+        });
+      };
+
+      if (Number(payableNow || 0) > 0 && selectedPaymentMethod === 'online') {
+        response = await payWithRazorpay({
+          orderPath: `/rides/${rideId}/complete-payment/razorpay/order`,
+          verifyPath: `/rides/${rideId}/complete-payment/razorpay/verify`,
+          description: `Ride payment for ${driver.name || 'driver'}`,
+          cancelledMessage: 'Ride payment was cancelled',
+          failedMessage: 'Ride payment failed',
         });
       } else if (Number(payableNow || 0) > 0 && selectedPaymentMethod === 'wallet') {
         response = await api.post(`/rides/${rideId}/complete-payment/wallet`, {
           rating,
           comment,
           tipAmount: selectedTip || 0,
+        });
+      } else if (Number(selectedTip || 0) > 0) {
+        // Cash ride: the fare went to the driver in cash, the tip is paid online straight into the driver's wallet.
+        response = await payWithRazorpay({
+          orderPath: `/rides/${rideId}/tip/razorpay/order`,
+          verifyPath: `/rides/${rideId}/tip/razorpay/verify`,
+          description: `Tip for ${driver.name || 'driver'}`,
+          cancelledMessage: 'Tip payment was cancelled',
+          failedMessage: 'Tip payment failed',
         });
       } else {
         response = await api.patch(`/rides/${rideId}/feedback`, {
@@ -532,7 +553,7 @@ const RideComplete = () => {
                 </p>
                 <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-black text-slate-800">
                   <Star size={10} className="fill-yellow-500 text-yellow-500" />
-                  {driver.rating || '4.9'}
+                  {driver.rating || 'New'}
                 </div>
               </div>
               <div className="h-14 w-16 shrink-0 overflow-hidden rounded-[12px] border border-slate-100 bg-white">

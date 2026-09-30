@@ -349,30 +349,8 @@ const RecentLocationsList = ({ routePrefix }) => {
         }
       }
     } catch (e) { }
-    // Pre-fill with dynamic defaults from reference screenshot if empty
-    return [
-      {
-        name: 'Prakash Bakery',
-        address: 'Bk Sindhi Colony, Indore, Madhya Pradesh, India',
-        lat: 22.7039,
-        lon: 75.9048,
-        distance: '2.5 km',
-      },
-      {
-        name: 'Navlakha Bus Stand',
-        address: 'Ahilyapur, Chhanera, New Harsud, Harsud, Madhya Pradesh',
-        lat: 22.6926,
-        lon: 75.8586,
-        distance: '3.1 km',
-      },
-      {
-        name: 'Jhabua Tower Road',
-        address: 'Chhoti Gwaltoli, Indore, Madhya Pradesh, India',
-        lat: 22.7187,
-        lon: 75.8553,
-        distance: '1.2 km',
-      },
-    ];
+    // A new user has no recent places yet — never show made-up ones.
+    return [];
   });
 
   const getSavedLocationCoords = () => {

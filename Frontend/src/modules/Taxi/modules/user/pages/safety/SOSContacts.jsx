@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Trash2, Phone, User, AlertTriangle, ShieldAlert, X, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../../../../shared/api/axiosInstance';
 import { triggerUserSosAlert } from '../../../../shared/services/safetyAlertService';
 
 const MAX_CONTACTS = 5;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
+const CONTACTS_PATH = '/users/me/emergency-contacts';
 
-const MOCK_CONTACTS = [
-  { id: '1', name: 'Rahul Verma',  phone: '9876543210' },
-  { id: '2', name: 'Priya Sharma', phone: '9123456789' },
-];
+const readContacts = (response) => {
+  const results = response?.data?.results || response?.results || response?.data?.data?.results;
+  return Array.isArray(results) ? results : [];
+};
 
 const EMERGENCY_SERVICES = [
   { id: 'police', label: 'Police', phone: '100', accent: 'bg-blue-50 border-blue-100 text-blue-600' },
@@ -21,7 +23,8 @@ const EMERGENCY_SERVICES = [
 
 const SOSContacts = () => {
   const navigate = useNavigate();
-  const [contacts, setContacts]         = useState(MOCK_CONTACTS);
+  const [contacts, setContacts]         = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(true);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [name, setName]                 = useState('');
   const [phone, setPhone]               = useState('');
@@ -41,20 +44,48 @@ const SOSContacts = () => {
     return Object.keys(e).length === 0;
   };
 
+  useEffect(() => {
+    let active = true;
+    api.get(CONTACTS_PATH)
+      .then((response) => {
+        if (active) setContacts(readContacts(response));
+      })
+      .catch((error) => {
+        if (active) toast.error(error?.message || 'Could not load your SOS contacts');
+      })
+      .finally(() => {
+        if (active) setLoadingContacts(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleAdd = async () => {
     if (!validate()) return;
     setSaving(true);
-    await new Promise(r => setTimeout(r, 500)); // POST /api/v1/common/sos/store
-    setContacts(prev => [...prev, { id: Date.now().toString(), name: name.trim(), phone }]);
-    setName(''); setPhone(''); setErrors({});
-    setShowAddSheet(false);
-    setSaving(false);
+    try {
+      const response = await api.post(CONTACTS_PATH, { name: name.trim(), phone });
+      const added = response?.data?.id ? response.data : response?.data?.data || response;
+      setContacts(prev => [...prev, { id: String(added?.id || Date.now()), name: added?.name || name.trim(), phone: added?.phone || phone }]);
+      setName(''); setPhone(''); setErrors({});
+      setShowAddSheet(false);
+    } catch (error) {
+      toast.error(error?.message || 'Could not save this contact');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id) => {
-    await new Promise(r => setTimeout(r, 300)); // POST /api/v1/common/sos/delete/:id
-    setContacts(prev => prev.filter(c => c.id !== id));
-    setDeleteTarget(null);
+    try {
+      await api.delete(`${CONTACTS_PATH}/${id}`);
+      setContacts(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+      toast.error(error?.message || 'Could not remove this contact');
+    } finally {
+      setDeleteTarget(null);
+    }
   };
 
   const triggerSOS = () => {
@@ -171,7 +202,11 @@ const SOSContacts = () => {
             <span className="text-[10px] font-bold text-slate-400">{contacts.length}/{MAX_CONTACTS}</span>
           </div>
 
-          {contacts.length === 0 && (
+          {loadingContacts && (
+            <p className="py-6 text-center text-[12px] font-bold text-slate-400">Loading contacts...</p>
+          )}
+
+          {!loadingContacts && contacts.length === 0 && (
             <div className="rounded-[20px] border border-white/80 bg-white/90 p-8 flex flex-col items-center gap-3 text-center shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
               <ShieldAlert size={32} className="text-slate-300" strokeWidth={1.5} />
               <p className="text-[13px] font-black text-slate-500">Add emergency contacts to stay safe</p>

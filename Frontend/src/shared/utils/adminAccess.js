@@ -30,6 +30,13 @@ export const GLOBAL_SECTIONS = [
     actions: ['view', 'create', 'edit', 'delete'],
     hint: 'Terms, Privacy and Support content shown on User/Restaurant/Delivery/Captain login screens',
   },
+  {
+    key: 'customization',
+    label: 'Customization Settings',
+    path: `${GLOBAL_ADMIN_HOME}/customization`,
+    actions: ['view', 'edit'],
+    hint: 'Edit = turn Razorpay / PhonePe on or off for Food and Taxi',
+  },
 ]
 
 export function readAdminProfile() {

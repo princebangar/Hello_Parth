@@ -1184,7 +1184,7 @@ const SelectVehicle = () => {
   const vehiclePickedByUserRef = useRef(false);
   const scheduledAtInputRef = useRef(null);
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings, hasBootstrapSettings } = useSettings();
   const pickup = routeState.pickup || '';
   const drop = routeState.drop || '';
   const pickupCoords = useMemo(
@@ -1685,9 +1685,13 @@ const SelectVehicle = () => {
     () => normalizeAllowedPaymentMethods(selectedAvailability?.allowedPaymentMethods),
     [selectedAvailability?.allowedPaymentMethods],
   );
+  // Online fare payment runs on Razorpay; hide it once the app knows Global admin switched Razorpay off.
+  const onlinePaymentAvailable = !hasBootstrapSettings || settings.paymentGateway?.slug === 'razor_pay';
   const paymentOptions = useMemo(
-    () => PAYMENT_OPTIONS.filter((option) => allowedPaymentMethods.includes(option.id)),
-    [allowedPaymentMethods],
+    () => PAYMENT_OPTIONS.filter(
+      (option) => allowedPaymentMethods.includes(option.id) && (option.id !== 'online' || onlinePaymentAvailable),
+    ),
+    [allowedPaymentMethods, onlinePaymentAvailable],
   );
   const onlineDrivers = selectedAvailability.drivers || [];
 
