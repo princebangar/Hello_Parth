@@ -8,11 +8,6 @@ export const adminService = {
   forgotPassword: (email) => api.post('/admin/forgot-password', { email }),
   verifyResetOtp: (data) => api.post('/admin/verify-reset-otp', data),
   resetPassword: (data) => api.post('/admin/reset-password', data),
-  getAdmins: () => api.get('/admin/admin-management/admins'),
-  createAdminAccount: (data) => api.post('/admin/admin-management/admins', data),
-  updateAdminAccount: (id, data) => api.patch(`/admin/admin-management/admins/${id}`, data),
-  deleteAdminAccount: (id) => api.delete(`/admin/admin-management/admins/${id}`),
-  getAdminPermissions: () => api.get('/admin/permissions'),
 
   /**
    * User Management
@@ -134,7 +129,7 @@ export const adminService = {
   approveOwner: (id, data) => api.patch(`/admin/owner-management/manage-owners/${id}/approve`, data),
   approveOwnerSignupFromDriver: (driverId) =>
     api.patch(`/admin/owner-management/pending-owners/${driverId}/approve`),
-  getOwnerBookings: () => api.get('/admin/owner-management/bookings'),
+  getOwnerBookings: (params = {}) => api.get('/admin/owner-management/bookings', { params }),
   createOwnerBooking: (data) => api.post('/admin/owner-management/bookings', data),
   updateOwnerBooking: (id, data) => api.patch(`/admin/owner-management/bookings/${id}`, data),
   deleteOwnerBooking: (id) => api.delete(`/admin/owner-management/bookings/${id}`),
@@ -199,7 +194,7 @@ export const adminService = {
   getUserWallets: () => api.get('/admin/wallet/users'),
   getDriverWallets: () => api.get('/admin/wallet/drivers'),
   getWithdrawalRequests: () => api.get('/admin/wallet/withdrawals'),
-  getWithdrawals: () => api.get('/admin/wallet/withdrawals'),
+  getWithdrawals: (params = {}) => api.get('/admin/wallet/withdrawals', { params }),
   updateWithdrawalStatus: (id, status) => api.patch(`/admin/wallet/withdrawals/${id}`, { status }),
 
   /**
@@ -208,6 +203,7 @@ export const adminService = {
   getPromotionsBootstrap: () => api.get('/admin/promotions/bootstrap'),
   getNotifications: () => api.get('/admin/notifications'),
   sendNotification: (data) => api.post('/admin/notifications/send', data),
+  searchNotificationRecipients: (params) => api.get('/admin/notifications/recipients', { params }),
   deleteNotification: (id) => api.delete(`/admin/notifications/${id}`),
   getBanners: () => api.get('/admin/banners'),
 

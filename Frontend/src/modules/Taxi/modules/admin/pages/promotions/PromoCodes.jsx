@@ -43,6 +43,7 @@ const createInitialFormData = () => ({
   service_location_id: '',
   service_location_ids: [],
   transport_type: '',
+  audience: 'all',
   user_specific: false,
   user_id: '',
   code: '',
@@ -309,7 +310,8 @@ const PromoCodes = () => {
           service_location_id: promo.service_location_id || '',
           service_location_ids: getPromoLocationIds(promo),
           transport_type: promo.transport_type || '',
-          user_specific: promo.user_specific === true,
+          audience: promo.audience || (promo.user_specific === true ? 'specific' : 'all'),
+          user_specific: promo.user_specific === true || promo.audience === 'specific',
           user_id: promo.user_id || '',
           code: promo.code || '',
           minimum_trip_amount: promo.minimum_trip_amount || '',
@@ -339,11 +341,12 @@ const PromoCodes = () => {
     setFilters(createInitialFilters());
   };
 
-  const handleUserSpecificChange = (checked) => {
+  const handleAudienceChange = (audience) => {
     setFormData((prev) => ({
       ...prev,
-      user_specific: checked,
-      user_id: checked ? prev.user_id : '',
+      audience,
+      user_specific: audience === 'specific',
+      user_id: audience === 'specific' ? prev.user_id : '',
     }));
   };
 
@@ -381,6 +384,10 @@ const PromoCodes = () => {
       return alert('To Date cannot be before From Date');
     }
     
+    if (formData.audience === 'specific' && !formData.user_id) {
+      return alert('Please select the user this promo code is for');
+    }
+
     const uses = Number(formData.uses_per_user);
     if (isNaN(uses) || uses < 1) {
       return alert('Usage limit per user must be at least 1');
@@ -398,7 +405,9 @@ const PromoCodes = () => {
         uses_per_user: Number(formData.uses_per_user),
         service_location_id: formData.service_location_ids[0] || formData.service_location_id,
         service_location_ids: formData.service_location_ids,
-        user_id: formData.user_specific ? formData.user_id : '',
+        audience: formData.audience,
+        user_specific: formData.audience === 'specific',
+        user_id: formData.audience === 'specific' ? formData.user_id : '',
       };
 
       const url = isEditRoute ? `${BASE}/${id}` : BASE;
@@ -737,40 +746,45 @@ const PromoCodes = () => {
                   </div>
 
                   <div>
-                    <FieldLabel icon={Users} required={formData.user_specific}>
-                      Users
+                    <FieldLabel icon={Users} required>
+                      Who can use this code
                     </FieldLabel>
                     <select
-                      required={formData.user_specific}
-                      disabled={!formData.user_specific}
-                      value={formData.user_id}
-                      onChange={(e) => handleFieldChange('user_id', e.target.value)}
+                      required
+                      value={formData.audience}
+                      onChange={(e) => handleAudienceChange(e.target.value)}
                       className={inputClass}
                     >
-                      <option value="">{formData.user_specific ? 'Select Users' : 'All Users'}</option>
-                      {usersList.map((user) => (
-                        <option key={user._id} value={user._id}>
-                          {user.name}
-                        </option>
-                      ))}
+                      <option value="all">All users</option>
+                      <option value="first_time">First-time users only</option>
+                      <option value="existing">Existing users only (completed a ride before)</option>
+                      <option value="specific">One selected user</option>
                     </select>
+                    <p className="mt-1 text-xs text-gray-400">
+                      First-time = has not completed any ride yet.
+                    </p>
                   </div>
 
-                  <div>
-                    <FieldLabel icon={ShieldCheck}>User Specific</FieldLabel>
-                    <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.user_specific}
-                        onChange={(e) => handleUserSpecificChange(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#0B1220] focus:ring-[#FFC400] cursor-pointer"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">Apply for selected user only</p>
-                        <p className="text-xs text-gray-400">Unchecked rehne par promo all users ke liye available rahega.</p>
-                      </div>
-                    </label>
-                  </div>
+                  {formData.audience === 'specific' && (
+                    <div>
+                      <FieldLabel icon={ShieldCheck} required>
+                        Select user
+                      </FieldLabel>
+                      <select
+                        required
+                        value={formData.user_id}
+                        onChange={(e) => handleFieldChange('user_id', e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">Select user</option>
+                        {usersList.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <FieldLabel icon={Ticket} required>
