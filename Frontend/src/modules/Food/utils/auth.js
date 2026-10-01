@@ -446,3 +446,34 @@ export function isUnifiedAuthenticated() {
   const taxiToken = localStorage.getItem("userToken");
   return !!(foodToken && taxiToken);
 }
+
+/**
+ * Pending-approval ticket (restaurant / delivery). Given by the backend after
+ * OTP while the account is not approved yet; the "under review" screen polls
+ * with it and receives a login session as soon as admin approves.
+ */
+const pendingTicketKey = (module) => `${module}_pending_ticket`
+
+export function setPendingTicket(module, ticket) {
+  try {
+    if (ticket) localStorage.setItem(pendingTicketKey(module), String(ticket))
+  } catch {
+    // ignore
+  }
+}
+
+export function getPendingTicket(module) {
+  try {
+    return localStorage.getItem(pendingTicketKey(module)) || ""
+  } catch {
+    return ""
+  }
+}
+
+export function clearPendingTicket(module) {
+  try {
+    localStorage.removeItem(pendingTicketKey(module))
+  } catch {
+    // ignore
+  }
+}
