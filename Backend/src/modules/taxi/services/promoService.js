@@ -3,6 +3,8 @@ import { ApiError } from '../../../utils/ApiError.js';
 import { PromoCode } from '../admin/promotions/models/PromoCode.js';
 import { PromoRedemption } from '../admin/promotions/models/PromoRedemption.js';
 import { PromoUserCounter } from '../admin/promotions/models/PromoUserCounter.js';
+import { Ride } from '../user/models/Ride.js';
+import { RIDE_STATUS } from '../constants/index.js';
 
 const normalizeText = (value) => String(value ?? '').trim();
 
@@ -23,6 +25,41 @@ const toObjectIdOrThrow = (value, fieldName = 'id') => {
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+// Older promos only have user_specific; new ones carry an explicit audience.
+export const getPromoAudience = (promo) => {
+  if (promo?.audience && promo.audience !== 'all') return promo.audience;
+  return promo?.user_specific === true ? 'specific' : 'all';
+};
+
+const userHasCompletedRide = async (userId, session = null) => {
+  if (!userId || !mongoose.isValidObjectId(userId)) return false;
+  const query = Ride.exists({ userId: new mongoose.Types.ObjectId(String(userId)), status: RIDE_STATUS.COMPLETED });
+  if (session) query.session(session);
+  return Boolean(await query);
+};
+
+/** Returns null when the user may use the promo, otherwise { reason, message }. */
+const checkPromoAudience = async (promo, userId, session = null) => {
+  const audience = getPromoAudience(promo);
+  if (audience === 'all') return null;
+  if (!userId) return { reason: 'USER_REQUIRED', message: 'User is required for this promo code' };
+
+  if (audience === 'specific') {
+    return String(promo.user_id || '') === String(userId)
+      ? null
+      : { reason: 'USER_MISMATCH', message: 'Promo code is not valid for this user' };
+  }
+
+  const hasRide = await userHasCompletedRide(userId, session);
+  if (audience === 'first_time' && hasRide) {
+    return { reason: 'FIRST_TIME_ONLY', message: 'This promo code is only for first-time users' };
+  }
+  if (audience === 'existing' && !hasRide) {
+    return { reason: 'EXISTING_ONLY', message: 'This promo code is only for users who have completed a ride' };
+  }
+  return null;
+};
 
 const getPromoServiceLocationIds = (promo) => {
   const locationIds = Array.isArray(promo?.service_location_ids) && promo.service_location_ids.length > 0
@@ -123,13 +160,9 @@ export const validatePromoForContext = async ({
     return { eligible: false, reason: 'TRANSPORT_TYPE_MISMATCH', message: 'Promo code is not valid for this transport type' };
   }
 
-  if (promo.user_specific === true) {
-    if (!userId) {
-      return { eligible: false, reason: 'USER_REQUIRED', message: 'User is required for this promo code' };
-    }
-    if (String(promo.user_id || '') !== String(userId)) {
-      return { eligible: false, reason: 'USER_MISMATCH', message: 'Promo code is not valid for this user' };
-    }
+  const audienceBlock = await checkPromoAudience(promo, userId);
+  if (audienceBlock) {
+    return { eligible: false, ...audienceBlock };
   }
 
   const minimumTripAmount = Math.max(0, Number(promo.minimum_trip_amount || 0));
@@ -174,6 +207,7 @@ export const validatePromoForContext = async ({
       service_location_ids: promoServiceLocationIds,
       transport_type: promo.transport_type,
       user_specific: promo.user_specific === true,
+      audience: getPromoAudience(promo),
       user_id: promo.user_id || '',
       minimum_trip_amount: Number(promo.minimum_trip_amount || 0),
       maximum_discount_amount: Number(promo.maximum_discount_amount || 0),
@@ -239,8 +273,9 @@ export const applyPromoToRideInTransaction = async ({
     throw new ApiError(400, 'Promo code is not valid for this transport type');
   }
 
-  if (promo.user_specific === true && String(promo.user_id || '') !== String(userId)) {
-    throw new ApiError(400, 'Promo code is not valid for this user');
+  const audienceBlock = await checkPromoAudience(promo, userId, session);
+  if (audienceBlock) {
+    throw new ApiError(400, audienceBlock.message);
   }
 
   const safeFare = Number(fare);
@@ -393,7 +428,9 @@ export const listAvailablePromosForUser = async ({
   if (userId) {
     query.$and.push({ $or: [{ user_specific: { $ne: true } }, { user_id: String(userId) }] });
   } else {
+    // Without a signed-in user only promos open to everyone can be shown.
     query.user_specific = { $ne: true };
+    query.audience = { $in: [null, 'all'] };
   }
   // A promo everyone together has used up is not "available" to show, whatever the limit.
   query.$and.push({ $or: [{ max_uses_total: { $lte: 0 } }, { $expr: { $lt: ['$usage_count', '$max_uses_total'] } }] });
@@ -423,7 +460,16 @@ export const listAvailablePromosForUser = async ({
   }
 
   // A promo already used up isn't "available" either — this user just can't apply it again.
-  const promos = candidates.filter((promo) => !usedUpPromoIds.has(String(promo._id))).slice(0, safeLimit);
+  const hasRide = userId ? await userHasCompletedRide(userId) : false;
+  const promos = candidates
+    .filter((promo) => !usedUpPromoIds.has(String(promo._id)))
+    .filter((promo) => {
+      const audience = getPromoAudience(promo);
+      if (audience === 'first_time') return Boolean(userId) && !hasRide;
+      if (audience === 'existing') return Boolean(userId) && hasRide;
+      return true;
+    })
+    .slice(0, safeLimit);
 
   return promos.map((promo) => ({
     _id: promo._id,
@@ -432,6 +478,7 @@ export const listAvailablePromosForUser = async ({
     service_location_id: promo.service_location_id,
     service_location_ids: getPromoServiceLocationIds(promo),
     user_specific: promo.user_specific === true,
+    audience: getPromoAudience(promo),
     minimum_trip_amount: Number(promo.minimum_trip_amount || 0),
     maximum_discount_amount: Number(promo.maximum_discount_amount || 0),
     cumulative_max_discount_amount: Number(promo.cumulative_max_discount_amount || 0),

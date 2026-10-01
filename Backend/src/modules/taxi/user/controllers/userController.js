@@ -1410,7 +1410,10 @@ export const getUserNotifications = async (req, res) => {
   // but if they did, we would use it. For now, we fetch all user-targeted notifications.
   const query = {
     status: 'sent',
-    send_to: { $in: ['all', 'users'] },
+    $or: [
+      { send_to: { $in: ['all', 'users'] } },
+      { send_to: 'custom', recipients: { $elemMatch: { role: 'user', id: user._id } } },
+    ],
   };
 
   const notifications = await Notification.find(query)

@@ -30,7 +30,7 @@ const collectAudienceTargets = async ({ sendTo, serviceLocationId }) => {
       isActive: { $ne: false },
       active: { $ne: false },
     })
-      .select('_id fcmTokenWeb fcmTokenMobile')
+      .select('_id fcmTokenWeb fcmTokenMobile fcmTokens')
       .lean();
 
     users.forEach((user) => {
@@ -55,7 +55,7 @@ const collectAudienceTargets = async ({ sendTo, serviceLocationId }) => {
     }
 
     const drivers = await Driver.find(driverQuery)
-      .select('_id fcmTokenWeb fcmTokenMobile')
+      .select('_id fcmTokenWeb fcmTokenMobile fcmTokens')
       .lean();
 
     drivers.forEach((driver) => {
@@ -216,7 +216,7 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
 
   if (normalizedUserIds.length) {
     const users = await User.find({ _id: { $in: normalizedUserIds } })
-      .select('_id fcmTokenWeb fcmTokenMobile')
+      .select('_id fcmTokenWeb fcmTokenMobile fcmTokens')
       .lean();
 
     users.forEach((user) => {
@@ -231,7 +231,7 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
 
   if (normalizedDriverIds.length) {
     const drivers = await Driver.find({ _id: { $in: normalizedDriverIds } })
-      .select('_id fcmTokenWeb fcmTokenMobile')
+      .select('_id fcmTokenWeb fcmTokenMobile fcmTokens')
       .lean();
 
     drivers.forEach((driver) => {
@@ -246,6 +246,12 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
 
   return targets;
 };
+
+// Where tapping a push opens, per app. Also marks the push as Taxi-only so it never lands in Food.
+export const TAXI_PUSH_TARGET_URL = Object.freeze({
+  user: '/taxi/user/profile/notifications',
+  driver: '/taxi/driver/notifications',
+});
 
 export const sendPushNotificationToAudience = async ({
   notificationId,
@@ -288,7 +294,11 @@ export const sendPushNotificationToAudience = async ({
   let failedCount = 0;
   const invalidTargets = [];
 
-  for (const batch of chunk(dedupedTargets, 500)) {
+  const roleBatches = ['user', 'driver'].flatMap((role) => (
+    chunk(dedupedTargets.filter((target) => target.role === role), 500).map((batch) => ({ role, batch }))
+  ));
+
+  for (const { role, batch } of roleBatches) {
     const response = await messaging.sendEachForMulticast({
       tokens: batch.map((target) => target.token),
       notification: {
@@ -300,6 +310,8 @@ export const sendPushNotificationToAudience = async ({
         notificationId: String(notificationId || ''),
         serviceLocationId: String(serviceLocationId || ''),
         sendTo: String(sendTo || 'all'),
+        module: 'taxi',
+        targetUrl: TAXI_PUSH_TARGET_URL[role],
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
       },
       android: {
@@ -349,11 +361,29 @@ export const sendPushNotificationToEntities = async ({
   data = {},
 }) => {
   const targets = await collectDirectTargets({ userIds, driverIds });
-  return sendPushToTargets({
-    targets,
-    title,
-    body,
-    image,
-    data,
-  });
+  const results = [];
+  for (const role of ['user', 'driver']) {
+    const roleTargets = targets.filter((target) => target.role === role);
+    if (!roleTargets.length) continue;
+    results.push(await sendPushToTargets({
+      targets: roleTargets,
+      title,
+      body,
+      image,
+      data: { module: 'taxi', targetUrl: TAXI_PUSH_TARGET_URL[role], ...data },
+    }));
+  }
+
+  if (!results.length) {
+    return sendPushToTargets({ targets: [], title, body, image, data });
+  }
+
+  return results.reduce((total, item) => ({
+    attempted: total.attempted && item.attempted,
+    deliveredCount: total.deliveredCount + item.deliveredCount,
+    failedCount: total.failedCount + item.failedCount,
+    invalidTokenCount: total.invalidTokenCount + item.invalidTokenCount,
+    targetCount: total.targetCount + item.targetCount,
+    reason: total.reason || item.reason,
+  }), { attempted: true, deliveredCount: 0, failedCount: 0, invalidTokenCount: 0, targetCount: 0, reason: '' });
 };
