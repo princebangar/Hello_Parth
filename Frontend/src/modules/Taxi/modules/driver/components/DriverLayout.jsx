@@ -69,8 +69,11 @@ const onboardingRoutes = new Set([
     '/taxi/owner/status',
 ]);
 
+// Terms / Privacy / Support linked from the login screen must open without a
+// session (they bounced straight back to login before).
 const isOnboardingRoute = (pathname = '') =>
     onboardingRoutes.has(pathname) ||
+    /^\/taxi\/(driver|owner)\/legal\/(terms|privacy|support)$/.test(pathname) ||
     pathname.startsWith('/taxi/driver/role-signup/bus-builder');
 
 const softEntryRoutes = new Set([
