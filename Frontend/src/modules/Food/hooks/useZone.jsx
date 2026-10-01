@@ -25,22 +25,30 @@ const zoneKeyFromCoords = (lat, lng) => {
   return `${rLat},${rLng}`
 }
 
+/** Remembers a /food/zones/detect answer the way the app reads it back on its next start. */
+export const storeZonePayload = (data) => {
+  if (data?.status === 'IN_SERVICE' && data.zoneId) {
+    localStorage.setItem('userZoneId', data.zoneId)
+    localStorage.setItem('userZone', JSON.stringify(data.zone))
+    localStorage.setItem('userZoneStatus', 'IN_SERVICE')
+  } else {
+    localStorage.removeItem('userZoneId')
+    localStorage.removeItem('userZone')
+    localStorage.setItem('userZoneStatus', 'OUT_OF_SERVICE')
+  }
+}
+
 const applyZonePayload = (data, { setZoneId, setZone, setZoneStatus }) => {
   if (data?.status === 'IN_SERVICE' && data.zoneId) {
     setZoneId(data.zoneId)
     setZone(data.zone || null)
     setZoneStatus('IN_SERVICE')
-    localStorage.setItem('userZoneId', data.zoneId)
-    localStorage.setItem('userZone', JSON.stringify(data.zone))
-    localStorage.setItem('userZoneStatus', 'IN_SERVICE')
   } else {
     setZoneId(null)
     setZone(null)
     setZoneStatus('OUT_OF_SERVICE')
-    localStorage.removeItem('userZoneId')
-    localStorage.removeItem('userZone')
-    localStorage.setItem('userZoneStatus', 'OUT_OF_SERVICE')
   }
+  storeZonePayload(data)
 }
 
 
@@ -134,15 +142,19 @@ export function useZone(location) {
 
   const lat = roundCoord(location?.latitude, 5)
   const lng = roundCoord(location?.longitude, 5)
-  const coordsChanged =
-    prevCoordsRef.current.latitude !== lat ||
-    prevCoordsRef.current.longitude !== lng;
 
-  // Auto-detect zone when location changes
+  // Auto-detect zone when location changes. Keyed on the rounded coords: the
+  // raw ones used to re-run this when they changed without changing the
+  // rounded value (e.g. "22.7533" -> 22.7533), which cancelled the pending
+  // detect below and never rescheduled it — loading stayed true and the whole
+  // user app sat on the skeleton.
   useEffect(() => {
 
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
       // Only detect zone if coordinates changed significantly (~1m via 5 decimals)
+      const coordsChanged =
+        prevCoordsRef.current.latitude !== lat ||
+        prevCoordsRef.current.longitude !== lng
       if (coordsChanged) {
         const hadCachedZone = Boolean(
           typeof localStorage !== "undefined" && localStorage.getItem("userZoneId"),
@@ -155,6 +167,7 @@ export function useZone(location) {
           clearTimeout(debounceTimerRef.current)
         }
         debounceTimerRef.current = setTimeout(() => {
+          debounceTimerRef.current = null
           detectZone(lat, lng)
         }, 50)
       }
@@ -177,9 +190,12 @@ export function useZone(location) {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current)
         debounceTimerRef.current = null
+        // Detect never ran for these coords (StrictMode remount / unmount):
+        // forget them so the next run starts it again.
+        prevCoordsRef.current = { latitude: null, longitude: null }
       }
     }
-  }, [location?.latitude, location?.longitude, detectZone])
+  }, [lat, lng, detectZone])
 
   // Manual refresh zone
   const refreshZone = useCallback(() => {

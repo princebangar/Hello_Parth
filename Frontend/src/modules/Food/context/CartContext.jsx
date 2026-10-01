@@ -337,6 +337,28 @@ export function CartProvider({ children }) {
     }
   }, [applyServerCart])
 
+  // Only the newest cart write's response is applied. When two writes overlap
+  // (e.g. ADD on two dishes back to back) the server may finish them in either
+  // order, so the dropped response can hold a line the applied one lacks.
+  // Once every write has settled, reload the cart if any response was dropped.
+  const inflightMutationsRef = useRef(0)
+  const droppedResponseRef = useRef(false)
+  const beginMutation = () => {
+    inflightMutationsRef.current += 1
+    return ++mutationSeqRef.current
+  }
+  const endMutation = useCallback(
+    (seq) => {
+      if (seq !== mutationSeqRef.current) droppedResponseRef.current = true
+      inflightMutationsRef.current = Math.max(0, inflightMutationsRef.current - 1)
+      if (inflightMutationsRef.current === 0 && droppedResponseRef.current) {
+        droppedResponseRef.current = false
+        loadDbCart()
+      }
+    },
+    [loadDbCart],
+  )
+
   // Initialize once: DB cart for auth users, guest LS otherwise (never persist auth cart to LS).
   useEffect(() => {
     const authed = isUserAuthenticated()
@@ -491,7 +513,7 @@ export function CartProvider({ children }) {
         return { ok: true }
       }
 
-      const seq = ++mutationSeqRef.current
+      const seq = beginMutation()
       try {
         const response = await foodCartAPI.addItem({
           itemId: item.itemId || item.productId || item.foodId || item.id,
@@ -512,9 +534,11 @@ export function CartProvider({ children }) {
           return { ok: false, error: message, code: "RESTAURANT_MISMATCH" }
         }
         return { ok: false, error: message }
+      } finally {
+        endMutation(seq)
       }
     },
-    [applyServerCart, normalizedCart],
+    [applyServerCart, endMutation, normalizedCart],
   )
 
   const removeFromCart = useCallback(
@@ -529,17 +553,23 @@ export function CartProvider({ children }) {
       }
 
       const lineId = itemToRemove?.lineItemId || itemToRemove?.id || resolvedItemId
-      const seq = ++mutationSeqRef.current
+      const seq = beginMutation()
       try {
         const response = await foodCartAPI.removeItem(lineId)
-        if (seq !== mutationSeqRef.current) return
+        if (seq !== mutationSeqRef.current) return { ok: true }
         applyServerCart(extractCartPayload(response))
         triggerRemoveAnimation(itemToRemove, sourcePosition, productInfo)
+        return { ok: true }
       } catch (err) {
         debugError("removeFromCart failed", err)
+        // Resync so the UI never keeps showing a quantity the server rejected.
+        droppedResponseRef.current = true
+        return { ok: false, error: apiErrorMessage(err) }
+      } finally {
+        endMutation(seq)
       }
     },
-    [applyServerCart, normalizedCart],
+    [applyServerCart, endMutation, normalizedCart],
   )
 
   const updateQuantity = useCallback(
@@ -577,16 +607,16 @@ export function CartProvider({ children }) {
         }
       }
       const controller = typeof AbortController !== "undefined" ? new AbortController() : null
-      const seq = ++mutationSeqRef.current
+      const seq = beginMutation()
       inflightQtyRef.current.set(lineId, { seq, controller })
 
       try {
         if (quantity <= 0) {
           const response = await foodCartAPI.removeItem(lineId)
-          if (seq !== mutationSeqRef.current) return
+          if (seq !== mutationSeqRef.current) return { ok: true }
           applyServerCart(extractCartPayload(response))
           triggerRemoveAnimation(existingItem, sourcePosition, productInfo)
-          return
+          return { ok: true }
         }
 
         if (existingItem && quantity < existingItem.quantity) {
@@ -594,17 +624,21 @@ export function CartProvider({ children }) {
         }
 
         const response = await foodCartAPI.updateItem(lineId, { quantity })
-        if (seq !== mutationSeqRef.current) return
+        if (seq !== mutationSeqRef.current) return { ok: true }
         applyServerCart(extractCartPayload(response))
+        return { ok: true }
       } catch (err) {
-        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return { ok: true }
         debugError("updateQuantity failed", err)
+        droppedResponseRef.current = true
+        return { ok: false, error: apiErrorMessage(err) }
       } finally {
         const current = inflightQtyRef.current.get(lineId)
         if (current?.seq === seq) inflightQtyRef.current.delete(lineId)
+        endMutation(seq)
       }
     },
-    [applyServerCart, normalizedCart],
+    [applyServerCart, endMutation, normalizedCart],
   )
 
   const getCartCount = useCallback(

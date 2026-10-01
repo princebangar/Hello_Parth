@@ -310,34 +310,18 @@ const playGlobalNotificationSound = async (orderData = {}) => {
   }
 };
 
+// Rings until the order is accepted / rejected / cancelled, the restaurant
+// mutes it, or the popup closes (each of those calls stopGlobalAlertLoop).
+// There used to be a 2-minute cap, persisted per order in localStorage, so an
+// order opened late popped up silently.
 const startGlobalAlertLoop = (orderData) => {
   stopGlobalAlertLoop();
-  
-  const orderId = getOrderAlertKey(orderData);
-  const storageKey = `alert_start_${orderId}`;
-  let alertStartTime = typeof window !== 'undefined' ? Number(localStorage.getItem(storageKey)) : 0;
-  
-  if (!alertStartTime) {
-    alertStartTime = Date.now();
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(storageKey, String(alertStartTime));
-      } catch (_) {}
-    }
-  }
 
-  globalAlertLoopStartedAt = alertStartTime;
+  globalAlertLoopStartedAt = Date.now();
   globalActiveOrder = orderData;
   updateGlobalState({ activeOrder: orderData });
 
-  const elapsed = Date.now() - globalAlertLoopStartedAt;
-  const ALERT_LOOP_MAX_MS = 120000;
   const ALERT_LOOP_INTERVAL_MS = 4500;
-
-  if (elapsed >= ALERT_LOOP_MAX_MS) {
-    stopGlobalAlertLoop();
-    return;
-  }
 
   if (!globalIsMuted && !isOrderMuted(orderData)) {
     playGlobalNotificationSound(orderData);
@@ -345,13 +329,6 @@ const startGlobalAlertLoop = (orderData) => {
 
   globalAlertLoopTimer = setInterval(() => {
     if (!globalActiveOrder) {
-      stopGlobalAlertLoop();
-      return;
-    }
-
-    const currentElapsed = Date.now() - globalAlertLoopStartedAt;
-
-    if (currentElapsed >= ALERT_LOOP_MAX_MS) {
       stopGlobalAlertLoop();
       return;
     }
@@ -796,8 +773,11 @@ export const useRestaurantNotifications = () => {
 
         const confirmed = (rows || [])
           .filter((o) => {
-            const status = String(o?.status || "").toLowerCase();
-            // Only show alert for orders that are still pending/created (not yet accepted by admin)
+            // Only show alert for orders that are still pending/created (not yet accepted by admin).
+            // Rows arrive normalized (backend "created" shows as status "confirmed"),
+            // so read the raw backend status — checking `status` never matched, so
+            // this poll saw "no pending orders" and stopped the ring within 8 s.
+            const status = String(o?.orderStatus || o?.status || "").toLowerCase();
             if (status !== "created" && status !== "pending") return false;
             if (isProcessedOrder(o)) return false;
 

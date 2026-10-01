@@ -374,7 +374,8 @@ export const useDeliveryNotifications = () => {
     }
   }, [clearAlertLoopTimer]);
 
-  const startAlertLoop = useCallback((playSoundFn, orderData) => {
+  // The ringtone itself loops (audio.loop); this timer only decides when it stops.
+  const startAlertLoop = useCallback((playSoundFn, orderData, maxMs = ALERT_LOOP_MAX_MS) => {
     clearAlertLoopTimer();
     const targetOrder = orderData || activeOrderRef.current;
     if (!targetOrder || isOrderAlertMuted(targetOrder)) return;
@@ -383,7 +384,7 @@ export const useDeliveryNotifications = () => {
 
     alertLoopTimerRef.current = setInterval(() => {
       const elapsed = Date.now() - alertLoopStartedAtRef.current;
-      if (elapsed >= 10000 || !activeOrderRef.current) {
+      if (elapsed >= maxMs || !activeOrderRef.current) {
         stopAlertLoop();
         return;
       }
@@ -495,6 +496,24 @@ export const useDeliveryNotifications = () => {
     playNotificationSound(target);
     startAlertLoop(playNotificationSound, target);
   }, [isOrderAlertMuted, playNotificationSound, startAlertLoop, newOrder]);
+
+  // Feed popup: ring until the rider accepts / passes (clearNewOrder or
+  // stopSound), or the offer goes to someone else. The cap only stops a phone
+  // left on the table from ringing forever for an offer that is long gone.
+  const FEED_POPUP_RING_MAX_MS = 2 * 60 * 1000;
+  const ringUntilHandled = useCallback((orderData) => {
+    if (!orderData || isOrderAlertMuted(orderData)) return;
+    const sameOrder = activeOrderRef.current && ordersShareIdentity(activeOrderRef.current, orderData);
+    // Already ringing for this order and not past the cap: just keep going.
+    if (sameOrder && alertLoopTimerRef.current && audioRef.current && !audioRef.current.paused) {
+      clearAlertLoopTimer();
+      startAlertLoop(playNotificationSound, orderData, FEED_POPUP_RING_MAX_MS);
+      return;
+    }
+    activeOrderRef.current = orderData;
+    playNotificationSound(orderData);
+    startAlertLoop(playNotificationSound, orderData, FEED_POPUP_RING_MAX_MS);
+  }, [clearAlertLoopTimer, isOrderAlertMuted, playNotificationSound, startAlertLoop]);
 
   const setOrderAlertMuted = useCallback(
     (orderData, nextMuted) => {
@@ -1448,6 +1467,7 @@ export const useDeliveryNotifications = () => {
     playNotificationSound,
     stopSound: stopAlertLoop,
     triggerOrderAlertFor10Sec,
+    ringUntilHandled,
     isOrderAlertMuted,
     setOrderAlertMuted,
     toggleOrderAlertMuted,

@@ -1963,6 +1963,12 @@ export function useLocation() {
       }
     } else {
       setLoading(false)
+      // Reloaded before the first GPS fix was saved (e.g. right after login):
+      // nothing is cached and nothing else would fetch it, so the app stayed on
+      // "Select location". Silent — only runs if permission is already granted.
+      if (!hasInitialLocation && !isDefaultLocationMode && !isSuppressedPath && isAuthenticated) {
+        startAutoLocationRefresh()
+      }
     }
 
     // Listen for storage changes to keep location in sync across components/tabs
