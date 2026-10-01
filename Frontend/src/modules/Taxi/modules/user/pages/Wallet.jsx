@@ -388,7 +388,7 @@ const Wallet = () => {
               const whenText = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
               return (
-                <div key={tx.id} className={`flex items-center gap-4 p-4 transition-colors group ${isDark ? 'hover:bg-slate-850' : 'hover:bg-slate-50'}`}>
+                <div key={tx.id} className={`flex items-center gap-4 p-4 transition-colors group ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                       isDebit ? (isDark ? 'bg-slate-950 text-slate-400' : 'bg-slate-50 text-slate-600') : (isDark ? 'bg-emerald-950/30 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
