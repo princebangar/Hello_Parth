@@ -1363,7 +1363,8 @@ function OrdersMainInner() {
             deliveryAcceptOrderTimeoutSecondsRef.current,
             takeawayAcceptOrderTimeoutSecondsRef.current,
           );
-          if (!activeTimeout || activeTimeout <= 0) return;
+          // No admin accept-time set → still show the popup, just without the
+          // countdown/auto-reject (the old early return hid every new order).
           setPopupOrder(nextOrder);
           setShowNewOrderPopup(true);
           setCountdown(getInitialCountdown(nextOrder, activeTimeout));
@@ -1425,6 +1426,7 @@ function OrdersMainInner() {
   const acceptSliderRef = useRef(null);
   const acceptSwipeStartXRef = useRef(0);
   const acceptSwipeActiveRef = useRef(false);
+  const acceptTriggeredRef = useRef(false);
   const [restaurantStatus, setRestaurantStatus] = useState({
     isActive: null,
     rejectionReason: null,
@@ -1907,38 +1909,42 @@ function OrdersMainInner() {
           const targetOrders = response.data.data.orders.filter((order) => {
             if (hasOrderBeenShown(order)) return false;
 
-            const orderId = order.orderId || order._id;
-            const inQueue = orderQueueRef.current.some((o) => resolveOrderActionId(o) === orderId);
+            const orderId = order.orderMongoId || order._id || order.orderId;
+            const inQueue = orderQueueRef.current.some((o) => resolveOrderActionId(o) === String(orderId));
             if (inQueue) return false;
 
-            return order.status === "confirmed";
+            // New orders are saved as "created" and wait here for accept/reject.
+            // getOrders() rewrites `status` ("created" -> "confirmed", and anything
+            // unknown -> "confirmed"), so read the raw backend orderStatus.
+            const status = String(order.orderStatus || order.status || "").toLowerCase();
+            if (status !== "created" && status !== "pending") return false;
+
+            const now = Date.now();
+            if (order.scheduledAt) {
+              return new Date(order.scheduledAt).getTime() <= now + 30 * 60000;
+            }
+            // Skip stale leftovers so a login doesn't pop (and ring for) old orders.
+            const createdAt = new Date(order.createdAt || 0).getTime();
+            return Boolean(createdAt) && now - createdAt <= 30 * 60000;
           });
 
           // Queue all matching orders
           if (targetOrders.length > 0) {
             const newQueueItems = [];
             for (const orderToPopup of targetOrders) {
-              const orderId = orderToPopup.orderId || orderToPopup._id;
-              markOrderAsShown({ orderId, _id: orderToPopup._id });
+              const orderMongoId = orderToPopup.orderMongoId || orderToPopup._id;
+              markOrderAsShown({ orderId: orderToPopup.orderId, orderMongoId, _id: orderToPopup._id });
 
+              // Same restaurant-facing shape the socket sends, so the popup
+              // shows customer, bill and notes exactly as for a live order.
               newQueueItems.push({
-                orderId: orderToPopup.orderId,
-                orderMongoId: orderToPopup._id,
-                restaurantId: orderToPopup.restaurantId,
-                restaurantName: orderToPopup.restaurantName,
-                items: orderToPopup.items || [],
-                total: orderToPopup.pricing?.total || 0,
-                customerAddress: orderToPopup.address,
-                status: orderToPopup.status,
-                createdAt: orderToPopup.createdAt,
-                estimatedDeliveryTime: orderToPopup.estimatedDeliveryTime || 30,
-                note: orderToPopup.note || "",
-                sendCutlery: orderToPopup.sendCutlery,
+                ...orderToPopup,
+                orderMongoId,
+                total: orderToPopup.total ?? orderToPopup.pricing?.total ?? 0,
                 paymentMethod:
                   orderToPopup.paymentMethod ||
                   orderToPopup.payment?.method ||
                   null,
-                payment: orderToPopup.payment,
                 orderType: orderToPopup.orderType || "delivery",
               });
             }
@@ -2055,8 +2061,14 @@ function OrdersMainInner() {
       acceptSwipeActiveRef.current = false;
       acceptSwipeStartXRef.current = 0;
       autoRejectInitiatedRef.current = false;
+      acceptTriggeredRef.current = false;
     }
   }, [showNewOrderPopup]);
+
+  // An accept attempt finished (success or error) — allow the next one.
+  useEffect(() => {
+    if (!isAcceptingOrder) acceptTriggeredRef.current = false;
+  }, [isAcceptingOrder]);
 
   useEffect(() => {
     if (!showNewOrderPopup) return;
@@ -2137,7 +2149,11 @@ function OrdersMainInner() {
   };
 
   const triggerSwipeAccept = () => {
-    if (isAcceptingOrder) return;
+    // A mouse swipe ends with mouseup (-> handleAcceptSwipeEnd) AND a click on
+    // the handle; both land here before isAcceptingOrder flips, which sent the
+    // accept twice (second one 400 + a duplicate toast).
+    if (isAcceptingOrder || acceptTriggeredRef.current) return;
+    acceptTriggeredRef.current = true;
     const activeOrder = popupOrder || newOrder;
     const orderId = activeOrder?.orderMongoId || activeOrder?.orderId || activeOrder?._id || activeOrder?.id;
     if (stopSound) stopSound();
@@ -3524,14 +3540,16 @@ function OrdersMainInner() {
                           <motion.div
                             className="absolute inset-y-0 left-0 bg-gradient-to-br from-[#B80B3D] to-[#66001D]"
                             initial={{ width: "100%" }}
-                            animate={{ width: `${popupTimeoutSeconds > 0 ? (countdown / popupTimeoutSeconds) * 100 : 0}%` }}
+                            animate={{ width: `${popupTimeoutSeconds > 0 ? (countdown / popupTimeoutSeconds) * 100 : 100}%` }}
                             transition={{ duration: 1, ease: "linear" }}
                           />
                           <div className="absolute inset-0 flex items-center justify-center px-12 sm:px-16">
                             <span className="relative z-10 text-xs sm:text-sm font-semibold text-white text-center leading-tight">
                               {isAcceptingOrder
                                 ? "Accepting order..."
-                                : `Slide to accept (${formatTime(countdown)})`}
+                                : popupTimeoutSeconds > 0
+                                  ? `Slide to accept (${formatTime(countdown)})`
+                                  : "Slide to accept"}
                             </span>
                           </div>
                           <motion.button

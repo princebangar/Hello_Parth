@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Input } from "@food/components/ui/input"
@@ -187,6 +187,31 @@ const deleteFileFromDB = async (key) => {
     debugError("IndexedDB delete failed:", err)
   }
 }
+
+// Ray-casting point-in-polygon on a zone's {latitude, longitude} boundary.
+const isPointInZone = (lat, lng, zone) => {
+  const points = (Array.isArray(zone?.coordinates) ? zone.coordinates : [])
+    .map((c) => [Number(c?.latitude ?? c?.lat), Number(c?.longitude ?? c?.lng)])
+    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b))
+  if (points.length < 3) return false
+  let inside = false
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [yi, xi] = points[i]
+    const [yj, xj] = points[j]
+    const crosses = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    if (crosses) inside = !inside
+  }
+  return inside
+}
+
+const findZoneForPoint = (lat, lng, zones = []) => {
+  const la = Number(lat)
+  const lo = Number(lng)
+  if (!Number.isFinite(la) || !Number.isFinite(lo) || (la === 0 && lo === 0)) return null
+  return (Array.isArray(zones) ? zones : []).find((z) => z?.isActive !== false && isPointInZone(la, lo, z)) || null
+}
+
+const getZoneLabel = (zone) => zone?.name || zone?.zoneName || zone?.serviceLocation || ""
 
 const getUploadableMenuFiles = (menuImages = []) =>
   (Array.isArray(menuImages) ? menuImages : [])
@@ -689,6 +714,50 @@ export default function RestaurantOnboarding() {
     hasUnsavedProgress: hasStep1UnsavedProgress,
   })
 
+  // Zone follows the picked location (no manual pick) — outside every zone is an error.
+  const hasLocationPoint =
+    Number.isFinite(Number(step1.location?.latitude)) &&
+    Number.isFinite(Number(step1.location?.longitude)) &&
+    String(step1.location?.latitude ?? "") !== "" &&
+    String(step1.location?.longitude ?? "") !== ""
+  const detectedZone = useMemo(
+    () => (hasLocationPoint ? findZoneForPoint(step1.location.latitude, step1.location.longitude, zones) : null),
+    [hasLocationPoint, step1.location?.latitude, step1.location?.longitude, zones],
+  )
+  const isLocationOutsideZones = hasLocationPoint && zones.length > 0 && !detectedZone
+  useEffect(() => {
+    if (!hasLocationPoint || zones.length === 0) return
+    const nextZoneId = detectedZone ? String(detectedZone._id || detectedZone.id || "") : ""
+    setStep1((prev) => (String(prev.zoneId || "") === nextZoneId ? prev : { ...prev, zoneId: nextZoneId }))
+  }, [detectedZone, hasLocationPoint, zones.length])
+
+  // Search results lean towards where we actually operate (all service zones
+  // together) instead of showing places from other states first. Only a bias,
+  // not a hard limit — the zone check itself happens on the picked location.
+  useEffect(() => {
+    const autocomplete = placesAutocompleteRef.current
+    const maps = window.google?.maps
+    if (!autocomplete || !maps || zones.length === 0) return
+    const bounds = new maps.LatLngBounds()
+    let hasPoint = false
+    zones.forEach((zone) => {
+      ;(Array.isArray(zone?.coordinates) ? zone.coordinates : []).forEach((coord) => {
+        const lat = Number(coord?.latitude ?? coord?.lat)
+        const lng = Number(coord?.longitude ?? coord?.lng)
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          bounds.extend({ lat, lng })
+          hasPoint = true
+        }
+      })
+    })
+    if (hasPoint) autocomplete.setBounds(bounds)
+  }, [zones, step])
+
+  // Text of the suggestion just picked: typing into the box re-runs the search,
+  // and setting the box to the picked address re-opened the dropdown, so the
+  // same place had to be picked again and again.
+  const pickedLocationTextRef = useRef("")
+
   const previewUrlCacheRef = useRef(new Map())
   const locationSearchInputRef = useRef(null)
   const locationSearchContainerRef = useRef(null)
@@ -734,13 +803,14 @@ export default function RestaurantOnboarding() {
     return null
   }
 
-  const openImageSourcePicker = ({ title, onSelectFile, fileNamePrefix, fallbackInputRef }) => {
+  const openImageSourcePicker = ({ title, onSelectFile, fileNamePrefix, fallbackInputRef, multiple = false }) => {
     setSourcePicker({
       isOpen: true,
       title: title || "Select image source",
       onSelectFile,
       fileNamePrefix: fileNamePrefix || "camera-image",
       fallbackInputRef: fallbackInputRef || null,
+      multiple,
     })
   }
 
@@ -748,14 +818,15 @@ export default function RestaurantOnboarding() {
     setSourcePicker((prev) => ({ ...prev, isOpen: false }))
   }
 
+  // Functional update: a multi-pick calls this once per image in a row, and a
+  // closure copy of step2 would keep only the last one.
   const handleMenuImagesSelected = (files = []) => {
     if (!files.length) return
-    const nextMenuImages = [...(step2.menuImages || []), ...files]
-    setStep2((prev) => ({
-      ...prev,
-      menuImages: nextMenuImages,
-    }))
-    void persistMenuImagesToDB(nextMenuImages)
+    setStep2((prev) => {
+      const nextMenuImages = [...(prev.menuImages || []), ...files]
+      void persistMenuImagesToDB(nextMenuImages)
+      return { ...prev, menuImages: nextMenuImages }
+    })
   }
 
 
@@ -1210,7 +1281,11 @@ export default function RestaurantOnboarding() {
     } else if (!/^\d{10}$/.test(normalizePhoneDigits(step1.primaryContactNumber))) {
        errors.push("Primary contact number must be exactly 10 digits")
     }
-    if (!step1.zoneId?.trim()) {
+    if (!hasLocationPoint) {
+      errors.push("Please search and select your restaurant location")
+    } else if (isLocationOutsideZones) {
+      errors.push("This location is outside our service zones")
+    } else if (!step1.zoneId?.trim()) {
       errors.push("Service zone is required")
     }
     if (!step1.location?.area?.trim()) {
@@ -1761,29 +1836,6 @@ export default function RestaurantOnboarding() {
           <p className="text-sm text-gray-700">
             Add your restaurant's location for order pick-up.
           </p>
-          <div>
-            <Label className="text-xs text-gray-700">Service zone*</Label>
-            <select
-              value={step1.zoneId || ""}
-              onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
-              className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
-              disabled={zonesLoading || !isEditing}
-            >
-              <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
-              {zones.map((z) => {
-                const id = String(z?._id || z?.id || "")
-                const label = z?.name || z?.zoneName || z?.serviceLocation || id
-                return (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                )
-              })}
-            </select>
-            <p className="text-[11px] text-gray-500 mt-1">
-              Choose the service zone where your restaurant will be available.
-            </p>
-          </div>
           <div ref={locationSearchContainerRef} className="relative">
             <Label className="text-xs text-gray-700">Search location</Label>
             <div className="relative">
@@ -1832,8 +1884,10 @@ export default function RestaurantOnboarding() {
                           longitude: lng,
                         },
                       }))
+                      pickedLocationTextRef.current = display
                       setLocationSearchValue(display)
                       setLocationSuggestions([])
+                      locationSearchInputRef.current?.blur()
                     }}
                     className="w-full pl-1.5 pr-3 py-2.5 text-left text-sm hover:bg-[#FEF2F2] border-b border-gray-100 last:border-none font-medium text-gray-700 flex items-center gap-2 transition-colors rounded-xl"
                   >
@@ -1946,6 +2000,27 @@ export default function RestaurantOnboarding() {
               className="bg-white text-sm"
               placeholder="Pincode"
             />
+          </div>
+          {/* Service zone — filled from the picked location, not chosen by hand */}
+          <div>
+            <Label className="text-xs text-gray-700">Service zone*</Label>
+            <div
+              className={`mt-1 w-full min-h-9 rounded-md border px-3 py-2 text-sm ${
+                isLocationOutsideZones
+                  ? "border-red-300 bg-red-50 text-red-700"
+                  : detectedZone
+                    ? "border-green-200 bg-green-50 text-green-800"
+                    : "border-input bg-gray-50 text-gray-500"
+              }`}
+            >
+              {zonesLoading
+                ? "Loading zones..."
+                : isLocationOutsideZones
+                  ? "This location is outside our service zones. Please pick your restaurant's exact location."
+                  : detectedZone
+                    ? getZoneLabel(detectedZone)
+                    : "Select your location above — the zone is filled automatically."}
+            </div>
           </div>
           <p className="text-[11px] text-gray-500 mt-1">
             Please ensure that this address is the same as mentioned on your FSSAI license.
@@ -2066,21 +2141,8 @@ export default function RestaurantOnboarding() {
           types: ["geocode", "establishment"]
         }
 
-        // Apply strict bounds filtering if zone is selected
-        const selectedZone = zones.find(z => String(z?._id || z?.id) === String(step1.zoneId))
-        if (selectedZone && Array.isArray(selectedZone.coordinates) && selectedZone.coordinates.length > 0) {
-          const bounds = new window.google.maps.LatLngBounds()
-          selectedZone.coordinates.forEach(coord => {
-            const lat = parseFloat(coord.latitude || coord.lat)
-            const lng = parseFloat(coord.longitude || coord.lng)
-            if (Number.isFinite(lat) && Number.isFinite(lng)) {
-              bounds.extend({ lat, lng })
-            }
-          })
-          autocompleteOptions.bounds = bounds
-          autocompleteOptions.strictBounds = true
-        }
-
+        // Zone is now derived from the picked location, so the search is not
+        // limited to a pre-selected zone's bounds anymore.
         autocomplete = new window.google.maps.places.Autocomplete(inputElement, autocompleteOptions)
 
         inputElement.setAttribute("data-google-places-initialized", "true")
@@ -2106,7 +2168,9 @@ export default function RestaurantOnboarding() {
             },
           }))
           
+          pickedLocationTextRef.current = parsed.formattedAddress || ""
           setLocationSearchValue(parsed.formattedAddress)
+          setLocationSuggestions([])
           inputElement.blur()
         })
 
@@ -2151,7 +2215,7 @@ export default function RestaurantOnboarding() {
       }
       placesAutocompleteRef.current = null
     }
-  }, [step, step1.zoneId, zones])
+  }, [step])
 
   // Hybrid Search Fallback (Nominatim)
   useEffect(() => {
@@ -2167,20 +2231,18 @@ export default function RestaurantOnboarding() {
       })
     }
 
-    if (q.length < 3) {
+    // Box was just filled with a picked suggestion — don't search for it again.
+    if (q.length < 3 || q === String(pickedLocationTextRef.current || "").trim()) {
       setLocationSuggestions([])
       setIsSearchingLocation(false)
       return
     }
-
-    const selectedZone = zones.find(z => String(z?._id || z?.id) === String(step1.zoneId))
-    const zoneName = selectedZone?.name || selectedZone?.zoneName || selectedZone?.serviceLocation || ""
+    pickedLocationTextRef.current = ""
 
     const t = setTimeout(async () => {
       try {
         setIsSearchingLocation(true)
-        const queryWithZone = zoneName ? `${q}, ${zoneName}` : q
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=10&q=${encodeURIComponent(queryWithZone)}&countrycodes=in`
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=10&q=${encodeURIComponent(q)}&countrycodes=in`
         const res = await fetch(url, { headers: { Accept: "application/json" } })
         const json = await res.json()
         const mapped = (Array.isArray(json) ? json : []).map(r => ({
@@ -2199,7 +2261,7 @@ export default function RestaurantOnboarding() {
     }, 400)
 
     return () => clearTimeout(t)
-  }, [locationSearchValue, step, step1.zoneId, zones])
+  }, [locationSearchValue, step])
 
   // Click outside to close location search suggestions dropdown
   useEffect(() => {
@@ -2266,7 +2328,7 @@ export default function RestaurantOnboarding() {
               <div className="flex flex-col">
                 <span className="text-xs font-medium text-gray-900">Upload menu images</span>
                 <span className="text-[11px] text-gray-500">
-                  JPG, PNG, WebP ? You can select multiple files
+                  JPG, PNG, WebP · You can select multiple files
                 </span>
               </div>
             </div>
@@ -2280,6 +2342,7 @@ export default function RestaurantOnboarding() {
                   fileNamePrefix: "menu-image",
                   fallbackInputRef: menuImagesInputRef,
                   onSelectFile: (file) => handleMenuImagesSelected(file ? [file] : []),
+                  multiple: true,
                 })
               }
             >
@@ -3096,6 +3159,7 @@ export default function RestaurantOnboarding() {
           title={sourcePicker.title}
           fileNamePrefix={sourcePicker.fileNamePrefix}
           galleryInputRef={sourcePicker.fallbackInputRef}
+          multiple={Boolean(sourcePicker.multiple)}
         />
 
         <OnboardingExitModal

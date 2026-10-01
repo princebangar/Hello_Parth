@@ -202,10 +202,10 @@ export default function MenuCategoriesPage() {
 
       if (editingCategory) {
         await restaurantAPI.updateCategory(editingCategory._id || editingCategory.id, payload)
-        toast.success("Category updated and sent for admin approval")
+        toast.success("Category updated")
       } else {
         await restaurantAPI.createCategory(payload)
-        toast.success("Category created and sent for admin approval")
+        toast.success("Category created")
       }
 
       resetModal()
@@ -242,7 +242,7 @@ export default function MenuCategoriesPage() {
       await restaurantAPI.updateCategory(category._id || category.id, {
         isActive: !(category?.isActive !== false),
       })
-      toast.success("Category updated and sent for admin approval")
+      toast.success("Category updated")
       fetchCategories()
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to update category")
@@ -258,7 +258,7 @@ export default function MenuCategoriesPage() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Menu Categories</h1>
-            <p className="text-xs text-slate-500">Create categories, track approvals, and resubmit edits safely.</p>
+            <p className="text-xs text-slate-500">Create your own categories and use them right away.</p>
           </div>
         </div>
       </div>
@@ -267,8 +267,8 @@ export default function MenuCategoriesPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-sm font-semibold text-slate-900">How this works</p>
           <p className="mt-2 text-sm text-slate-600">
-            New categories stay pending until admin approval. Editing an approved category sends it back for review.
-            Only approved categories can be used for food uploads.
+            Categories you create are ready to use immediately, with no admin approval needed. They stay private to your restaurant.
+            You can pick them when adding or editing a dish.
           </p>
         </div>
 
@@ -341,9 +341,9 @@ export default function MenuCategoriesPage() {
                         {isGlobal ? (
                           <p>Admin controls this category now, so you can use it but not rename or delete it.</p>
                         ) : status === "approved" ? (
-                          <p>Editing this category will send it back for admin approval.</p>
+                          <p>Ready to use for your dishes.</p>
                         ) : (
-                          <p>Foods can be added only after approval.</p>
+                          <p>Save this category again to make it usable.</p>
                         )}
                         {status === "rejected" && category?.rejectionReason && (
                           <p className="text-rose-600">Reason: {category.rejectionReason}</p>
@@ -406,8 +406,8 @@ export default function MenuCategoriesPage() {
                   </h2>
                   <p className="text-xs text-slate-500">
                     {editingCategory
-                      ? "Any edit sends this category back for admin approval."
-                      : "Choose the diet scope carefully before sending it for approval."}
+                      ? "Changes apply right away."
+                      : "Choose the diet scope carefully. It decides which dishes can use this category."}
                   </p>
                 </div>
                 <button onClick={resetModal}>
@@ -501,7 +501,7 @@ export default function MenuCategoriesPage() {
                   disabled={uploadingImage}
                   className="flex-1 rounded-xl bg-gradient-to-br from-[#B80B3D] to-[#66001D] py-3 font-medium text-white disabled:opacity-60"
                 >
-                  {uploadingImage ? "Uploading..." : editingCategory ? "Save & Resubmit" : "Create"}
+                  {uploadingImage ? "Uploading..." : editingCategory ? "Save" : "Create"}
                 </button>
               </div>
             </motion.div>

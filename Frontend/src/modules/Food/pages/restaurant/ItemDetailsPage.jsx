@@ -55,6 +55,11 @@ const createVariantDraft = (variant = {}) => {
   };
 }
 
+// Unsaved form kept in memory while the restaurant hops to "Add category" and
+// back (that navigation unmounts this page and used to wipe the picked image
+// and everything typed). Module scope so the File objects survive.
+let unsavedItemDraft = null
+
 export default function ItemDetailsPage() {
   const navigate = useNavigate()
   const goBack = useRestaurantBackNavigation()
@@ -410,9 +415,22 @@ export default function ItemDetailsPage() {
     const viewport = window.visualViewport
     if (!viewport) return
 
+    let lastInset = 0
     const updateKeyboardInset = () => {
       const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-      setKeyboardInset(inset > 60 ? inset : 0)
+      const nextInset = inset > 60 ? inset : 0
+      setKeyboardInset(nextInset)
+      // The keyboard finishes opening after the focus scroll already ran, so
+      // the field (e.g. item name) ended up under it — scroll again once it's up.
+      if (nextInset > lastInset) {
+        const active = document.activeElement
+        if (active?.matches?.('input, textarea, [contenteditable="true"]')) {
+          window.setTimeout(() => {
+            active.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+          }, 50)
+        }
+      }
+      lastInset = nextInset
     }
 
     viewport.addEventListener("resize", updateKeyboardInset)
@@ -424,6 +442,65 @@ export default function ItemDetailsPage() {
       viewport.removeEventListener("scroll", updateKeyboardInset)
     }
   }, [])
+
+  const openAddCategoryPage = () => {
+    unsavedItemDraft = {
+      key: String(id || ""),
+      values: {
+        itemName, category, selectedCategoryId, subCategory, servesInfo,
+        itemSizeQuantity, itemSizeUnit, itemDescription, foodType, basePrice,
+        variants, preparationTime, gst, isRecommended, isInStock, selectedTags,
+        weightPerServing, calorieCount, proteinCount, carbohydrates, fatCount,
+        fibreCount, allergens, images,
+      },
+      imageFiles: new Map(imageFiles),
+    }
+    setIsCategoryPopupOpen(false)
+    navigate('/food/restaurant/menu-categories', {
+      state: { backTo: location.pathname, openCategoryPopup: true }
+    })
+  }
+
+  // Put the unsaved form back when returning from "Add category"
+  // (for an existing item: after its saved data has loaded).
+  const draftRestoredRef = useRef(false)
+  useEffect(() => {
+    if (draftRestoredRef.current || loadingItem) return
+    const draft = unsavedItemDraft
+    if (!draft || draft.key !== String(id || "")) return
+    if (!isNewItem && !itemData) return
+    draftRestoredRef.current = true
+    unsavedItemDraft = null
+    const v = draft.values
+    setItemName(v.itemName)
+    setCategory(v.category)
+    setSelectedCategoryId(v.selectedCategoryId)
+    setSubCategory(v.subCategory)
+    setServesInfo(v.servesInfo)
+    setItemSizeQuantity(v.itemSizeQuantity)
+    setItemSizeUnit(v.itemSizeUnit)
+    setItemDescription(v.itemDescription)
+    setFoodType(v.foodType)
+    setBasePrice(v.basePrice)
+    setVariants(v.variants)
+    setPreparationTime(v.preparationTime)
+    setGst(v.gst)
+    setIsRecommended(v.isRecommended)
+    setIsInStock(v.isInStock)
+    setSelectedTags(v.selectedTags)
+    setWeightPerServing(v.weightPerServing)
+    setCalorieCount(v.calorieCount)
+    setProteinCount(v.proteinCount)
+    setCarbohydrates(v.carbohydrates)
+    setFatCount(v.fatCount)
+    setFibreCount(v.fibreCount)
+    setAllergens(v.allergens)
+    setImages(v.images)
+    setImageFiles(draft.imageFiles)
+    // Back from creating a category → let them pick it right away.
+    setIsCategoryPopupOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingItem, itemData, id, isNewItem])
 
   // Serves info options
   const servesOptions = [
@@ -1313,12 +1390,7 @@ export default function ItemDetailsPage() {
                 <h2 className="text-lg font-bold text-gray-900">Select category</h2>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      setIsCategoryPopupOpen(false)
-                      navigate('/restaurant/menu-categories', {
-                        state: { backTo: location.pathname, openCategoryPopup: true }
-                      })
-                    }}
+                    onClick={openAddCategoryPage}
                     className="p-2 rounded-lg bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white hover:bg-gray-800 transition-colors flex items-center gap-1.5"
                     title="Add Category"
                   >
@@ -1365,12 +1437,7 @@ export default function ItemDetailsPage() {
                   <div className="flex flex-1 flex-col items-center justify-center space-y-4">
                     <p className="text-sm text-gray-500">No categories available</p>
                     <button
-                      onClick={() => {
-                        setIsCategoryPopupOpen(false)
-                        navigate('/restaurant/menu-categories', {
-                          state: { backTo: location.pathname, openCategoryPopup: true }
-                        })
-                      }}
+                      onClick={openAddCategoryPage}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white rounded-lg font-semibold hover:bg-gray-800 transition-colors"
                     >
                       <Plus className="w-5 h-5" />

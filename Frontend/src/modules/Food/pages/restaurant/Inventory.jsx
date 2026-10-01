@@ -2389,11 +2389,15 @@ export default function Inventory() {
                                   </div>
                                   
                                   <div className="flex items-center gap-3 sm:gap-4 mt-1">
-                                    <p className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest ${
-                                      item.inStock ? "text-green-500" : "text-rose-500"
-                                    }`}>
-                                      {item.inStock ? "● Live" : `● ${getRuleStatusLabel(item.stockRule)}`}
-                                    </p>
+                                    {/* Live / paused only means something once admin approved the item —
+                                        an item under review or rejected is not visible to customers. */}
+                                    {item.approvalStatus === "approved" && (
+                                      <p className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest ${
+                                        item.inStock ? "text-green-500" : "text-rose-500"
+                                      }`}>
+                                        {item.inStock ? "● Live" : `● ${getRuleStatusLabel(item.stockRule)}`}
+                                      </p>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => handleEditItem(category, item)}
@@ -2429,12 +2433,14 @@ export default function Inventory() {
                                   onClick={(e) => e.stopPropagation()}
                                   className="scale-100 sm:scale-125 origin-right"
                                 >
+                                  {/* Pending / rejected items stay off until admin approves them. */}
                                   <Switch
-                                    checked={item.inStock}
+                                    checked={item.approvalStatus === "approved" && item.inStock}
+                                    disabled={item.approvalStatus !== "approved"}
                                     onCheckedChange={(checked) =>
                                       handleToggleChange("item", category.id, item.id, checked)
                                     }
-                                    className="data-[state=checked]:bg-green-500 scale-90 sm:scale-100"
+                                    className="data-[state=checked]:bg-green-500 scale-90 sm:scale-100 disabled:opacity-40"
                                   />
                                 </div>
                               </div>
