@@ -207,6 +207,8 @@ function RestaurantDetailsContent() {
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [selectedVariantId, setSelectedVariantId] = useState("")
+  // Quantity picked in the dish popup; only written to the cart on "Add item".
+  const [itemDetailQty, setItemDetailQty] = useState(1)
   const [showFilterSheet, setShowFilterSheet] = useState(false)
   const [showLocationSheet, setShowLocationSheet] = useState(false)
   const [showScheduleSheet, setShowScheduleSheet] = useState(false)
@@ -1309,20 +1311,25 @@ function RestaurantDetailsContent() {
 
 
 
-  // Sync quantities from cart on mount and when restaurant changes
+  // Sync quantities from cart on mount and when restaurant changes.
+  // Keyed by "itemId::variantId" (what the menu looks up) — a logged-in cart's
+  // line id is the server's Mongo _id, so keying by item.id never matched and
+  // every dish kept showing ADD after it was added.
   useEffect(() => {
     if (!restaurant || !restaurant.name) return
 
     const cartQuantities = {}
     cart.forEach((item) => {
-      if (item.restaurant === restaurant.name) {
-        cartQuantities[item.id] = item.quantity || 0
-      }
+      const key = buildCartLineId(item.itemId || item.productId || item.id, item.variantId || "")
+      cartQuantities[key] = (cartQuantities[key] || 0) + (item.quantity || 0)
     })
     setQuantities(cartQuantities)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurant?.name, cart])
 
+  // Pick the variant to show when the dish popup opens: the one already in the
+  // cart, else the first. Only on open — re-running on every quantity change
+  // snapped the selection back while the user was picking a different variant.
   useEffect(() => {
     if (!selectedItem) {
       setSelectedVariantId("")
@@ -1333,17 +1340,14 @@ function RestaurantDetailsContent() {
       const lineItemId = getLineItemIdForDish(selectedItem, v)
       return quantities[lineItemId] > 0
     })
-    
-    if (variantInCart) {
-      setSelectedVariantId(variantInCart.id)
-    } else {
-      const defaultVariant = getDefaultFoodVariant(selectedItem)
-      setSelectedVariantId(defaultVariant?.id || "")
-    }
-  }, [selectedItem, quantities])
+    const initialVariant = variantInCart || getDefaultFoodVariant(selectedItem)
+    setSelectedVariantId(initialVariant?.id || "")
+    setItemDetailQty(Math.max(1, quantities[getLineItemIdForDish(selectedItem, initialVariant)] || 0))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem])
 
   // Helper function to update item quantity in both local state and cart
-  const updateItemQuantity = (item, newQuantity, event = null, preferredVariant = null) => {
+  const updateItemQuantity = async (item, newQuantity, event = null, preferredVariant = null) => {
     // Check authentication
     if (!isModuleAuthenticated('user')) {
       window.dispatchEvent(new CustomEvent('show-login-required'))
@@ -1364,12 +1368,6 @@ function RestaurantDetailsContent() {
 
     const resolvedVariant = preferredVariant || getDefaultFoodVariant(item)
     const lineItemId = getLineItemIdForDish(item, resolvedVariant)
-
-    // Update local state
-    setQuantities((prev) => ({
-      ...prev,
-      [lineItemId]: newQuantity,
-    }))
 
     // CRITICAL: Validate restaurant data before adding to cart
     if (!restaurant || !restaurant.name) {
@@ -1459,56 +1457,46 @@ function RestaurantDetailsContent() {
       }
     }
 
-    // Update cart context
-    if (newQuantity <= 0) {
-      // Pass sourcePosition and product info for removal animation
-      const productInfo = {
-        id: lineItemId,
-        name: item.name,
-        imageUrl: item.image,
-      }
-      removeFromCart(lineItemId, sourcePosition, productInfo)
-    } else {
-      const existingCartItem = getCartItem(lineItemId)
-      if (existingCartItem) {
-        // Prepare product info for animation
-        const productInfo = {
-          id: lineItemId,
-          name: item.name,
-          imageUrl: item.image,
-        }
+    const productInfo = {
+      id: lineItemId,
+      name: item.name,
+      imageUrl: item.image,
+    }
+    const existingCartItem = getCartItem(lineItemId)
+    const prevQuantity = existingCartItem?.quantity || 0
+    if (newQuantity === prevQuantity) return
 
-        // If incrementing quantity, trigger add animation with sourcePosition
-        if (newQuantity > existingCartItem.quantity && sourcePosition) {
-          const result = addToCart(cartItem, sourcePosition)
-          if (result?.ok === false) {
-            toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
-            return
-          }
-          if (newQuantity > existingCartItem.quantity + 1) {
-            updateQuantity(lineItemId, newQuantity)
-          }
-        }
-        // If decreasing quantity, trigger removal animation with sourcePosition
-        else if (newQuantity < existingCartItem.quantity && sourcePosition) {
-          updateQuantity(lineItemId, newQuantity, sourcePosition, productInfo)
-        }
-        // Otherwise just update quantity without animation
-        else {
-          updateQuantity(lineItemId, newQuantity)
-        }
-      } else {
-        // Add to cart first (adds with quantity 1), then update to desired quantity
-        // Pass sourcePosition when adding a new item
-        const result = addToCart(cartItem, sourcePosition)
-        if (result?.ok === false) {
-          toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
-          return
-        }
-        if (newQuantity > 1) {
-          updateQuantity(lineItemId, newQuantity)
-        }
-      }
+    // Optimistic UI; the cart sync effect overwrites it with the server's answer.
+    setQuantities((prev) => ({
+      ...prev,
+      [lineItemId]: newQuantity,
+    }))
+
+    // Cart calls are async — the old code read `result.ok` off the Promise, so
+    // every failure (other restaurant in cart, item unavailable…) was silent.
+    let result
+    if (newQuantity <= 0) {
+      result = await removeFromCart(lineItemId, sourcePosition, productInfo)
+    } else if (!existingCartItem) {
+      // New line: send the wanted quantity in one call (add-then-update raced).
+      result = await addToCart({ ...cartItem, quantity: newQuantity }, sourcePosition)
+    } else if (
+      newQuantity === prevQuantity + 1 &&
+      sourcePosition &&
+      (quantities[lineItemId] || 0) === prevQuantity
+    ) {
+      // Plain +1 with nothing in flight: add call (plays the fly-to-cart animation).
+      // During rapid taps fall through to an absolute set so taps can't double count.
+      result = await addToCart(cartItem, sourcePosition)
+    } else if (newQuantity < prevQuantity && sourcePosition) {
+      result = await updateQuantity(lineItemId, newQuantity, sourcePosition, productInfo)
+    } else {
+      result = await updateQuantity(lineItemId, newQuantity)
+    }
+
+    if (result?.ok === false) {
+      setQuantities((prev) => ({ ...prev, [lineItemId]: prevQuantity }))
+      toast.error(result.error || 'Could not update cart. Please try again.')
     }
   }
 
@@ -1901,7 +1889,10 @@ function RestaurantDetailsContent() {
   // different URL, so the browser treats the popup as a fresh download otherwise.
   const handleItemClick = async (item, event) => {
     const seq = ++itemDetailOpenSeqRef.current
-    const listImg = event?.currentTarget?.querySelector?.("img")
+    // Opened from the dish image, or from its ADD button (image is a sibling).
+    const listImg =
+      event?.currentTarget?.querySelector?.("img") ||
+      event?.currentTarget?.parentElement?.querySelector?.("img")
     const cachedSrc = listImg?.currentSrc || listImg?.src || ""
     const imageSrc = cachedSrc || item?.image || ""
     setSelectedItem({ ...item, displayImage: imageSrc })
@@ -3140,8 +3131,12 @@ function RestaurantDetailsContent() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation()
-                                        if (!shouldShowGrayscale) {
-                                          updateItemQuantity(item, 1, e, getDefaultFoodVariant(item))
+                                        if (shouldShowGrayscale) return
+                                        // Dishes with variants: let the user pick one first.
+                                        if (hasFoodVariants(item)) {
+                                          handleItemClick(item, e)
+                                        } else {
+                                          updateItemQuantity(item, 1, e, null)
                                         }
                                       }}
                                       disabled={shouldShowGrayscale}
@@ -3376,8 +3371,11 @@ function RestaurantDetailsContent() {
                                               transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                if (!shouldShowGrayscale) {
-                                                  updateItemQuantity(item, 1, e, getDefaultFoodVariant(item))
+                                                if (shouldShowGrayscale) return
+                                                if (hasFoodVariants(item)) {
+                                                  handleItemClick(item, e)
+                                                } else {
+                                                  updateItemQuantity(item, 1, e, null)
                                                 }
                                               }}
                                               disabled={shouldShowGrayscale}
@@ -4056,7 +4054,10 @@ function RestaurantDetailsContent() {
                             <button
                               key={variant.id}
                               type="button"
-                              onClick={() => setSelectedVariantId(variant.id)}
+                              onClick={() => {
+                                setSelectedVariantId(variant.id)
+                                setItemDetailQty(Math.max(1, getDishQuantity(selectedItem, variant.id)))
+                              }}
                               className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${String(selectedVariantId || "") === String(variant.id)
                                   ? "border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-900/30 dark:text-red-200"
                                   : "border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-[#2a2a2a] dark:text-gray-300"
@@ -4079,17 +4080,11 @@ function RestaurantDetailsContent() {
                         : 'border-gray-300 dark:border-gray-700'
                         }`}>
                         <button
-                          onClick={(e) => {
-                            if (!shouldShowGrayscale) {
-                              updateItemQuantity(
-                                selectedItem,
-                                Math.max(1, getDishQuantity(selectedItem, selectedVariantId)) - 1,
-                                e,
-                                getVariantForDish(selectedItem, selectedVariantId),
-                              )
-                            }
-                          }}
-                          disabled={getDishQuantity(selectedItem, selectedVariantId) === 0 || shouldShowGrayscale}
+                          onClick={() => setItemDetailQty((q) => Math.max(0, q - 1))}
+                          disabled={
+                            shouldShowGrayscale ||
+                            itemDetailQty <= (getDishQuantity(selectedItem, selectedVariantId) > 0 ? 0 : 1)
+                          }
                           className={`${shouldShowGrayscale
                             ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
                             : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
@@ -4101,19 +4096,10 @@ function RestaurantDetailsContent() {
                           ? 'text-gray-400 dark:text-gray-600'
                           : 'text-gray-900 dark:text-white'
                           }`}>
-                          {Math.max(1, getDishQuantity(selectedItem, selectedVariantId))}
+                          {itemDetailQty}
                         </span>
                         <button
-                          onClick={(e) => {
-                            if (!shouldShowGrayscale) {
-                              updateItemQuantity(
-                                selectedItem,
-                                Math.max(1, getDishQuantity(selectedItem, selectedVariantId)) + 1,
-                                e,
-                                getVariantForDish(selectedItem, selectedVariantId),
-                              )
-                            }
-                          }}
+                          onClick={() => setItemDetailQty((q) => Math.min(99, q + 1))}
                           disabled={shouldShowGrayscale}
                           className={shouldShowGrayscale
                             ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
@@ -4124,7 +4110,7 @@ function RestaurantDetailsContent() {
                         </button>
                       </div>
 
-                      {/* Add Item Button */}
+                      {/* Add Item Button — commits the picked variant + quantity */}
                       <Button
                         className={`flex-1 h-[44px] rounded-lg font-semibold flex items-center justify-center gap-1 sm:gap-2 px-1 sm:px-4 ${shouldShowGrayscale
                           ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50'
@@ -4134,7 +4120,7 @@ function RestaurantDetailsContent() {
                           if (!shouldShowGrayscale) {
                             updateItemQuantity(
                               selectedItem,
-                              Math.max(1, getDishQuantity(selectedItem, selectedVariantId)),
+                              itemDetailQty,
                               e,
                               getVariantForDish(selectedItem, selectedVariantId),
                             )
@@ -4145,14 +4131,17 @@ function RestaurantDetailsContent() {
                       >
                         <span className="truncate">
                           {getDishQuantity(selectedItem, selectedVariantId) > 0
-                            ? "Update cart"
-                            : (hasFoodVariants(selectedItem) ? "Add" : "Add item")}
+                            ? (itemDetailQty === 0 ? "Remove" : "Update cart")
+                            : "Add item"}
                         </span>
                         <div className="flex flex-wrap items-center justify-center gap-1 overflow-hidden">
                           <span className="text-sm sm:text-base font-bold whitespace-nowrap">
-                            {hasFoodVariants(selectedItem)
-                              ? `${getVariantForDish(selectedItem, selectedVariantId)?.name || "Default"} · ${RUPEE_SYMBOL}${Math.round(getVariantForDish(selectedItem, selectedVariantId)?.price || selectedItem.price)}`
-                              : `${RUPEE_SYMBOL}${Math.round(selectedItem.price)}`}
+                            {(() => {
+                              const variant = getVariantForDish(selectedItem, selectedVariantId)
+                              const unitPrice = Number(variant?.price ?? selectedItem.price) || 0
+                              const total = `${RUPEE_SYMBOL}${Math.round(unitPrice * Math.max(1, itemDetailQty))}`
+                              return variant ? `${variant.name} · ${total}` : total
+                            })()}
                           </span>
                         </div>
                       </Button>
