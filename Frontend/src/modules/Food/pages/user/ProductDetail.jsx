@@ -132,18 +132,16 @@ export default function ProductDetail() {
     return Math.round((sum / reviews.length) * 10) / 10
   }, [reviews, product])
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!isModuleAuthenticated('user')) {
       window.dispatchEvent(new CustomEvent('show-login-required'))
       return
     }
     if (product) {
-      for (let i = 0; i < quantity; i++) {
-        const result = addToCart(product)
-        if (result?.ok === false) {
-          alert(result.error || "Cannot add item from different restaurant. Please clear cart first.")
-          break
-        }
+      // One call with the full quantity (N parallel adds raced each other).
+      const result = await addToCart({ ...product, quantity })
+      if (result?.ok === false) {
+        alert(result.error || "Cannot add item from different restaurant. Please clear cart first.")
       }
     }
   }

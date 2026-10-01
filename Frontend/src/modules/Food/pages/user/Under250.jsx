@@ -831,11 +831,13 @@ export default function Under250({ isTabActive = true }) {
     }
   }, [zoneId])
 
-  // Sync quantities from cart on mount
+  // Sync quantities from cart on mount. Keyed by "itemId::variantId" like the
+  // cards look it up (a logged-in cart's line id is the server _id).
   useEffect(() => {
     const cartQuantities = {}
     cart.forEach((item) => {
-      cartQuantities[item.id] = item.quantity || 0
+      const key = buildCartLineId(item.itemId || item.productId || item.id, item.variantId || "")
+      cartQuantities[key] = (cartQuantities[key] || 0) + (item.quantity || 0)
     })
     setQuantities(cartQuantities)
   }, [cart])
@@ -952,7 +954,7 @@ export default function Under250({ isTabActive = true }) {
   }, [])
 
   // Helper function to update item quantity in both local state and cart
-  const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null, preferredVariant = null) => {
+  const updateItemQuantity = async (item, newQuantity, event = null, restaurantName = null, preferredVariant = null) => {
     // Check authentication
     if (!isModuleAuthenticated('user')) {
       window.dispatchEvent(new CustomEvent('show-login-required'))
@@ -967,12 +969,6 @@ export default function Under250({ isTabActive = true }) {
 
     const resolvedVariant = preferredVariant || getDefaultFoodVariant(item)
     const lineItemId = getLineItemIdForDish(item, resolvedVariant)
-
-    // Update local state
-    setQuantities((prev) => ({
-      ...prev,
-      [lineItemId]: newQuantity,
-    }))
 
     // Find restaurant name from the item or use provided parameter
     const restaurant = restaurantName || item.restaurant || "Under 250"
@@ -1019,47 +1015,41 @@ export default function Under250({ isTabActive = true }) {
       }
     }
 
-    // Update cart context
-    if (newQuantity <= 0) {
-      const productInfo = {
-        id: lineItemId,
-        name: item.name,
-        imageUrl: item.image,
-      }
-      removeFromCart(lineItemId, sourcePosition, productInfo)
-    } else {
-      const existingCartItem = getCartItem(lineItemId)
-      if (existingCartItem) {
-        const productInfo = {
-          id: lineItemId,
-          name: item.name,
-          imageUrl: item.image,
-        }
+    const productInfo = {
+      id: lineItemId,
+      name: item.name,
+      imageUrl: item.image,
+    }
+    const existingCartItem = getCartItem(lineItemId)
+    const prevQuantity = existingCartItem?.quantity || 0
+    if (newQuantity === prevQuantity) return
 
-        if (newQuantity > existingCartItem.quantity && sourcePosition) {
-          const result = addToCart(cartItem, sourcePosition)
-          if (result?.ok === false) {
-            toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
-            return
-          }
-          if (newQuantity > existingCartItem.quantity + 1) {
-            updateQuantity(lineItemId, newQuantity)
-          }
-        } else if (newQuantity < existingCartItem.quantity && sourcePosition) {
-          updateQuantity(lineItemId, newQuantity, sourcePosition, productInfo)
-        } else {
-          updateQuantity(lineItemId, newQuantity)
-        }
-      } else {
-        const result = addToCart(cartItem, sourcePosition)
-        if (result?.ok === false) {
-          toast.error(result.error || 'Cannot add item from different restaurant. Please clear cart first.')
-          return
-        }
-        if (newQuantity > 1) {
-          updateQuantity(lineItemId, newQuantity)
-        }
-      }
+    setQuantities((prev) => ({
+      ...prev,
+      [lineItemId]: newQuantity,
+    }))
+
+    // Cart calls are async — await them so failures reach the user.
+    let result
+    if (newQuantity <= 0) {
+      result = await removeFromCart(lineItemId, sourcePosition, productInfo)
+    } else if (!existingCartItem) {
+      result = await addToCart({ ...cartItem, quantity: newQuantity }, sourcePosition)
+    } else if (
+      newQuantity === prevQuantity + 1 &&
+      sourcePosition &&
+      (quantities[lineItemId] || 0) === prevQuantity
+    ) {
+      result = await addToCart(cartItem, sourcePosition)
+    } else if (newQuantity < prevQuantity && sourcePosition) {
+      result = await updateQuantity(lineItemId, newQuantity, sourcePosition, productInfo)
+    } else {
+      result = await updateQuantity(lineItemId, newQuantity)
+    }
+
+    if (result?.ok === false) {
+      setQuantities((prev) => ({ ...prev, [lineItemId]: prevQuantity }))
+      toast.error(result.error || 'Could not update cart. Please try again.')
     }
   }
 
@@ -1621,9 +1611,12 @@ export default function Under250({ isTabActive = true }) {
                                       }`}
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      if (!isOffline) {
-                                        const defaultVariant = getDefaultFoodVariant(item)
-                                        updateItemQuantity(item, 1, e, restaurant.name, defaultVariant)
+                                      if (isOffline) return
+                                      // Variant picker lives on the restaurant page.
+                                      if (hasFoodVariants(item)) {
+                                        goToRestaurantForVariants(item, restaurant)
+                                      } else {
+                                        updateItemQuantity(item, 1, e, restaurant.name, null)
                                       }
                                     }}
                                   >
@@ -1977,14 +1970,18 @@ export default function Under250({ isTabActive = true }) {
                         }`}
                     onClick={(e) => {
                       if (!shouldShowGrayscale && !selectedItem.isRestaurantOffline) {
-                        const defaultVariant = getDefaultFoodVariant(selectedItem)
-                        updateItemQuantity(selectedItem, itemDetailQuantity, e, selectedItem.restaurant, defaultVariant)
+                        if (hasFoodVariants(selectedItem)) {
+                          closeItemDetail()
+                          goToRestaurantForVariants(selectedItem, { slug: selectedItem.restaurantSlug })
+                          return
+                        }
+                        updateItemQuantity(selectedItem, itemDetailQuantity, e, selectedItem.restaurant, null)
                         closeItemDetail()
                       }
                     }}
                     disabled={shouldShowGrayscale || selectedItem.isRestaurantOffline}
                   >
-                    <span>{quantities[getLineItemIdForDish(selectedItem, getDefaultFoodVariant(selectedItem))] > 0 ? "Update item" : "Add item"}</span>
+                    <span>{hasFoodVariants(selectedItem) ? "Choose option" : quantities[getLineItemIdForDish(selectedItem, getDefaultFoodVariant(selectedItem))] > 0 ? "Update item" : "Add item"}</span>
                     <span className="text-base md:text-lg lg:text-xl font-bold">
                       {RUPEE_SYMBOL}{Math.round((getDefaultFoodVariant(selectedItem)?.price ?? selectedItem.price) * itemDetailQuantity)}
                     </span>
