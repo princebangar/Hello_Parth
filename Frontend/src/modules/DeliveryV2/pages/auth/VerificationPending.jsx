@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { Clock3, ShieldCheck, AlertTriangle, X } from "lucide-react"
-import { clearModuleAuth } from "@food/utils/auth"
+import { toast } from "sonner"
+import apiClient from "@food/api"
+import { clearModuleAuth, getPendingTicket, clearPendingTicket, setAuthData } from "@food/utils/auth"
 import {
   enablePendingVerificationPush,
   getWebNotificationPermission,
@@ -22,15 +24,74 @@ export default function VerificationPending() {
   const navigate = useNavigate()
   const location = useLocation()
 
+  // Latest status from the auto-refresh poll (overrides what we navigated in with).
+  const [liveStatus, setLiveStatus] = useState(null)
+  const [liveMessage, setLiveMessage] = useState("")
+
   const localStatus = useMemo(() => {
+    if (liveStatus) return liveStatus
     if (location.state?.isRejected) return "rejected"
     return sessionStorage.getItem("delivery_pendingStatus") || "pending"
-  }, [location.state?.isRejected])
+  }, [location.state?.isRejected, liveStatus])
 
   const localMessage = useMemo(() => {
+    if (liveMessage) return liveMessage
     if (location.state?.message) return location.state.message
     return sessionStorage.getItem("delivery_pendingMessage") || ""
-  }, [location.state?.message])
+  }, [location.state?.message, liveMessage])
+
+  // Auto-refresh: poll with the pending ticket from OTP. Approved → the reply
+  // carries a login session, so the app opens without logging in again.
+  useEffect(() => {
+    let cancelled = false
+    const check = async () => {
+      const ticket = getPendingTicket("delivery")
+      if (!ticket || document.visibilityState !== "visible") return
+      try {
+        const res = await apiClient.post(
+          "/food/auth/delivery/pending-status",
+          { pendingTicket: ticket },
+          { contextModule: "delivery" },
+        )
+        const data = res?.data?.data || {}
+        if (cancelled) return
+        const status = String(data.status || "").toLowerCase()
+        if (status === "approved" && data.accessToken) {
+          setAuthData("delivery", data.accessToken, data.user, data.refreshToken)
+          clearPendingTicket("delivery")
+          sessionStorage.removeItem("delivery_pendingPhone")
+          sessionStorage.removeItem("delivery_pendingStatus")
+          sessionStorage.removeItem("delivery_pendingMessage")
+          sessionStorage.removeItem("delivery_pendingRejectionReason")
+          toast.success("Your account is approved! 🎉")
+          window.location.replace("/food/delivery")
+        } else if (status === "rejected") {
+          const msg = data.rejectionReason
+            ? `Your delivery partner application has been rejected. Reason: ${data.rejectionReason}`
+            : "Your delivery partner application has been rejected. Please contact support."
+          sessionStorage.setItem("delivery_pendingStatus", "rejected")
+          sessionStorage.setItem("delivery_pendingMessage", msg)
+          setLiveStatus("rejected")
+          setLiveMessage(msg)
+        } else if (status === "pending") {
+          setLiveStatus("pending")
+        }
+      } catch (err) {
+        if (err?.response?.status === 401) clearPendingTicket("delivery")
+      }
+    }
+    check()
+    const pollId = setInterval(check, 15000)
+    const onVisible = () => check()
+    window.addEventListener("focus", onVisible)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(pollId)
+      window.removeEventListener("focus", onVisible)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [])
 
   const pendingPhone = useMemo(() => {
     return (

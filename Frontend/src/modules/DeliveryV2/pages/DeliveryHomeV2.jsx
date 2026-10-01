@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useDeliveryStore, resolveOrderKey, mapDeliveryPhaseToTripStatus } from '@/modules/DeliveryV2/store/useDeliveryStore';
+import { useDeliveryStore, resolveOrderKey, mapDeliveryPhaseToTripStatus, dedupeOrdersByIdentity } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { useProximityCheck, formatTripDistanceKm } from '@/modules/DeliveryV2/hooks/useProximityCheck';
 import { useOrderManager } from '@/modules/DeliveryV2/hooks/useOrderManager';
 import { useDeliveryNotificationsContext } from '@/modules/DeliveryV2/components/DeliveryRealtimeShell';
@@ -12,6 +12,7 @@ import { mapOrderLocations } from '@/modules/DeliveryV2/utils/orderMapping';
 // Components
 import LiveMap from '@/modules/DeliveryV2/components/map/LiveMap';
 import { PickupActionModal } from '@/modules/DeliveryV2/components/modals/PickupActionModal';
+import { NewOrderModal } from '@/modules/DeliveryV2/components/modals/NewOrderModal';
 import { DeliveryVerificationModal } from '@/modules/DeliveryV2/components/modals/DeliveryVerificationModal';
 import { OrderSummaryModal } from '@/modules/DeliveryV2/components/modals/OrderSummaryModal';
 import ActionSlider from '@/modules/DeliveryV2/components/ui/ActionSlider';
@@ -82,8 +83,61 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     updateOrderSession(focusedOrderId, { isModalMinimized: value });
   };
   const { isWithinRange, distanceToTarget } = useProximityCheck();
-  const { reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
-  const { clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, claimedOrderId, clearClaimedOrderId, adminNotification, clearAdminNotification, isConnected: isSocketConnected, emitLocation } = useDeliveryNotificationsContext();
+  const { acceptOrder, reachPickup, pickUpOrder, reachDrop, completeDelivery, resetTrip } = useOrderManager();
+  const { clearNewOrder, orderStatusUpdate, clearOrderStatusUpdate, claimedOrderId, clearClaimedOrderId, adminNotification, clearAdminNotification, isConnected: isSocketConnected, emitLocation, ringUntilHandled, stopSound, isOrderAlertMuted, toggleOrderAlertMuted, muteUiTick } = useDeliveryNotificationsContext();
+
+  // Incoming-order popup. A rider with no active order gets every new offer
+  // as a popup right here (ringing until accept / pass). Once they carry an
+  // order (multi-order limit set in admin), further offers stay in the Orders
+  // tab with its short ring, as before.
+  const newOrders = useDeliveryStore((state) => state.newOrders);
+  const [dismissedOfferKey, setDismissedOfferKey] = useState(null);
+  const [offerActionBusy, setOfferActionBusy] = useState(false);
+  const feedOffer = isOnline && acceptedOrders.length === 0
+    ? dedupeOrdersByIdentity(newOrders).find((order) => resolveOrderKey(order) !== dismissedOfferKey) || null
+    : null;
+  const feedOfferKey = feedOffer ? resolveOrderKey(feedOffer) : null;
+
+  useEffect(() => {
+    if (!feedOffer || isOrderAlertMuted(feedOffer)) return;
+    ringUntilHandled(feedOffer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedOfferKey, muteUiTick]);
+
+  const handleFeedOfferAccept = async (order) => {
+    if (offerActionBusy) return;
+    setOfferActionBusy(true);
+    stopSound?.();
+    try {
+      await acceptOrder(order);
+      clearNewOrder(order);
+      setFocusedOrder(resolveOrderKey(order));
+      toast.success('Order accepted');
+      if (currentTab !== 'feed') navigate('/food/delivery/feed');
+    } catch {
+      // useOrderManager already showed the reason
+    } finally {
+      setOfferActionBusy(false);
+    }
+  };
+
+  const handleFeedOfferPass = async (order) => {
+    const orderId = resolveOrderKey(order);
+    stopSound?.();
+    try {
+      if (orderId) await deliveryAPI.rejectOrder(orderId);
+    } catch (error) {
+      console.warn('[DeliveryHomeV2] reject failed:', error?.message || error);
+    } finally {
+      clearNewOrder(order);
+    }
+  };
+
+  const handleFeedOfferMinimize = (order) => {
+    setDismissedOfferKey(resolveOrderKey(order));
+    stopSound?.();
+    toast('Order request kept in the Orders tab');
+  };
   const companyName = useCompanyName();
   const { items: broadcastItems, unreadCount: notificationUnreadCount, markAsRead: markBroadcastAsRead, dismissAll: dismissAllBroadcast } = useNotificationInbox("delivery", { limit: 20 });
 
@@ -1181,6 +1235,21 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
             </button>
          </div>
       </BottomPopup>
+
+      {/* Incoming order popup (rider with no active order) */}
+      <AnimatePresence>
+        {feedOffer && (
+          <NewOrderModal
+            key={feedOfferKey}
+            order={feedOffer}
+            onAccept={handleFeedOfferAccept}
+            onReject={() => handleFeedOfferPass(feedOffer)}
+            onMinimize={() => handleFeedOfferMinimize(feedOffer)}
+            isMuted={isOrderAlertMuted(feedOffer)}
+            onToggleMute={() => toggleOrderAlertMuted(feedOffer)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Floating Minimize/Restore Toggle - Above navbar (feed tab only) */}
       {currentTab === 'feed' && isModalMinimized && (activeOrder || showVerification) && (

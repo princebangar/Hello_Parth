@@ -47,9 +47,17 @@ export const useOrderManager = () => {
 
       if (response?.data?.success) {
         const fullOrder = response.data.data?.order || order;
+        // orderId becomes the Mongo id here; keep the "FOD-…" one for display.
+        const displayOrderId =
+          fullOrder.displayOrderId ||
+          [fullOrder.orderId, fullOrder.order_id, order?.orderId]
+            .map((v) => String(v || ''))
+            .find((v) => v && v !== String(orderId)) ||
+          undefined;
         const mappedOrder = mapOrderLocations({
           ...fullOrder,
           orderId,
+          displayOrderId,
         });
         acceptOrderToQueue(mappedOrder);
         removeNewOrder(orderId);
@@ -204,7 +212,11 @@ export const useOrderManager = () => {
       }
 
       if (finalOrder) {
-        acceptOrderToQueue(mapOrderLocations({ ...finalOrder, orderId }));
+        // orderId is the Mongo id from here on; keep the "FOD-…" one for display.
+        const displayOrderId =
+          finalOrder.displayOrderId ||
+          (String(finalOrder.orderId || '') !== String(orderId) ? finalOrder.orderId : undefined);
+        acceptOrderToQueue(mapOrderLocations({ ...finalOrder, orderId, displayOrderId }));
       }
 
       updateTripStatus('COMPLETED', orderId);
