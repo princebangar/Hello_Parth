@@ -2,8 +2,9 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { Suspense, lazy } from "react"
 import Loader from "@/shared/components/Loader"
 import { peekLoginReturnTo, resolvePostLoginRoute } from "@/shared/utils/activeModule.js"
+import { loadLoginPage } from "@/shared/utils/preloadLogin.js"
 
-const Login = lazy(() => import("./pages/Login"))
+const Login = lazy(loadLoginPage)
 
 function LoginRedirect() {
   const location = useLocation()

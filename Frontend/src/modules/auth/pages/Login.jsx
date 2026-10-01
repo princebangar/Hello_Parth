@@ -5,14 +5,37 @@ import { Loader2, ArrowRight, ArrowLeft, X } from "lucide-react"
 import { toast } from "sonner"
 import apiClient, { authAPI } from "@food/api"
 import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/moduleAuth"
-import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo, CONSUMER_GUEST_HOME } from "@/shared/utils/activeModule.js"
+import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo, CONSUMER_GUEST_HOME, prefetchConsumerAppsWhenIdle } from "@/shared/utils/activeModule.js"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
+import { prefetchPolicyContentWhenIdle } from "@/shared/utils/policyPages"
+
+// Typed number survives a trip to Terms / Privacy / Support and back.
+const PHONE_DRAFT_KEY = "login_phone_draft"
+const readPhoneDraft = () => {
+  try {
+    return String(sessionStorage.getItem(PHONE_DRAFT_KEY) || "").replace(/\D/g, "").slice(0, 10)
+  } catch {
+    return ""
+  }
+}
+const writePhoneDraft = (value) => {
+  try {
+    if (value) sessionStorage.setItem(PHONE_DRAFT_KEY, value)
+    else sessionStorage.removeItem(PHONE_DRAFT_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 export default function UnifiedOTPFastLogin() {
   const RESEND_COOLDOWN_SECONDS = 60
   const VERIFY_REQUEST_TIMEOUT_MS = 20000
   const FCM_FETCH_TIMEOUT_MS = 12000
-  const [phoneNumber, setPhoneNumber] = useState("")
+  const [phoneNumber, setPhoneNumberState] = useState(readPhoneDraft)
+  const setPhoneNumber = (value) => {
+    setPhoneNumberState(value)
+    writePhoneDraft(value)
+  }
   const [otp, setOtp] = useState("")
   const [step, setStep] = useState(1) // 1: Phone, 2: OTP, 3: Name (new user), 4: Recover choice, 5: Name (start fresh)
   const [loading, setLoading] = useState(false)
@@ -29,6 +52,46 @@ export default function UnifiedOTPFastLogin() {
     [searchParams, location.state?.referralCode],
   )
   const submitting = useRef(false)
+
+  // Each step after the phone screen gets its own history entry, so the
+  // browser / Android back button returns to the phone screen instead of
+  // leaving the login page (it used to jump to the home page).
+  const goToStep = (next, { replace = false } = {}) => {
+    setStep(next)
+    navigate(`${location.pathname}${location.search}`, {
+      replace,
+      state: { ...(location.state || {}), authStep: next },
+    })
+  }
+
+  const resetToPhoneStep = () => {
+    setStep(1)
+    setOtp("")
+    setName("")
+    setPendingAuthData(null)
+    setDeletedAccountRecovery(null)
+    setResendTimer(0)
+  }
+
+  const historyAuthStep = location.state?.authStep
+  useEffect(() => {
+    if (!historyAuthStep && step > 1) resetToPhoneStep()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyAuthStep])
+
+  // A refresh keeps history state but not component state: drop the stale step.
+  useEffect(() => {
+    if (location.state?.authStep) {
+      const { authStep, ...rest } = location.state
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: rest })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const leaveStepViaHistory = () => {
+    if (location.state?.authStep) navigate(-1)
+    else resetToPhoneStep()
+  }
 
   // Dismiss soft keyboard on unmount & auto-redirect if already logged in
   useEffect(() => {
@@ -51,6 +114,11 @@ export default function UnifiedOTPFastLogin() {
       }
     }
   }, [location.state?.from, navigate])
+
+  // Terms / Privacy / Support load in the background so tapping one opens it straight away - and so does the app
+  // the login is about to open (Taxi, then Food), so there is no skeleton wait after the OTP.
+  useEffect(() => prefetchPolicyContentWhenIdle("user"), [])
+  useEffect(() => prefetchConsumerAppsWhenIdle(), [])
 
   const handleSkipForNow = () => {
     ensureFoodGuestSession()
@@ -80,8 +148,7 @@ export default function UnifiedOTPFastLogin() {
     }
 
     if (step > 1) {
-      setStep(1)
-      setDeletedAccountRecovery(null)
+      leaveStepViaHistory()
       return
     }
 
@@ -221,7 +288,7 @@ export default function UnifiedOTPFastLogin() {
       console.log("[Auth] OTP send response:", otpSendResponse?.data || otpSendResponse)
       setOtpSent(true)
       setOtp("")
-      setStep(2)
+      goToStep(2)
       setResendTimer(RESEND_COOLDOWN_SECONDS)
       toast.success("OTP sent! Check your phone.")
     } catch (err) {
@@ -249,6 +316,7 @@ export default function UnifiedOTPFastLogin() {
       setOtp("")
       setOtpSent(true)
       setResendTimer(RESEND_COOLDOWN_SECONDS)
+      document.getElementById("otp-0")?.focus()
       toast.success("OTP resent successfully.")
     } catch (err) {
       console.log("[Auth] OTP resend error:", err?.response?.data || err)
@@ -261,12 +329,7 @@ export default function UnifiedOTPFastLogin() {
   }
 
   const handleEditNumber = () => {
-    setStep(1)
-    setOtp("")
-    setName("")
-    setPendingAuthData(null)
-    setDeletedAccountRecovery(null)
-    setResendTimer(0)
+    leaveStepViaHistory()
   }
 
   const handleVerifyOTP = async (e) => {
@@ -332,7 +395,7 @@ export default function UnifiedOTPFastLogin() {
 
       if (data.deletedAccountFound) {
         setDeletedAccountRecovery({ recoveryToken: data.recoveryToken, phone: data.phone || phoneNumber })
-        setStep(4)
+        goToStep(4, { replace: true })
         toast.success("We found a previous account on this number.")
         return
       }
@@ -350,12 +413,14 @@ export default function UnifiedOTPFastLogin() {
       if (needsName) {
         setPendingAuthData({ ...data, fcmToken, platform })
         setName("")
-        setStep(3)
+        // Replace the OTP entry: back from "enter name" returns to the phone screen.
+        goToStep(3, { replace: true })
         toast.success("OTP verified. Complete your profile to continue.")
         return
       }
 
       setUnifiedAuthData(data)
+      writePhoneDraft("")
       try {
         await authAPI.saveLoginFcmToken(fcmToken, platform)
       } catch (fcmSaveError) {
@@ -400,9 +465,7 @@ export default function UnifiedOTPFastLogin() {
     }
     if (!pendingAuthData?.accessToken || !pendingAuthData?.user) {
       toast.error("Session expired. Please verify OTP again.")
-      setStep(1)
-      setOtp("")
-      setPendingAuthData(null)
+      leaveStepViaHistory()
       return
     }
 
@@ -429,6 +492,7 @@ export default function UnifiedOTPFastLogin() {
       }
 
       setUnifiedAuthData(nextData)
+      writePhoneDraft("")
       toast.success("Profile completed successfully!")
       consumeLoginReturnTo()
       const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
@@ -455,6 +519,7 @@ export default function UnifiedOTPFastLogin() {
   }
 
   const goToPostLoginRoute = () => {
+    writePhoneDraft("")
     consumeLoginReturnTo()
     const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
     const fromHint = String(location.state?.from || "").split("?")[0]
@@ -487,7 +552,7 @@ export default function UnifiedOTPFastLogin() {
 
   const handleStartFreshChoice = () => {
     setName("")
-    setStep(5)
+    goToStep(5, { replace: true })
   }
 
   const handleConfirmStartFresh = async (e) => {
@@ -499,9 +564,7 @@ export default function UnifiedOTPFastLogin() {
     }
     if (!deletedAccountRecovery?.recoveryToken) {
       toast.error("Session expired. Please verify OTP again.")
-      setStep(1)
-      setOtp("")
-      setDeletedAccountRecovery(null)
+      leaveStepViaHistory()
       return
     }
     if (submitting.current) return
@@ -609,9 +672,9 @@ export default function UnifiedOTPFastLogin() {
         </div>
 
         {/* Mobile Header / Form Area */}
-        <div className="flex-1 w-full relative z-20 flex flex-col items-center justify-start pt-4 lg:justify-center">
-          {/* Top Action Bar (Single Back Button) */}
-          <div className="w-full max-w-[420px] px-6 py-2 flex items-center justify-start z-[100] relative">
+        <div className="flex-1 w-full relative z-20 flex flex-col items-center overflow-y-auto py-16">
+          {/* Top Action Bar (Single Back Button) — pinned so the form itself stays vertically centred */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] px-6 pt-4 pb-2 flex items-center justify-start z-[100]">
             <button
               type="button"
               onClick={handleBack}
@@ -622,7 +685,8 @@ export default function UnifiedOTPFastLogin() {
             </button>
           </div>
 
-          <div className="w-full max-w-[420px] px-6 flex flex-col items-center">
+          {/* my-auto centres the form vertically without clipping it when the keyboard shrinks the view */}
+          <div className="w-full max-w-[420px] px-6 flex flex-col items-center my-auto">
 
             <motion.div
               key="auth-view"
@@ -631,11 +695,14 @@ export default function UnifiedOTPFastLogin() {
               className="w-full flex flex-col items-center"
             >
               {/* Circular Logo */}
-              <img
-                src={DEFAULT_BRAND_LOGO}
-                alt="Hello Parth"
-                className="w-[84px] h-[84px] rounded-full object-cover shadow-lg mb-6"
-              />
+              {/* object-contain + padding: the full logo stays visible inside the circle */}
+              <div className="w-[84px] h-[84px] rounded-full bg-white shadow-lg mb-6 flex items-center justify-center p-3">
+                <img
+                  src={DEFAULT_BRAND_LOGO}
+                  alt="Hello Parth"
+                  className="w-full h-full object-contain"
+                />
+              </div>
 
               <div className="text-center mb-8">
                 <h2 className="text-[32px] leading-tight font-black text-[#1A1A1A] tracking-tight mb-2">
@@ -888,14 +955,22 @@ export default function UnifiedOTPFastLogin() {
                     </button>
                   )}
 
-                  <p className="mt-6 text-center text-[13px] text-gray-800 px-4 font-medium leading-relaxed max-w-[30ch]">
-                    By continuing, you agree to our{" "}
-                    <Link to="/food/user/profile/terms" className="font-bold text-slate-900 hover:underline">Terms</Link>
-                    {", "}
-                    <Link to="/food/user/profile/privacy" className="font-bold text-slate-900 hover:underline">Privacy Policy</Link>
-                    {" "}and{" "}
-                    <Link to="/food/user/profile/support-info" className="font-bold text-slate-900 hover:underline">Support</Link>.
-                  </p>
+                  {step === 1 && (
+                    <p className="mt-6 text-center text-[11px] text-gray-400/80 px-4 font-medium leading-relaxed max-w-[320px] font-['Poppins']">
+                      By continuing, you agree to our <br />
+                      <Link to="/food/user/profile/terms" className="text-gray-400 hover:text-[#F38F24] transition-colors uppercase tracking-wider font-semibold">
+                        TERMS
+                      </Link>
+                      <span className="mx-2 text-gray-400/80 font-bold">•</span>
+                      <Link to="/food/user/profile/privacy" className="text-gray-400 hover:text-[#F38F24] transition-colors uppercase tracking-wider font-semibold">
+                        PRIVACY
+                      </Link>
+                      <span className="mx-2 text-gray-400/80 font-bold">•</span>
+                      <Link to="/food/user/profile/support-info" className="text-gray-400 hover:text-[#F38F24] transition-colors uppercase tracking-wider font-semibold">
+                        SUPPORT
+                      </Link>
+                    </p>
+                  )}
                 </div>
               </form>
             </motion.div>
