@@ -137,13 +137,21 @@ const LocationMapSection = () => {
     };
   }, []);
 
-  const persistCoords = (next) => {
+  const persistCoords = (next, { touch = true } = {}) => {
     setCoords(next);
     setCenterCoords(next);
     setStatus('ready');
+    const previous = getSavedLocation();
+    const moved = !Number.isFinite(previous?.lat) || !Number.isFinite(previous?.lon)
+      || Math.abs(previous.lat - next.lat) > 0.0005
+      || Math.abs(previous.lon - next.lon) > 0.0005;
     saveLocation({
       ...next,
-      updatedAt: Date.now(),
+      // The old address belongs to the old spot — the new one arrives after reverse geocoding.
+      // (Keeping it made the pickup show a place the user had already left.)
+      ...(moved ? { address: '' } : {}),
+      // Showing an already-saved fix again must not make it look freshly detected.
+      ...(touch ? { updatedAt: Date.now() } : {}),
     });
   };
 
@@ -151,10 +159,31 @@ const LocationMapSection = () => {
     saveLocation({ address: String(address || '').trim() });
   };
 
+  // The GPS fix can arrive before the Google Maps script has loaded, and then the address was never looked up
+  // (the pickup stayed blank or kept an old place). Resolve it as soon as the script is ready.
+  const addressLookupKeyRef = useRef('');
+  useEffect(() => {
+    if (!isLoaded || !window.google?.maps?.Geocoder || !coords || address) {
+      return;
+    }
+    const key = `${Number(coords.lat).toFixed(5)},${Number(coords.lon).toFixed(5)}`;
+    if (addressLookupKeyRef.current === key) {
+      return;
+    }
+    addressLookupKeyRef.current = key;
+
+    new window.google.maps.Geocoder().geocode({ location: { lat: coords.lat, lng: coords.lon } }, (results, geocodeStatus) => {
+      if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
+        persistAddress(results[0].formatted_address);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, coords, address]);
+
   useEffect(() => {
     const saved = getSavedLocation();
     if (typeof saved?.lat === 'number' && typeof saved?.lon === 'number') {
-      persistCoords({ lat: saved.lat, lon: saved.lon });
+      persistCoords({ lat: saved.lat, lon: saved.lon }, { touch: false });
     }
 
     const shouldRefreshCurrentLocation =

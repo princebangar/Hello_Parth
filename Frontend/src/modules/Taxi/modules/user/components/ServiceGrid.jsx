@@ -3,13 +3,53 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, normalizeAssetUrl } from '../../../shared/context/SettingsContext';
-import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 import { getPageCache, setPageCache, registerPageCacheLifecycle } from '@/shared/utils/pageCache';
 
 registerPageCacheLifecycle();
 
 const SERVICE_MODULES_CACHE_KEY = 'taxi_home_service_modules';
+// The session cache above is wiped whenever the tab closes or reloads, so every app open started with grey tiles
+// until the request came back. The last list is also kept in localStorage: it is shown at once and the request
+// that follows replaces it (stale-while-revalidate).
+const SERVICE_MODULES_PERSIST_KEY = 'taxi_service_modules_v1';
+
+const readPersistedModules = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SERVICE_MODULES_PERSIST_KEY) || 'null');
+    return Array.isArray(parsed?.list) && parsed.list.length > 0 ? parsed.list : null;
+  } catch {
+    return null;
+  }
+};
+
+const persistModules = (list) => {
+  try {
+    if (Array.isArray(list) && list.length > 0) {
+      localStorage.setItem(SERVICE_MODULES_PERSIST_KEY, JSON.stringify({ at: Date.now(), list }));
+    }
+  } catch {
+    // storage full / blocked - the session cache still works
+  }
+};
+
+const readModuleList = (response) =>
+  response?.data?.data?.results || response?.data?.results || response?.data || [];
+
+/** Downloads the service tiles ahead of time (login screen) so Taxi's first screen has them. Needs no login. */
+export const prefetchServiceModules = async () => {
+  if (getPageCache(SERVICE_MODULES_CACHE_KEY) || readPersistedModules()) return;
+  try {
+    const response = await userService.getAppModules({ limit: 100 });
+    const list = readModuleList(response);
+    if (Array.isArray(list) && list.length > 0) {
+      setPageCache(SERVICE_MODULES_CACHE_KEY, list);
+      persistModules(list);
+    }
+  } catch {
+    // purely an optimisation
+  }
+};
 
 const getDynamicImageSrc = (item = {}, fallbackImage) => {
   const rawImage = item.uploadedImage || item.imageUrl || item.image || item.thumbnail || item.icon || null;
@@ -34,6 +74,7 @@ const getDynamicImageSrc = (item = {}, fallbackImage) => {
 };
 import { userService } from '../services/userService';
 import { X, LayoutGrid } from 'lucide-react';
+import ServiceArt from './ServiceArt';
 
 import taxiFallback from '../../../assets/user-app/taxi.png';
 import bikeFallback from '../../../assets/user-app/bike.png';
@@ -183,7 +224,7 @@ export const ServiceCard = React.memo(({ icon, label, description, path, loading
       whileTap={{ scale: 0.97 }}
       onClick={handleCardClick}
       className={`relative overflow-hidden w-full h-[106px] flex items-center justify-between p-4 rounded-[24px] border text-left transition-all duration-300 group shadow-sm ${isDark
-          ? 'bg-gradient-to-br from-zinc-900 to-zinc-950/90 border-zinc-850 hover:border-yellow-500/30 hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'
+          ? 'bg-gradient-to-br from-zinc-900 to-zinc-950/90 border-zinc-800 hover:border-yellow-500/30 hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'
           : 'bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200/70 hover:border-[#FFB300]/30 hover:shadow-[0_8px_16px_rgba(15,23,42,0.04)]'
         }`}
     >
@@ -235,7 +276,7 @@ const ViewAllCard = React.memo(({ isDark, onClick }) => {
       onClick={onClick}
       className={`relative overflow-hidden w-full h-[106px] flex items-center justify-between p-4 rounded-[24px] border text-left transition-all duration-300 group shadow-sm ${isDark
           ? 'bg-gradient-to-br from-zinc-800 to-zinc-900 border-zinc-700/80 hover:border-yellow-500/30 hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'
-          : 'bg-gradient-to-br from-slate-100 to-slate-200/90 border-slate-350 hover:border-[#FFB300]/30 hover:shadow-[0_8px_16px_rgba(15,23,42,0.04)]'
+          : 'bg-gradient-to-br from-slate-100 to-slate-200/90 border-slate-300 hover:border-[#FFB300]/30 hover:shadow-[0_8px_16px_rgba(15,23,42,0.04)]'
         }`}
     >
       <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.02] to-white/[0.05] pointer-events-none" />
@@ -259,13 +300,8 @@ const ViewAllCard = React.memo(({ isDark, onClick }) => {
   );
 });
 
-const ServiceCardStretched = React.memo(({ subtitle, title, icon, path, onClick, isDark, image, uploadedImage, item }) => {
+const ServiceCardStretched = React.memo(({ subtitle, title, icon, path, onClick, item }) => {
   const navigate = useNavigate();
-  const [imgSrc, setImgSrc] = useState(icon);
-
-  useEffect(() => {
-    setImgSrc(icon);
-  }, [icon]);
 
   const handleCardClick = () => {
     const cleanTitle = String(title || '').toLowerCase();
@@ -277,8 +313,6 @@ const ServiceCardStretched = React.memo(({ subtitle, title, icon, path, onClick,
 
     if (vehicleType) {
       localStorage.setItem('selectedVehicleType', vehicleType);
-      console.log('--- TEMPORARY DEBUG LOG ---');
-      console.log('selectedVehicleType on click (ServiceCardStretched):', vehicleType);
     } else {
       localStorage.removeItem('selectedVehicleType');
     }
@@ -290,169 +324,26 @@ const ServiceCardStretched = React.memo(({ subtitle, title, icon, path, onClick,
     }
   };
 
-  const getFallbackIcon = () => {
-    const cleanTitle = String(title || '').toLowerCase();
-    if (cleanTitle.includes('bus')) return busFallback;
-    if (cleanTitle.includes('bike')) return bikeFallback;
-    if (cleanTitle.includes('parcel') || cleanTitle.includes('delivery')) return parcelFallback;
-    if (cleanTitle.includes('ride') || cleanTitle.includes('cab') || cleanTitle.includes('taxi')) return taxiFallback;
-    return fallbackCar;
-  };
-
-  const renderAllServicesIcon = () => (
-    <div className={`h-11 w-11 rounded-[14px] flex items-center justify-center shrink-0 ${isDark ? 'bg-zinc-800/80 border border-zinc-700/50' : 'bg-slate-200/50 border border-slate-300/30'
-      }`}>
-      <div className="grid grid-cols-2 gap-1 w-5.5 h-5.5">
-        <div className="w-[9px] h-[9px] rounded-[2.5px] bg-[#FFC400]" />
-        <div className="w-[9px] h-[9px] rounded-[2.5px] bg-slate-400 dark:bg-white" />
-        <div className="w-[9px] h-[9px] rounded-[2.5px] bg-slate-400 dark:bg-white" />
-        <div className="w-[9px] h-[9px] rounded-[2.5px] bg-slate-300 dark:bg-zinc-650" />
-      </div>
-    </div>
-  );
-
-  const isAllServices = title === 'All Services' || String(title || '').toLowerCase().includes('all services');
-  const imageSrc = getDynamicImageSrc(item || { uploadedImage, image }, imgSrc || getFallbackIcon());
-
-  const [currentImageSrc, setCurrentImageSrc] = useState(imageSrc);
-
-  useEffect(() => {
-    setCurrentImageSrc(imageSrc);
-  }, [imageSrc]);
-
-  const imageMode = item?.imageMode || item?.imageDisplayMode || 'illustration';
-  const isFallback = !item?.uploadedImage && !item?.image;
+  const isAllServices = String(title || '').toLowerCase().includes('all services');
+  // The admin's tile image wins, then the module's own icon; with neither, ServiceArt draws a glyph.
+  const artSrc = getDynamicImageSrc(item || {}, icon || '');
+  const showSubtitle = subtitle && String(subtitle).toLowerCase() !== String(title || '').toLowerCase();
 
   return (
-    <>
-      <style>{`
-        .everything-card {
-          position: relative;
-          height: 108px;
-          border-radius: 22px;
-          overflow: hidden;
-          background: #121821 !important;
-          border: 1px solid rgba(63, 63, 70, 0.4);
-          width: 100%;
-          text-align: left;
-          display: block;
-          transition: all 0.2s ease;
-          z-index: 10 !important;
-          pointer-events: auto !important;
-          cursor: pointer !important;
-        }
+    <button type="button" onClick={handleCardClick} className="everything-card group">
+      <div className="everything-card-content">
+        {showSubtitle && <span>{subtitle}</span>}
+        <h3>{title}</h3>
+      </div>
 
-        .everything-card::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          z-index: 2;
-          background: linear-gradient(
-            90deg,
-            #121821 0%,
-            #121821 52%,
-            transparent 72%
-          );
-          pointer-events: none;
-        }
-
-        .everything-card:active {
-          transform: scale(0.98);
-        }
-
-        .everything-card-image-wrap {
-          position: absolute;
-          right: 0;
-          bottom: 0;
-          width: 70%;
-          height: 100%;
-          overflow: hidden;
-          z-index: 1;
-        }
-
-        .everything-card-image {
-          width: 190% !important;
-          height: 100% !important;
-          object-fit: cover !important;
-          object-position: right center !important;
-          opacity: 1 !important;
-          filter: none !important;
-          mix-blend-mode: normal !important;
-        }
-
-        .everything-card-content {
-          position: relative;
-          z-index: 4;
-          width: 65%;
-          padding: 11px;
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          justify-content: flex-start;
-          pointer-events: none;
-        }
-
-        .everything-card-content span {
-          display: block;
-          font-size: 11px;
-          font-weight: 750;
-          letter-spacing: 0.05em;
-          color: #94A3B8 !important;
-        }
-
-        .everything-card-content h3 {
-          margin-top: 4px;
-          font-size: 15px;
-          font-weight: 900;
-          line-height: 1.25;
-          color: #ffffff !important;
-        }
-
-        .everything-card-icon-wrap {
-          position: absolute;
-          right: 8px;
-          bottom: 8px;
-          width: 72px;
-          height: 72px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1;
-          pointer-events: none;
-        }
-      `}</style>
-
-      <button
-        type="button"
-        onClick={handleCardClick}
-        className="everything-card group"
-      >
-        <div className="everything-card-content">
-          {String(subtitle || '').toLowerCase() !== String(title || '').toLowerCase() && (
-            <span>{subtitle}</span>
-          )}
-          <h3>{title}</h3>
-        </div>
-
+      <div className="everything-card-art service-art">
         {isAllServices ? (
-          <div className="everything-card-icon-wrap">
-            {renderAllServicesIcon()}
-          </div>
+          <LayoutGrid className="service-art-glyph" size={26} strokeWidth={2} aria-hidden="true" />
         ) : (
-          <div className="everything-card-image-wrap">
-            <img
-              src={currentImageSrc}
-              alt={title}
-              className="everything-card-image"
-              loading="lazy"
-              onError={() => {
-                setCurrentImageSrc(imgSrc || getFallbackIcon());
-              }}
-            />
-          </div>
+          <ServiceArt src={artSrc} label={title} hint={title} />
         )}
-      </button>
-    </>
+      </div>
+    </button>
   );
 });
 
@@ -474,7 +365,7 @@ const ServiceGrid = ({
 }) => {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const cachedModules = getPageCache(SERVICE_MODULES_CACHE_KEY);
+  const cachedModules = getPageCache(SERVICE_MODULES_CACHE_KEY) || readPersistedModules();
   const [modules, setModules] = useState(cachedModules || []);
   const [loading, setLoading] = useState(!cachedModules);
   const [localShowAllModal, localSetShowAllModal] = useState(false);
@@ -557,10 +448,11 @@ const ServiceGrid = ({
       if (!cachedModules) setLoading(true);
       try {
         const response = await userService.getAppModules({ limit: 100 });
-        const list = response?.data?.data?.results || response?.data?.results || response?.data || [];
+        const list = readModuleList(response);
         if (isMounted) {
           setModules(list);
           setPageCache(SERVICE_MODULES_CACHE_KEY, list);
+          persistModules(list);
         }
       } catch (error) {
         console.error('[ServiceGrid] Failed to fetch modules dynamically:', error);
@@ -719,6 +611,7 @@ const ServiceGrid = ({
 
       return {
         icon: apiIcon && apiIcon.trim() !== '' ? apiIcon : getFallbackIcon(m),
+        hasImage: !!(apiIcon && apiIcon.trim() !== ''),
         label: m.name,
         description: typeLabel,
         path: getPath(m),
@@ -757,9 +650,6 @@ const ServiceGrid = ({
     },
   };
 
-  const { theme } = useUserTheme();
-  const isDark = theme === 'dark';
-
   return (
     <div className="w-full">
       <motion.section
@@ -769,7 +659,7 @@ const ServiceGrid = ({
         className="py-1"
       >
         <div className="flex items-center justify-between mb-2.5">
-          <h2 className={`text-[19px] font-[900] tracking-tight leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          <h2 className="user-section-title">
             Everything In Minutes
           </h2>
         </div>
@@ -777,7 +667,7 @@ const ServiceGrid = ({
         {loading ? (
           <div className="grid grid-cols-2 gap-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className={`w-full animate-pulse rounded-[24px] h-[132px] ${isDark ? 'bg-zinc-900/60' : 'bg-slate-100/80'}`} />
+              <div key={i} className="w-full animate-pulse rounded-[20px] h-[96px]" style={{ background: 'var(--user-card-soft)' }} />
             ))}
           </div>
         ) : (() => {
@@ -798,10 +688,11 @@ const ServiceGrid = ({
                 const isBike = String(item.title || '').toLowerCase().includes('bike');
                 const isBook = String(item.title || '').toLowerCase().includes('book') || String(item.title || '').toLowerCase().includes('ride');
 
-                const fallbackIcon = isParcel ? (parcelModule ? normalizeAssetUrl(parcelModule.mobile_menu_icon) : parcelFallback)
-                  : isBike ? (bikeModule ? normalizeAssetUrl(bikeModule.mobile_menu_icon) : bikeFallback)
-                    : isBook ? (rideModule ? normalizeAssetUrl(rideModule.mobile_menu_icon) : taxiFallback)
-                      : taxiFallback;
+                const moduleIcon = (module) => normalizeAssetUrl(module?.mobile_menu_icon);
+                const fallbackIcon = isParcel ? moduleIcon(parcelModule)
+                  : isBike ? moduleIcon(bikeModule)
+                    : isBook ? moduleIcon(rideModule)
+                      : '';
 
                 const clickHandler = () => {
                   const clickRoute = item.actionRoute || item.route;
@@ -829,9 +720,6 @@ const ServiceGrid = ({
                       subtitle={item.subtitle}
                       icon={fallbackIcon}
                       onClick={clickHandler}
-                      isDark={isDark}
-                      image={item.image}
-                      uploadedImage={item.uploadedImage}
                       item={item}
                     />
                   </motion.div>
