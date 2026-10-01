@@ -12,6 +12,7 @@ import {
 } from "@food/utils/subAdminPermissions"
 import { getAdminHomePath, getModuleAccess, isPlatformAdmin } from "@/shared/utils/adminAccess.js"
 import { refreshAdminProfile } from "@/modules/Global/utils/adminSession"
+import { warmAdminPages } from "@/shared/utils/warmAdminPages.js"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -25,6 +26,9 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const mainRef = useRef(null);
   const user = getCurrentUser("admin");
+
+  // Load the admin pages in the background so sidebar clicks open instantly.
+  useEffect(() => warmAdminPages(import.meta.glob("../../pages/admin/**/*.jsx")), [])
 
   // Keep sub-admin access in sync (permission / module changes apply without re-login).
   // refreshAdminProfile only rewrites the stored profile when something actually changed.

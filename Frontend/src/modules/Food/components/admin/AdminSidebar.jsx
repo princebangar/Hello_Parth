@@ -66,6 +66,7 @@ import { getCurrentUser } from "@food/utils/auth"
 import { adminAPI } from "@food/api"
 import { dispatchAdminNotificationsUpdated } from "@food/hooks/useAdminNotifications"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
+import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -271,7 +272,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
     }
 
     fetchBadges()
-    const timer = setInterval(fetchBadges, 15000)
+    const stopBadgePolling = setVisibleInterval(fetchBadges, 15000)
 
     window.addEventListener("refresh-sidebar-badges", handleRefreshBadges)
 
@@ -281,7 +282,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
     }, 700)
 
     return () => {
-      clearInterval(timer)
+      stopBadgePolling()
       clearTimeout(fallbackTimer)
       window.removeEventListener("refresh-sidebar-badges", handleRefreshBadges)
     }
