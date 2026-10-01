@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -23,7 +23,7 @@ import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistrat
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED } from './shared/featureFlags';
 import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
-import RouteSkeleton from './modules/shared/components/RouteSkeleton';
+import AppRouteFallback from '@/shared/components/AppRouteFallback';
 import './App.css';
 import './index.css';
 
@@ -266,8 +266,6 @@ const AdminOwnerBookings = lazy(() => import('./modules/admin/pages/owners/Owner
 const AdminGeoFencing = lazy(() => import('./modules/admin/pages/geo/GeoFencing'));
 const AdminHeatMap = lazy(() => import('./modules/admin/pages/geo/HeatMap'));
 const AdminGodsEye = lazy(() => import('./modules/admin/pages/geo/GodsEye'));
-const AdminFinance = lazy(() => import('./modules/admin/pages/finance/Finance'));
-const AdminFareConfig = lazy(() => import('./modules/admin/pages/finance/FareConfiguration'));
 const AdminSafetyCenter = lazy(() => import('./modules/admin/pages/safety/SafetyCenter'));
 const AdminGlobalSettings = lazy(() => import('./modules/admin/pages/settings/GlobalSettings'));
 const AdminGeneralSettings = lazy(() => import('./modules/admin/pages/settings/GeneralSettings'));
@@ -298,8 +296,6 @@ const AdminLanguages = lazy(() => import('./modules/admin/pages/masters/Language
 const AdminPreferences = lazy(() => import('./modules/admin/pages/masters/Preferences'));
 
 // Admin Management
-const AdminAdmins = lazy(() => import('./modules/admin/pages/management/Admins'));
-const AdminAdminCreate = lazy(() => import('./modules/admin/pages/management/AdminCreate'));
 
 const AdminReportPlaceholder = ({ title }) => (
   <div className="flex flex-col items-center justify-center min-h-[500px] text-gray-400 bg-white rounded-[32px] border border-gray-100 shadow-sm p-10 mx-6">
@@ -506,6 +502,39 @@ const UserAccountInvalidationListener = () => {
       });
     };
 
+    // Ride progress goes into the same Taxi notification list the header bell opens. The id is
+    // ride + status, so a repeated socket event never creates a duplicate row.
+    const RIDE_NOTICES = {
+      accepted: ['Driver accepted your ride', 'Your driver is on the way to the pickup point.'],
+      arriving: ['Driver is arriving', 'Your driver is almost at the pickup point.'],
+      arrived: ['Driver has arrived', 'Your driver is waiting at the pickup point.'],
+      started: ['Ride started', 'Your trip is in progress.'],
+      ongoing: ['Ride started', 'Your trip is in progress.'],
+      completed: ['Ride completed', 'You have reached your destination. Thanks for riding with us.'],
+      cancelled: ['Ride cancelled', 'Your ride was cancelled.'],
+    };
+
+    const handleRideStatus = (payload = {}) => {
+      const rideId = String(payload.rideId || payload.id || payload._id || '').trim();
+      const status = String(payload.liveStatus || payload.status || '').trim().toLowerCase();
+      const notice = RIDE_NOTICES[status];
+      if (!rideId || !notice) {
+        return;
+      }
+
+      addRealtimeNotification({
+        id: `ride:${rideId}:${status}`,
+        title: notice[0],
+        body: notice[1],
+        sentAt: new Date().toISOString(),
+        type: 'ride',
+        source: 'ride-status',
+      });
+    };
+
+    const handleRideAccepted = (payload = {}) => handleRideStatus({ ...payload, status: 'accepted', liveStatus: 'accepted' });
+    const handleRideCancelled = (payload = {}) => handleRideStatus({ ...payload, status: 'cancelled', liveStatus: 'cancelled' });
+
     const socket = socketService.connect({ role: 'user' });
     if (!socket) {
       return undefined;
@@ -513,6 +542,9 @@ const UserAccountInvalidationListener = () => {
 
     socketService.on('account:deleted', handleLogout);
     socketService.on('chat:message', handleAdminChatMessage);
+    socketService.on('ride:status:updated', handleRideStatus);
+    socketService.on('rideAccepted', handleRideAccepted);
+    socketService.on('rideCancelled', handleRideCancelled);
 
     const handleAuthStale = (event) => {
       const staleToken = event.detail?.token || '';
@@ -535,6 +567,9 @@ const UserAccountInvalidationListener = () => {
     return () => {
       socketService.off('account:deleted', handleLogout);
       socketService.off('chat:message', handleAdminChatMessage);
+      socketService.off('ride:status:updated', handleRideStatus);
+      socketService.off('rideAccepted', handleRideAccepted);
+      socketService.off('rideCancelled', handleRideCancelled);
       window.removeEventListener('app:auth-stale', handleAuthStale);
       socketService.disconnect();
     };
@@ -687,17 +722,30 @@ const DriverEntryRedirect = () => {
   );
 };
 
-// Shared full-viewport skeleton (RouteSkeleton) used for the top-level route
+// Shared full-viewport skeleton (RouteSkeleton, i.e. Food's AppShellSkeleton) used for the top-level route
 // Suspense — covers every lazy page in the app (admin/driver/user) with the
 // same "global" loading skeleton as the bottom-nav tabs in
 // UserMainTabKeepAlive.jsx, instead of each Suspense boundary having its own.
-const RouteSoftFallback = RouteSkeleton;
+// The Terms / Privacy / Support screens get the plain loader instead (see AppRouteFallback).
+const RouteSoftFallback = AppRouteFallback;
 
 function TaxiApp() {
+  const { pathname } = useLocation();
+
   useEffect(() => {
     installNativeFcmBridge();
     installBrowserFcmRegistration();
   }, []);
+
+  // index.css styles <html>/<body>/* (Outfit font, root colours) for the Taxi app. That stylesheet
+  // stays loaded after the first visit and TaxiApp can stay mounted in the admin keep-alive, so those
+  // rules are gated on this class — otherwise Food ended up in Outfit too. Driven by the URL, not by
+  // mount/unmount, so it is correct in both cases.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('taxi-app-active', pathname.startsWith('/taxi'));
+    return () => root.classList.remove('taxi-app-active');
+  }, [pathname]);
 
   return (
     <>
@@ -1258,16 +1306,8 @@ function TaxiApp() {
                   element={<AdminBannerImage />}
                 />
 
-                {/* Admin Management */}
-                <Route path="management/admins" element={<AdminAdmins />} />
-                <Route
-                  path="management/admins/create"
-                  element={<AdminAdminCreate />}
-                />
-                <Route
-                  path="management/admins/edit/:id"
-                  element={<AdminAdminCreate />}
-                />
+                {/* Sub-admins are managed only from Global admin; the old Taxi "Admins" URLs go to the dashboard. */}
+                <Route path="management/*" element={<Navigate to="/taxi/admin/dashboard" replace />} />
 
                 {/* Owner Management */}
                 <Route
@@ -1345,7 +1385,8 @@ function TaxiApp() {
                 <Route path="geo/gods-eye" element={<AdminGodsEye />} />
                 <Route path="geo/peak-zone" element={<AdminGeoFencing />} />
                 <Route path="geo/*" element={<AdminGeoFencing />} />
-                <Route path="finance" element={<AdminFinance />} />
+                {/* The old, unlinked Finance page is gone; bookmarks go to the real money screens' home. */}
+                <Route path="finance" element={<Navigate to="/taxi/admin/earnings" replace />} />
                 {/* Price Management */}
                 <Route path="pricing">
                   <Route index element={<Navigate to="service-location" />} />
@@ -1488,10 +1529,6 @@ function TaxiApp() {
                 <Route
                   path="masters/preferences"
                   element={<AdminPreferences />}
-                />
-                <Route
-                  path="masters/roles"
-                  element={<Navigate to="/admin/management/admins" replace />}
                 />
 
                 <Route
