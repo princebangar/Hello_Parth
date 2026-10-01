@@ -1,22 +1,20 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { ArrowLeft, Trash2, AlertTriangle, User } from "lucide-react";
-import { Button } from "@food/components/ui/button";
+import { ArrowLeft, Trash2, User } from "lucide-react";
 import { authAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import { toast } from "sonner";
 import { showAccountDeletedToast } from "@/shared/utils/customToasts";
 import AnimatedPage from "@food/components/user/AnimatedPage";
+import UserDeleteAccountDialog from "@/shared/components/UserDeleteAccountDialog.jsx";
 
 export default function Settings() {
   const navigate = useNavigate();
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
-  const [deleteCaptcha, setDeleteCaptcha] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
-    if (isDeleting || deleteCaptcha !== "DELETE") return;
+    if (isDeleting) return;
     setIsDeleting(true);
     try {
       await authAPI.deleteAccount("user");
@@ -81,10 +79,7 @@ export default function Settings() {
 
           {/* Delete Account */}
           <div 
-            onClick={() => {
-              setDeleteCaptcha("");
-              setDeleteAccountOpen(true);
-            }}
+            onClick={() => setDeleteAccountOpen(true)}
             className="block group cursor-pointer border-b border-gray-200/80 dark:border-gray-800/80 py-4"
           >
             <div className="flex items-center gap-3 transition-all duration-150">
@@ -103,71 +98,12 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Delete Account Confirmation Dialog */}
-      {deleteAccountOpen && (
-        <div className="fixed inset-0 z-[1000] overflow-y-auto bg-black/60 backdrop-blur-sm">
-          <div className="flex min-h-screen items-center justify-center p-4 py-10">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#1a1a1a] shadow-2xl border border-red-100 dark:border-red-900/30 overflow-hidden p-6">
-              
-              <div className="flex flex-col items-center text-center mb-4">
-                <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
-                  <Trash2 className="h-7 w-7 text-red-600 dark:text-red-400" />
-                </div>
-                <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                  Delete Your Account?
-                </h3>
-              </div>
-
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 leading-relaxed text-center">
-                Are you sure you want to delete your account?
-              </p>
-
-              <div className="mb-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-r-xl p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                  <span className="text-sm font-bold text-red-700 dark:text-red-400">Warning</span>
-                </div>
-                <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
-                  Your account will be Deleted. Admin will keep your historical records for revenue reporting.
-                </p>
-              </div>
-              
-              <div className="mb-6">
-                <input 
-                  type="text" 
-                  placeholder="Type DELETE to confirm" 
-                  value={deleteCaptcha}
-                  onChange={(e) => setDeleteCaptcha(e.target.value.toUpperCase())}
-                  className="w-full h-12 px-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-transparent dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-50 dark:focus:ring-red-900/20 outline-none transition-all font-bold text-center tracking-widest placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 h-12 rounded-xl text-md font-bold ring-2 ring-gray-300 dark:ring-gray-600"
-                  onClick={() => setDeleteAccountOpen(false)}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white text-md font-bold disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-red-600/20"
-                  onClick={handleDeleteAccount}
-                  disabled={isDeleting || deleteCaptcha !== "DELETE"}
-                >
-                  {isDeleting ? "Deleting..." : "Delete Account"}
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      )}
+      <UserDeleteAccountDialog
+        open={deleteAccountOpen}
+        onClose={() => setDeleteAccountOpen(false)}
+        onConfirm={handleDeleteAccount}
+        isDeleting={isDeleting}
+      />
 
     </AnimatedPage>
   );

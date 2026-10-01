@@ -5,6 +5,7 @@ import { Button } from "@food/components/ui/button"
 import { Card, CardContent } from "@food/components/ui/card"
 import { useState } from "react"
 import { performUserLogout } from "@/shared/utils/userSession.js"
+import { logoutWithTransition } from "@/shared/utils/logoutTransition.js"
 
 export default function Logout() {
   const navigate = useNavigate()
@@ -16,10 +17,7 @@ export default function Logout() {
     setError("")
 
     try {
-      await performUserLogout()
-      setTimeout(() => {
-        navigate("/login", { replace: true })
-      }, 500)
+      await logoutWithTransition({ navigate, signOut: performUserLogout })
     } catch {
       setError("An error occurred during logout, but you have been signed out locally.")
       setTimeout(() => {

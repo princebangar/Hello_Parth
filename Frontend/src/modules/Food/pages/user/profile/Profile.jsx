@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useNavigationType, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
+  AlertTriangle,
   ArrowLeft,
   ChevronRight,
   Wallet,
@@ -15,14 +16,12 @@ import {
   Percent,
   Info,
   PenSquare,
-  AlertTriangle,
   Settings as SettingsIcon,
   Power,
   ShoppingCart,
   MapPin,
   Share2,
   Utensils,
-  Trash2,
   Pencil,
   Loader2,
   Camera,
@@ -42,7 +41,6 @@ import { normalizeImageUrl } from "@food/utils/common";
 
 import AnimatedPage from "@food/components/user/AnimatedPage";
 import { Card, CardContent } from "@food/components/ui/card";
-import { Button } from "@food/components/ui/button";
 import { useProfile } from "@food/context/ProfileContext";
 import { useLocationSelector } from "@food/components/user/UserLayout";
 import {
@@ -65,6 +63,15 @@ import { toast } from "sonner";
 import { showAccountDeletedToast } from "@/shared/utils/customToasts";
 import UserAppearanceDialog from "@/shared/components/UserAppearanceDialog.jsx";
 import UserLogoutConfirmDialog from "@/shared/components/UserLogoutConfirmDialog.jsx";
+import UserDeleteAccountDialog from "@/shared/components/UserDeleteAccountDialog.jsx";
+import useBodyScrollLock from "@/shared/hooks/useBodyScrollLock.js";
+import { preloadAuthApp } from "@/shared/utils/preloadLogin.js";
+import {
+  hideLogoutCover,
+  hideLogoutCoverWhenLoginShown,
+  logoutWithTransition,
+  showLogoutCover,
+} from "@/shared/utils/logoutTransition.js";
 import { getFoodUserTheme, THEME_CHANGE_EVENT } from "@/shared/utils/theme.js";
 import {
   formatSavedAddressSubtitle,
@@ -125,7 +132,6 @@ export default function Profile() {
   const [referralReward, setReferralReward] = useState(0);
   const [walletBalance, setWalletBalance] = useState(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
-  const [deleteCaptcha, setDeleteCaptcha] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [showBalanceWarning, setShowBalanceWarning] = useState(false);
   const [balanceData, setBalanceData] = useState({ balance: 0, type: "Wallet" });
@@ -157,17 +163,7 @@ export default function Profile() {
   }, [navType]);
 
   // Lock scroll when any popup is open
-  useEffect(() => {
-    const isPopupOpen = logoutConfirmOpen || deleteAccountOpen || showBalanceWarning || vegModeOpen || appearanceOpen;
-    if (isPopupOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [logoutConfirmOpen, deleteAccountOpen, showBalanceWarning, vegModeOpen, appearanceOpen]);
+  useBodyScrollLock(logoutConfirmOpen || deleteAccountOpen || showBalanceWarning || vegModeOpen || appearanceOpen);
 
   const handleVegModeUpdate = (nextValue) => {
     setVegMode(nextValue);
@@ -386,11 +382,10 @@ export default function Profile() {
     setIsLoggingOut(true);
 
     try {
-      await performUserLogout();
-      navigate("/login", { replace: true });
+      // Dim "Logging out..." cover + login screen preloaded: the page goes straight to login, no blank frame.
+      await logoutWithTransition({ navigate, signOut: performUserLogout });
     } catch (err) {
       debugError("Error during logout:", err);
-      navigate("/login", { replace: true });
     } finally {
       setIsLoggingOut(false);
     }
@@ -398,26 +393,32 @@ export default function Profile() {
 
   const handleLogoutClick = () => {
     if (isLoggingOut) return;
+    preloadAuthApp();
     setLogoutConfirmOpen(true);
   };
 
   const handleDeleteAccount = async () => {
-    if (isDeleting || deleteCaptcha !== "DELETE") return;
+    if (isDeleting) return;
     setIsDeleting(true);
     try {
       await authAPI.deleteAccount("user");
 
       showAccountDeletedToast();
 
+      // Cover the screen first so the page being torn down is never seen empty
+      showLogoutCover();
       // Clear user module authentication data
       clearModuleAuth("user");
 
       // Dispatch auth change event to notify other components
       window.dispatchEvent(new Event("userAuthChanged"));
 
-      // Navigate to sign in page
+      // Navigate to sign in page (login screen already loaded, so no blank frame)
+      await preloadAuthApp();
       navigate("/login", { replace: true });
+      hideLogoutCoverWhenLoginShown();
     } catch (error) {
+      hideLogoutCover();
       debugError("Error deleting account:", error);
       toast.error(error?.response?.data?.message || "Failed to delete account. Please try again.");
     } finally {
@@ -1028,7 +1029,6 @@ export default function Profile() {
               <button
                 onClick={() => {
                   setShowBalanceWarning(false);
-                  setDeleteCaptcha("");
                   setDeleteAccountOpen(true);
                 }}
                 className="w-full h-12 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -1047,72 +1047,12 @@ export default function Profile() {
       )}
 
       {/* Delete Account Confirmation */}
-      {deleteAccountOpen && (
-        <div className="fixed inset-0 z-[1000] overflow-y-auto bg-black/60 backdrop-blur-sm">
-          <div className="flex min-h-screen items-center justify-center p-4 py-10">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#1a1a1a] shadow-2xl border border-red-100 dark:border-red-900/30 overflow-hidden p-6">
-
-              {/* Icon + Title centered */}
-              <div className="flex flex-col items-center text-center mb-4">
-                <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
-                  <Trash2 className="h-7 w-7 text-red-600 dark:text-red-400" />
-                </div>
-                <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                  Delete Your Account?
-                </h3>
-              </div>
-
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 leading-relaxed text-center">
-                Are you sure you want to delete your account?
-              </p>
-
-              <div className="mb-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-r-xl p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                  <span className="text-sm font-bold text-red-700 dark:text-red-400">Warning</span>
-                </div>
-                <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
-                  Your account will be Deleted. Admin will keep your historical records for revenue reporting.
-                </p>
-              </div>
-
-              <div className="mb-6">
-                <input
-                  type="text"
-                  placeholder="Type DELETE to confirm"
-                  value={deleteCaptcha}
-                  onChange={(e) => setDeleteCaptcha(e.target.value.toUpperCase())}
-                  className="w-full h-12 px-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-transparent dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-50 dark:focus:ring-red-900/20 outline-none transition-all font-bold text-center tracking-widest placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 h-12 rounded-xl text-md font-bold ring-2 ring-gray-300 dark:ring-gray-600"
-                  onClick={() => setDeleteAccountOpen(false)}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white text-md font-bold disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-red-600/20"
-                  onClick={handleDeleteAccount}
-                  disabled={isDeleting || deleteCaptcha !== "DELETE"}
-                >
-                  {isDeleting ? "Deleting..." : "Delete Account"}
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      )}
-
+      <UserDeleteAccountDialog
+        open={deleteAccountOpen}
+        onClose={() => setDeleteAccountOpen(false)}
+        onConfirm={handleDeleteAccount}
+        isDeleting={isDeleting}
+      />
 
     </AnimatedPage>
   );
