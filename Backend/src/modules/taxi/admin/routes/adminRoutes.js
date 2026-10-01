@@ -9,7 +9,6 @@ import {
   approveOwner,
   approveOwnerSignupFromDriver,
   approveBusDriverSignup,
-  createAdminAccount,
   createAdminBusBooking,
   createBusService,
   createAppModule,
@@ -157,7 +156,6 @@ import {
   listOwnerWalletHistory,
   adjustOwnerWallet,
   updateAppModule,
-  updateAdminAccount,
   updateBusService,
   updateDriver,
   updateEmployee,
@@ -190,10 +188,7 @@ import {
   createVehicleType,
   createFleetVehicle,
   cancelAdminBusBookingSeats,
-  deleteAdminAccount,
   deleteVehicleType,
-  getAdminPermissions,
-  getAdmins,
   getTransportTypes,
   deleteFleetVehicle,
 } from '../controllers/adminController.js';
@@ -224,11 +219,6 @@ adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory)
 
 adminRouter.use('/admin', authenticate(['admin']));
 
-adminRouter.get('/admin/permissions', getAdminPermissions);
-adminRouter.get('/admin/admin-management/admins', getAdmins);
-adminRouter.post('/admin/admin-management/admins', createAdminAccount);
-adminRouter.patch('/admin/admin-management/admins/:id', updateAdminAccount);
-adminRouter.delete('/admin/admin-management/admins/:id', deleteAdminAccount);
 
 adminRouter.get('/admin/users', getUsers);
 adminRouter.get('/admin/employees', getEmployees);

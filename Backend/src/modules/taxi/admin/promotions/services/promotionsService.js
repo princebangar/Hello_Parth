@@ -2,14 +2,16 @@ import mongoose from 'mongoose';
 import { ApiError } from '../../../../../utils/ApiError.js';
 import { ServiceLocation } from '../../models/ServiceLocation.js';
 import { User } from '../../../user/models/User.js';
+import { Driver } from '../../../driver/models/Driver.js';
 import { Banner } from '../models/Banner.js';
 import { Notification } from '../models/Notification.js';
 import { PromoCode } from '../models/PromoCode.js';
 import { uploadDataUrlToCloudinary } from '../../../../../utils/cloudinaryUpload.js';
-import { sendPushNotificationToAudience } from '../../../services/pushNotificationService.js';
+import { sendPushNotificationToAudience, sendPushNotificationToEntities } from '../../../services/pushNotificationService.js';
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
 const PROMO_TRANSPORT_TYPES = ['taxi', 'delivery', 'pooling', 'bus', 'self_drive', 'all'];
+const PROMO_AUDIENCES = ['all', 'first_time', 'existing', 'specific'];
 
 const buildPaginator = (items, page = 1, limit = 50) => {
   const safePage = Math.max(1, Number(page) || 1);
@@ -103,6 +105,7 @@ const serializePromoCode = (item) => ({
   user_id: item.user_id || '',
   user_name: item.user_name || '',
   user_specific: item.user_specific === true,
+  audience: item.audience && item.audience !== 'all' ? item.audience : (item.user_specific === true ? 'specific' : 'all'),
   transport_type: item.transport_type || 'all',
   code: item.code || '',
   minimum_trip_amount: Number(item.minimum_trip_amount || 0),
@@ -124,6 +127,12 @@ const serializeNotification = (item) => ({
   service_location_id: item.service_location_id || '',
   service_location_name: item.service_location_name || '',
   send_to: item.send_to || 'all',
+  recipients: (item.recipients || []).map((recipient) => ({
+    role: recipient.role,
+    id: String(recipient.id),
+    label: recipient.label || '',
+    subLabel: recipient.subLabel || '',
+  })),
   push_title: item.push_title || '',
   message: item.message || '',
   image: item.image || '',
@@ -239,7 +248,18 @@ const ensurePromoCodeUnique = async (code, ignoreId = null) => {
 
 const normalizePromoPayload = async (payload, existing = null) => {
   const serviceLocationData = await normalizeServiceLocationIds(payload, existing);
-  const userSpecific = normalizeBoolean(payload.user_specific, existing?.user_specific ?? false);
+  const requestedAudience = normalizeText(payload.audience).toLowerCase();
+  if (requestedAudience && !PROMO_AUDIENCES.includes(requestedAudience)) {
+    throw new ApiError(400, 'Audience must be one of all, first_time, existing or specific');
+  }
+  // audience wins; older clients that only send user_specific keep working.
+  const audience = requestedAudience
+    || (payload.user_specific !== undefined
+      ? (normalizeBoolean(payload.user_specific, false) ? 'specific' : 'all')
+      : (existing?.audience && existing.audience !== 'all'
+        ? existing.audience
+        : (existing?.user_specific === true ? 'specific' : 'all')));
+  const userSpecific = audience === 'specific';
   const userId = normalizeText(payload.user_id ?? existing?.user_id);
   const user = userId
     ? await User.findById(toObjectIdOrThrow(userId, 'user id')).select('_id name phone').lean()
@@ -299,6 +319,7 @@ const normalizePromoPayload = async (payload, existing = null) => {
     user_id: userSpecific ? user?._id || userId : '',
     user_name: userSpecific ? user?.name || '' : '',
     user_specific: userSpecific,
+    audience,
     transport_type: transportType,
     code,
     minimum_trip_amount: minimumTripAmount,
@@ -313,17 +334,42 @@ const normalizePromoPayload = async (payload, existing = null) => {
   };
 };
 
+const normalizeRecipients = (value) => {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map((item) => ({
+      role: normalizeText(item?.role),
+      id: normalizeText(item?.id),
+      label: normalizeText(item?.label),
+      subLabel: normalizeText(item?.subLabel),
+    }))
+    .filter((item) => ['user', 'driver'].includes(item.role) && mongoose.Types.ObjectId.isValid(item.id))
+    .filter((item) => {
+      const key = item.role + ':' + item.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
 const normalizeNotificationPayload = async (payload, existing = null) => {
+  const sendTo = normalizeText(payload.send_to ?? existing?.send_to ?? 'all');
+  if (!['all', 'drivers', 'users', 'custom'].includes(sendTo)) {
+    throw new ApiError(400, 'Send to must be all, drivers, users, or custom');
+  }
+
+  const isCustom = sendTo === 'custom';
+  const recipients = isCustom ? normalizeRecipients(payload.recipients ?? existing?.recipients) : [];
+  if (isCustom && recipients.length === 0) {
+    throw new ApiError(400, 'Select at least one person to notify');
+  }
+
   const serviceLocationId = payload.service_location_id || existing?.service_location_id;
-  if (!serviceLocationId) {
+  if (!serviceLocationId && !isCustom) {
     throw new ApiError(400, 'Service location is required');
   }
 
-  const serviceLocation = await ensureServiceLocationExists(serviceLocationId);
-  const sendTo = normalizeText(payload.send_to ?? existing?.send_to ?? 'all');
-  if (!['all', 'drivers', 'users'].includes(sendTo)) {
-    throw new ApiError(400, 'Send to must be all, drivers, or users');
-  }
+  const serviceLocation = serviceLocationId ? await ensureServiceLocationExists(serviceLocationId) : null;
 
   const pushTitle = normalizeText(payload.push_title ?? payload.title ?? existing?.push_title);
   const message = normalizeText(payload.message ?? existing?.message);
@@ -353,9 +399,10 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
   }
 
   return {
-    service_location_id: serviceLocation._id,
-    service_location_name: serviceLocation.service_location_name || serviceLocation.name || '',
+    ...(serviceLocation ? { service_location_id: serviceLocation._id } : {}),
+    service_location_name: serviceLocation ? (serviceLocation.service_location_name || serviceLocation.name || '') : '',
     send_to: sendTo,
+    recipients,
     push_title: pushTitle,
     message,
     image,
@@ -531,14 +578,23 @@ export const createNotification = async (payload) => {
   const normalizedPayload = await normalizeNotificationPayload(payload);
   const notification = await Notification.create(normalizedPayload);
   const serializedNotification = serializeNotification(notification.toObject());
-  const delivery = await sendPushNotificationToAudience({
-    notificationId: notification._id,
-    serviceLocationId: notification.service_location_id,
-    sendTo: notification.send_to,
-    title: notification.push_title,
-    body: notification.message,
-    image: notification.image,
-  });
+  const delivery = notification.send_to === 'custom'
+    ? await sendPushNotificationToEntities({
+      userIds: notification.recipients.filter((item) => item.role === 'user').map((item) => String(item.id)),
+      driverIds: notification.recipients.filter((item) => item.role === 'driver').map((item) => String(item.id)),
+      title: notification.push_title,
+      body: notification.message,
+      image: notification.image,
+      data: { notificationId: String(notification._id), sendTo: 'custom' },
+    })
+    : await sendPushNotificationToAudience({
+      notificationId: notification._id,
+      serviceLocationId: notification.service_location_id,
+      sendTo: notification.send_to,
+      title: notification.push_title,
+      body: notification.message,
+      image: notification.image,
+    });
 
   return {
     notification: serializedNotification,
@@ -547,6 +603,33 @@ export const createNotification = async (payload) => {
       ? 'Notification sent and push delivery attempted'
       : 'Notification created but push delivery is not configured',
   };
+};
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Search riders / drivers for the "Particular persons" picker.
+export const searchNotificationRecipients = async ({ role = 'user', q = '', limit = 20 } = {}) => {
+  const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+  const term = String(q || '').trim();
+  const filter = { deletedAt: null };
+  if (term) {
+    const pattern = new RegExp(escapeRegExp(term), 'i');
+    filter.$or = [{ name: pattern }, { phone: pattern }];
+  }
+
+  const isDriver = role === 'driver';
+  const rows = await (isDriver ? Driver : User).find(filter)
+    .sort({ createdAt: -1 })
+    .limit(safeLimit)
+    .select('name phone')
+    .lean();
+
+  return rows.map((row) => ({
+    role: isDriver ? 'driver' : 'user',
+    id: String(row._id),
+    label: row.name || row.phone || 'Unnamed',
+    subLabel: row.phone || '',
+  }));
 };
 
 export const deleteNotification = async (id) => {

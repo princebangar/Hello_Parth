@@ -33,6 +33,10 @@ import { Driver } from '../../driver/models/Driver.js';
 import { BusDriver } from '../../driver/models/BusDriver.js';
 import { Zone } from '../../driver/models/Zone.js';
 import { Ride } from '../../user/models/Ride.js';
+import { loadRideStats, sumGroups } from './dashboardRideStats.js';
+import { loadDriverProfileStats, findLastRideLocation } from './driverProfileStats.js';
+import { loadCancellationStats } from './cancellationStats.js';
+import { buildFleetVehicleFilter, buildOwnerBookingFilter, buildPagerMeta, readPaging } from './ownerListQueries.js';
 import { UserSubscription } from '../../user/models/UserSubscription.js';
 import { AppLanguage } from '../models/AppLanguage.js';
 import { RideModule } from '../models/RideModule.js';
@@ -75,6 +79,9 @@ let publicVehicleCatalogCache = {
   value: null,
 };
 const DASHBOARD_CACHE_TTL_MS = 60 * 1000;
+// Upper bound for admin tables that return everything in one response (newest first). Keeps a response from
+// growing without limit as data accumulates; far above what these screens show at once.
+const LIST_SAFETY_CAP = 1000;
 let dashboardCache = {
   expiresAt: 0,
   value: null,
@@ -2365,187 +2372,6 @@ export const loginAdmin = async ({ email, password }) => {
   };
 };
 
-export const listAdminPermissions = async () =>
-  ADMIN_PERMISSIONS.map((key) => ({ key, label: key }));
-
-export const listAdmins = async (currentAdmin) => {
-  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
-
-  const admins = await Admin.find()
-    .select('-resetPasswordOtp -resetPasswordExpires')
-    .sort({ createdAt: -1 })
-    .lean();
-
-  // Food sub-admins and Global sub-admins are managed from their own admin screens.
-  return enrichAdminSummaries(admins.filter(isManagedFromTaxiAdmin));
-};
-
-// Admins the Taxi Admins screen may list / edit / delete: not Food-only, not Global sub-admins.
-const isManagedFromTaxiAdmin = (admin = {}) =>
-  admin.isGlobalSubAdmin !== true && getAdminModuleAccess(admin).taxi === true;
-
-const validateSubadminPayload = async (payload = {}, existingAdminId = null) => {
-  const adminType = normalizeAdminType(payload.admin_type || payload.role);
-  const name = String(payload.name || '').trim();
-  const email = String(payload.email || '').trim().toLowerCase();
-  const phone = String(payload.phone || '').trim();
-  const role = String(payload.role || (adminType === 'superadmin' ? 'superadmin' : 'subadmin')).trim();
-  const permissions = normalizeAdminPermissions(
-    adminType === 'superadmin' ? [SUPERADMIN_PERMISSION] : payload.permissions || [],
-  );
-  const serviceLocationIds = normalizeObjectIdList(payload.service_location_ids);
-  const zoneIds = normalizeObjectIdList(payload.zone_ids);
-  const active = payload.active === undefined ? true : normalizeBoolean(payload.active);
-  const status = String(payload.status || (active ? 'active' : 'inactive')).trim().toLowerCase() === 'inactive'
-    ? 'inactive'
-    : 'active';
-
-  if (!name) {
-    throw new ApiError(400, 'Admin name is required');
-  }
-
-  if (!email) {
-    throw new ApiError(400, 'Admin email is required');
-  }
-
-  const duplicate = await Admin.findOne({
-    email,
-    ...(existingAdminId ? { _id: { $ne: existingAdminId } } : {}),
-  }).lean();
-
-  if (duplicate) {
-    throw new ApiError(409, 'Admin email already exists');
-  }
-
-  if (adminType === 'subadmin' && permissions.length === 0) {
-    throw new ApiError(400, 'Select at least one permission for the subadmin');
-  }
-
-  if (adminType === 'subadmin' && serviceLocationIds.length === 0) {
-    throw new ApiError(400, 'Assign at least one service location to the subadmin');
-  }
-
-  if (serviceLocationIds.length > 0) {
-    const count = await ServiceLocation.countDocuments({ _id: { $in: serviceLocationIds } });
-    if (count !== serviceLocationIds.length) {
-      throw new ApiError(400, 'One or more selected service locations are invalid');
-    }
-  }
-
-  if (zoneIds.length > 0) {
-    const zones = await Zone.find({ _id: { $in: zoneIds } }).select('_id service_location_id').lean();
-    if (zones.length !== zoneIds.length) {
-      throw new ApiError(400, 'One or more selected zones are invalid');
-    }
-
-    if (
-      adminType === 'subadmin' &&
-      zones.some((zone) => !serviceLocationIds.some((id) => String(id) === String(zone.service_location_id || '')))
-    ) {
-      throw new ApiError(400, 'Assigned zones must belong to the selected service locations');
-    }
-  }
-
-  return {
-    admin_type: adminType,
-    // Taxi-scoped account: without these the schema default (platform_superadmin, food) would apply.
-    adminLevel: adminType === 'superadmin' ? 'taxi_superadmin' : 'subadmin',
-    module: 'taxi',
-    servicesAccess: ['taxi'],
-    name,
-    email,
-    phone,
-    role,
-    permissions,
-    service_location_ids: adminType === 'superadmin' ? [] : serviceLocationIds,
-    zone_ids: adminType === 'superadmin' ? [] : zoneIds,
-    active,
-    status,
-  };
-};
-
-export const createAdminAccount = async (currentAdmin, payload = {}) => {
-  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
-
-  const password = String(payload.password || '').trim();
-  const passwordConfirmation = String(payload.password_confirmation || payload.passwordConfirmation || '').trim();
-
-  if (!password || password.length < 5) {
-    throw new ApiError(400, 'Password must be at least 5 characters');
-  }
-
-  if (!passwordConfirmation || password !== passwordConfirmation) {
-    throw new ApiError(400, 'Passwords do not match');
-  }
-
-  const validated = await validateSubadminPayload(payload);
-  // The admin model hashes `password` on save — hashing here as well would double-hash it and lock the new
-  // admin out of the unified admin login.
-  const created = await Admin.create({
-    ...validated,
-    password,
-  });
-
-  const [serializedAdmin] = await enrichAdminSummaries([created]);
-  return serializedAdmin;
-};
-
-export const updateAdminAccount = async (currentAdmin, id, payload = {}) => {
-  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
-
-  const admin = await Admin.findById(id).select('+password');
-  if (!admin) {
-    throw new ApiError(404, 'Admin account not found');
-  }
-
-  if (String(admin._id) === String(currentAdmin?.id || '')) {
-    throw new ApiError(400, 'Use your profile flow to update your own admin account');
-  }
-
-  if (!isManagedFromTaxiAdmin(admin)) {
-    throw new ApiError(403, 'This admin is managed from the Global admin');
-  }
-
-  const validated = await validateSubadminPayload(payload, admin._id);
-  Object.assign(admin, validated);
-
-  if (payload.password) {
-    const password = String(payload.password || '').trim();
-    const passwordConfirmation = String(payload.password_confirmation || payload.passwordConfirmation || '').trim();
-    if (password.length < 5) {
-      throw new ApiError(400, 'Password must be at least 5 characters');
-    }
-    if (password !== passwordConfirmation) {
-      throw new ApiError(400, 'Passwords do not match');
-    }
-    admin.password = password;
-  }
-
-  await admin.save();
-  const [serializedAdmin] = await enrichAdminSummaries([admin]);
-  return serializedAdmin;
-};
-
-export const deleteAdminAccount = async (currentAdmin, id) => {
-  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
-
-  const admin = await Admin.findById(id).lean();
-  if (!admin) {
-    throw new ApiError(404, 'Admin account not found');
-  }
-
-  if (String(admin._id) === String(currentAdmin?.id || '')) {
-    throw new ApiError(400, 'You cannot delete your own admin account');
-  }
-
-  if (!isManagedFromTaxiAdmin(admin)) {
-    throw new ApiError(403, 'This admin is managed from the Global admin');
-  }
-
-  await Admin.deleteOne({ _id: admin._id });
-  return { deleted: true };
-};
-
 export const forgotPassword = async (email) => {
   const admin = await Admin.findOne({ email: email?.trim().toLowerCase() });
   if (!admin) {
@@ -3390,7 +3216,11 @@ export const getDriverRatingDetail = async (id) => {
     throw new ApiError(404, 'Driver not found');
   }
 
-  const rides = await Ride.find({ driverId: driver._id }).sort({ createdAt: -1 }).lean();
+  const rides = await Ride.find({ driverId: driver._id })
+    .select('createdAt pickupLocation')
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
 
   return {
     driver: {
@@ -4317,61 +4147,27 @@ export const getDriverProfile = async (id) => {
     throw new ApiError(404, 'Driver not found');
   }
 
-  const [rides, walletTransactions] = await Promise.all([
-    Ride.find({ driverId: driver._id }).sort({ createdAt: -1 }).lean(),
-    WalletTransaction.find({ driverId: driver._id }).sort({ createdAt: -1 }).lean(),
-  ]);
+  // Totals are added up inside MongoDB (see driverProfileStats.js) instead of loading every ride and wallet
+  // transaction of the driver.
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const isCompleted = (ride) => String(ride.status || '').toLowerCase() === 'completed';
-  const isCancelled = (ride) => String(ride.status || '').toLowerCase() === 'cancelled';
-  const isOngoing = (ride) => !isCompleted(ride) && !isCancelled(ride);
+  const { rides: rideStats, wallet: walletStats } = await loadDriverProfileStats(driver._id, startOfDay);
 
-  const completedRides = rides.filter(isCompleted);
-  const cancelledRides = rides.filter(isCancelled);
-  const ongoingRides = rides.filter(isOngoing);
-  const todayRides = rides.filter((ride) => ride.createdAt && ride.createdAt >= startOfDay);
-  const todayCompleted = completedRides.filter((ride) =>
-    (ride.completedAt || ride.createdAt) >= startOfDay
-  );
-  const todayCancelled = cancelledRides.filter((ride) =>
-    (ride.completedAt || ride.createdAt) >= startOfDay
-  );
-
-  const sum = (items, field) =>
-    items.reduce((total, item) => total + Number(item?.[field] || 0), 0);
-
-  const totalEarnings = sum(completedRides, 'fare');
-  const todayEarnings = sum(todayCompleted, 'fare');
-  const driverEarnings = completedRides.reduce((total, ride) => {
-    const fare = Number(ride?.fare || 0);
-    const commission = Number(ride?.commissionAmount || 0);
-    const earning = Number(ride?.driverEarnings ?? Math.max(fare - commission, 0));
-    return total + earning;
-  }, 0);
-  const adminCommission = completedRides.reduce((total, ride) => {
-    const fare = Number(ride?.fare || 0);
-    const explicitCommission = ride?.commissionAmount;
-    const fallbackCommission = Math.max(fare - Number(ride?.driverEarnings || 0), 0);
-    return total + Number(explicitCommission ?? fallbackCommission);
-  }, 0);
-  const byCash = sum(completedRides.filter((r) => r.paymentMethod === 'cash'), 'fare');
-  const byCard = sum(completedRides.filter((r) => r.paymentMethod === 'online'), 'fare');
-  const spendAmount = walletTransactions.reduce((total, item) => {
-    const amount = Number(item?.amount || 0);
-    return amount < 0 ? total + Math.abs(amount) : total;
-  }, 0);
-  const creditAmount = walletTransactions.reduce((total, item) => {
-    const amount = Number(item?.amount || 0);
-    return amount > 0 ? total + amount : total;
-  }, 0);
+  const totalEarnings = rideStats.totalEarnings;
+  const todayEarnings = rideStats.todayEarnings;
+  const driverEarnings = rideStats.driverEarnings;
+  const adminCommission = rideStats.adminCommission;
+  const byCash = rideStats.byCash;
+  const byCard = rideStats.byCard;
+  const spendAmount = walletStats.spend;
+  const creditAmount = walletStats.credit;
   const balanceAmount = Number(driver?.wallet?.balance || 0);
   const cashLimit = Number(driver?.wallet?.cashLimit ?? 500);
   const isWalletBlocked = Boolean(driver?.wallet?.isBlocked);
 
   const driverLocation = driver.location?.coordinates || [];
-  const lastRideLocation = rides.find((ride) => Array.isArray(ride.lastDriverLocation?.coordinates));
+  const lastRideLocation = driverLocation.length === 2 ? null : await findLastRideLocation(driver._id);
   const coordinates = driverLocation.length === 2 ? driverLocation : (lastRideLocation?.lastDriverLocation?.coordinates || []);
 
   const [lng, lat] = coordinates;
@@ -4391,12 +4187,12 @@ export const getDriverProfile = async (id) => {
     online_selfie: driver.onlineSelfie || {},
     vehicle_image: driver.vehicleImage || 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
     stats: {
-      total_trips: rides.length,
-      completed_trips: completedRides.length,
-      cancelled_trips: cancelledRides.length,
-      ongoing_trips: ongoingRides.length,
-      today_trips: todayRides.length,
-      today_cancelled: todayCancelled.length,
+      total_trips: rideStats.total,
+      completed_trips: rideStats.completed,
+      cancelled_trips: rideStats.cancelled,
+      ongoing_trips: rideStats.ongoing,
+      today_trips: rideStats.todayTotal,
+      today_cancelled: rideStats.todayCancelled,
     },
     earnings: {
       today_earnings: Number(todayEarnings.toFixed(2)),
@@ -4415,7 +4211,7 @@ export const getDriverProfile = async (id) => {
       is_blocked: isWalletBlocked,
       total_credits: Number(creditAmount.toFixed(2)),
       total_debits: Number(spendAmount.toFixed(2)),
-      transaction_count: walletTransactions.length,
+      transaction_count: walletStats.count,
     },
     location: hasValidLocation ? { lat, lng } : null,
   };
@@ -6616,16 +6412,28 @@ export const updateOwner = async (id, payload) => {
 export const approveOwner = async (id, payload) =>
   updateOwner(id, { approve: normalizeBoolean(payload.approve), active: true });
 
-export const listFleetVehicles = async () => {
-
-  const items = await FleetVehicle.find()
+export const listFleetVehicles = async (query = {}) => {
+  const findFleet = (filter = {}) => FleetVehicle.find(filter)
     .populate('owner_id', 'company_name owner_name name email mobile')
     .populate('service_location_id', 'service_location_name name country')
     .populate('vehicle_type_id', 'name type_name transport_type icon_types')
-    .sort({ createdAt: -1 })
-    .lean();
+    .sort({ createdAt: -1, _id: -1 });
 
-  return { results: items.map(serializeFleetVehicle) };
+  // No page asked for: the plain list (newest first, capped) like before.
+  if (query.page === undefined || query.page === null || query.page === '') {
+    const items = await findFleet().limit(LIST_SAFETY_CAP).lean();
+    return { results: items.map(serializeFleetVehicle) };
+  }
+
+  // Paged: status + search are applied in MongoDB and only one page comes back.
+  const paging = readPaging(query);
+  const filter = await buildFleetVehicleFilter({ status: query.status, search: query.search });
+  const [items, total] = await Promise.all([
+    findFleet(filter).skip(paging.skip).limit(paging.limit).lean(),
+    FleetVehicle.countDocuments(filter),
+  ]);
+
+  return { results: items.map(serializeFleetVehicle), paginator: buildPagerMeta(paging, total) };
 };
 
 export const createFleetVehicle = async (payload = {}) => {
@@ -6730,13 +6538,26 @@ export const deleteOwner = async (id) => {
   return true;
 };
 
-export const listOwnerBookings = async () => {
-  const items = await OwnerBooking.find()
+export const listOwnerBookings = async (query = {}) => {
+  const findBookings = (filter = {}) => OwnerBooking.find(filter)
     .populate('owner_id', 'full_name name email mobile')
-    .sort({ createdAt: -1 })
-    .lean();
+    .sort({ createdAt: -1, _id: -1 });
 
-  return items.map(serializeOwnerBooking);
+  // No page asked for: the plain list (newest first, capped) like before.
+  if (query.page === undefined || query.page === null || query.page === '') {
+    const items = await findBookings().limit(LIST_SAFETY_CAP).lean();
+    return items.map(serializeOwnerBooking);
+  }
+
+  // Paged: search is applied in MongoDB and only one page comes back.
+  const paging = readPaging(query);
+  const filter = await buildOwnerBookingFilter({ search: query.search });
+  const [items, total] = await Promise.all([
+    findBookings(filter).skip(paging.skip).limit(paging.limit).lean(),
+    OwnerBooking.countDocuments(filter),
+  ]);
+
+  return { results: items.map(serializeOwnerBooking), paginator: buildPagerMeta(paging, total) };
 };
 
 export const createOwnerBooking = async (payload) => {
@@ -6914,7 +6735,19 @@ export const getAdminEarnings = async (query = {}) => {
     endDate.setHours(23, 59, 59, 999);
   }
 
-  const rides = await Ride.find({ status: RIDE_STATUS.COMPLETED })
+  // The date range is applied inside MongoDB (same "completedAt || updatedAt || createdAt" rule the JS filter
+  // below uses, which stays as a second check) and only the fields this screen needs are loaded.
+  const earningsQuery = { status: RIDE_STATUS.COMPLETED };
+  if (startDate || endDate) {
+    const completedDateExpr = { $ifNull: ['$completedAt', { $ifNull: ['$updatedAt', '$createdAt'] }] };
+    const bounds = [];
+    if (startDate) bounds.push({ $gte: [completedDateExpr, startDate] });
+    if (endDate) bounds.push({ $lte: [completedDateExpr, endDate] });
+    earningsQuery.$expr = { $and: bounds };
+  }
+
+  const rides = await Ride.find(earningsQuery)
+    .select('fare commissionAmount driverEarnings serviceType paymentMethod completedAt updatedAt createdAt userId driverId vehicleTypeId vehicleIconType transport_type pricingSnapshot.admin_commission_from_driver pricingSnapshot.admin_commission_type_from_driver')
     .sort({ completedAt: -1, updatedAt: -1, createdAt: -1 })
     .populate('userId', 'name phone')
     .populate({
@@ -7048,15 +6881,11 @@ export const getDashboardData = async () => {
     return withServerUptime(dashboardCache.value);
   }
 
-  const [totalUsers, totalDrivers, totalOwners, approvedDrivers, rides, supportTicketStats, onlineDrivers, pendingWithdrawals, sosStats, lastSos, pendingFleetVehicles] = await Promise.all([
+  const [totalUsers, totalDrivers, totalOwners, approvedDrivers, supportTicketStats, onlineDrivers, pendingWithdrawals, sosStats, lastSos, pendingFleetVehicles] = await Promise.all([
     User.countDocuments(),
     Driver.countDocuments(),
     Owner.countDocuments(),
     Driver.countDocuments({ approve: true }),
-    Ride.find()
-      .select('status liveStatus fare paymentMethod commissionAmount driverEarnings driverId createdAt updatedAt completedAt')
-      .sort({ createdAt: -1 })
-      .lean(),
     SupportTicket.aggregate([
       {
         $group: {
@@ -7079,65 +6908,39 @@ export const getDashboardData = async () => {
   const endOfToday = new Date(now);
   endOfToday.setHours(23, 59, 59, 999);
 
-  const getRideEventDate = (ride) => {
-    const status = String(ride?.status || '').toLowerCase();
-    if (status === RIDE_STATUS.COMPLETED) {
-      return ride?.completedAt || ride?.updatedAt || ride?.createdAt || null;
-    }
-    if (status === RIDE_STATUS.CANCELLED) {
-      return ride?.updatedAt || ride?.createdAt || null;
-    }
-    return ride?.createdAt || ride?.updatedAt || null;
-  };
+  // Ride numbers are computed inside MongoDB (see dashboardRideStats.js) instead of loading every ride.
+  const rideStats = await loadRideStats({ startOfToday, endOfToday });
+  const rideGroups = rideStats.groups;
+  const isCompletedGroup = (group) => group.cls === 'completed';
+  const isCancelledGroup = (group) => group.cls === 'cancelled';
+  const isScheduledGroup = (group) => group.cls === 'scheduled';
+  const isTodayGroup = (group) => group.today === true;
+  const count = (predicate) => sumGroups(rideGroups, predicate, 'count');
+  const money = (predicate, field) => sumGroups(rideGroups, predicate, field);
 
-  const isWithinRange = (date, rangeStart, rangeEnd) => {
-    const value = date ? new Date(date) : null;
-    if (!value || Number.isNaN(value.getTime())) return false;
-    return value >= rangeStart && value <= rangeEnd;
-  };
+  const completedCount = count(isCompletedGroup);
+  const cancelledCount = count(isCancelledGroup);
+  const scheduledCount = count(isScheduledGroup);
+  const totalRideCount = completedCount + cancelledCount + scheduledCount;
+  const todayCompletedCount = count((g) => isCompletedGroup(g) && isTodayGroup(g));
+  const todayCancelledCount = count((g) => isCancelledGroup(g) && isTodayGroup(g));
+  const todayScheduledCount = count((g) => isScheduledGroup(g) && isTodayGroup(g));
 
-  const isCompletedRide = (ride) => String(ride?.status || '').toLowerCase() === RIDE_STATUS.COMPLETED;
-  const isCancelledRide = (ride) => String(ride?.status || '').toLowerCase() === RIDE_STATUS.CANCELLED;
-  const isScheduledRide = (ride) => !isCompletedRide(ride) && !isCancelledRide(ride);
+  const completedToday = (g) => isCompletedGroup(g) && isTodayGroup(g);
+  const totalOverallFare = money(isCompletedGroup, 'fare');
+  const totalTodayFare = money(completedToday, 'fare');
+  const totalOverallCommission = money(isCompletedGroup, 'commission');
+  const totalTodayCommission = money(completedToday, 'commission');
+  const totalOverallDriverEarnings = money(isCompletedGroup, 'driverEarnings');
+  const totalTodayDriverEarnings = money(completedToday, 'driverEarnings');
 
-  const completedRides = rides.filter(isCompletedRide);
-  const cancelledRides = rides.filter(isCancelledRide);
-  const scheduledRides = rides.filter(isScheduledRide);
+  const overallByCash = money((g) => isCompletedGroup(g) && g.pay === 'cash', 'fare');
+  const overallByCard = money((g) => isCompletedGroup(g) && g.pay === 'online', 'fare');
+  const todayByCash = money((g) => completedToday(g) && g.pay === 'cash', 'fare');
+  const todayByCard = money((g) => completedToday(g) && g.pay === 'online', 'fare');
 
-  const todayCompletedRides = completedRides.filter((ride) => isWithinRange(getRideEventDate(ride), startOfToday, endOfToday));
-  const todayCancelledRides = cancelledRides.filter((ride) => isWithinRange(getRideEventDate(ride), startOfToday, endOfToday));
-  const todayScheduledRides = scheduledRides.filter((ride) => isWithinRange(getRideEventDate(ride), startOfToday, endOfToday));
-
-  const sumFare = (items) =>
-    items.reduce((total, ride) => total + Number(ride?.fare || 0), 0);
-  const sumCommission = (items) =>
-    items.reduce((total, ride) => {
-      const fare = Number(ride?.fare || 0);
-      const explicitCommission = Number(ride?.commissionAmount);
-      const fallbackCommission = Math.max(fare - Number(ride?.driverEarnings || 0), 0);
-      return total + (Number.isFinite(explicitCommission) ? explicitCommission : fallbackCommission);
-    }, 0);
-  const sumDriverEarnings = (items) =>
-    items.reduce((total, ride) => {
-      const fare = Number(ride?.fare || 0);
-      const commission = Number(ride?.commissionAmount || 0);
-      const earning = Number.isFinite(Number(ride?.driverEarnings))
-        ? Number(ride?.driverEarnings)
-        : Math.max(fare - commission, 0);
-      return total + earning;
-    }, 0);
-
-  const totalOverallFare = sumFare(completedRides);
-  const totalTodayFare = sumFare(todayCompletedRides);
-  const totalOverallCommission = sumCommission(completedRides);
-  const totalTodayCommission = sumCommission(todayCompletedRides);
-  const totalOverallDriverEarnings = sumDriverEarnings(completedRides);
-  const totalTodayDriverEarnings = sumDriverEarnings(todayCompletedRides);
-
-  const overallByCash = sumFare(completedRides.filter((ride) => String(ride?.paymentMethod || 'cash').toLowerCase() === 'cash'));
-  const overallByCard = sumFare(completedRides.filter((ride) => String(ride?.paymentMethod || '').toLowerCase() === 'online'));
-  const todayByCash = sumFare(todayCompletedRides.filter((ride) => String(ride?.paymentMethod || 'cash').toLowerCase() === 'cash'));
-  const todayByCard = sumFare(todayCompletedRides.filter((ride) => String(ride?.paymentMethod || '').toLowerCase() === 'online'));
+  const cancelledWithDriverCount = count((g) => isCancelledGroup(g) && g.hasDriver);
+  const cancelledNoDriverCount = count((g) => isCancelledGroup(g) && !g.hasDriver);
 
   const buildRecentMonthKeys = (monthCount = 4) => {
     const months = [];
@@ -7167,30 +6970,18 @@ export const getDashboardData = async () => {
     ]),
   );
 
-  completedRides.forEach((ride) => {
-    const eventDate = getRideEventDate(ride);
-    if (!eventDate) return;
-    const date = new Date(eventDate);
-    if (Number.isNaN(date.getTime())) return;
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const month = recentMonthMap.get(key);
+  rideGroups.forEach((group) => {
+    const month = group.month ? recentMonthMap.get(group.month) : null;
     if (!month) return;
-    month.amount += Number(ride?.fare || 0);
-  });
-
-  cancelledRides.forEach((ride) => {
-    const eventDate = getRideEventDate(ride);
-    if (!eventDate) return;
-    const date = new Date(eventDate);
-    if (Number.isNaN(date.getTime())) return;
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const month = recentMonthMap.get(key);
-    if (!month) return;
-    month.total += 1;
-    if (!ride?.driverId) {
-      month.noDriver += 1;
-    } else {
-      month.byUser += 1;
+    if (isCompletedGroup(group)) {
+      month.amount += Number(group.fare || 0);
+    } else if (isCancelledGroup(group)) {
+      month.total += group.count;
+      if (group.hasDriver) {
+        month.byUser += group.count;
+      } else {
+        month.noDriver += group.count;
+      }
     }
   });
 
@@ -7213,13 +7004,7 @@ export const getDashboardData = async () => {
     };
   });
 
-  const tripsByDriver = new Map();
-  completedRides.forEach((ride) => {
-    if (!ride?.driverId) return;
-    const key = String(ride.driverId);
-    tripsByDriver.set(key, (tripsByDriver.get(key) || 0) + 1);
-  });
-  const topDriverEntries = [...tripsByDriver.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const topDriverEntries = rideStats.topDriverTrips.map((row) => [row.id, row.trips]);
   const topDriverDocs = topDriverEntries.length
     ? await Driver.find({ _id: { $in: topDriverEntries.map(([id]) => id) } }).select('name rating ratingCount').lean()
     : [];
@@ -7263,16 +7048,16 @@ export const getDashboardData = async () => {
       lastAt: lastSos?.createdAt || null,
     },
     todayTrips: {
-      total: todayCompletedRides.length + todayCancelledRides.length + todayScheduledRides.length,
-      completed: todayCompletedRides.length,
-      cancelled: todayCancelledRides.length,
-      scheduled: todayScheduledRides.length,
+      total: todayCompletedCount + todayCancelledCount + todayScheduledCount,
+      completed: todayCompletedCount,
+      cancelled: todayCancelledCount,
+      scheduled: todayScheduledCount,
     },
     overallTrips: {
-      total: rides.length,
-      completed: completedRides.length,
-      cancelled: cancelledRides.length,
-      scheduled: scheduledRides.length,
+      total: totalRideCount,
+      completed: completedCount,
+      cancelled: cancelledCount,
+      scheduled: scheduledCount,
     },
     todayEarnings: {
       total: Number(totalTodayFare.toFixed(2)),
@@ -7292,14 +7077,14 @@ export const getDashboardData = async () => {
       chart: overallChart,
     },
     cancelChart: {
-      total: cancelledRides.length,
-      byUser: cancelledRides.filter((ride) => ride?.driverId).length,
+      total: cancelledCount,
+      byUser: cancelledWithDriverCount,
       byDriver: 0,
-      noDriver: cancelledRides.filter((ride) => !ride?.driverId).length,
+      noDriver: cancelledNoDriverCount,
       chart: cancelChartSeries,
     },
-    performance_index: rides.length
-      ? Number((((completedRides.length || 0) / rides.length) * 100).toFixed(1))
+    performance_index: totalRideCount
+      ? Number((((completedCount || 0) / totalRideCount) * 100).toFixed(1))
       : 0,
   };
 
@@ -7315,7 +7100,38 @@ export const getOverallEarnings = async () => (await getDashboardData()).overall
 export const getTodayEarnings = async () => (await getDashboardData()).todayEarnings;
 export const getCancelChart = async () => (await getDashboardData()).cancelChart;
 
-export const listWithdrawals = async () => WithdrawalRequest.find().populate('driver_id owner_id').sort({ createdAt: -1 }).lean();
+export const listWithdrawals = async ({ page, limit, type } = {}) => {
+  const filter = {};
+  if (type === 'owner') filter.owner_id = { $exists: true, $ne: null };
+  else if (type === 'driver') filter.driver_id = { $exists: true, $ne: null };
+
+  const query = () => WithdrawalRequest.find(filter)
+    .populate('driver_id', 'name phone')
+    .populate('owner_id', 'name owner_name company_name phone email')
+    .sort({ createdAt: -1 });
+
+  // Callers that do not ask for a page keep getting the plain list (newest first, capped).
+  if (page === undefined || page === null || page === '') {
+    return query().limit(LIST_SAFETY_CAP).lean();
+  }
+
+  const safePage = Math.max(1, Number(page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
+  const [results, total] = await Promise.all([
+    query().skip((safePage - 1) * safeLimit).limit(safeLimit).lean(),
+    WithdrawalRequest.countDocuments(filter),
+  ]);
+
+  return {
+    results,
+    paginator: {
+      current_page: safePage,
+      per_page: safeLimit,
+      total,
+      last_page: Math.max(1, Math.ceil(total / safeLimit)),
+    },
+  };
+};
 
 export const listZones = async (currentAdmin = null) => {
   if (currentAdmin) {
@@ -8465,71 +8281,46 @@ export const updateLanguage = async (id, payload = {}) => {
 };
 
 export const getCancellationAnalytics = async () => {
-  const [totalRidesCount, cancelledRides] = await Promise.all([
+  // The counting runs inside MongoDB (see cancellationStats.js); only grouped numbers come back.
+  const [totalRidesCount, { facets, driverById, userById }] = await Promise.all([
     Ride.countDocuments({}),
-    Ride.find({ status: 'cancelled' })
-      .select('fare userId driverId cancellation')
-      .populate('userId', 'name phone')
-      .populate('driverId', 'name phone')
-      .lean(),
+    loadCancellationStats(),
   ]);
 
-  const reasons = new Map();
-  const drivers = new Map();
+  const totals = facets.totals?.[0] || {};
+  const totalCancelledRides = Number(totals.total || 0);
   const stageBreakdown = { searching: 0, accepted: 0, arrived: 0 };
-  const flaggedRides = [];
-  let customerCancellations = 0;
-  let driverCancellations = 0;
-  let totalRevenueLost = 0;
-  let totalCancellationFeesCollected = 0;
-
-  for (const ride of cancelledRides) {
-    const cancellation = ride.cancellation || {};
-    const cancelledBy = String(cancellation.cancelled_by || '').toLowerCase();
-    const reason = String(cancellation.reason || '').trim() || 'Not specified';
-    const stage = String(cancellation.stage || '').toLowerCase() || (ride.driverId ? 'accepted' : 'searching');
-
-    reasons.set(reason, (reasons.get(reason) || 0) + 1);
-    if (stage in stageBreakdown) stageBreakdown[stage] += 1;
-    if (cancelledBy === 'user') customerCancellations += 1;
-    if (cancelledBy === 'driver') driverCancellations += 1;
-    if (ride.driverId) totalRevenueLost += Number(ride.fare || 0);
-    if (cancellation.is_fee_applied) totalCancellationFeesCollected += Number(cancellation.cancellation_charge || 0);
-
-    if (cancelledBy === 'driver' && ride.driverId?._id) {
-      const key = String(ride.driverId._id);
-      const entry = drivers.get(key) || { driverName: ride.driverId.name || '', driverPhone: ride.driverId.phone || '', cancellationCount: 0 };
-      entry.cancellationCount += 1;
-      drivers.set(key, entry);
-    }
-
-    if (cancellation.flaggedForAdminReview) {
-      flaggedRides.push({
-        reason: cancellation.flagReason || reason,
-        comment: cancellation.comment || '',
-        customerName: ride.userId?.name || '',
-        customerPhone: ride.userId?.phone || '',
-        driverName: ride.driverId?.name || '',
-        driverPhone: ride.driverId?.phone || '',
-        cancelledAt: cancellation.cancelled_at || null,
-      });
-    }
-  }
-
-  const totalCancelledRides = cancelledRides.length;
+  (facets.stages || []).forEach((row) => {
+    if (row._id in stageBreakdown) stageBreakdown[row._id] = Number(row.count || 0);
+  });
 
   return {
     totalRidesCount,
     totalCancelledRides,
     cancellationRate: totalRidesCount > 0 ? Math.round((totalCancelledRides / totalRidesCount) * 1000) / 10 : 0,
-    customerCancellations,
-    driverCancellations,
-    totalRevenueLost: Math.round(totalRevenueLost * 100) / 100,
-    totalCancellationFeesCollected: Math.round(totalCancellationFeesCollected * 100) / 100,
-    reasonsBreakdown: [...reasons.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+    customerCancellations: Number(totals.customer || 0),
+    driverCancellations: Number(totals.driver || 0),
+    totalRevenueLost: Math.round(Number(totals.revenueLost || 0) * 100) / 100,
+    totalCancellationFeesCollected: Math.round(Number(totals.fees || 0) * 100) / 100,
+    reasonsBreakdown: (facets.reasons || []).map((row) => ({ reason: row._id, count: Number(row.count || 0) })),
     stageBreakdown,
-    topDriverCancellations: [...drivers.values()].sort((a, b) => b.cancellationCount - a.cancellationCount).slice(0, 5),
-    flaggedRides: flaggedRides.slice(0, 50),
+    topDriverCancellations: (facets.drivers || []).map((row) => {
+      const driverDoc = driverById.get(String(row._id)) || {};
+      return { driverName: driverDoc.name || '', driverPhone: driverDoc.phone || '', cancellationCount: Number(row.count || 0) };
+    }),
+    flaggedRides: (facets.flagged || []).map((row) => {
+      const customer = userById.get(String(row.userId || '')) || {};
+      const driverDoc = driverById.get(String(row.driverId || '')) || {};
+      return {
+        reason: row.flagReason || row.reason,
+        comment: row.comment || '',
+        customerName: customer.name || '',
+        customerPhone: customer.phone || '',
+        driverName: driverDoc.name || '',
+        driverPhone: driverDoc.phone || '',
+        cancelledAt: row.cancelledAt || null,
+      };
+    }),
   };
 };
 
@@ -8780,7 +8571,7 @@ export const buildUserReport = async (query = {}) => {
   const dateFilter = buildDateFilter(date_option, from_date, to_date);
   if (dateFilter) filter.createdAt = dateFilter;
 
-  const users = await User.find(filter).sort({ createdAt: -1 }).lean();
+  const users = await User.find(filter).select('name email phone mobile active deletedAt createdAt').sort({ createdAt: -1 }).lean();
   return {
     headers: ['name', 'email', 'mobile', 'active', 'createdAt'],
     rows: users.map((item) => ({
@@ -8809,7 +8600,7 @@ export const buildDriverReport = async (query = {}) => {
   const dateFilter = buildDateFilter(date_option, from_date, to_date);
   if (dateFilter) filter.createdAt = dateFilter;
 
-  const items = await Driver.find(filter).lean();
+  const items = await Driver.find(filter).select('name phone city registerFor vehicleType status createdAt').lean();
   return {
     headers: ['name', 'mobile', 'city', 'transport_type', 'vehicle_type', 'status', 'createdAt'],
     rows: items.map((item) => ({

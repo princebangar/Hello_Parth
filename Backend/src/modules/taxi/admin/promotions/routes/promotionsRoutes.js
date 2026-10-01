@@ -7,6 +7,7 @@ import {
   deleteNotification,
   deletePromoCode,
   getBanners,
+  getNotificationRecipients,
   getNotifications,
   getPromoCodes,
   getPromotionsBootstrap,
@@ -32,6 +33,7 @@ promotionsRouter.delete('/admin/promos/:id', deletePromoCode);
 promotionsRouter.get('/admin/promos/users', getPromotionsUsers);
 promotionsRouter.get('/admin/promos/service-locations', getPromotionsServiceLocations);
 
+promotionsRouter.get('/admin/notifications/recipients', getNotificationRecipients);
 promotionsRouter.get('/admin/notifications', getNotifications);
 promotionsRouter.post('/admin/notifications', sendNotification);
 promotionsRouter.post('/admin/notifications/send', sendNotification);
