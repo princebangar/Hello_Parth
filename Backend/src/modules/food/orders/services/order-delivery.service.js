@@ -255,16 +255,16 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
 
     if (status === 'picked_up') {
       userTitle = 'Order on the way!';
-      userBody = `Partner has picked up your order #${orderId} and is heading your way.`;
+      userBody = `Partner has picked up your order #${displayOrderId} and is heading your way.`;
       riderTitle = 'Order picked up!';
       riderBody = `You have picked up order #${displayOrderId}. Proceed to the customer location.`;
     } else if (status === 'reached_drop') {
       userTitle = 'Partner nearby!';
-      userBody = `Your delivery partner has reached your location for order #${orderId}.`;
+      userBody = `Your delivery partner has reached your location for order #${displayOrderId}.`;
       riderTitle = 'Arrived at drop!';
       riderBody = `You have reached the customer location for order #${displayOrderId}.`;
     } else if (status === 'delivered') {
-      userTitle = `Order #${orderId} delivered!`;
+      userTitle = `Order #${displayOrderId} delivered!`;
       userBody = 'Hope you enjoyed your meal! Don\'t forget to rate your experience.';
       riderTitle = 'Delivery successful!';
       riderBody = `Order #${displayOrderId} has been successfully delivered.`;
@@ -471,6 +471,11 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
     const isOwnAccepted =
       String(order?.dispatch?.deliveryPartnerId || '') === String(deliveryPartnerId);
     if (isOwnAccepted) return false;
+    // Offers this rider already passed on.
+    const passed = (order?.dispatch?.offeredTo || []).some(
+      (item) => String(item?.partnerId) === String(deliveryPartnerId) && item?.action === 'rejected',
+    );
+    if (passed) return false;
     return (
       partnerZoneId &&
       isRestaurantInPartnerZone(order) &&
@@ -748,7 +753,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         { ownerType: 'USER', ownerId: order.userId },
         {
           title: `Delivery partner assigned`,
-          body: `A delivery partner has accepted Order #${order._id.toString()}.`,
+          body: `A delivery partner has accepted Order #${order.order_id || order.orderId || order._id.toString()}.`,
           data: {
             type: 'delivery_accepted',
             orderId: order._id.toString(),
@@ -763,7 +768,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         { ownerType: 'RESTAURANT', ownerId: order.restaurantId },
         {
           title: `Rider assigned`,
-          body: `Order #${order._id.toString()} is now assigned to a delivery partner.`,
+          body: `Order #${order.order_id || order.orderId || order._id.toString()} is now assigned to a delivery partner.`,
           data: {
             type: 'delivery_accepted',
             orderId: order._id.toString(),
@@ -800,6 +805,23 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
   const order = await FoodOrder.findOne(identity).select('+deliveryOtp');
   if (!order) throw new NotFoundError('Order not found');
   if (order.dispatch.deliveryPartnerId?.toString() !== deliveryPartnerId.toString()) {
+    // "Pass this task" on an open offer (broadcast, nobody assigned yet): just
+    // record that this rider passed so it isn't offered to them again. This
+    // used to 403 ("Not your order"), and the passed offer came back on every
+    // poll and rang again.
+    if (!order.dispatch.deliveryPartnerId && order.dispatch.status === 'unassigned') {
+      const mine = order.dispatch.offeredTo.find(
+        (item) => String(item.partnerId) === String(deliveryPartnerId),
+      );
+      if (mine) {
+        mine.action = 'rejected';
+      } else {
+        order.dispatch.offeredTo.push({ partnerId: deliveryPartnerId, action: 'rejected', at: new Date() });
+      }
+      order.markModified('dispatch.offeredTo');
+      await order.save();
+      return order.toObject();
+    }
     throw new ForbiddenError('Not your order');
   }
 
@@ -891,7 +913,7 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
         title: 'Rider arrived!',
         body: `${partner?.name || 'The delivery partner'} has arrived at ${
           restaurant?.restaurantName || 'your restaurant'
-        } to pick up Order #${order._id.toString()}.`,
+        } to pick up Order #${order.order_id || order.orderId || order._id.toString()}.`,
         data: {
           type: 'rider_arrived',
           orderId: String(order._id.toString()),

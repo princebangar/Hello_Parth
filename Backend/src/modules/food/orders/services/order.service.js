@@ -756,7 +756,7 @@ export async function verifyPayment(userId, dto) {
   // Notify Customer about payment success
   await notifyOwnersSafely([{ ownerType: "USER", ownerId: userId }], {
     title: "Payment Successful",
-    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order._id.toString()}.`,
+    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order.order_id || order.orderId || order._id.toString()}.`,
     data: {
       type: "payment_success",
       orderId: String(order._id.toString()),

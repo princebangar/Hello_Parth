@@ -78,9 +78,10 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
                         { $or: APPROVED_CATEGORY_FILTER }
                     ]
                 },
+                // A restaurant's own (private) categories need no admin approval.
                 {
                     restaurantId: context.restaurantId,
-                    $or: APPROVED_CATEGORY_FILTER
+                    approvalStatus: { $ne: 'rejected' }
                 }
             ]
         }
@@ -302,10 +303,12 @@ export async function createRestaurantCategory(restaurantId, body = {}) {
         sortOrder: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0,
         restaurantId: context.restaurantId,
         createdByRestaurantId: context.restaurantId,
-        approvalStatus: 'pending',
-        isApproved: false,
+        // Private to this restaurant → usable right away, no admin approval.
+        approvalStatus: 'approved',
+        isApproved: true,
         rejectionReason: '',
         requestedAt: new Date(),
+        approvedAt: new Date(),
         zoneId: context.zoneId && mongoose.Types.ObjectId.isValid(context.zoneId)
             ? new mongoose.Types.ObjectId(context.zoneId)
             : undefined
@@ -360,13 +363,15 @@ export async function updateRestaurantCategory(restaurantId, id, body = {}) {
         doc.foodTypeScope = nextFoodTypeScope;
     }
 
+    // Editing a private category keeps it usable (no re-approval).
     doc.createdByRestaurantId = doc.createdByRestaurantId || context.restaurantId;
-    doc.approvalStatus = 'pending';
-    doc.isApproved = false;
-    doc.rejectionReason = '';
-    doc.requestedAt = new Date();
-    doc.approvedAt = undefined;
-    doc.rejectedAt = undefined;
+    if (doc.approvalStatus !== 'approved') {
+        doc.approvalStatus = 'approved';
+        doc.isApproved = true;
+        doc.rejectionReason = '';
+        doc.approvedAt = new Date();
+        doc.rejectedAt = undefined;
+    }
 
     await doc.save();
     return doc.toObject();

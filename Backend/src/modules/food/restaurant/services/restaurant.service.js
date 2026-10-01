@@ -430,9 +430,21 @@ export const registerRestaurant = async (payload, files) => {
     const estimatedDeliveryTimeText = String(estimatedDeliveryTime || '').trim();
     const estimatedDeliveryTimeMinutes = parseEstimatedDeliveryMinutes(estimatedDeliveryTimeText);
 
+    const latNum = toFiniteNumber(latitude);
+    const lngNum = toFiniteNumber(longitude);
+    // The zone comes from the restaurant's own location — a pin outside every
+    // service zone (or outside the zone sent) is rejected.
+    let resolvedZoneId = zoneId;
+    if (latNum !== null && lngNum !== null) {
+        const { detectZoneIdForPoint } = await import('../../utils/zoneGeo.js');
+        const detected = await detectZoneIdForPoint(latNum, lngNum);
+        if (!detected) {
+            throw new ValidationError('This location is outside our service zones');
+        }
+        resolvedZoneId = detected;
+    }
+
     try {
-        const latNum = toFiniteNumber(latitude);
-        const lngNum = toFiniteNumber(longitude);
         const restaurant = await FoodRestaurant.create({
             restaurantName,
             restaurantNameNormalized,
@@ -444,8 +456,8 @@ export const registerRestaurant = async (payload, files) => {
             ownerPhoneLast10,
             primaryContactNumber,
             pureVegRestaurant: pureVegRestaurant === true,
-            zoneId: zoneId && mongoose.Types.ObjectId.isValid(String(zoneId).trim())
-                ? new mongoose.Types.ObjectId(String(zoneId).trim())
+            zoneId: resolvedZoneId && mongoose.Types.ObjectId.isValid(String(resolvedZoneId).trim())
+                ? new mongoose.Types.ObjectId(String(resolvedZoneId).trim())
                 : undefined,
             // Store unified location object (geo + address).
             location: latNum !== null && lngNum !== null ? {
@@ -1447,14 +1459,25 @@ export const listApprovedRestaurants = async (query = {}) => {
 
     const zoneIdRaw = String(query.zoneId || '').trim();
     if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
-        filter.$or = [{ zoneId: new mongoose.Types.ObjectId(zoneIdRaw) }];
+        // A restaurant belongs to the zone its pin is in. The stored zoneId alone
+        // let restaurants located outside the zone show up; it's only trusted
+        // for restaurants without coordinates. Goes into $and so a search's $or
+        // isn't overwritten.
+        const zoneObjectId = new mongoose.Types.ObjectId(zoneIdRaw);
+        let zoneCondition = { zoneId: zoneObjectId };
         const zoneDoc = await FoodZone.findById(zoneIdRaw).select('isActive coordinates location').lean();
         if (zoneDoc && zoneDoc.isActive) {
             const polygon = zoneToPolygon(zoneDoc);
             if (polygon) {
-                filter.$or.push({ location: { $geoWithin: { $geometry: polygon } } });
+                zoneCondition = {
+                    $or: [
+                        { location: { $geoWithin: { $geometry: polygon } } },
+                        { zoneId: zoneObjectId, 'location.coordinates.0': { $exists: false } },
+                    ],
+                };
             }
         }
+        filter.$and = [...(filter.$and || []), zoneCondition];
     }
 
     const lat = toFiniteNumber(query.lat);
@@ -1554,6 +1577,30 @@ export const listApprovedRestaurants = async (query = {}) => {
             as: 'outletTimingsData'
         }
     });
+
+    // Delivery / takeaway lists: hide restaurants with no live dish (nothing to
+    // order). Done before pagination so page sizes and totals stay right.
+    if (query.orderType !== 'dining') {
+        pipeline.push({
+            $lookup: {
+                from: FoodItem.collection.name,
+                let: { rid: '$_id' },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: { $eq: ['$restaurantId', '$$rid'] },
+                            approvalStatus: 'approved',
+                            isAvailable: { $ne: false },
+                        },
+                    },
+                    { $limit: 1 },
+                    { $project: { _id: 1 } },
+                ],
+                as: '__liveDish',
+            },
+        });
+        pipeline.push({ $match: { '__liveDish.0': { $exists: true } } });
+    }
 
     // Sorting Stage
     const sortStage = (() => {

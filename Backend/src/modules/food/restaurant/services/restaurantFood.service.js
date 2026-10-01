@@ -102,7 +102,8 @@ const getRestaurantContext = async (restaurantId) => {
 
 const getAccessibleCategoryFilter = (context) => ({
     $or: [
-        { restaurantId: context.restaurantId, $or: APPROVED_CATEGORY_FILTER },
+        // Own private categories: usable without admin approval (not if rejected).
+        { restaurantId: context.restaurantId, approvalStatus: { $ne: 'rejected' } },
         {
             $and: [
                 { $or: GLOBAL_CATEGORY_FILTER },
@@ -160,7 +161,11 @@ const resolveCategoryForRestaurant = async (context, body = {}) => {
 
     await backfillLegacyCategoryWorkflow([category]);
 
-    if (String(category.approvalStatus || '') !== 'approved') {
+    // The restaurant's own private categories need no approval (older ones may
+    // still say "pending" from before that rule).
+    const isOwnCategory =
+        category.restaurantId && String(category.restaurantId) === String(context.restaurantId);
+    if (!isOwnCategory && String(category.approvalStatus || '') !== 'approved') {
         throw new ValidationError('This category is awaiting admin approval');
     }
     if (context.pureVegRestaurant && String(category.foodTypeScope || '') !== 'Veg') {
