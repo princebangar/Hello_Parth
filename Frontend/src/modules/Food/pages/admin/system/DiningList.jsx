@@ -4,6 +4,7 @@ import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, Sta
 import { adminAPI } from "@food/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
+import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -97,12 +98,10 @@ export default function DiningList() {
 
         fetchRestaurants()
         
-        // Setup polling for real-time reflection
-        const intervalId = setInterval(() => {
+        // Refresh while the tab is visible (was a full list fetch every 3 s, even in a background tab)
+        return setVisibleInterval(() => {
             fetchRestaurants()
-        }, 3000)
-        
-        return () => clearInterval(intervalId)
+        }, 15000)
     }, [])
 
     // Fetch categories
