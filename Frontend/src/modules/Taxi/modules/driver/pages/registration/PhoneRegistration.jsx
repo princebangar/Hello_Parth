@@ -14,6 +14,7 @@ import {
   toPlainData,
 } from '../../services/registrationService';
 import AuthShell from '../../components/auth/AuthShell';
+import { prefetchPolicyContentWhenIdle } from '@/shared/utils/policyPages';
 import RolePicker from '../../components/auth/RolePicker';
 import {
   DEFAULT_DRIVER_ROLE,
@@ -38,6 +39,10 @@ const getErrorStatus = (err) => Number(err?.status || err?.response?.status || 0
 const PhoneRegistration = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Terms / Privacy / Support load in the background so tapping one opens it straight away.
+  useEffect(() => prefetchPolicyContentWhenIdle('driver'), []);
+
   const storedSession = getStoredDriverRegistrationSession();
   const isOwnerPortal = location.pathname.startsWith('/taxi/owner');
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -342,32 +347,32 @@ const PhoneRegistration = () => {
           )}
         </button>
 
-        <p className="text-center text-sm leading-5 text-[#64748b]">
-          By continuing, you agree to our{' '}
+        {/* Taxi forces Outfit on everything (!important), so Poppins needs the important modifier here. */}
+        <p className="mx-auto max-w-[320px] text-center text-[11px] font-medium leading-relaxed text-gray-400/80 !font-['Poppins']">
+          By continuing, you agree to our <br />
           <button
             type="button"
             onClick={() => navigate(`${routePrefix}/legal/terms`)}
-            className="font-semibold text-[#0b1220] underline underline-offset-2"
+            className="font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:text-[#0b1220] !font-['Poppins']"
           >
-            Terms
+            TERMS
           </button>
-          ,{' '}
+          <span className="mx-2 font-bold text-gray-400/80">•</span>
           <button
             type="button"
             onClick={() => navigate(`${routePrefix}/legal/privacy`)}
-            className="font-semibold text-[#0b1220] underline underline-offset-2"
+            className="font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:text-[#0b1220] !font-['Poppins']"
           >
-            Privacy Policy
-          </button>{' '}
-          and{' '}
+            PRIVACY
+          </button>
+          <span className="mx-2 font-bold text-gray-400/80">•</span>
           <button
             type="button"
             onClick={() => navigate(`${routePrefix}/legal/support`)}
-            className="font-semibold text-[#0b1220] underline underline-offset-2"
+            className="font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:text-[#0b1220] !font-['Poppins']"
           >
-            Support
+            SUPPORT
           </button>
-          .
         </p>
       </form>
     </AuthShell>
