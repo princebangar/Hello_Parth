@@ -27,7 +27,7 @@ export default function AcceptedOrderCard({ order, focused = false, onSelect }) 
   const session = useDeliveryStore((state) =>
     orderId ? state.orderSessions[orderId] : null,
   );
-  const displayId = order?.orderId || order?.displayOrderId || orderId;
+  const displayId = order?.displayOrderId || order?.orderId || orderId;
   const restaurantName =
     order?.restaurantName ||
     order?.restaurantId?.restaurantName ||

@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@500;600;700;800&family=Sora:wght@600;700&display=swap");
+/* Web fonts (Nunito Sans, Sora) are requested once from index.html - an @import here made this stylesheet wait on a
+   Google round trip. */
 
 .delivery-v2-theme {
   --dv-primary: #15498b;
@@ -30,6 +31,13 @@
 .delivery-v2-theme [class*="font-['Poppins']"],
 .delivery-v2-theme [class*="font-\[\'Poppins\'\]"] {
   font-family: "Nunito Sans", "Outfit", sans-serif !important;
+}
+
+/* The "By continuing, you agree to our TERMS • PRIVACY • SUPPORT" line looks the same on every Hello Parth login
+   screen (customer, restaurant, delivery, captain): Poppins. Must stay after the rule above (same specificity). */
+.delivery-v2-theme .auth-legal-footer,
+.delivery-v2-theme .auth-legal-footer * {
+  font-family: "Poppins", sans-serif !important;
 }
 
 .delivery-v2-theme h1,
