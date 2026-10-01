@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { exportDeliverymenToExcel, exportDeliverymenToPDF } from "@food/components/admin/deliveryman/deliverymanExportUtils"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
 const debugError = () => {}
 
 
@@ -198,13 +199,9 @@ export default function DeliverymanList() {
   useEffect(() => {
     fetchDeliverymen()
 
-    const interval = setInterval(() => {
+    return setVisibleInterval(() => {
       fetchDeliverymenQuietly()
-    }, 8000)
-
-    return () => {
-      clearInterval(interval)
-    }
+    }, 15000)
   }, [currentPage, pageSize, debouncedSearch])
 
   const filteredDeliverymen = useMemo(() => {
