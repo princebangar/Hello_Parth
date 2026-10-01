@@ -1225,7 +1225,12 @@ const SelectVehicle = () => {
   // back to pick a real location instead of silently booking the wrong trip.
   useEffect(() => {
     if (!hasCompleteRideContext) {
-      navigate(`${routePrefix}/ride/select-location`, { replace: true });
+      // Keep the vehicle category the user tapped on Home so it is still applied once they pick the places.
+      const selectedCategory = routeState.selectedCategory || queryVehicleType || undefined;
+      navigate(`${routePrefix}/ride/select-location`, {
+        replace: true,
+        state: selectedCategory ? { selectedCategory } : undefined,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2136,6 +2141,14 @@ const SelectVehicle = () => {
 
     proceedToBooking();
   };
+
+  if (!hasCompleteRideContext) {
+    return (
+      <div className="h-[100dvh] w-full flex items-center justify-center bg-slate-50">
+        <div className="h-8 w-8 rounded-full border-[3px] border-slate-300 border-t-slate-700 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] bg-slate-50 w-full lg:max-w-7xl mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden lg:grid lg:grid-cols-12 lg:bg-white lg:shadow-xl">

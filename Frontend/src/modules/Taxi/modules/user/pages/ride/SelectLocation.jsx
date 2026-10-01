@@ -6,12 +6,25 @@ import { GoogleMap } from '@react-google-maps/api';
 import { useAppGoogleMapsLoader, INDIA_CENTER, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
 import api from '../../../../shared/api/axiosInstance';
 import { getSavedLocation, getSavedLocationCoords, saveLocation } from '../../services/locationStore';
+import {
+  dedupePlaces,
+  distanceBetweenKm,
+  formatDistance,
+  keepNearbyPredictions,
+  loadPopularPlaces,
+  nearbyAutocompleteRequest,
+} from '../../utils/nearbyPlaces';
 
-const DEFAULT_COORDS = [INDIA_CENTER.lng, INDIA_CENTER.lat];
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
 const getLatLngCacheKey = (coords, precision = 5) =>
   `${Number(coords?.lat || 0).toFixed(precision)},${Number(coords?.lng || 0).toFixed(precision)}`;
 const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '').replace(/\s{2,}/g, ' ');
+// Pickups saved from this screen are stamped "now" so they count as fresh for a while.
+const savePickup = (location) => saveLocation({ ...location, updatedAt: Date.now() });
+// A saved pickup older than this is not trusted as "where the user is now".
+const SAVED_PICKUP_MAX_AGE_MS = 10 * 60 * 1000;
+// A city ride longer than this is almost certainly a wrong pick (or belongs to Intercity).
+const MAX_CITY_RIDE_KM = 100;
 
 const unwrapResults = (response) => {
   const payload = response?.data?.data || response?.data || response;
@@ -171,13 +184,25 @@ const SelectLocation = () => {
     ? routeState.activeInput
     : 'drop';
   const isParcelFlow = routeState.flow === 'parcel' || String(routeState.returnTo || '').includes('/parcel/details');
+  const isIntercityRoute = Boolean(
+    routeState.intercity
+    || routeState.serviceType === 'intercity'
+    || routeState.transport_type === 'intercity'
+    || routeState.transportType === 'intercity',
+  );
   const savedLocation = getSavedLocation();
-  const savedPickupLabel = String(savedLocation?.address || '').trim();
-  const savedPickupCoords = getSavedLocationCoords();
+  // Only a recent fix counts as "where I am now"; an old one would show a place the user has already left.
+  const savedIsFresh = Boolean(savedLocation?.updatedAt) && (Date.now() - savedLocation.updatedAt) <= SAVED_PICKUP_MAX_AGE_MS;
+  const savedPickupLabel = savedIsFresh ? String(savedLocation?.address || '').trim() : '';
+  const savedPickupCoords = savedIsFresh ? getSavedLocationCoords() : null;
   const [pickup, setPickup] = useState(() => routeState.pickup || savedPickupLabel || '');
+  // True once the user has typed in the active field. A prefilled address that was never edited must not
+  // be searched as if it were a query (that gave "No results for <the whole address>").
+  const [userTyped, setUserTyped] = useState(false);
   const [drop, setDrop] = useState(() => routeState.drop || '');
   const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || savedPickupCoords || null);
   const [locationError, setLocationError] = useState('');
+  const [tripError, setTripError] = useState('');
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const [nearbyPopular, setNearbyPopular] = useState([]);
   const [dropCoords, setDropCoords] = useState(() => routeState.dropCoords || null);
@@ -353,7 +378,7 @@ const SelectLocation = () => {
           const addr = results[0].formatted_address;
           setPickup(addr);
           setPickupCoords(coords);
-          saveLocation({ address: addr, lat: latitude, lon: longitude });
+          savePickup({ address: addr, lat: latitude, lon: longitude });
           return;
         }
 
@@ -378,6 +403,7 @@ const SelectLocation = () => {
   }, [pickup, isParcelFlow, isLoaded, loadError]);
 
   // "Popular Locations" must reflect places near the user's own current location, never a fixed city.
+  // Popular spots of a few kinds (malls, landmarks, stations, temples, hospitals) around the pickup, nearest first.
   useEffect(() => {
     if (!isLoaded || !Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
       return;
@@ -394,39 +420,17 @@ const SelectLocation = () => {
     }
 
     let cancelled = false;
-
-    placesService.nearbySearch(
-      {
-        location: { lat: Number(lat), lng: Number(lng) },
-        radius: 5000,
-        type: 'point_of_interest',
-      },
-      (results, status) => {
-        if (cancelled) return;
-
-        if (status === window.google.maps.places.PlacesServiceStatus.OK && Array.isArray(results)) {
-          const mapped = results
-            .filter((place) => place?.geometry?.location)
-            .slice(0, 6)
-            .map((place) => ({
-              title: place.name,
-              address: place.vicinity || place.formatted_address || place.name,
-              coords: [place.geometry.location.lng(), place.geometry.location.lat()],
-              placeId: place.place_id,
-            }));
-          setNearbyPopular(mapped);
-        } else {
-          setNearbyPopular([]);
-        }
-      },
-    );
+    loadPopularPlaces(window.google, placesService, pickupCoords).then((places) => {
+      if (!cancelled) setNearbyPopular(places);
+    });
 
     return () => {
       cancelled = true;
     };
   }, [isLoaded, pickupCoords]);
 
-  const resolveCoords = async (label, fallback = DEFAULT_COORDS) => {
+  // Resolves a typed place to coordinates. Never invents a location: returns null when it cannot be found.
+  const resolveCoords = async (label, fallback = null) => {
     if (!label || !String(label).trim()) {
       return fallback;
     }
@@ -520,7 +524,7 @@ const SelectLocation = () => {
                 resolve({
                   title: result?.title || '',
                   address: result?.address || result?.title || '',
-                  coords: DEFAULT_COORDS,
+                  coords: null,
                 });
               });
               return;
@@ -529,7 +533,7 @@ const SelectLocation = () => {
             resolve({
               title: result?.title || '',
               address: result?.address || result?.title || '',
-              coords: DEFAULT_COORDS,
+              coords: null,
             });
           },
         );
@@ -550,7 +554,9 @@ const SelectLocation = () => {
       address: result?.address || result?.title || '',
       coords,
     };
-    placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
+    if (coords) {
+      placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
+    }
     return resolvedSelection;
   };
 
@@ -575,11 +581,44 @@ const SelectLocation = () => {
   const query = getQuery();
   const currentZone = useMemo(() => findMatchingZone(pickupCoords, zones), [pickupCoords, zones]);
 
-  const popularSuggestions = nearbyPopular;
+  // Places near the pickup; if Google gave fewer than 3, the user's last booked places fill in so the list is never empty.
+  const recentPlaces = useMemo(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:recentLocations') || '[]');
+      return (Array.isArray(saved) ? saved : [])
+        .filter((item) => item?.address && Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon)))
+        .map((item) => ({
+          title: item.name || String(item.address).split(',')[0],
+          address: item.address,
+          coords: [Number(item.lon), Number(item.lat)],
+          distanceLabel: '',
+        }));
+    } catch {
+      return [];
+    }
+  }, [nearbyPopular]);
+  const usingRecentFallback = nearbyPopular.length < 3 && recentPlaces.length > 0;
+  const popularSuggestions = useMemo(
+    () => (usingRecentFallback ? dedupePlaces([...nearbyPopular, ...recentPlaces]).slice(0, 4) : nearbyPopular),
+    [usingRecentFallback, nearbyPopular, recentPlaces],
+  );
+  // Typed searches are kept near where the ride starts.
+  const searchOrigin = useMemo(() => {
+    const source = pickupCoords || savedPickupCoords;
+    if (!Array.isArray(source) || source.length !== 2) return null;
+    const [lng, lat] = source.map(Number);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  }, [pickupCoords, savedPickupCoords]);
+  const searchOriginKey = searchOrigin ? `${searchOrigin.lat.toFixed(2)},${searchOrigin.lng.toFixed(2)}` : '';
+
+  useEffect(() => {
+    setUserTyped(false);
+  }, [activeInput]);
 
   const isInitialDefault = useMemo(() => {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) return false;
+    if (!userTyped) return true;
 
     if (activeInput === 'pickup') {
       const defaultPickup = String(routeState.pickup || '').trim();
@@ -598,7 +637,7 @@ const SelectLocation = () => {
     }
 
     return false;
-  }, [query, activeInput, routeState.pickup, routeState.drop, routeState.stops, savedPickupLabel]);
+  }, [query, userTyped, activeInput, routeState.pickup, routeState.drop, routeState.stops, savedPickupLabel]);
 
   const localSearchResults = useMemo(
     () => (query.trim().length >= 1 && !isInitialDefault ? [] : popularSuggestions),
@@ -612,7 +651,7 @@ const SelectLocation = () => {
       return;
     }
 
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = `${query.trim().toLowerCase()}|${searchOriginKey}`;
     const cached = searchCacheRef.current.get(normalizedQuery);
     if (cached) {
       setRemoteResults(cached);
@@ -631,7 +670,10 @@ const SelectLocation = () => {
         sessionToken: getAutocompleteSessionToken(),
       };
 
-      if (zoneBounds) {
+      if (searchOrigin && !isIntercityRoute) {
+        // Only places near the pickup — never another city or state.
+        Object.assign(request, nearbyAutocompleteRequest(window.google, searchOrigin));
+      } else if (zoneBounds) {
         request.bounds = zoneBounds;
       }
 
@@ -640,13 +682,13 @@ const SelectLocation = () => {
           return;
         }
 
-        const nextResults = status === 'OK'
-          ? predictions.slice(0, 6).map((prediction) => ({
-            title: prediction.structured_formatting?.main_text || prediction.description,
-            address: prediction.description,
-            placeId: prediction.place_id,
-          }))
-          : [];
+        const nearby = status === 'OK' ? keepNearbyPredictions(predictions) : [];
+        const nextResults = dedupePlaces(nearby.map((prediction) => ({
+          title: prediction.structured_formatting?.main_text || prediction.description,
+          address: prediction.description,
+          placeId: prediction.place_id,
+          distanceLabel: Number.isFinite(prediction.distance_meters) ? formatDistance(prediction.distance_meters / 1000) : '',
+        }))).slice(0, 6);
 
         searchCacheRef.current.set(normalizedQuery, nextResults);
         setRemoteResults(nextResults);
@@ -657,22 +699,13 @@ const SelectLocation = () => {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [query, zoneBounds]);
+  }, [query, zoneBounds, searchOriginKey]);
 
-  const searchResults = useMemo(() => {
-    const merged = [...remoteResults, ...localSearchResults];
-    const seen = new Set();
-
-    return merged.filter((result) => {
-      const key = `${String(result.title || '').trim().toLowerCase()}|${String(result.address || '').trim().toLowerCase()}`;
-      if (!key || seen.has(key)) {
-        return false;
-      }
-
-      seen.add(key);
-      return true;
-    });
-  }, [localSearchResults, remoteResults]);
+  // The same place must show up once, however Google spells it.
+  const searchResults = useMemo(
+    () => dedupePlaces([...remoteResults, ...localSearchResults]),
+    [localSearchResults, remoteResults],
+  );
 
   const getMapStartCoord = () => {
     const activeCoords = activeInput === 'drop' ? dropCoords : pickupCoords;
@@ -838,6 +871,18 @@ const SelectLocation = () => {
     const resolvedPickupCoords = pickupCoords || await resolveCoords(finalPickup);
     const resolvedDropCoords = optionalDropCoords || dropCoords || await resolveCoords(finalDrop);
 
+    if (!Array.isArray(resolvedPickupCoords) || !Array.isArray(resolvedDropCoords)) {
+      setTripError('We could not find that place on the map. Please pick it from the suggestions or choose it on the map.');
+      return;
+    }
+
+    const tripKm = distanceBetweenKm(resolvedPickupCoords, resolvedDropCoords);
+    if (!isParcelFlow && !isIntercityRoute && Number.isFinite(tripKm) && tripKm > MAX_CITY_RIDE_KM) {
+      setTripError(`That drop is about ${Math.round(tripKm)} km away, too far for a city ride. Please choose a place near you.`);
+      return;
+    }
+    setTripError('');
+
     if (isParcelFlow) {
       navigate(parcelReturnPath, {
         state: {
@@ -854,7 +899,7 @@ const SelectLocation = () => {
       return;
     }
 
-    saveLocation({
+    savePickup({
       address: finalPickup,
       lat: resolvedPickupCoords[1],
       lon: resolvedPickupCoords[0],
@@ -939,7 +984,7 @@ const SelectLocation = () => {
       }
       setPickup(finalAddress);
       setPickupCoords(selectedCoords);
-      saveLocation({
+      savePickup({
         address: finalAddress,
         lat: selectedCoords[1],
         lon: selectedCoords[0],
@@ -1048,6 +1093,12 @@ const SelectLocation = () => {
 
     resetAutocompleteSessionToken();
 
+    if (!Array.isArray(resolvedCoords)) {
+      setTripError('We could not find that place on the map. Please try another suggestion or choose it on the map.');
+      return;
+    }
+    setTripError('');
+
     if (activeInput === 'pickup') {
       if (isParcelFlow) {
         returnParcelSelection('pickup', finalTitle, resolvedCoords);
@@ -1055,7 +1106,7 @@ const SelectLocation = () => {
       }
       setPickup(finalTitle);
       setPickupCoords(resolvedCoords);
-      saveLocation({
+      savePickup({
         address: finalTitle,
         lat: resolvedCoords[1],
         lon: resolvedCoords[0],
@@ -1263,8 +1314,12 @@ const SelectLocation = () => {
                   <input
                     type="text"
                     value={pickup}
-                    onChange={(e) => setPickup(sanitizeLocationInput(e.target.value))}
-                    onFocus={() => setActiveInput('pickup')}
+                    onChange={(e) => { setUserTyped(true); setPickup(sanitizeLocationInput(e.target.value)); }}
+                    onFocus={(e) => {
+                      setActiveInput('pickup');
+                      // Typing replaces the shown address instead of appending to it.
+                      e.target.select();
+                    }}
                     placeholder={isResolvingCurrentLocation ? 'Detecting your location...' : 'Your pickup location'}
                     className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
                   />
@@ -1318,7 +1373,7 @@ const SelectLocation = () => {
                           autoFocus={activeInput === idx}
                           placeholder={`Stop ${idx + 1} location...`}
                           onFocus={() => setActiveInput(idx)}
-                          onChange={(e) => updateStop(idx, sanitizeLocationInput(e.target.value))}
+                          onChange={(e) => { setUserTyped(true); updateStop(idx, sanitizeLocationInput(e.target.value)); }}
                           className={`w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none ${stop.trim().length > 0 ? 'placeholder:text-slate-300' : 'placeholder:text-indigo-300'
                             }`}
                         />
@@ -1358,7 +1413,7 @@ const SelectLocation = () => {
                     autoFocus={activeInput === 'drop'}
                     placeholder="Enter drop location..."
                     onFocus={() => setActiveInput('drop')}
-                    onChange={(e) => setDrop(sanitizeLocationInput(e.target.value))}
+                    onChange={(e) => { setUserTyped(true); setDrop(sanitizeLocationInput(e.target.value)); }}
                     className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
                   />
                   {drop.length > 0 && (
@@ -1415,7 +1470,11 @@ const SelectLocation = () => {
         {/* Search Results */}
         <div className="relative z-10 px-5 mb-4 pb-20 lg:pb-4">
           <h2 className="text-[14px] font-bold text-slate-400 mb-3 ml-1 uppercase tracking-widest">
-            {query.trim().length > 0 ? 'Search Results' : currentZone?.name ? `${currentZone.name} Suggestions` : 'Popular Locations'}
+            {query.trim().length > 0 && !isInitialDefault
+              ? 'Search Results'
+              : usingRecentFallback
+                ? 'Recent places'
+                : currentZone?.name ? `Popular near you in ${currentZone.name}` : 'Popular near you'}
           </h2>
 
           <div className="bg-white/75 backdrop-blur-md rounded-2xl border border-white/80 lg:bg-white lg:border-slate-100 overflow-hidden shadow-[0_14px_34px_rgba(15,23,42,0.06)] lg:shadow-sm">
@@ -1423,17 +1482,17 @@ const SelectLocation = () => {
             <motion.button
               whileTap={{ scale: 0.99 }}
               onClick={handleUseCurrentLocationResult}
-              className="w-full text-left flex items-center gap-3 px-4 py-3.5 border-b border-white/70 lg:border-slate-100 bg-emerald-50/30 hover:bg-emerald-50/50 transition-colors group"
+              className="w-full text-left flex items-center gap-3 px-4 py-3.5 border-b border-white/70 lg:border-slate-100 bg-[#E8EEF7]/50 hover:bg-[#E8EEF7] transition-colors group"
             >
-              <div className="w-10 h-10 rounded-2xl bg-white border border-emerald-100 shadow-sm flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-white border border-[#5B9BD5]/30 shadow-sm flex items-center justify-center shrink-0">
                 {isLocating ? (
-                  <LoaderCircle size={18} className="animate-spin text-emerald-500" />
+                  <LoaderCircle size={18} className="animate-spin" style={{ color: '#5B9BD5' }} />
                 ) : (
-                  <Navigation size={18} className="text-emerald-500 fill-emerald-50" />
+                  <Navigation size={18} style={{ color: '#5B9BD5', fill: '#E8EEF7' }} />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="text-[15px] font-bold text-slate-900 leading-tight group-hover:text-emerald-600 transition-colors">Use Current Location</h4>
+                <h4 className="text-[15px] font-bold text-slate-900 leading-tight transition-colors">Use Current Location</h4>
                 <p className="text-[12px] text-slate-400 font-medium mt-0.5">Perfect for accurate pickup</p>
               </div>
               <ChevronRight size={16} className="text-slate-300" />
@@ -1452,7 +1511,9 @@ const SelectLocation = () => {
                 </div>
                 <div className="min-w-0">
                   <h4 className="text-[15px] font-semibold text-slate-900 leading-tight">{result.title}</h4>
-                  <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">{result.address}</p>
+                  <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">
+                    {result.distanceLabel ? `${result.distanceLabel} • ` : ''}{result.address}
+                  </p>
                 </div>
               </motion.button>
             ))}
@@ -1476,18 +1537,16 @@ const SelectLocation = () => {
               </div>
             )}
           </div>
-          {query.trim().length >= 3 && (
-            <div className="mt-3 px-1">
-              <p className="text-[11px] font-bold text-slate-400">
-                {isSearchingLocations
-                  ? 'Searching locations inside your service zone...'
-                  : zonePaths.length
-                    ? 'Showing zone-prioritized results after 3+ characters.'
-                    : 'Showing optimized search results after 3+ characters.'}
-              </p>
-            </div>
-          )}
         </div>
+
+        {tripError && (
+          <div className="relative z-10 px-5 mb-24">
+            <div className="flex items-start gap-1.5 rounded-xl bg-rose-50 border border-rose-100 px-3 py-2 text-[12px] font-semibold text-rose-600">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{tripError}</span>
+            </div>
+          </div>
+        )}
 
         {/* Persistent Confirm Button */}
         <AnimatePresence>
