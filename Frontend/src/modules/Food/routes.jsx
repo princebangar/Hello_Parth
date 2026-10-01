@@ -16,28 +16,38 @@ import {
   normalizeBrowsePath,
 } from "@food/utils/browseScrollMemory"
 import { isModuleAuthenticated } from "@food/utils/auth"
-import { AppShellSkeleton } from "./components/ui/loading-skeletons"
-import { Loader2 } from "lucide-react"
-
-const PageLoader = () => (
-  <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#0a0a0a]">
-    <Loader2 className="h-10 w-10 animate-spin text-[#CB202D]" />
-    <p className="mt-4 text-gray-500 font-bold uppercase tracking-widest text-[10px]">
-      Loading...
-    </p>
-  </div>
-)
+import AppRouteFallback from "@/shared/components/AppRouteFallback"
 
 // Lazy Loading Components
 const UserRouter = lazy(() => import("@food/components/user/UserRouter"))
 
 // Restaurant Module
 const RestaurantRouter = lazy(() => import("@food/components/restaurant/RestaurantRouter"))
+// Off the orders page there is no accept popup, so show a new-order card
+// that takes the restaurant to the orders page (which opens accept/reject).
+// The ring runs while the card is up; Dismiss silences it.
 const RestaurantGlobalNotificationListenerInner = lazy(() =>
-  import("@food/hooks/useRestaurantNotifications").then((mod) => ({
+  Promise.all([
+    import("@food/hooks/useRestaurantNotifications"),
+    import("@food/components/restaurant/NewOrderNotification"),
+  ]).then(([mod, cardMod]) => ({
     default: function RestaurantGlobalNotificationListenerInner() {
-      mod.useRestaurantNotifications()
-      return null
+      const navigate = useNavigate()
+      const { newOrder, stopSound } = mod.useRestaurantNotifications()
+      const [dismissedKey, setDismissedKey] = React.useState("")
+      const NewOrderNotification = cardMod.default
+      const orderKey = String(newOrder?.orderMongoId || newOrder?.orderId || newOrder?._id || "")
+      if (!newOrder || !orderKey || orderKey === dismissedKey) return null
+      return (
+        <NewOrderNotification
+          order={newOrder}
+          onClose={() => {
+            setDismissedKey(orderKey)
+            stopSound()
+          }}
+          onViewOrder={() => navigate("/food/restaurant")}
+        />
+      )
     },
   }))
 )
@@ -58,7 +68,7 @@ const DeliveryRouter = lazy(() => import("../DeliveryV2"))
 // subtree — its layout, its socket connection, its initial location/zone
 // check — to actually reset on ordinary clicks, not just the first load.
 const UserRouterWrapper = () => (
-  <Suspense fallback={<AppShellSkeleton />}>
+  <Suspense fallback={<AppRouteFallback />}>
     <UserRouter />
   </Suspense>
 )
@@ -333,7 +343,7 @@ export default function App() {
           <Route
             path="restaurant/*"
             element={
-              <Suspense fallback={<AppShellSkeleton />}>
+              <Suspense fallback={<AppRouteFallback />}>
                 <RestaurantRouter />
               </Suspense>
             }
@@ -343,7 +353,7 @@ export default function App() {
           <Route
             path="delivery/*"
             element={
-              <Suspense fallback={<AppShellSkeleton />}>
+              <Suspense fallback={<AppRouteFallback />}>
                 <DeliveryRouter />
               </Suspense>
             }
