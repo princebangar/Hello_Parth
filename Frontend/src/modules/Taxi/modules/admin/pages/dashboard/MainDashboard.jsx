@@ -42,6 +42,7 @@ import { GoogleMap, MarkerF } from '@react-google-maps/api';
 import { adminService } from '../../services/adminService';
 import { BACKEND_LABEL } from '../../../../shared/api/runtimeConfig';
 import { GOOGLE_MAPS_API_KEY, HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useBaseGoogleMapsLoader } from '../../utils/googleMaps';
+import { setVisibleInterval } from '@/shared/utils/visibleInterval.js';
 
 const currency = (value) => Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 });
 const DASHBOARD_REFRESH_INTERVAL_MS = 60000;
@@ -81,8 +82,7 @@ const MainDashboard = () => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => fetchData(true), DASHBOARD_REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return setVisibleInterval(() => fetchData(true), DASHBOARD_REFRESH_INTERVAL_MS);
   }, []);
 
   // Backend Mapped Variables
@@ -181,73 +181,89 @@ const MainDashboard = () => {
     });
   }, [bookingDonutData, donutCircumference]);
 
+  // Food-style KPI tiles: label, value, one-line helper, tinted icon; every tile with a destination is clickable.
+  const kpiCards = [
+    { label: 'Total Customers', value: totalUsers, helper: 'Registered riders', icon: Users, tone: 'text-violet-600', accent: 'bg-violet-200/40', path: '/taxi/admin/users' },
+    { label: 'Total Drivers', value: totalDrivers, helper: 'All driver accounts', icon: Car, tone: 'text-sky-600', accent: 'bg-sky-200/40', path: '/taxi/admin/drivers' },
+    { label: 'Active Drivers', value: approvedDrivers, helper: 'Approved and active', icon: UserCheck, tone: 'text-emerald-600', accent: 'bg-emerald-200/40', path: '/taxi/admin/drivers/active' },
+    { label: 'Online Drivers', value: onlineDrivers, helper: 'On duty right now', icon: Zap, tone: 'text-orange-600', accent: 'bg-orange-200/40', path: '/taxi/admin/drivers/active' },
+    { label: 'Total Trips', value: overallTrips.total || 0, helper: 'All time', icon: Activity, tone: 'text-rose-600', accent: 'bg-rose-200/40', path: '/taxi/admin/trips' },
+    { label: 'Ongoing Trips', value: todayTrips.scheduled || 0, helper: 'Scheduled today', icon: Clock, tone: 'text-blue-600', accent: 'bg-blue-200/40', path: '/taxi/admin/trips' },
+    { label: "Today's Revenue", value: `₹${currency(todayEarnings.total)}`, helper: 'Earned today', icon: IndianRupee, tone: 'text-green-600', accent: 'bg-green-200/40', path: '/taxi/admin/earnings' },
+    { label: 'Fleet Online', value: `${fleetUtilization}%`, helper: 'Drivers online vs total', icon: TrendingUp, tone: 'text-teal-600', accent: 'bg-teal-200/40', path: '/taxi/admin/drivers/active' },
+    { label: 'Pending Approvals', value: declinedDrivers, helper: 'Drivers awaiting approval', icon: AlertTriangle, tone: 'text-red-600', accent: 'bg-red-200/40', path: '/taxi/admin/drivers/pending' },
+    { label: 'Server Uptime', value: formatUptime(dashboard?.serverUptimeSeconds), helper: 'Since last restart', icon: Server, tone: 'text-indigo-600', accent: 'bg-indigo-200/40' },
+  ];
+
   return (
-    <div className="min-h-screen bg-[#F6F8FC] p-6 lg:p-8 font-sans redigo-admin-root animate-in fade-in duration-300">
-      
+    <div className="font-sans redigo-admin-root animate-in fade-in duration-300">
+      <div className="relative overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-[0_30px_120px_-60px_rgba(0,0,0,0.28)]">
 
-
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* EXECUTIVE HEADER */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        {/* HEADER BAND — same layout as the Food admin dashboard */}
+        <div className="flex flex-col gap-4 border-b border-neutral-200 bg-gradient-to-br from-white via-neutral-50 to-neutral-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="flex items-center gap-2.5 mb-1.5">
-              <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#64748B]">Terminal Operations Hub</span>
-            </div>
-            <h1>Executive Control Center</h1>
+            <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Admin Overview</p>
+            <h1 className="text-2xl font-semibold text-neutral-900">Taxi Operations Command</h1>
           </div>
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-[#E5E7EB] shadow-sm">
-              <Clock size={14} className="text-[#64748B]" />
-              <span className="font-semibold text-slate-700">
-                Sync: {lastUpdatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm text-neutral-700 shadow-sm">
+              <Clock size={14} className="text-neutral-500" />
+              <span className="font-medium">
+                Synced {lastUpdatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             </div>
             <button
+              type="button"
               onClick={() => fetchData(true)}
-              className="flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 transition-colors h-9 w-9 rounded-lg"
-              title="Sync Cloud Data"
+              title="Refresh now"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-neutral-200 bg-white shadow-sm transition-colors hover:bg-neutral-50"
             >
-              <RefreshCw size={15} className={isRefreshing ? 'animate-spin text-slate-900' : 'text-slate-600'} />
+              <RefreshCw size={16} className={isRefreshing ? 'animate-spin text-neutral-900' : 'text-neutral-600'} />
             </button>
           </div>
         </div>
 
+        <div className="space-y-6 px-6 py-6">
+
         {dashboardError && (
-          <div className="rounded-xl bg-rose-50 border border-rose-100 p-4 flex items-center gap-4 animate-shake">
+          <div className="rounded-xl bg-rose-50 border border-rose-100 p-4 flex items-center gap-4">
             <div className="h-10 w-10 bg-white rounded-lg flex items-center justify-center text-rose-500 shadow-sm shrink-0">
               <CircleAlert size={20} />
             </div>
             <div>
-              <p className="text-xs font-bold text-rose-900">Communication Gateway Offline</p>
-              <p className="text-[10px] text-rose-600 mt-0.5 uppercase tracking-wider">{dashboardError}</p>
+              <p className="text-xs font-bold text-rose-900">Could not load dashboard data</p>
+              <p className="text-[11px] text-rose-600 mt-0.5">{dashboardError}</p>
             </div>
           </div>
         )}
 
-        {/* 1. LIVE PLATFORM OVERVIEW (10 KPI Cards) */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            { label: "Total Customers", value: totalUsers, icon: Users, cardBg: "!bg-violet-500" },
-            { label: "Total Drivers", value: totalDrivers, icon: Car, cardBg: "!bg-sky-500" },
-            { label: "Active Drivers", value: approvedDrivers, icon: UserCheck, cardBg: "!bg-emerald-500" },
-            { label: "Total Trips", value: overallTrips.total || 0, icon: Activity, cardBg: "!bg-rose-500" },
-            { label: "Online Drivers", value: onlineDrivers, icon: Car, cardBg: "!bg-orange-500" },
-            { label: "Ongoing Trips", value: todayTrips.scheduled || 0, icon: Activity, cardBg: "!bg-blue-500" },
-            { label: "Today's Revenue", value: `₹${currency(todayEarnings.total)}`, icon: IndianRupee, cardBg: "!bg-emerald-500" },
-            { label: "Server Uptime", value: formatUptime(dashboard?.serverUptimeSeconds), icon: Server, cardBg: "!bg-violet-500" },
-            { label: "Drivers Online", value: `${fleetUtilization}%`, icon: TrendingUp, cardBg: "!bg-teal-500" },
-            { label: "Pending Approvals", value: declinedDrivers, icon: Clock, cardBg: "!bg-red-500" }
-          ].map((kpi, idx) => (
-            <div key={idx} className={`admin-card !p-4 border-none !text-white hover:scale-[1.02] transition-transform shadow-lg ${kpi.cardBg}`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="card-label text-[10px] font-bold opacity-80 uppercase tracking-wider">{kpi.label}</span>
-                <div className="p-2 rounded-full bg-white/20 backdrop-blur-sm">
-                  <kpi.icon size={16} strokeWidth={2.5} />
+        {/* KPI CARDS */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {kpiCards.map((kpi) => (
+            <div
+              key={kpi.label}
+              role={kpi.path ? 'link' : undefined}
+              tabIndex={kpi.path ? 0 : undefined}
+              onClick={kpi.path ? () => navigate(kpi.path) : undefined}
+              onKeyDown={kpi.path ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(kpi.path); } } : undefined}
+              className={`group relative overflow-hidden rounded-xl border border-neutral-200 bg-white transition-all duration-300 ${kpi.path ? 'cursor-pointer hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]' : ''}`}
+            >
+              <div className={`absolute inset-0 opacity-40 transition-opacity duration-300 group-hover:opacity-60 ${kpi.accent}`} />
+              <div className="relative z-10 flex items-center justify-between px-4 py-4">
+                <div className="mr-2 min-w-0 flex-1">
+                  <p className="mb-1 truncate text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-500">{kpi.label}</p>
+                  <div className="mb-1 flex min-h-[1.75rem] items-center text-xl font-bold leading-tight text-neutral-900">
+                    {isLoading ? <span className="inline-block h-6 w-20 animate-pulse rounded-md bg-neutral-200" /> : kpi.value}
+                  </div>
+                  <p className="text-[10px] font-medium leading-snug text-neutral-500">{kpi.helper}</p>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/90 shadow-sm ring-1 ring-neutral-200 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6">
+                  <kpi.icon className={`h-5 w-5 ${kpi.tone}`} />
                 </div>
               </div>
-              <h4 className="text-xl font-black tracking-tight mt-1">{isLoading ? '...' : kpi.value}</h4>
+              {kpi.path ? (
+                <ArrowUpRight className="absolute bottom-2 right-2 h-3 w-3 translate-x-2 text-neutral-400 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
+              ) : null}
             </div>
           ))}
         </div>
@@ -569,6 +585,7 @@ const MainDashboard = () => {
           </div>
         </div>
 
+        </div>
       </div>
     </div>
   );

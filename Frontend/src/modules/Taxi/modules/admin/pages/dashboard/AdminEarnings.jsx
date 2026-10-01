@@ -164,6 +164,16 @@ const AdminEarnings = () => {
     setFilters(pendingFilters);
   };
 
+  // Cards that stand for a slice of the ledger jump straight to that slice.
+  const showPayment = (method) => {
+    const next = { ...filters, paymentMethod: method };
+    setPage(1);
+    setFilters(next);
+    setPendingFilters(next);
+    document.getElementById('earnings-ledger')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const scrollToLedger = () => document.getElementById('earnings-ledger')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   const clearFilters = useCallback(() => {
     setPage(1);
     setFilters(emptyFilters);
@@ -252,10 +262,6 @@ const AdminEarnings = () => {
   const cashCommission = Number(summary.byCash || 0);
   const onlineCommission = Math.max(0, totalCommission - cashCommission);
   
-  // Safe derived metrics for premium accounting layout
-  const netPlatformRevenue = Math.max(0, totalCommission * 0.95); // Assuming 5% standard tax/disputes reduction
-  const refundAmount = Math.max(0, grossFare * 0.015); // Derived estimate
-  const pendingSettlements = Math.max(0, driverEarnings * 0.08); // Derived 8% pending window
 
   // CSV Export utility
   const handleExport = () => {
@@ -385,36 +391,46 @@ const AdminEarnings = () => {
         </div>
       </div>
 
-      {/* 2. KPI CARDS SECTION (10 Metrics) */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 mb-8">
+      {/* 2. KPI CARDS — same look as the dashboard; only cards that map to a ledger slice are clickable */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 mb-6">
         {[
-          { label: "Total Commission", value: currency(totalCommission), icon: IndianRupee, cardBg: "!bg-orange-500" },
-          { label: "Gross Ride Fare", value: currency(grossFare), icon: Wallet, cardBg: "!bg-blue-500" },
-          { label: "Driver Earnings", value: currency(driverEarnings), icon: TrendingUp, cardBg: "!bg-emerald-500" },
-          { label: "Net Platform Revenue", value: currency(netPlatformRevenue), icon: ShieldCheck, cardBg: "!bg-violet-500" },
-          { label: "Average Commission", value: currency(averageCommission), icon: BarChart3, cardBg: "!bg-fuchsia-500" },
-          { label: "Cash Commission", value: currency(cashCommission), icon: UserRound, cardBg: "!bg-slate-600" },
-          { label: "Online Commission", value: currency(onlineCommission), icon: Car, cardBg: "!bg-teal-500" },
-          { label: "Pending Settlements", value: currency(pendingSettlements), icon: Clock, cardBg: "!bg-orange-500" },
-          { label: "Refund Amount", value: currency(refundAmount), icon: AlertTriangle, cardBg: "!bg-rose-500" },
-          { label: "Completed Transactions", value: totalTrips, icon: CheckCircle, cardBg: "!bg-sky-500" }
-        ].map((kpi, idx) => (
-          <motion.div
-            key={idx}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: idx * 0.03 }}
-            className={`admin-card !p-4 border-none !text-white hover:scale-[1.02] transition-all shadow-lg rounded-lg ${kpi.cardBg}`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="card-label text-[10px] font-bold opacity-80 uppercase tracking-wider">{kpi.label}</span>
-              <div className="p-2 rounded-full bg-white/20 backdrop-blur-sm">
-                <kpi.icon size={16} strokeWidth={2.5} />
+          { label: 'Total Commission', value: currency(totalCommission), helper: 'Platform cut on completed trips', icon: IndianRupee, tone: 'text-orange-600', accent: 'bg-orange-200/40' },
+          { label: 'Gross Ride Fare', value: currency(grossFare), helper: 'Total fare collected', icon: Wallet, tone: 'text-blue-600', accent: 'bg-blue-200/40' },
+          { label: 'Driver Earnings', value: currency(driverEarnings), helper: 'Paid out to drivers', icon: TrendingUp, tone: 'text-emerald-600', accent: 'bg-emerald-200/40' },
+          { label: 'Average Commission', value: currency(averageCommission), helper: 'Per completed trip', icon: BarChart3, tone: 'text-fuchsia-600', accent: 'bg-fuchsia-200/40' },
+          { label: 'Cash Commission', value: currency(cashCommission), helper: 'Tap to list cash trips', icon: UserRound, tone: 'text-slate-600', accent: 'bg-slate-200/50', onClick: () => showPayment('cash') },
+          { label: 'Online Commission', value: currency(onlineCommission), helper: 'Tap to list online trips', icon: Car, tone: 'text-teal-600', accent: 'bg-teal-200/40', onClick: () => showPayment('online') },
+          { label: 'Completed Transactions', value: totalTrips, helper: 'Tap to jump to the ledger', icon: CheckCircle, tone: 'text-sky-600', accent: 'bg-sky-200/40', onClick: scrollToLedger },
+        ].map((kpi, idx) => {
+          const clickable = typeof kpi.onClick === 'function';
+          return (
+            <motion.div
+              key={kpi.label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: idx * 0.02 }}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={kpi.onClick}
+              onKeyDown={clickable ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); kpi.onClick(); } } : undefined}
+              className={`group relative overflow-hidden rounded-xl border border-neutral-200 bg-white transition-all duration-300 ${clickable ? 'cursor-pointer hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]' : ''}`}
+            >
+              <div className={`absolute inset-0 opacity-40 transition-opacity duration-300 ${clickable ? 'group-hover:opacity-60' : ''} ${kpi.accent}`} />
+              <div className="relative z-10 flex items-center justify-between px-4 py-4">
+                <div className="mr-2 min-w-0 flex-1">
+                  <p className="mb-1 truncate text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-500">{kpi.label}</p>
+                  <div className="mb-1 flex min-h-[1.75rem] items-center text-xl font-bold leading-tight text-neutral-900">
+                    {loading ? <span className="inline-block h-6 w-20 animate-pulse rounded-md bg-neutral-200" /> : kpi.value}
+                  </div>
+                  <p className="text-[10px] font-medium leading-snug text-neutral-500">{kpi.helper}</p>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/90 shadow-sm ring-1 ring-neutral-200">
+                  <kpi.icon className={`h-5 w-5 ${kpi.tone}`} />
+                </div>
               </div>
-            </div>
-            <h4 className="text-xl font-black tracking-tight mt-1">{loading ? '...' : kpi.value}</h4>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </div>
 
       {/* 3. FILTERS PANEL */}
@@ -589,71 +605,6 @@ const AdminEarnings = () => {
         <BreakdownPanel title="Rider type performance" icon={UserRound} rows={riderTypePerformanceRows} emptyText="No rider type earnings found." />
       </div>
 
-      {/* 6 & 7. SETTLEMENT & ADJUSTMENT PANEL ROW */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-8">
-        
-        {/* Settlement Summary */}
-        <div className="admin-card bg-white border border-[#E5E7EB] rounded-lg">
-          <div className="flex items-center gap-2 mb-4">
-            <h3 className="text-xs font-bold text-[#0B1220] uppercase tracking-wider">Settlement Ledger Summary</h3>
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-xs mb-4">
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Total Driver Payable</span>
-              <span className="text-base font-bold text-[#0B1220] block mt-0.5">{currency(driverEarnings)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Paid to Drivers</span>
-              <span className="text-base font-bold text-emerald-600 block mt-0.5">{currency(driverEarnings * 0.92)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Pending Payout</span>
-              <span className="text-base font-bold text-amber-500 block mt-0.5">{currency(pendingSettlements)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Failed Payout</span>
-              <span className="text-base font-bold text-rose-500 block mt-0.5">{currency(0)}</span>
-            </div>
-          </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 flex justify-between items-center text-[10px] text-slate-500 font-semibold">
-            <span>Next Settlement Target Date</span>
-            <span className="text-[#0B1220] font-bold">Friday, 10:00 AM</span>
-          </div>
-        </div>
-
-        {/* Refund & Adjustment Summary */}
-        <div className="admin-card bg-white border border-[#E5E7EB] rounded-lg">
-          <div className="flex items-center gap-2 mb-4">
-            <h3 className="text-xs font-bold text-[#0B1220] uppercase tracking-wider">Refunds & Adjustments</h3>
-            <div className="h-1.5 w-1.5 rounded-full bg-[#FFC400]" />
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-xs mb-4">
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Total Refunds Issued</span>
-              <span className="text-base font-bold text-rose-500 block mt-0.5">{currency(refundAmount)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Cancelled Ride Refunds</span>
-              <span className="text-base font-bold text-[#0B1220] block mt-0.5">{currency(refundAmount * 0.7)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Wallet Adjustments</span>
-              <span className="text-base font-bold text-[#0B1220] block mt-0.5">{currency(refundAmount * 0.2)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block uppercase font-semibold text-[9px] tracking-wider">Disputed Audits</span>
-              <span className="text-base font-bold text-amber-500 block mt-0.5">{currency(refundAmount * 0.1)}</span>
-            </div>
-          </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 flex justify-between items-center text-[10px] text-slate-500 font-semibold">
-            <span>Manual Adjustments Approved Today</span>
-            <span className="text-[#0B1220] font-bold">₹0.00</span>
-          </div>
-        </div>
-
-      </div>
-
       {/* 8. TRANSACTION HISTORY TABLE */}
       <div className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white shadow-sm mb-8">
         <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-4 md:flex-row md:items-center">
@@ -672,7 +623,7 @@ const AdminEarnings = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div id="earnings-ledger" className="overflow-x-auto scroll-mt-4">
           <table className="w-full min-w-[1250px] text-left font-sans">
             <thead>
               <tr className="bg-slate-50 text-[12px] font-bold text-[#64748B] border-b border-[#E5E7EB]">

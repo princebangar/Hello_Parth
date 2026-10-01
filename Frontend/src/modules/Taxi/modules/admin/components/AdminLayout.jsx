@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState, startTransition, Suspense } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition, Suspense } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   FOOD_ADMIN_HOME,
   GLOBAL_ADMIN_HOME,
@@ -10,6 +10,7 @@ import {
 import { getAdminHomePath, getModuleAccess } from '@/shared/utils/adminAccess.js';
 import { POOLING_ENABLED } from '../../../shared/featureFlags';
 import { socketService } from '../../../shared/api/socket';
+import { warmAdminPages } from '@/shared/utils/warmAdminPages.js';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
 import { adminService } from '../services/adminService';
@@ -81,6 +82,55 @@ const hasActiveChild = (pathname, items = []) =>
     if (item.subItems) return hasActiveChild(pathname, item.subItems);
     return false;
   });
+
+// The Taxi menu used to put ~13 unrelated things under "Home". Items keep their own definitions (paths,
+// permissions, sub-items); this only decides which section heading each top-level item sits under, in order.
+const ADMIN_SECTION_LAYOUT = [
+  { title: 'Home', labels: ['Dashboard', 'Admin Earnings', 'Chat'] },
+  { title: 'Operations', labels: ['Trip Requests', 'Ongoing Requests', 'Delivery Requests', 'Cancellation Analytics', 'Geofencing', 'Bus Service', 'Car Pooling'] },
+  { title: 'People', labels: ['Customer Management', 'Driver Management', 'Owner Management'] },
+  { title: 'Pricing & Services', labels: ['Price Management'] },
+  { title: 'Marketing', labels: ['Broadcast Notifications', 'Promotions Management', 'Referral Management'] },
+  { title: 'Finance & Support', labels: ['Wallet Payment', 'Report', 'Support Management'] },
+  { title: 'Masters & Settings', labels: ['Language', 'Business Settings', 'App Settings'] },
+];
+
+const organizeAdminSections = (sections = []) => {
+  const byLabel = new Map();
+  sections.forEach((section) => (section.items || []).forEach((item) => byLabel.set(item.label, item)));
+  const used = new Set();
+  const organized = ADMIN_SECTION_LAYOUT.map(({ title, labels }) => ({
+    title,
+    items: labels.map((label) => {
+      const item = byLabel.get(label);
+      if (item) used.add(label);
+      return item;
+    }).filter(Boolean),
+  })).filter((section) => section.items.length > 0);
+
+  // Anything not named above (a future menu item) must never disappear — keep it under "More".
+  const leftovers = [];
+  sections.forEach((section) => (section.items || []).forEach((item) => {
+    if (!used.has(item.label)) leftovers.push(item);
+  }));
+  if (leftovers.length > 0) organized.push({ title: 'More', items: leftovers });
+  return organized;
+};
+
+// Keys of every group that contains the current page, so the sidebar opens to it automatically.
+const collectActiveGroupKeys = (sections = [], pathname = '') => {
+  const keys = [];
+  const walk = (items, parentKey) => {
+    items.forEach((item) => {
+      if (!item.subItems || !hasActiveChild(pathname, item.subItems)) return;
+      const key = `${parentKey}:${item.label}`;
+      keys.push(key);
+      walk(item.subItems, key);
+    });
+  };
+  sections.forEach((section) => walk(section.items || [], section.title));
+  return keys;
+};
 
 const flattenItems = (sections = []) =>
   sections.flatMap((section) => section.items ?? []);
@@ -318,25 +368,42 @@ const SidebarBadge = ({ count, isActive = false }) => {
   );
 };
 
+// The sidebar highlights the page you just clicked immediately ("optimistic" active path) instead of waiting for
+// the route (and its lazy chunk) to finish loading. Before, the OLD item stayed lit for a second after a click.
+const SidebarNavContext = createContext({ activePath: '', onNavigate: () => {} });
+
+const normalizeSidebarPath = (value = '') => String(value || '').split('?')[0].replace(/\/+$/, '') || '/';
+const isSidebarPathActive = (activePath, to) => normalizeSidebarPath(activePath) === normalizeSidebarPath(to);
+
+const SidebarLink = ({ to, className, activeClassName, idleClassName, children }) => {
+  const { activePath, onNavigate } = useContext(SidebarNavContext);
+  const active = isSidebarPathActive(activePath, to);
+
+  return (
+    <Link
+      to={to}
+      aria-current={active ? 'page' : undefined}
+      onClick={() => onNavigate(to)}
+      className={cn("outline-none focus:outline-none focus-visible:outline-none [-webkit-tap-highlight-color:transparent]", className, active ? activeClassName : idleClassName)}
+    >
+      {children}
+    </Link>
+  );
+};
+
 const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadCount = 0 }) => (
-  <NavLink
+  <SidebarLink
     to={path}
-    end
-    className={({ isActive }) =>
-      cn(
-        "group flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 relative",
-        isActive
-          ? "bg-white/10 text-white shadow-[0_4px_20px_rgba(255,255,255,0.05)] border border-white/15"
-          : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"
-      )
-    }
+    className="group flex items-center gap-3 px-4 py-2.5 rounded-xl relative outline-none focus:outline-none focus-visible:outline-none"
+    activeClassName="bg-white/10 text-white"
+    idleClassName="text-neutral-400 hover:text-neutral-200 hover:bg-white/5"
   >
     {React.createElement(icon, { size: 18, className: 'shrink-0' })}
     {!isCollapsed && <span className="min-w-0 flex-1 text-[14px] font-bold tracking-tight">{label}</span>}
     {!isCollapsed && (
       <SidebarBadge count={unreadCount} />
     )}
-  </NavLink>
+  </SidebarLink>
 );
 
 const SidebarGroup = ({
@@ -370,10 +437,9 @@ const SidebarGroup = ({
         type="button"
         onClick={toggleGroup}
         className={cn(
-          "group w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-300",
-          isActive || isExpanded
-            ? "bg-white/10 text-white shadow-[0_4px_20px_rgba(255,255,255,0.05)] border border-white/15"
-            : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"
+          "group w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-colors duration-100 outline-none focus:outline-none focus-visible:outline-none",
+          isActive ? "text-white" : "text-neutral-400 hover:text-neutral-200",
+          "hover:bg-white/5"
         )}
       >
         <div className="flex min-w-0 items-center gap-3">
@@ -385,7 +451,7 @@ const SidebarGroup = ({
         </div>
         {!isCollapsed && (
           <div className="ml-3 flex items-center gap-2">
-            <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
+            <SidebarBadge count={unreadCount} isActive={isActive} />
             <ChevronRight size={14} className={cn("transition-transform duration-300", isExpanded && "rotate-90")} />
           </div>
         )}
@@ -408,23 +474,17 @@ const SidebarGroup = ({
                 unreadCountsByPath={unreadCountsByPath}
               />
             ) : (
-              <NavLink
+              <SidebarLink
                 key={item.path}
                 to={item.path}
-                end
-                className={({ isActive: childActive }) =>
-                  cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-300",
-                    childActive
-                      ? "bg-white/5 text-white"
-                      : "text-neutral-500 hover:text-neutral-200 hover:bg-white/5"
-                  )
-                }
+                className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors duration-100"
+                activeClassName="bg-white/10 text-white font-semibold"
+                idleClassName="text-neutral-500 hover:text-neutral-200 hover:bg-white/5"
               >
-                <div className={cn("h-1 w-1 shrink-0 rounded-full", "bg-neutral-600")} />
+                <div className="h-1 w-1 shrink-0 rounded-full bg-neutral-600" />
                 <span className="min-w-0 flex-1">{item.label}</span>
                 <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} />
-              </NavLink>
+              </SidebarLink>
             )
           )}
         </div>
@@ -462,18 +522,17 @@ const NestedGroup = ({
         type="button"
         onClick={toggleGroup}
         className={cn(
-          "group w-full flex items-center justify-between px-3 py-1.5 rounded-xl transition-all duration-300",
-          isActive || isExpanded
-            ? "bg-white/10 text-white shadow-[0_4px_20px_rgba(255,255,255,0.05)] border border-white/15"
-            : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"
+          "group w-full flex items-center justify-between px-3 py-1.5 rounded-xl transition-colors duration-100 outline-none focus:outline-none focus-visible:outline-none",
+          isActive ? "text-white" : "text-neutral-400 hover:text-neutral-200",
+          "hover:bg-white/5"
         )}
       >
         <span className="flex min-w-0 items-center gap-3 text-[12px] font-medium">
-          <div className={cn("h-1 w-1 shrink-0 rounded-full", isActive || isExpanded ? "bg-white" : "bg-neutral-600")} />
+          <div className={cn("h-1 w-1 shrink-0 rounded-full", isActive ? "bg-white" : "bg-neutral-600")} />
           <span className="truncate">{label}</span>
         </span>
         <span className="ml-3 flex items-center gap-2">
-          <SidebarBadge count={unreadCount} isActive={isActive || isExpanded} />
+          <SidebarBadge count={unreadCount} isActive={isActive} />
           <ChevronRight size={12} className={cn("transition-transform duration-300", isExpanded && "rotate-90")} />
         </span>
       </button>
@@ -481,23 +540,17 @@ const NestedGroup = ({
       {isExpanded && (
         <div className="pl-4 space-y-1">
           {subItems.map((item) => (
-            <NavLink
+            <SidebarLink
               key={item.path}
               to={item.path}
-              end
-              className={({ isActive: childActive }) =>
-                cn(
-                  "flex items-center gap-3 px-3 py-1.5 rounded-xl text-[12px] font-medium transition-all duration-300",
-                  childActive
-                    ? "bg-white/5 text-white"
-                    : "text-neutral-500 hover:text-neutral-200 hover:bg-white/5"
-                )
-              }
+              className="flex items-center gap-3 px-3 py-1.5 rounded-xl text-[12px] font-medium transition-colors duration-100"
+              activeClassName="bg-white/10 text-white font-semibold"
+              idleClassName="text-neutral-500 hover:text-neutral-200 hover:bg-white/5"
             >
               <div className="h-0.5 w-0.5 shrink-0 rounded-full bg-neutral-700" />
               <span className="min-w-0 flex-1">{item.label}</span>
               <SidebarBadge count={getSidebarItemCount(item, unreadCountsByPath)} />
-            </NavLink>
+            </SidebarLink>
           ))}
         </div>
       )}
@@ -625,6 +678,7 @@ const AdminLayout = () => {
   const [bookingPage, setBookingPage] = useState(1);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState(() => readDismissedNotifications());
+  const [pendingSidebarPath, setPendingSidebarPath] = useState(null);
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -772,22 +826,15 @@ const AdminLayout = () => {
       {
         title: 'Home',
         items: [
-          {
-            icon: UserCog,
-            label: 'Admin Management',
-            subItems: [
-              { label: 'Admins', path: '/taxi/admin/management/admins', permission: 'subadmins.manage' },
-            ],
-          },
           { icon: Home, label: 'Dashboard', path: '/taxi/admin/dashboard', permission: 'dashboard.view' },
           { icon: IndianRupee, label: 'Admin Earnings', path: '/taxi/admin/earnings', permission: 'earnings.view' },
           { icon: MessageCircle, label: 'Chat', path: '/taxi/admin/chat', permission: 'chat.view' },
+          { icon: Bell, label: 'Broadcast Notifications', path: '/taxi/admin/promotions/send-notification', permission: 'promotions.view' },
           {
             icon: TrendingUp,
             label: 'Promotions Management',
             subItems: [
               { label: 'Promo Code', path: '/taxi/admin/promotions/promo-codes', permission: 'promotions.view' },
-              { label: 'Push Notifications', path: '/taxi/admin/promotions/send-notification', permission: 'promotions.view' },
               //{ label: 'Banner Image', path: '/taxi/admin/promotions/banner-image', permission: 'promotions.view' },
             ],
           },
@@ -994,7 +1041,7 @@ const AdminLayout = () => {
   const isAdminChatRoute = pathMatches(location.pathname, '/taxi/admin/chat');
   const mode = isOwnerRoute ? OWNER_MODE : ADMIN_MODE;
   const sidebarSections = useMemo(
-    () => filterSidebarSectionsByAccess(mode === OWNER_MODE ? ownerSections : adminSections, adminProfile),
+    () => filterSidebarSectionsByAccess(mode === OWNER_MODE ? ownerSections : organizeAdminSections(adminSections), adminProfile),
     [adminProfile, adminSections, mode, ownerSections],
   );
   const unreadCountsByPath = useMemo(
@@ -1047,6 +1094,60 @@ const AdminLayout = () => {
       }))
       .filter((section) => section.items.length > 0);
   }, [sidebarSearchQuery, sidebarSections]);
+
+  // Load the admin pages in the background so sidebar clicks open instantly.
+  useEffect(() => warmAdminPages(import.meta.glob('../pages/**/*.jsx')), []);
+
+  // The real route caught up (or the click went nowhere): stop using the optimistic highlight.
+  useEffect(() => {
+    setPendingSidebarPath(null);
+  }, [location.pathname]);
+  const activeSidebarPath = pendingSidebarPath || location.pathname;
+  const sidebarNavContextValue = useMemo(
+    () => ({
+      activePath: activeSidebarPath,
+      onNavigate: (to) => setPendingSidebarPath(isSidebarPathActive(location.pathname, to) ? null : to),
+    }),
+    [activeSidebarPath, location.pathname],
+  );
+
+  // Open the groups that contain the current page whenever the route changes (collapsing is left to the user).
+  useEffect(() => {
+    const keys = collectActiveGroupKeys(sidebarSections, activeSidebarPath);
+    if (keys.length === 0) return;
+    setExpandedSidebarGroups((current) => (keys.every((key) => current.includes(key)) ? current : [...current, ...keys]));
+  }, [activeSidebarPath, sidebarSections]);
+
+  // Keep the active page centred in the sidebar: instantly on first load, smoothly after navigation.
+  // NavLink marks the current page with aria-current="page", so that is what we look for.
+  const sidebarNavRef = useRef(null);
+  const sidebarScrolledOnce = useRef(false);
+  useLayoutEffect(() => {
+    const nav = sidebarNavRef.current;
+    if (!nav) return undefined;
+
+    const centreActive = (behavior) => {
+      const active = nav.querySelector('a[aria-current="page"]');
+      if (!active) return;
+      const navRect = nav.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      const top = activeRect.top - navRect.top + nav.scrollTop - navRect.height / 2 + activeRect.height / 2;
+      const max = Math.max(0, nav.scrollHeight - nav.clientHeight);
+      nav.scrollTo({ top: Math.max(0, Math.min(top, max)), behavior });
+    };
+
+    const behavior = sidebarScrolledOnce.current ? 'smooth' : 'auto';
+    // Wait a frame so a group that just opened for this route has its rows in the DOM.
+    const frame = requestAnimationFrame(() => {
+      centreActive(behavior);
+      sidebarScrolledOnce.current = true;
+    });
+    const timer = window.setTimeout(() => centreActive(behavior), 200);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [activeSidebarPath, expandedSidebarGroups, mode]);
 
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
   const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);
@@ -1222,7 +1323,9 @@ const AdminLayout = () => {
           return;
         }
 
-        const response = await adminService.getOwnerBookings();
+        // The bell only needs the latest bookings, so ask for one page of 50 instead of the whole table. It is
+        // paged in the browser (5 per page), so flipping pages does not need another request.
+        const response = await adminService.getOwnerBookings({ page: 1, limit: 50 });
         if (!isMounted) return;
 
         setBookingsFeed(response?.data?.results || response?.results || []);
@@ -1251,7 +1354,7 @@ const AdminLayout = () => {
     return () => {
       isMounted = false;
     };
-  }, [bookingPage, isNotificationsOpen, notificationTab, rideRequestPage]);
+  }, [isNotificationsOpen, notificationTab, rideRequestPage]);
 
   useEffect(() => {
     if (!isSearchOpen) return undefined;
@@ -1487,7 +1590,7 @@ const AdminLayout = () => {
                   value={sidebarSearchQuery}
                   onChange={(event) => setSidebarSearchQuery(event.target.value)}
                   className={cn(
-                    "w-full pl-9 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/40 transition-all duration-200 text-left",
+                    "admin-sidebar-search w-full pl-9 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/40 transition-all duration-200 text-left",
                     sidebarSearchQuery ? "pr-9" : "pr-3"
                   )}
                 />
@@ -1505,7 +1608,8 @@ const AdminLayout = () => {
             )}
           </div>
 
-          <nav className="admin-sidebar-scroll mt-0 flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-y-contain px-3 py-3 scroll-smooth">
+          <SidebarNavContext.Provider value={sidebarNavContextValue}>
+          <nav ref={sidebarNavRef} className="admin-sidebar-scroll mt-0 flex-1 min-h-0 space-y-8 overflow-y-auto overscroll-y-contain px-3 py-3">
             {visibleSidebarSections.length === 0 && sidebarSearchQuery.trim() ? (
               <div className="px-3 py-12 text-left">
                 <p className="text-neutral-300 text-sm font-medium">No menu items found</p>
@@ -1529,7 +1633,7 @@ const AdminLayout = () => {
                       {...item}
                       forceOpen={mode === OWNER_MODE || Boolean(sidebarSearchQuery.trim())}
                       isCollapsed={isCollapsed}
-                      pathname={location.pathname}
+                      pathname={activeSidebarPath}
                       groupKey={`${section.title}:${item.label}`}
                       expandedGroups={expandedSidebarGroups}
                       setExpandedGroups={setExpandedSidebarGroups}
@@ -1550,6 +1654,7 @@ const AdminLayout = () => {
               ))
             )}
           </nav>
+          </SidebarNavContext.Provider>
         </div>
       </aside>
 
@@ -1984,7 +2089,7 @@ const AdminLayout = () => {
           </div>
         )}
 
-        <main className="no-scrollbar flex-1 overflow-y-auto p-4 scroll-smooth lg:p-8">
+        <main className="taxi-admin-main no-scrollbar flex-1 overflow-y-auto bg-neutral-100 p-4 pb-10 lg:p-6 lg:pb-10">
           <Suspense fallback={null}>
             <Outlet />
           </Suspense>
