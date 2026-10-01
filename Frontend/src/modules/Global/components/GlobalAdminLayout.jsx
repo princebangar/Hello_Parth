@@ -5,6 +5,7 @@ import { getAdminHomePath, getModuleAccess, readAdminProfile } from "@/shared/ut
 import GlobalSidebar from "./GlobalSidebar"
 import GlobalTopbar from "./GlobalTopbar"
 import { refreshAdminProfile } from "../utils/adminSession"
+import { warmAdminPages } from "@/shared/utils/warmAdminPages.js"
 
 const readCollapsed = () => {
   try {
@@ -30,6 +31,9 @@ export default function GlobalAdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(readCollapsed)
   const [, setProfileVersion] = useState(0)
+
+  // Load the Global admin pages in the background so sidebar clicks open instantly.
+  useEffect(() => warmAdminPages(import.meta.glob("../pages/**/*.jsx")), [])
 
   // A change made by the super admin (modules, sidebar options) reaches an open panel without a new sign-in.
   useEffect(() => {
