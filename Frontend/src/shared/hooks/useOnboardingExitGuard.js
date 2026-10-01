@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 /**
  * Guards onboarding exit on the first step only.
@@ -38,23 +38,32 @@ export default function useOnboardingExitGuard({
     onPreviousStep?.()
   }, [isFirstStep, onPreviousStep, requestExit])
 
+  // Latest values for the popstate listener. The listener used to be re-created
+  // (and a new history entry pushed) on every render because callers pass fresh
+  // functions each time — the history stack piled up (19 entries after two
+  // screens), so the phone's back button needed many taps and finally fell
+  // through to the app's "exit app" popup instead of the previous step.
+  const latestRef = useRef({ isFirstStep, onPreviousStep, requestExit })
+  latestRef.current = { isFirstStep, onPreviousStep, requestExit }
+
   useEffect(() => {
     window.history.pushState(null, "", window.location.href)
 
     const handlePopState = () => {
       window.history.pushState(null, "", window.location.href)
 
-      if (isFirstStep) {
-        requestExit()
+      const { isFirstStep: first, onPreviousStep: previous, requestExit: exit } = latestRef.current
+      if (first) {
+        exit()
         return
       }
 
-      onPreviousStep?.()
+      previous?.()
     }
 
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
-  }, [isFirstStep, onPreviousStep, requestExit])
+  }, [])
 
   return {
     showExitModal,
