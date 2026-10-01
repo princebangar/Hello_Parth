@@ -1677,7 +1677,9 @@ export async function getCustomers(query = {}) {
     const page = Math.max(parseInt(query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
-    const filter = { role: 'USER' };
+    // Only customers who finished sign-up (entered a name after OTP). A number
+    // that stopped at OTP has no name yet and showed up as "Unnamed".
+    const filter = { role: 'USER', name: { $regex: '\\S', $nin: ['null', 'Null', 'NULL'] } };
 
     if (query.status) {
         if (String(query.status) === 'active') filter.isActive = true;
@@ -3442,11 +3444,47 @@ export async function createCategory(body) {
     return doc.toObject();
 }
 
+/**
+ * Push + in-app inbox message to one restaurant. Never throws — a failed
+ * notification must not fail the admin action that triggered it.
+ */
+export async function notifyRestaurantSafely(restaurantId, { title, body, link = '/food/restaurant', type = 'info', data = {} } = {}) {
+    if (!restaurantId || !title || !body) return;
+    try {
+        const [{ notifyOwnersSafely }, { createInboxNotifications }] = await Promise.all([
+            import('../../../../core/notifications/firebase.service.js'),
+            import('../../../../core/notifications/notification.service.js'),
+        ]);
+        await Promise.allSettled([
+            notifyOwnersSafely([{ ownerType: 'RESTAURANT', ownerId: String(restaurantId) }], {
+                title,
+                body,
+                sendToAllDevices: true,
+                data: { type, targetUrl: link, link, ...data },
+            }),
+            createInboxNotifications({
+                notifications: [{
+                    ownerType: 'RESTAURANT',
+                    ownerId: String(restaurantId),
+                    title,
+                    message: body,
+                    link,
+                    category: type,
+                    metadata: data,
+                }],
+            }),
+        ]);
+    } catch (e) {
+        console.error('[notifyRestaurantSafely] failed:', e?.message || e);
+    }
+}
+
 export async function approveCategory(id) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
     const doc = await FoodCategory.findById(id);
     if (!doc) return null;
 
+    const wasApproved = doc.approvalStatus === 'approved';
     if (!doc.createdByRestaurantId && doc.restaurantId) {
         doc.createdByRestaurantId = doc.restaurantId;
     }
@@ -3456,6 +3494,17 @@ export async function approveCategory(id) {
     doc.rejectedAt = undefined;
     doc.rejectionReason = '';
     await doc.save();
+
+    const ownerRestaurantId = doc.createdByRestaurantId || doc.restaurantId;
+    if (!wasApproved && ownerRestaurantId) {
+        void notifyRestaurantSafely(ownerRestaurantId, {
+            title: 'Category approved ✅',
+            body: `Your category "${doc.name}" has been approved. You can now add items to it.`,
+            link: '/food/restaurant/menu-categories',
+            type: 'category_approved',
+            data: { categoryId: String(doc._id) },
+        });
+    }
     return doc.toObject();
 }
 
@@ -3476,6 +3525,14 @@ export async function rejectCategory(id, reason) {
     doc.rejectedAt = new Date();
     doc.approvedAt = undefined;
     await doc.save();
+
+    void notifyRestaurantSafely(doc.createdByRestaurantId || doc.restaurantId, {
+        title: 'Category rejected',
+        body: `Your category "${doc.name}" was rejected${doc.rejectionReason ? `: ${doc.rejectionReason}` : '.'}`,
+        link: '/food/restaurant/menu-categories',
+        type: 'category_rejected',
+        data: { categoryId: String(doc._id) },
+    });
     return doc.toObject();
 }
 
@@ -6425,7 +6482,33 @@ export async function getCashConfirmations(query = {}) {
     };
 }
 
+// 15 count queries run for every admin, every 15 s. A few seconds of sharing is invisible to users but means
+// N open admin panels cost one set of queries, not N. Concurrent callers also share one in-flight computation.
+const SIDEBAR_BADGES_TTL_MS = 5000;
+let sidebarBadgesCache = { at: 0, value: null };
+let sidebarBadgesInFlight = null;
+
 export async function getSidebarBadges() {
+    if (sidebarBadgesCache.value && Date.now() - sidebarBadgesCache.at < SIDEBAR_BADGES_TTL_MS) {
+        return sidebarBadgesCache.value;
+    }
+    if (sidebarBadgesInFlight) return sidebarBadgesInFlight;
+
+    sidebarBadgesInFlight = computeSidebarBadges()
+        .then((value) => {
+            // an empty object means the counts failed — do not keep that around
+            if (value && Object.keys(value).length > 0) {
+                sidebarBadgesCache = { at: Date.now(), value };
+            }
+            return value;
+        })
+        .finally(() => {
+            sidebarBadgesInFlight = null;
+        });
+    return sidebarBadgesInFlight;
+}
+
+async function computeSidebarBadges() {
     try {
         const [
             pendingRestaurants,

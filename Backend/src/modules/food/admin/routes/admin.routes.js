@@ -8,7 +8,6 @@ import * as feedbackExperienceController from '../controllers/feedbackExperience
 import * as notificationBroadcastController from '../controllers/notificationBroadcast.controller.js';
 import * as diningAdminController from '../../dining/controllers/diningAdmin.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
-import * as subAdminController from '../controllers/subAdmin.controller.js';
 import { getAdminPageController, upsertAdminPageController } from '../controllers/pageContent.controller.js';
 import * as systemConfigController from '../controllers/systemConfig.controller.js';
 import { upload } from '../../../../middleware/upload.js';
@@ -35,15 +34,6 @@ router.use(requireAdmin);
 router.use(enforceSubAdminPermissions);
 
 // ----- Sub Admins (full ADMIN only — enforced in controller) -----
-router.get('/sub-admins/permission-modules', subAdminController.getPermissionModules);
-router.get('/sub-admins', subAdminController.listSubAdmins);
-router.post('/sub-admins', subAdminController.createSubAdmin);
-router.get('/sub-admins/:id', subAdminController.getSubAdminById);
-router.patch('/sub-admins/:id', subAdminController.updateSubAdmin);
-router.patch('/sub-admins/:id/status', subAdminController.updateSubAdminStatus);
-router.patch('/sub-admins/:id/password', subAdminController.resetSubAdminPassword);
-router.patch('/sub-admins/:id/permissions', subAdminController.updateSubAdminPermissions);
-router.delete('/sub-admins/:id', subAdminController.deleteSubAdmin);
 
 // ----- Broadcast Notifications -----
 router.post('/notifications/broadcast', notificationBroadcastController.createBroadcastNotificationController);
