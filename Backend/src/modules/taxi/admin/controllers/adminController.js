@@ -345,23 +345,6 @@ export const verifyResetOtp = asyncHandler(async (req, res) =>
 export const resetPassword = asyncHandler(async (req, res) =>
   ok(res, await adminService.resetPassword(req.body)),
 );
-export const getAdmins = asyncHandler(async (req, res) =>
-  ok(res, { results: await adminService.listAdmins(req.auth?.admin) }),
-);
-export const getAdminPermissions = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listAdminPermissions() }),
-);
-export const createAdminAccount = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createAdminAccount(req.auth?.admin, req.body)),
-);
-export const updateAdminAccount = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateAdminAccount(req.auth?.admin, req.params.id, req.body)),
-);
-export const deleteAdminAccount = asyncHandler(async (req, res) => {
-  await adminService.deleteAdminAccount(req.auth?.admin, req.params.id);
-  ok(res, { deleted: true });
-});
-
 export const getUsers = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUsers(req.query)),
 );
@@ -670,8 +653,8 @@ export const deleteOwner = asyncHandler(async (req, res) => {
   ok(res, { deleted: true });
 });
 
-export const getFleetVehicles = asyncHandler(async (_req, res) =>
-  ok(res, await adminService.listFleetVehicles()),
+export const getFleetVehicles = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listFleetVehicles(req.query)),
 );
 export const createFleetVehicle = asyncHandler(async (req, res) =>
   ok(res, await adminService.createFleetVehicle(req.body)),
@@ -684,9 +667,11 @@ export const deleteFleetVehicle = asyncHandler(async (req, res) => {
   ok(res, { deleted: true });
 });
 
-export const getOwnerBookings = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listOwnerBookings() }),
-);
+export const getOwnerBookings = asyncHandler(async (req, res) => {
+  const data = await adminService.listOwnerBookings(req.query);
+  // a paged call already comes back as { results, paginator }; the plain call is a bare list
+  ok(res, Array.isArray(data) ? { results: data } : data);
+});
 export const createOwnerBooking = asyncHandler(async (req, res) =>
   ok(res, await adminService.createOwnerBooking(req.body)),
 );
@@ -716,9 +701,11 @@ export const getTodayEarnings = asyncHandler(async (_req, res) =>
 export const getCancelChart = asyncHandler(async (_req, res) =>
   ok(res, await adminService.getCancelChart()),
 );
-export const getWithdrawals = asyncHandler(async (_req, res) =>
-  ok(res, { results: await adminService.listWithdrawals() }),
-);
+export const getWithdrawals = asyncHandler(async (req, res) => {
+  const data = await adminService.listWithdrawals(req.query);
+  // paginated calls already come back as { results, paginator }; the plain call is a bare list
+  ok(res, Array.isArray(data) ? { results: data } : data);
+});
 
 export const getZones = asyncHandler(async (req, res) =>
   ok(res, { results: await adminService.listZones(req.auth?.admin) }),
