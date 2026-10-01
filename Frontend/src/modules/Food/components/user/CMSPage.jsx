@@ -1,11 +1,30 @@
 import { useNavigate } from "react-router-dom"
-import { useState, useEffect } from "react"
-import { ArrowLeft, Lock, Loader2, Mail, Phone, MessageSquare, Clock, ShieldCheck } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { ArrowLeft, Lock, Mail, Phone, MessageSquare, Clock, ShieldCheck, MapPin, Ticket } from "lucide-react"
 import { motion } from "framer-motion"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { Button } from "@food/components/ui/button"
-import api from "@food/api"
+import PolicyPageLoader from "@/shared/components/PolicyPageLoader"
+import { fetchPolicyPage, readPolicyPage } from "@/shared/utils/policyPages"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
+import { loadBusinessSettings, getCachedSettings } from "@food/utils/businessSettings"
+import { isModuleAuthenticated } from "@food/utils/auth"
+
+const toPageData = (page, defaultTitle) => ({
+  title: page?.title || defaultTitle,
+  content: page?.content || "",
+  email: page?.email || "",
+  mobile: page?.mobile || "",
+  faq: page?.faq || "",
+})
+
+const formatBusinessPhone = (phone) => {
+  if (!phone) return ""
+  if (typeof phone === "string") return phone.trim()
+  const number = String(phone.number || "").trim()
+  if (!number) return ""
+  return `${String(phone.countryCode || "").trim()} ${number}`.trim()
+}
 
 /**
  * Shared CMS display component for Help & Support (and other legal pages).
@@ -25,50 +44,48 @@ export default function CMSPage({
 }) {
   const navigate = useNavigate()
   const appGoBack = useAppBackNavigation()
-  const [loading, setLoading] = useState(true)
-  const [pageData, setPageData] = useState({
-    title: defaultTitle,
-    content: "",
-    email: "",
-    mobile: "",
-    faq: "",
-  })
+  // The last copy of this page (from an earlier visit, or fetched in the background by the login screen) is shown
+  // at once; only a page that has never been loaded shows the loader.
+  const [loading, setLoading] = useState(() => !readPolicyPage(endpoint))
+  const [pageData, setPageData] = useState(() => toPageData(readPolicyPage(endpoint), defaultTitle))
 
+  // Real company contact (admin > Business settings), used when the CMS page
+  // itself has no email/phone — never show placeholder contact details.
+  const [business, setBusiness] = useState(() => getCachedSettings())
+
+  const shownEndpointRef = useRef(endpoint)
   useEffect(() => {
-    fetchPageData()
+    let active = true
+
+    if (shownEndpointRef.current !== endpoint) {
+      // same component, different page: start from that page's cached copy (or the loader)
+      shownEndpointRef.current = endpoint
+      const cachedPage = readPolicyPage(endpoint)
+      setPageData(toPageData(cachedPage, defaultTitle))
+      setLoading(!cachedPage)
+    }
+
+    fetchPolicyPage(endpoint).then((page) => {
+      if (!active) return
+      if (page) setPageData(toPageData(page, defaultTitle))
+      setLoading(false)
+    })
+
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint])
 
-  const fetchPageData = async () => {
-    try {
-      setLoading(true)
-      const response = await api.get(endpoint)
-      const data = response.data?.data || response.data
-
-      if (data && typeof data === "object") {
-        if ("content" in data) {
-          setPageData({
-            title: data.title || defaultTitle,
-            content: data.content || "",
-            email: data.email || "",
-            mobile: data.mobile || "",
-            faq: data.faq || "",
-          })
-        } else if (data.data && typeof data.data === "object" && "content" in data.data) {
-          setPageData({
-            title: data.data.title || defaultTitle,
-            content: data.data.content || "",
-            email: data.data.email || "",
-            mobile: data.data.mobile || "",
-            faq: data.data.faq || "",
-          })
-        }
-      }
-    } catch (error) {
-      // silent
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    let active = true
+    loadBusinessSettings().then((settings) => {
+      if (active && settings) setBusiness(settings)
+    })
+    return () => {
+      active = false
     }
-  }
+  }, [])
 
   const handleBack = () => {
     if (externalGoBack) {
@@ -84,16 +101,24 @@ export default function CMSPage({
 
   const isSupport = endpoint?.includes("support") || defaultTitle?.toLowerCase().includes("support")
   const hasActualContent = pageData.content && pageData.content.replace(/<[^>]*>/g, "").trim().length > 0;
+  const contactEmail = String(pageData.email || business?.email || "").trim()
+  const contactPhone = String(pageData.mobile || formatBusinessPhone(business?.phone) || "").trim()
+  const contactAddress = [business?.address, business?.state, business?.pincode]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean)
+    .join(", ")
+  // Only the customer app has the ticket flow (restaurant/delivery have their own).
+  const canRaiseTicket = isSupport && module === "USER"
+  const handleRaiseTicket = () => {
+    if (isModuleAuthenticated("user")) {
+      navigate("/food/user/profile/support")
+    } else {
+      navigate("/login", { state: { from: "/food/user/profile/support" } })
+    }
+  }
 
   if (loading) {
-    return (
-      <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#0a0a0a]">
-        <Loader2 className="h-10 w-10 animate-spin text-[#CB202D]" />
-        <p className="mt-4 text-gray-500 font-bold uppercase tracking-widest text-[10px]">
-          Loading...
-        </p>
-      </div>
-    )
+    return <PolicyPageLoader />
   }
 
   return (
@@ -112,7 +137,15 @@ export default function CMSPage({
             <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
               {pageData.title || defaultTitle}
             </h1>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Hello Parth Food Information</p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+              {module === "DRIVER"
+                ? "Hello Parth Captain"
+                : module === "RESTAURANT"
+                  ? "Hello Parth Restaurant Partner"
+                  : module === "DELIVERY"
+                    ? "Hello Parth Delivery Partner"
+                    : "Hello Parth"}
+            </p>
           </div>
         </div>
       </div>
@@ -125,40 +158,76 @@ export default function CMSPage({
         >
           {/* Support Contact Cards */}
           {isSupport && (
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${hasActualContent ? "mb-10" : "mb-0"}`}>
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#CB202D]/30">
-                <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
-                  <Mail className="w-6 h-6 text-[#CB202D]" />
-                </div>
-                <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">
-                  Email Us
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
-                  {pageData.email || "support@helloparth.com"}
-                </p>
-                <a
-                  href={`mailto:${pageData.email || "support@helloparth.com"}`}
-                  className="mt-4 text-xs font-black text-[#CB202D] uppercase tracking-widest hover:underline"
-                >
-                  Send Message
-                </a>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#CB202D]/30">
-                <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
-                  <Phone className="w-6 h-6 text-[#CB202D]" />
-                </div>
-                <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">
-                  Call Us
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
-                  {pageData.mobile || "+91 00000 00000"}
-                </p>
-                <a
-                  href={`tel:${pageData.mobile}`}
-                  className="mt-4 text-xs font-black text-[#CB202D] uppercase tracking-widest hover:underline"
-                >
-                  Call Now
-                </a>
+            <div className={hasActualContent ? "mb-10" : "mb-0"}>
+              <h2 className="text-xl font-black text-gray-900 dark:text-white mb-4 tracking-tight">
+                Contact us
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {contactEmail && (
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#CB202D]/30">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
+                      <Mail className="w-6 h-6 text-[#CB202D]" />
+                    </div>
+                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">
+                      Email Us
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium break-all">{contactEmail}</p>
+                    <a
+                      href={`mailto:${contactEmail}`}
+                      className="mt-4 text-xs font-black text-[#CB202D] uppercase tracking-widest hover:underline"
+                    >
+                      Send Message
+                    </a>
+                  </div>
+                )}
+                {contactPhone && (
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#CB202D]/30">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
+                      <Phone className="w-6 h-6 text-[#CB202D]" />
+                    </div>
+                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">
+                      Call Us
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{contactPhone}</p>
+                    <a
+                      href={`tel:${contactPhone.replace(/\s+/g, "")}`}
+                      className="mt-4 text-xs font-black text-[#CB202D] uppercase tracking-widest hover:underline"
+                    >
+                      Call Now
+                    </a>
+                  </div>
+                )}
+                {contactAddress && (
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+                      <MapPin className="w-6 h-6 text-[#CB202D]" />
+                    </div>
+                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">
+                      Office
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{contactAddress}</p>
+                  </div>
+                )}
+                {canRaiseTicket && (
+                  <button
+                    type="button"
+                    onClick={handleRaiseTicket}
+                    className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center group transition-all hover:border-[#CB202D]/30"
+                  >
+                    <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">
+                      <Ticket className="w-6 h-6 text-[#CB202D]" />
+                    </div>
+                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider mb-2">
+                      Raise a support ticket
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
+                      Report an order, restaurant or app issue and track the reply.
+                    </p>
+                    <span className="mt-4 text-xs font-black text-[#CB202D] uppercase tracking-widest">
+                      Raise ticket
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -295,7 +364,7 @@ export default function CMSPage({
         <p className="text-center mt-10 text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] leading-relaxed">
           Last updated: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}{" "}
           <br />
-          © {new Date().getFullYear()} Hello Parth Food. All Rights Reserved.
+          © {new Date().getFullYear()} Hello Parth. All Rights Reserved.
         </p>
       </div>
     </AnimatedPage>

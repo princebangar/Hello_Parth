@@ -7,7 +7,8 @@ import { markLocationAllowed } from "@/shared/utils/sharedUserLocation"
 const isConsumerAppPath = (pathname = "") => {
   const path = String(pathname || "").toLowerCase()
   if (path.startsWith("/admin") || path.includes("/taxi/admin")) return false
-  if (path.includes("/restaurant") || path.includes("/delivery")) return false
+  // Restaurant / delivery partner panels (not the customer's /food/user/restaurants/... pages).
+  if (/^\/(food\/)?(restaurant|delivery)(\/|$)/.test(path)) return false
   if (path.includes("/taxi/driver") || path.includes("/taxi/owner")) return false
   if (path.startsWith("/login")) return true
   if (path.startsWith("/food/user") || path === "/food" || path.startsWith("/food/")) return true
@@ -16,12 +17,27 @@ const isConsumerAppPath = (pathname = "") => {
   return false
 }
 
+const queryGeoPermission = async () => {
+  if (!navigator.permissions?.query) return "unknown"
+  try {
+    const result = await navigator.permissions.query({ name: "geolocation" })
+    return result.state
+  } catch {
+    return "unknown"
+  }
+}
+
+// "Select Location Manually" navigates to the address page — don't pop the
+// prompt straight back up there.
+let skipNextPrompt = false
+
 export default function LocationPrompt() {
   const navigate = useNavigate()
   const routeLocation = useRouteLocation()
   const { location, loading, permissionGranted, requestLocation } = useLocation()
   const [showPrompt, setShowPrompt] = useState(false)
   const [isRequesting, setIsRequesting] = useState(false)
+  const [geoPermission, setGeoPermission] = useState("unknown")
   const cardRef = useRef(null)
 
   useEffect(() => {
@@ -33,19 +49,16 @@ export default function LocationPrompt() {
     let cancelled = false
 
     const maybeShow = async () => {
-      if (hasValidStoredUserLocation() && permissionGranted) return
-
-      let permissionState = "unknown"
-      if (navigator.permissions?.query) {
-        try {
-          const result = await navigator.permissions.query({ name: "geolocation" })
-          permissionState = result.state
-        } catch {
-          permissionState = "unknown"
-        }
+      if (skipNextPrompt) {
+        skipNextPrompt = false
+        return
       }
 
-      if (permissionState === "granted" || permissionGranted) {
+      const permissionState = await queryGeoPermission()
+      if (cancelled) return
+      setGeoPermission(permissionState)
+
+      if (permissionState === "granted") {
         if (!hasValidStoredUserLocation()) {
           try {
             await requestLocation()
@@ -55,9 +68,12 @@ export default function LocationPrompt() {
         return
       }
 
-      if (hasValidStoredUserLocation()) return
-      if (cancelled) return
+      // No Permissions API (older WebViews): all we can go by is having a location.
+      if (permissionState === "unknown" && (permissionGranted || hasValidStoredUserLocation())) return
 
+      // Location access is mandatory: keep asking on every screen (including
+      // the header's location picker) until it is granted — also when a
+      // location was picked by hand earlier.
       setShowPrompt(true)
       document.body.style.overflow = "hidden"
       if (cardRef.current) {
@@ -79,10 +95,21 @@ export default function LocationPrompt() {
     }
   }, [permissionGranted, routeLocation.pathname])
 
+  // Close once access is actually granted (a stored location alone isn't enough now).
   useEffect(() => {
-    if (hasValidStoredUserLocation() && showPrompt) {
-      setShowPrompt(false)
-      document.body.style.overflow = ""
+    if (!showPrompt) return undefined
+    let cancelled = false
+    queryGeoPermission().then((state) => {
+      if (cancelled) return
+      setGeoPermission(state)
+      const granted = state === "granted" || (state === "unknown" && hasValidStoredUserLocation())
+      if (granted) {
+        setShowPrompt(false)
+        document.body.style.overflow = ""
+      }
+    })
+    return () => {
+      cancelled = true
     }
   }, [location, showPrompt])
 
@@ -95,12 +122,14 @@ export default function LocationPrompt() {
       document.body.style.overflow = ""
     } catch {
       // Keep prompt open so user can try again or pick manually.
+      setGeoPermission(await queryGeoPermission())
     } finally {
       setIsRequesting(false)
     }
   }
 
   const handleSelectManually = () => {
+    skipNextPrompt = true
     setShowPrompt(false)
     document.body.style.overflow = ""
     const path = String(routeLocation.pathname || "")
@@ -154,6 +183,12 @@ export default function LocationPrompt() {
         <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mt-3 leading-relaxed px-1">
           Allow location access once to see nearby food, rides, and offers. The same location is used in Food and Taxi.
         </p>
+
+        {geoPermission === "denied" && (
+          <p className="text-xs font-semibold text-[#DC2626] text-center mt-3 px-1">
+            Location is blocked for this app. Turn it on in your browser or phone settings, then tap Allow again.
+          </p>
+        )}
 
         <div className="flex flex-col gap-2.5 mt-6 w-full">
           <button

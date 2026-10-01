@@ -89,16 +89,7 @@ const Wallet = lazy(() => import("@food/pages/user/Wallet"))
 // Complaints
 const SubmitComplaint = lazy(() => import("@food/pages/user/complaints/SubmitComplaint"))
 
-import { Loader2 } from "lucide-react"
-
-const PageLoader = () => (
-  <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#0a0a0a]">
-    <Loader2 className="h-10 w-10 animate-spin text-[#CB202D]" />
-    <p className="mt-4 text-gray-500 font-bold uppercase tracking-widest text-[10px]">
-      Loading...
-    </p>
-  </div>
-)
+import PageLoader from "@/shared/components/PolicyPageLoader"
 
 /** Main tabs render via MainTabKeepAlive in UserLayout — route match only. */
 const MainTabRoutePlaceholder = () => null
