@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, FileSearch, Loader2, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -47,41 +47,47 @@ const WithdrawalRequestOwners = () => {
   const navigate = useNavigate();
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [requests, setRequests] = useState([]);
+  const [pagedRequests, setPagedRequests] = useState([]);
+  const [totalEntries, setTotalEntries] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // The server pages the list now (only owner requests, newest first) instead of sending every request ever
+  // made and slicing it here.
   useEffect(() => {
+    let cancelled = false;
+
     const fetchWithdrawals = async () => {
       setIsLoading(true);
 
       try {
-        const response = await adminService.getWithdrawals();
+        const response = await adminService.getWithdrawals({ type: 'owner', page, limit: itemsPerPage });
+
+        if (cancelled) return;
 
         if (response.success) {
-          const results = response.data?.results || response.data || [];
-          setRequests(results.filter((item) => item.owner_id || item.owner));
+          setPagedRequests(response.data?.results || []);
+          setTotalEntries(Number(response.data?.paginator?.total || 0));
         }
       } catch (error) {
         console.error('Owner withdrawals fetch failed:', error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchWithdrawals();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, itemsPerPage]);
 
   useEffect(() => {
     setPage(1);
   }, [itemsPerPage]);
 
-  const totalEntries = requests.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
   const safePage = Math.min(page, totalPages);
-  const pagedRequests = useMemo(() => {
-    const start = (safePage - 1) * itemsPerPage;
-    return requests.slice(start, start + itemsPerPage);
-  }, [itemsPerPage, requests, safePage]);
   const showingFrom = totalEntries === 0 ? 0 : (safePage - 1) * itemsPerPage + 1;
   const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + pagedRequests.length - 1, totalEntries);
 

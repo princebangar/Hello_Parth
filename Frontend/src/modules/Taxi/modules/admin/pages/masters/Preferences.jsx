@@ -140,7 +140,8 @@ const Preferences = () => {
             <p className="text-sm text-gray-400">Loading preferences...</p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">#</th>
@@ -193,6 +194,7 @@ const Preferences = () => {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

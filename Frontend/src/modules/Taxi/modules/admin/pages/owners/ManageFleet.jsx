@@ -95,17 +95,21 @@ const ManageFleet = () => {
   const navigate = useNavigate();
   const [view, setView] = useState('list'); // 'list' | 'create' | 'edit'
   const [editingId, setEditingId] = useState(null);
-  const [fleet, setFleet] = useState([]);
+  const [fleet, setFleet] = useState([]); // only the rows of the current page
+  const [totalEntries, setTotalEntries] = useState(0);
   const [owners, setOwners] = useState([]); // Added owners state
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [areas, setAreas] = useState([]);
   const [transportTypes, setTransportTypes] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // first load of the table
+  const [isFetching, setIsFetching] = useState(false); // any page / search / filter request in flight
+  const [reloadKey, setReloadKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [updatingFleetId, setUpdatingFleetId] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchParams] = useSearchParams();
   // Dashboard "Owner vehicles awaiting approval" opens this list already filtered to pending.
   const [statusFilter, setStatusFilter] = useState(() =>
@@ -126,25 +130,18 @@ const ManageFleet = () => {
   const token = localStorage.getItem('adminToken') || '';
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  /* ── Fetch initial data ── */
-  const fetchData = async () => {
-    setIsLoading(true);
+  /* ── Fetch the form dropdowns (owners, areas, transport types) ── */
+  const fetchOptions = async () => {
     try {
-      const [fleetRes, ownersRes, areasRes, rideRes] = await Promise.all([
-        fetch(`${BASE}/owner-management/manage-fleet`, { headers }),
+      const [ownersRes, areasRes, rideRes] = await Promise.all([
         fetch(`${BASE}/owner-management/manage-owners`, { headers }), // Fetching owners
         fetch(`${BASE}/service-locations`, { headers }),
         fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/common/ride_modules`, { headers })
       ]);
 
-      const fData = await fleetRes.json();
       const oData = await ownersRes.json();
       const aData = await areasRes.json();
       const rData = await rideRes.json();
-
-      if (fData.success) {
-        setFleet(Array.isArray(fData.data) ? fData.data : (fData.data?.results || []));
-      }
 
       if (oData.success) {
         const oList = oData.data?.results || oData.data || [];
@@ -169,10 +166,10 @@ const ManageFleet = () => {
       }
     } catch (err) {
       console.error('Failed to fetch initial data:', err);
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const reloadFleet = () => setReloadKey((key) => key + 1);
 
   /* ── Fetch vehicle types based on Area ── */
   const fetchVehicleTypes = async () => {
@@ -193,20 +190,70 @@ const ManageFleet = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchOptions();
   }, []);
 
   useEffect(() => {
     fetchVehicleTypes();
   }, [formData.transport_type]);
 
+  // The server does the search, the status filter and the paging: only the rows of the current page come
+  // down, and an older request that finishes late is ignored.
   useEffect(() => {
-    setPage(1);
-  }, [itemsPerPage]);
+    let cancelled = false;
 
+    const fetchFleet = async () => {
+      setIsFetching(true);
+      try {
+        const params = new URLSearchParams({ page: String(page), limit: String(itemsPerPage) });
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        if (debouncedSearch) params.set('search', debouncedSearch);
+
+        const res = await fetch(`${BASE}/owner-management/manage-fleet?${params.toString()}`, { headers });
+        const json = await res.json();
+        if (cancelled || !json.success) return;
+
+        const data = json.data;
+        const rows = Array.isArray(data) ? data : (data?.results || []);
+        const lastPage = Math.max(1, Number(data?.paginator?.last_page) || 1);
+
+        // The page we asked for is gone (e.g. its last row was deleted): jump to the new last page instead.
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
+
+        setFleet(rows);
+        setTotalEntries(Number(data?.paginator?.total ?? rows.length));
+      } catch (err) {
+        if (!cancelled) console.error('Failed to fetch fleet:', err);
+      } finally {
+        if (!cancelled) {
+          setIsFetching(false);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchFleet();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, itemsPerPage, statusFilter, debouncedSearch, reloadKey]);
+
+  // Typing in the search box only asks the server once the admin pauses, and always starts from page 1.
   useEffect(() => {
-    setPage(1);
-  }, [searchTerm, statusFilter]);
+    const nextSearch = searchTerm.trim();
+    if (nextSearch === debouncedSearch) return undefined;
+
+    const timer = setTimeout(() => {
+      setDebouncedSearch(nextSearch);
+      setPage(1);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, debouncedSearch]);
 
   const resetForm = () => {
     setFormData({
@@ -254,7 +301,7 @@ const ManageFleet = () => {
       const json = await res.json();
       if (json.success) {
         setView('list');
-        fetchData(); // Refresh everything
+        reloadFleet(); // Refresh the current page
         resetForm();
       } else {
         alert(json.message || 'Operation failed');
@@ -274,7 +321,7 @@ const ManageFleet = () => {
         headers
       });
       const json = await res.json();
-      if (json.success) fetchData();
+      if (json.success) reloadFleet();
       else alert(json.message || 'Delete failed');
     } catch {
       alert('Delete failed');
@@ -323,6 +370,9 @@ const ManageFleet = () => {
             : fleetItem
         )
       );
+
+      // With a status filter or a search active the row may no longer belong on this page: ask the server again.
+      if (statusFilter !== 'all' || debouncedSearch) reloadFleet();
     } catch (error) {
       console.error('Failed to update fleet status:', error);
       window.alert('Status update failed');
@@ -331,41 +381,10 @@ const ManageFleet = () => {
     }
   };
 
-  const filteredFleet = fleet.filter((item) => {
-    const normalizedStatus = String(item?.status || 'pending').toLowerCase();
-    const matchesStatus =
-      statusFilter === 'all' ? true : normalizedStatus === statusFilter;
-
-    const searchValue = searchTerm.trim().toLowerCase();
-    if (!searchValue) {
-      return matchesStatus;
-    }
-
-    const haystack = [
-      item.vehicle_type_id?.name,
-      item.vehicle_type_id?.type_name,
-      item.vehicle_type,
-      item.car_brand,
-      item.car_model,
-      item.license_plate_number,
-      item.owner_id?.company_name,
-      item.owner_id?.name,
-      item.owner_id?.owner_name,
-      getFleetStatusReason(item),
-      item.status,
-    ]
-      .map((value) => String(value || '').toLowerCase())
-      .join(' ');
-
-    return matchesStatus && haystack.includes(searchValue);
-  });
-
-  const totalEntries = filteredFleet.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
   const safePage = Math.min(page, totalPages);
-  const pagedFleet = filteredFleet.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
   const showingFrom = totalEntries === 0 ? 0 : (safePage - 1) * itemsPerPage + 1;
-  const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + pagedFleet.length - 1, totalEntries);
+  const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + fleet.length - 1, totalEntries);
 
   const handleViewDocuments = (item) => {
     const urls = getFleetDocumentUrls(item?.documents);
@@ -633,7 +652,10 @@ const ManageFleet = () => {
                 <div className="relative">
                   <select
                     value={itemsPerPage}
-                    onChange={(e) => setItemsPerPage(Number(e.target.value) || 10)}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value) || 10);
+                      setPage(1);
+                    }}
                     className="h-9 w-24 appearance-none rounded border border-gray-300 bg-white px-3 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
                   >
                     {[10, 25, 50, 100].map((value) => (
@@ -667,7 +689,10 @@ const ManageFleet = () => {
                 <div className="relative">
                   <select
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setPage(1);
+                    }}
                     className="h-10 w-full appearance-none rounded border border-gray-300 bg-white px-3 pr-10 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 md:w-44"
                   >
                     <option value="all">All Status</option>
@@ -692,7 +717,7 @@ const ManageFleet = () => {
 
             {/* Table */}
             <div className="px-5">
-              <div className="overflow-x-auto">
+              <div className={`overflow-x-auto transition-opacity ${isFetching && !isLoading ? 'opacity-60' : ''}`}>
                 <table className="w-full text-left">
                   <thead className="bg-gray-50">
                     <tr>
@@ -717,7 +742,7 @@ const ManageFleet = () => {
                         </div>
                       </td>
                     </tr>
-                  ) : pagedFleet.length === 0 ? (
+                  ) : fleet.length === 0 ? (
                     <tr>
                       <td colSpan="9" className="border-b border-gray-200 px-3 py-10 text-center">
                         <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-500">
@@ -727,7 +752,7 @@ const ManageFleet = () => {
                       </td>
                     </tr>
                   ) : (
-                    pagedFleet.map((item) => (
+                    fleet.map((item) => (
                       <tr
                         key={item._id}
                         className="bg-white transition-colors hover:bg-gray-50"

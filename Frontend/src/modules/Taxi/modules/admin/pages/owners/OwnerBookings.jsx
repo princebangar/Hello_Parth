@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { adminService } from '../../services/adminService';
@@ -24,58 +24,108 @@ const defaultFormData = {
 
 const OwnerBookings = () => {
   const [view, setView] = useState('list');
-  const [bookings, setBookings] = useState([]);
+  const [bookings, setBookings] = useState([]); // only the rows of the current page
+  const [totalEntries, setTotalEntries] = useState(0);
   const [owners, setOwners] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // first load of the table
+  const [fetching, setFetching] = useState(false); // any page / search request in flight
+  const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState(defaultFormData);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [bookingsRes, ownersRes] = await Promise.all([
-        adminService.getOwnerBookings(),
-        adminService.getOwners(),
-      ]);
+  const reloadBookings = () => setReloadKey((key) => key + 1);
 
-      setBookings(bookingsRes?.data?.results || bookingsRes?.results || []);
-      setOwners(ownersRes?.data?.results || ownersRes?.results || []);
-    } catch (error) {
-      console.error('Failed to fetch owner bookings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // The owners are only needed for the form's dropdown.
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+
+    const fetchOwners = async () => {
+      try {
+        const ownersRes = await adminService.getOwners();
+        if (!cancelled) setOwners(ownersRes?.data?.results || ownersRes?.results || []);
+      } catch (error) {
+        console.error('Failed to fetch owners:', error);
+      }
+    };
+
+    fetchOwners();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // The server does the search and the paging: only the rows of the current page come down, and an older
+  // request that finishes late is ignored.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchBookings = async () => {
+      setFetching(true);
+      try {
+        const response = await adminService.getOwnerBookings({
+          page,
+          limit: itemsPerPage,
+          ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        });
+        if (cancelled) return;
+
+        const payload = response?.data || response || {};
+        const rows = Array.isArray(payload) ? payload : payload.results || [];
+        const lastPage = Math.max(1, Number(payload.paginator?.last_page) || 1);
+
+        // The page we asked for is gone (e.g. its last row was deleted): jump to the new last page instead.
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
+
+        setBookings(rows);
+        setTotalEntries(Number(payload.paginator?.total ?? rows.length));
+      } catch (error) {
+        if (!cancelled) console.error('Failed to fetch owner bookings:', error);
+      } finally {
+        if (!cancelled) {
+          setFetching(false);
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchBookings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, itemsPerPage, debouncedSearch, reloadKey]);
+
+  // Typing in the search box only asks the server once the admin pauses, and always starts from page 1.
+  useEffect(() => {
+    const nextSearch = searchTerm.trim();
+    if (nextSearch === debouncedSearch) return undefined;
+
+    const timer = setTimeout(() => {
+      setDebouncedSearch(nextSearch);
+      setPage(1);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, debouncedSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
+  const safePage = Math.min(page, totalPages);
+  const showingFrom = totalEntries === 0 ? 0 : (safePage - 1) * itemsPerPage + 1;
+  const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + bookings.length - 1, totalEntries);
 
   const resetForm = () => {
     setEditingId(null);
     setFormData(defaultFormData);
   };
-
-  const filteredBookings = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    if (!query) return bookings;
-
-    return bookings.filter((item) =>
-      [
-        item.booking_reference,
-        item.customer_name,
-        item.customer_phone,
-        item.owner_id?.name,
-        item.pickup_location,
-        item.dropoff_location,
-        item.booking_status,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query)),
-    );
-  }, [bookings, searchTerm]);
 
   const handleEdit = (booking) => {
     setEditingId(booking._id || booking.id);
@@ -114,7 +164,7 @@ const OwnerBookings = () => {
       if (response?.success) {
         resetForm();
         setView('list');
-        fetchData();
+        reloadBookings();
       } else {
         alert(response?.message || 'Failed to save booking');
       }
@@ -132,6 +182,8 @@ const OwnerBookings = () => {
       const response = await adminService.deleteOwnerBooking(id);
       if (response?.success) {
         setBookings((prev) => prev.filter((item) => (item._id || item.id) !== id));
+        setTotalEntries((total) => Math.max(0, total - 1));
+        reloadBookings(); // refill the page from the server
       }
     } catch (error) {
       console.error('Failed to delete owner booking:', error);
@@ -178,6 +230,24 @@ const OwnerBookings = () => {
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
                   />
                 </div>
+                <div className="flex items-center gap-3 text-sm font-semibold text-slate-500">
+                  <span>Show</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(event) => {
+                      setItemsPerPage(Number(event.target.value) || 10);
+                      setPage(1);
+                    }}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-4 pr-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white"
+                  >
+                    {[10, 25, 50, 100].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                  <span>entries</span>
+                </div>
               </div>
 
               <div className="p-6">
@@ -185,9 +255,9 @@ const OwnerBookings = () => {
                   <div className="flex min-h-[280px] items-center justify-center">
                     <Loader2 className="animate-spin text-slate-400" size={30} />
                   </div>
-                ) : filteredBookings.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1100px] border-collapse">
+                ) : bookings.length > 0 ? (
+                  <div className={`overflow-x-auto transition-opacity ${fetching ? 'opacity-60' : ''}`}>
+                    <table className="w-full min-w-[820px] border-collapse">
                       <thead>
                         <tr className="border-b border-slate-100 text-left">
                           <th className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400">Reference</th>
@@ -201,7 +271,7 @@ const OwnerBookings = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredBookings.map((booking) => (
+                        {bookings.map((booking) => (
                           <tr key={booking._id || booking.id} className="border-b border-slate-50 last:border-0">
                             <td className="px-4 py-4 text-sm font-bold text-slate-900">{booking.booking_reference}</td>
                             <td className="px-4 py-4 text-sm font-semibold text-slate-600">{booking.owner_id?.name || '-'}</td>
@@ -227,11 +297,42 @@ const OwnerBookings = () => {
                   </div>
                 ) : (
                   <div className="rounded-[28px] border border-dashed border-slate-200 bg-white px-8 py-16 text-center">
-                    <h3 className="text-lg font-black text-slate-900">No Bookings Yet</h3>
-                    <p className="mx-auto mt-2 max-w-md text-sm font-medium text-slate-500">Create your first owner booking to start tracking assigned trips.</p>
+                    <h3 className="text-lg font-black text-slate-900">{debouncedSearch ? 'No Matching Bookings' : 'No Bookings Yet'}</h3>
+                    <p className="mx-auto mt-2 max-w-md text-sm font-medium text-slate-500">
+                      {debouncedSearch
+                        ? 'Try a different reference, customer, owner or route.'
+                        : 'Create your first owner booking to start tracking assigned trips.'}
+                    </p>
                   </div>
                 )}
               </div>
+
+              {!loading && totalEntries > 0 && (
+                <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm font-semibold text-slate-400">
+                    Showing {showingFrom} to {showingTo} of {totalEntries} entries
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      disabled={safePage <= 1}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+                    <span className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-bold text-black">{safePage}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                      disabled={safePage >= totalPages}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </MotionDiv>
         ) : (
