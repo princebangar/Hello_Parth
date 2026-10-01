@@ -13,6 +13,7 @@ import {
   removeRealtimeNotification,
 } from '../utils/realtimeNotificationStore';
 import toast from 'react-hot-toast';
+import { markTaxiNotificationsSeen } from '../utils/useTaxiNotificationUnread';
 
 const formatNotificationTime = (value) => {
   if (!value) return 'Recently';
@@ -78,6 +79,12 @@ const Notifications = () => {
   };
 
   useEffect(() => { fetchNotifications(); }, []);
+
+  // Opening the list clears the bell badge; anything that arrives while it is open is seen too.
+  useEffect(() => {
+    markTaxiNotificationsSeen();
+    return () => markTaxiNotificationsSeen();
+  }, [notifications.length]);
 
   useEffect(() => {
     const handleRealtimeNotificationsUpdated = () => {

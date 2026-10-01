@@ -15,6 +15,8 @@ import api from '../../../shared/api/axiosInstance';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import UserAppearanceDialog from '@/shared/components/UserAppearanceDialog.jsx';
 import UserLogoutConfirmDialog from '@/shared/components/UserLogoutConfirmDialog.jsx';
+import { preloadAuthApp } from '@/shared/utils/preloadLogin.js';
+import { logoutWithTransition } from '@/shared/utils/logoutTransition.js';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -86,7 +88,6 @@ const Profile = () => {
   const navigate = useNavigate();
   const navType = useNavigationType();
   const { theme } = useUserTheme();
-  const isDark = theme === 'dark';
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -235,17 +236,23 @@ const Profile = () => {
     loadProfile();
   }, [navigate]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
-    clearCurrentRide();
-    socketService.disconnect();
-    clearLocalUserSession();
-    navigate('/login', { replace: true });
+    // Dim "Logging out..." cover + login screen preloaded: the page goes straight to login, no blank frame.
+    await logoutWithTransition({
+      navigate,
+      signOut: () => {
+        clearCurrentRide();
+        socketService.disconnect();
+        clearLocalUserSession();
+      },
+    });
   };
 
   const handleLogoutClick = () => {
     if (isLoggingOut) return;
+    preloadAuthApp();
     setLogoutConfirmOpen(true);
   };
 
@@ -295,8 +302,6 @@ const Profile = () => {
           style={{ background: 'var(--user-profile-header-gradient)' }}
           className="absolute inset-0 transition-all duration-300" 
         />
-        <div className="absolute top-[-20%] right-[-10%] h-64 w-64 rounded-full blur-3xl bg-indigo-500/10 opacity-60 pointer-events-none" />
-        <div className="absolute bottom-0 left-[-5%] h-40 w-40 rounded-full blur-2xl bg-emerald-500/5 opacity-60 pointer-events-none" />
       </div>
 
       <div className="relative z-10">
@@ -310,10 +315,11 @@ const Profile = () => {
           <MotionDiv
             initial={false}
             animate={{ opacity: 1, scale: 1 }}
-            className="rounded-[32px] p-6 shadow-md border transition-all duration-300 animate-fade-in"
+            className="rounded-[24px] p-5 border transition-all duration-300 animate-fade-in"
             style={{
-              backgroundColor: isDark ? 'var(--user-card-bg)' : '#FFFDF0',
-              borderColor: isDark ? 'var(--user-border)' : '#FEF3C7',
+              backgroundColor: 'var(--user-card-bg)',
+              borderColor: 'var(--user-border)',
+              boxShadow: 'var(--user-card-shadow)',
               color: 'var(--user-text-primary)'
             }}
           >
@@ -338,7 +344,7 @@ const Profile = () => {
                     corner — a hardcoded white ring here showed up as a
                     stray bright line against the dark-theme card. */}
                 <div
-                  style={{ borderColor: isDark ? 'var(--user-card-bg)' : '#FFFDF0' }}
+                  style={{ borderColor: 'var(--user-card-bg)' }}
                   className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg border-2 flex items-center justify-center shadow-sm"
                 >
                   <Check size={14} className="text-white" strokeWidth={4} />
@@ -373,25 +379,25 @@ const Profile = () => {
 
             {/* Quick Stats Row */}
             <div 
-              style={{ borderColor: isDark ? 'var(--user-border)' : '#FEF3C7' }}
-              className="grid grid-cols-3 gap-3 mt-8 pt-6 border-t"
+              style={{ borderColor: 'var(--user-border)' }}
+              className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t"
             >
               <div className="text-center">
                 <p 
                   style={{ color: 'var(--user-text-secondary)' }}
-                  className="text-[10px] font-black tracking-[0.15em]"
+                  className="text-[12px] font-medium"
                 >
                   Total Trips
                 </p>
                 <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.trips}</p>
               </div>
               <div 
-                style={{ borderColor: isDark ? 'var(--user-border)' : '#FEF3C7' }}
+                style={{ borderColor: 'var(--user-border)' }}
                 className="text-center border-x"
               >
                 <p 
                   style={{ color: 'var(--user-text-secondary)' }}
-                  className="text-[10px] font-black tracking-[0.15em]"
+                  className="text-[12px] font-medium"
                 >
                   Rating
                 </p>
@@ -403,7 +409,7 @@ const Profile = () => {
               <div className="text-center">
                 <p 
                   style={{ color: 'var(--user-text-secondary)' }}
-                  className="text-[10px] font-black tracking-[0.15em]"
+                  className="text-[12px] font-medium"
                 >
                   Credits
                 </p>
@@ -442,13 +448,12 @@ const Profile = () => {
                   </h3>
                 </div>
               )}
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {section.items.map((item, iIdx) => (
                   <MotionButton
                     key={iIdx}
                     variants={itemVariants}
                     initial={false}
-                    whileHover={{ x: 4, scale: 1.01 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
                       if (item.id === 'appearance') return setAppearanceOpen(true);
@@ -458,30 +463,31 @@ const Profile = () => {
                     style={{
                       backgroundColor: 'var(--user-card-bg)',
                       borderColor: 'var(--user-border)',
+                      boxShadow: 'var(--user-card-shadow)',
                     }}
-                    className="w-full flex items-center gap-5 px-6 py-5 rounded-[24px] border shadow-sm text-left cursor-pointer"
+                    className="w-full flex items-center gap-4 px-4 py-3.5 rounded-[18px] border text-left cursor-pointer"
                   >
-                    <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0 ${item.bg}`}>
-                      <item.icon size={20} className={item.color} strokeWidth={2.5} />
+                    <div
+                      className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 ${item.id === 'logout' ? item.bg : ''}`}
+                      style={item.id === 'logout' ? undefined : { background: 'var(--user-card-soft)' }}
+                    >
+                      <item.icon
+                        size={19}
+                        className={item.id === 'logout' ? item.color : ''}
+                        style={item.id === 'logout' ? undefined : { color: 'var(--user-text-primary)' }}
+                        strokeWidth={2.2}
+                      />
                     </div>
                     <div className="flex-1">
                       <p className="text-[15px] font-bold leading-tight tracking-tight">{item.title}</p>
                       <p
                         style={{ color: 'var(--user-text-secondary)' }}
-                        className="text-[12px] font-semibold mt-0.5 capitalize"
+                        className="text-[12px] font-medium mt-0.5 capitalize"
                       >
                         {item.id === 'appearance' ? theme : item.sub}
                       </p>
                     </div>
-                    <div
-                      style={{
-                        backgroundColor: 'var(--user-bg)',
-                        color: 'var(--user-text-secondary)'
-                      }}
-                      className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-                    >
-                      <ChevronRight size={18} strokeWidth={3} />
-                    </div>
+                    <ChevronRight size={18} strokeWidth={2.4} className="shrink-0" style={{ color: 'var(--user-text-muted)' }} />
                   </MotionButton>
                 ))}
               </div>

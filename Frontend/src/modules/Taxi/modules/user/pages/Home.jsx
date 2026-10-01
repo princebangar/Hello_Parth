@@ -5,6 +5,8 @@ import { CalendarClock, ChevronRight, Clock3, MapPin, ShieldCheck, User, Clock, 
 import SuperAppHomeHeader from '@/shared/components/SuperAppHomeHeader';
 import HeaderGreeting from '../components/HeaderGreeting';
 import ServiceGrid, { ServiceCard } from '../components/ServiceGrid';
+import ServiceArt from '../components/ServiceArt';
+import useTaxiNotificationUnread from '../utils/useTaxiNotificationUnread';
 import LocationMapSection from '../components/LocationMapSection';
 import ActionsSection from '../components/ActionsSection';
 import PromoBanners from '../components/PromoBanners';
@@ -18,7 +20,6 @@ import deliveryFallback from '../../../assets/user-app/delivery.png';
 import parcelFallback from '../../../assets/user-app/parcel.png';
 import truckFallback from '../../../assets/user-app/truck.png';
 import busFallback from '../../../assets/user-app/bus.png';
-import fallbackCar from '../../../assets/user-app/fallback-car.png';
 import yellowTaxiImg from '../../../assets/user-app/yellow-taxi.jpg';
 import indiaGateRealImg from '@/assets/india_gate_real.png';
 import seamlessHighwayBg from '@/assets/seamless_highway_bg.png';
@@ -101,81 +102,6 @@ const PromoBannerImage = ({ promo, fallbackImage }) => {
   );
 };
 
-const FooterBannerImage = ({ footerSettings, fallbackImage }) => {
-  const { theme } = useUserTheme();
-  const isDark = theme === 'dark';
-
-  const hasCustomMedia = footerSettings?.uploadedImage || footerSettings?.imageUrl || footerSettings?.image;
-  const resolved = hasCustomMedia ? getDynamicImageSrc(footerSettings, fallbackImage) : fallbackImage;
-
-  const [src, setSrc] = useState(resolved);
-
-  useEffect(() => {
-    setSrc(resolved);
-  }, [resolved]);
-
-  const isVideo = src && (
-    src.endsWith('.mp4') ||
-    src.endsWith('.webm') ||
-    src.endsWith('.ogg') ||
-    src.includes('/video/') ||
-    src.includes('video')
-  );
-
-  if (isVideo) {
-    return (
-      <div key={src} className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <video
-          key={src}
-          src={src}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-          className={`w-full h-full object-cover ${isDark ? 'opacity-55' : 'opacity-100'}`}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <img
-        src={src}
-        alt=""
-        style={{ display: 'none' }}
-        onError={() => setSrc(fallbackImage)}
-      />
-      <motion.div
-        key={src}
-        className="absolute inset-0 pointer-events-none bg-repeat-x"
-        style={{
-          backgroundImage: `url(${src})`,
-          backgroundSize: 'auto 100%',
-          backgroundPosition: '0px center',
-          mixBlendMode: 'normal',
-          willChange: 'transform, background-position, opacity',
-        }}
-        initial={{ opacity: 0, scale: 1.05 }}
-        animate={{
-          opacity: isDark ? 0.6 : 0.8,
-          scale: 1,
-          backgroundPosition: ["0px center", "-2000px center"],
-        }}
-        transition={{
-          opacity: { duration: 1.2 },
-          scale: { duration: 1.5, ease: "easeOut" },
-          backgroundPosition: {
-            duration: 35,
-            repeat: Infinity,
-            ease: "linear",
-          }
-        }}
-      />
-    </>
-  );
-};
 import { getLocalUserToken, clearLocalUserSession } from '../services/authService';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
@@ -227,13 +153,15 @@ const getCurrentRideIcon = (ride) => {
   return taxiFallback;
 };
 
+// Shown as the pickup only until the real current address is known - never a made-up city.
+const PICKUP_PLACEHOLDER = 'Detecting your location...';
+
 const defaultSettings = {
   homeSections: {
     enableEverything: true,
     enableExplore: true,
     enablePromo: true,
-    enableGoPlaces: true,
-    enableFooter: true
+    enableGoPlaces: true
   },
   everything: [
     { id: '1', title: 'Parcel', subtitle: 'Send anything', image: '', route: '/taxi/user/parcel/type', order: 1, status: 'active' },
@@ -249,18 +177,13 @@ const defaultSettings = {
   ],
   promos: [
     { id: '1', title: 'Experience A New Standard With Appzeto ', subtitle: 'A premier private hire service where luxury and reliability converge.', image: '', route: '/taxi/user/ride/select-location', order: 1, status: 'active' },
-    { id: '2', title: 'Need to Send Packages? Try Parcel!', subtitle: 'Fast and secure delivery across Indore at affordable prices.', image: '', route: '/taxi/user/parcel/type', order: 2, status: 'active' }
+    { id: '2', title: 'Need to Send Packages? Try Parcel!', subtitle: 'Fast and secure delivery across your city at affordable prices.', image: '', route: '/taxi/user/parcel/type', order: 2, status: 'active' }
   ],
   goPlaces: [
     { id: '1', title: 'Hassle-Free City Rides', image: '', route: '/taxi/user/ride/select-location', order: 1, status: 'active' },
     { id: '2', title: 'Quick Rides to Railway Station', image: '', route: '/taxi/user/ride/select-location', order: 2, status: 'active' },
     { id: '3', title: 'Ride to Bus Terminal', image: '', route: '/taxi/user/ride/select-location', order: 3, status: 'active' }
-  ],
-  footer: {
-    hashtag: '#goAppzeto 24',
-    line1: 'Made for India',
-    line2: 'Crafted for riders'
-  }
+  ]
 };
 
 const unwrapApiPayload = (response) => response?.data?.data || response?.data || response;
@@ -464,6 +387,7 @@ const RecentLocationsList = ({ routePrefix }) => {
 };
 
 const Home = () => {
+  const unreadNotifications = useTaxiNotificationUnread();
   const navigate = useNavigate();
   const location = useLocation();
   const { settings, loading: settingsLoading } = useSettings();
@@ -532,9 +456,9 @@ const Home = () => {
   const [pickupAddress, setPickupAddress] = useState(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:lastLocation') || '{}');
-      return String(saved?.address || '').trim() || 'Indore, Madhya Pradesh';
+      return String(saved?.address || '').trim() || PICKUP_PLACEHOLDER;
     } catch (e) {
-      return 'Indore, Madhya Pradesh';
+      return PICKUP_PLACEHOLDER;
     }
   });
   const [isLocationLoading, setIsLocationLoading] = useState(() => {
@@ -550,7 +474,7 @@ const Home = () => {
     const handleLocationUpdate = () => {
       try {
         const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:lastLocation') || '{}');
-        setPickupAddress(String(saved?.address || '').trim() || 'Indore, Madhya Pradesh');
+        setPickupAddress(String(saved?.address || '').trim() || PICKUP_PLACEHOLDER);
       } catch (e) { }
     };
     const handleLocationStatus = (e) => {
@@ -681,9 +605,9 @@ const Home = () => {
       console.log('--- TEMPORARY DEBUG LOG ---');
       console.log('selectedVehicleType from home:', vehicleType);
 
-      if (vehicleType) {
+      if (vehicleType && vehicleType !== 'parcel') {
         localStorage.setItem('selectedVehicleType', vehicleType);
-        navigate(`/taxi/user/ride/select-vehicle?vehicleType=${vehicleType}`, { state: { selectedCategory: vehicleType } });
+        navigate(`/taxi/user/ride/select-location?vehicleType=${vehicleType}`, { state: { selectedCategory: vehicleType } });
       } else {
         localStorage.removeItem('selectedVehicleType');
         navigate(cleanRoute(targetRoute), { state: { selectedCategory: vehicleType } });
@@ -709,9 +633,9 @@ const Home = () => {
       console.log('--- TEMPORARY DEBUG LOG ---');
       console.log('selectedVehicleType from home:', vehicleType);
 
-      if (vehicleType) {
+      if (vehicleType && vehicleType !== 'parcel') {
         localStorage.setItem('selectedVehicleType', vehicleType);
-        navigate(`/taxi/user/ride/select-vehicle?vehicleType=${vehicleType}`, { state: { selectedCategory: vehicleType } });
+        navigate(`/taxi/user/ride/select-location?vehicleType=${vehicleType}`, { state: { selectedCategory: vehicleType } });
       } else {
         localStorage.removeItem('selectedVehicleType');
         navigate(cleanRoute(definedPath), { state: { selectedCategory: vehicleType } });
@@ -1000,7 +924,7 @@ const Home = () => {
           <div className="h-4 w-20 animate-pulse bg-slate-200 dark:bg-zinc-800 rounded-md mb-3" />
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="flex-shrink-0 w-[86px] h-[96px] rounded-[20px] animate-pulse bg-slate-250 dark:bg-zinc-800/80" />
+              <div key={i} className="flex-shrink-0 w-[86px] h-[96px] rounded-[20px] animate-pulse bg-slate-200 dark:bg-zinc-800/80" />
             ))}
           </div>
         </div>
@@ -1015,54 +939,34 @@ const Home = () => {
       .filter(c => c.status === 'active' || c.status === true)
       .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 
-    const getExploreIcon = (title) => {
-      const cleanTitle = String(title || '').toLowerCase();
-      if (cleanTitle.includes('parcel')) return parcelFallback;
-      if (cleanTitle.includes('auto')) return taxiFallback;
-      if (cleanTitle.includes('cab') || cleanTitle.includes('car')) return fallbackCar;
-      if (cleanTitle.includes('bike') || cleanTitle.includes('moto')) return bikeFallback;
-      return fallbackCar;
-    };
-
     return (
       <div className="pt-1">
-        <div className="mb-2.5 ml-1 flex items-center justify-between">
-          <h2 className={`text-[19px] font-[900] tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Explore
-          </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="user-section-title">Explore</h2>
           <button
             type="button"
             onClick={() => setIsAllServicesOpen(true)}
-            className="text-[13px] font-black uppercase text-[#FFC400] tracking-wider flex items-center gap-0.5"
-            style={{ pointerEvents: 'auto', zIndex: 100, position: 'relative' }}
+            className="text-[13px] font-semibold flex items-center gap-0.5"
+            style={{ pointerEvents: 'auto', zIndex: 100, position: 'relative', color: 'var(--user-text-secondary)' }}
           >
-            View All <ChevronRight size={12} strokeWidth={3} />
+            View all <ChevronRight size={14} strokeWidth={2.5} />
           </button>
         </div>
 
-        <div className="flex gap-3 overflow-x-auto no-scrollbar scroll-smooth pb-3 px-1">
+        <div className="flex gap-3 overflow-x-auto no-scrollbar scroll-smooth pb-3 -mx-1 px-1">
           {activeCards.map((card, idx) => (
             <motion.button
               key={card.id || idx}
               whileTap={{ scale: 0.96 }}
               type="button"
               onClick={() => handleServiceClick(card)}
-              className={`flex-shrink-0 w-[86px] h-[96px] rounded-[20px] border flex flex-col items-center justify-center p-2 text-center transition-all duration-300 group shadow-sm ${isDark
-                ? 'bg-gradient-to-br from-[#121821] to-[#1A2332] border-[#222E42]/80 hover:border-yellow-500/20'
-                : 'bg-[#F7F8FB] border-slate-200/80 hover:border-[#FFC400]/20'
-                }`}
+              className="flex-shrink-0 w-[88px] rounded-[18px] flex flex-col items-center gap-2 px-2 pt-3 pb-2.5 text-center"
+              style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: 'var(--user-card-shadow)' }}
             >
-              {/* Subtle accent blob behind icon */}
-              <div className="w-10 h-10 rounded-full flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-[#FFC400]/10 rounded-full blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity" />
-                <SafeImage
-                  item={card}
-                  fallbackImage={getExploreIcon(card.title)}
-                  className="w-8 h-8 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)] group-hover:scale-105 transition-transform"
-                />
+              <div className="service-art h-12 w-12 rounded-[14px]">
+                <ServiceArt src={getDynamicImageSrc(card, '')} label={card.title} hint={card.title} size={24} imgClassName="h-full w-full object-contain p-1.5" />
               </div>
-              <span className={`text-[12px] font-black leading-tight mt-2 tracking-tight text-center line-clamp-2 ${isDark ? 'text-zinc-300 group-hover:text-yellow-400' : 'text-[#0B1220] group-hover:text-[#FFC400]'
-                }`}>
+              <span className="text-[12px] font-semibold leading-tight text-center line-clamp-2" style={{ color: 'var(--user-text-primary)' }}>
                 {card.title}
               </span>
             </motion.button>
@@ -1071,11 +975,12 @@ const Home = () => {
       </div>
     );
   };
+
   const renderPromoBanner = () => {
     if (settingsLoading) {
       return (
         <div className="pt-2">
-          <div className="h-[140px] w-full rounded-[26px] animate-pulse bg-slate-250 dark:bg-zinc-800/80" />
+          <div className="h-[140px] w-full rounded-[26px] animate-pulse bg-slate-200 dark:bg-zinc-800/80" />
         </div>
       );
     }
@@ -1119,7 +1024,7 @@ const Home = () => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="promo-carousel border border-slate-200/60 dark:border-zinc-800 shadow-md bg-[#0B1220] transition-colors duration-300">
+        <div className="promo-carousel bg-[#0B1220]" style={{ border: '1px solid var(--user-border)', boxShadow: 'var(--user-card-shadow)' }}>
           <div
             className="promo-track"
             style={{ transform: `translateX(-${currentPromoIndex * 100}%)` }}
@@ -1152,17 +1057,14 @@ const Home = () => {
                   />
                   <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent z-10 rounded-[22px]" />
                   <div className="absolute inset-0 flex items-center p-6 z-20">
-                    <div className="max-w-[80%] space-y-1 text-left">
-                      <span className="inline-block text-[10px] font-black uppercase tracking-widest text-[#FFC400] bg-[#FFC400]/10 px-2.5 py-0.5 rounded-full mb-1">
-                        Super Saver
-                      </span>
-                      <h2 className="text-[17px] sm:text-[19px] font-black leading-tight tracking-normal uppercase text-slate-50 whitespace-normal break-words">
+                    <div className="max-w-[80%] space-y-1.5 text-left">
+                      <h2 className="text-[18px] font-bold leading-tight tracking-tight text-slate-50 whitespace-normal break-words">
                         <span className="text-[#FFC400]">{item.title ? item.title.split(' ')[0] : ''}</span>
                         {' '}
                         {item.title ? item.title.split(' ').slice(1).join(' ') : ''}
                       </h2>
                       {item.subtitle && (
-                        <p className="text-[11px] sm:text-[12px] font-semibold text-slate-200/90 leading-snug line-clamp-2">
+                        <p className="text-[12px] font-medium text-slate-200/90 leading-snug line-clamp-2">
                           {item.subtitle}
                         </p>
                       )}
@@ -1215,7 +1117,7 @@ const Home = () => {
           <div className="h-3 w-40 animate-pulse bg-slate-200 dark:bg-zinc-800 rounded-md mb-3" />
           <div className="flex gap-3.5 overflow-x-auto no-scrollbar pb-3">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="flex-shrink-0 w-[156px] h-[162px] rounded-[24px] animate-pulse bg-slate-250 dark:bg-zinc-800/80" />
+              <div key={i} className="flex-shrink-0 w-[156px] h-[162px] rounded-[24px] animate-pulse bg-slate-200 dark:bg-zinc-800/80" />
             ))}
           </div>
         </div>
@@ -1240,16 +1142,14 @@ const Home = () => {
 
     return (
       <div className="pt-1">
-        <div className="mb-2.5 ml-1">
-          <h2 className={`text-[19px] font-[900] tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Go Places with Hello Parth
-          </h2>
-          <p className={`text-[11px] font-[900] tracking-[0.14em] mt-1.5 ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>
+        <div className="mb-3">
+          <h2 className="user-section-title">Go Places with Hello Parth</h2>
+          <p className="mt-1 text-[12px] font-medium" style={{ color: 'var(--user-text-muted)' }}>
             Fast bookings to key transit hubs
           </p>
         </div>
 
-        <div className="flex gap-3.5 overflow-x-auto no-scrollbar scroll-smooth pb-3 px-1">
+        <div className="flex gap-3 overflow-x-auto no-scrollbar scroll-smooth pb-3 -mx-1 px-1">
           {activeCards.map((card, idx) => (
             <motion.button
               key={card.id || idx}
@@ -1262,170 +1162,30 @@ const Home = () => {
                   navigate(`${routePrefix}/ride/select-location`);
                 }
               }}
-              className={`flex-shrink-0 w-[156px] rounded-[24px] border overflow-hidden text-left transition-all duration-300 group shadow-sm flex flex-col ${isDark
-                ? 'bg-gradient-to-br from-[#121821] to-[#1A2332] border-[#222E42]/85 hover:border-yellow-500/20'
-                : 'bg-[#F7F8FB] border-slate-200/80 hover:border-[#FFC400]/20'
-                }`}
+              className="flex-shrink-0 w-[156px] rounded-[20px] overflow-hidden text-left group flex flex-col"
+              style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: 'var(--user-card-shadow)' }}
             >
-              {/* Header Image Area with subtle gradient */}
-              <div className={`h-[80px] w-full flex items-center justify-center p-3 relative overflow-hidden ${isDark ? 'bg-zinc-900/50' : 'bg-slate-200/30'
-                }`}>
-                {/* Yellow glow blob */}
-                <div className="absolute w-12 h-12 rounded-full bg-[#FFC400]/10 blur-md pointer-events-none group-hover:bg-[#FFC400]/20 transition-all" />
+              {/* Image area */}
+              <div className="service-art h-[84px] w-full p-3">
                 <SafeImage
                   item={card}
                   fallbackImage={getGoPlacesIcon(card.title)}
-                  className="h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.12)] group-hover:scale-105 transition-transform duration-300"
+                  className="h-full object-contain group-hover:scale-105 transition-transform duration-300"
                 />
               </div>
 
-              {/* Title & Slogan */}
-              <div className="p-3 flex-1 flex flex-col justify-between">
-                <h4 className={`text-[14px] font-black leading-tight tracking-tight line-clamp-2 ${isDark ? 'text-zinc-100 group-hover:text-yellow-400' : 'text-slate-800 group-hover:text-[#FFC400]'
-                  }`}>
+              {/* Title & action */}
+              <div className="p-3 flex-1 flex flex-col justify-between gap-2">
+                <h4 className="text-[14px] font-semibold leading-snug line-clamp-2" style={{ color: 'var(--user-text-primary)' }}>
                   {card.title}
                 </h4>
-                <div className="mt-2.5 flex items-center gap-0.5 text-[11px] font-[900] text-[#FFC400] tracking-wider leading-none">
-                  Book Now <ChevronRight size={10} strokeWidth={3} className="mt-0.5" />
+                <div className="flex items-center gap-0.5 text-[12px] font-semibold leading-none" style={{ color: 'var(--user-text-secondary)' }}>
+                  Book now <ChevronRight size={13} strokeWidth={2.5} />
                 </div>
               </div>
             </motion.button>
           ))}
         </div>
-      </div>
-    );
-  };
-
-  const renderFooterSection = () => {
-    if (settingsLoading) {
-      return (
-        <div className="pt-4 pb-6">
-          <div className="relative overflow-hidden w-full h-[140px] rounded-[24px] animate-pulse bg-slate-250 dark:bg-zinc-800/80" />
-        </div>
-      );
-    }
-    if (uiSettings?.homeSections && uiSettings.homeSections.enableFooter === false) {
-      return null;
-    }
-
-    return (
-      <div className="pt-4 pb-6">
-        <style>{`
-          @keyframes scrollHighway {
-            from {
-              background-position: 0px 50%;
-            }
-            to {
-              background-position: -2000px 50%;
-            }
-          }
-          @keyframes kenBurns {
-            0% {
-              transform: scale(1) translate(0, 0);
-            }
-            50% {
-              transform: scale(1.08) translate(-1%, -0.5%);
-            }
-            100% {
-              transform: scale(1) translate(0, 0);
-            }
-          }
-          .animate-scroll-highway {
-            animation: scrollHighway 35s linear infinite;
-          }
-          .animate-ken-burns {
-            animation: kenBurns 25s ease-in-out infinite;
-          }
-        `}</style>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.97, y: 30 }}
-          whileInView={{ opacity: 1, scale: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ type: "spring", stiffness: 80, damping: 15 }}
-          className={`go-appzeto-banner relative overflow-hidden min-h-[420px] pb-32 flex flex-col justify-center items-center text-center p-8 transition-all duration-300 border-t w-full rounded-[24px] ${isDark
-            ? 'border-zinc-800 bg-[#05070D] shadow-[0_-12px_36px_rgba(0,0,0,0.4)]'
-            : 'border-slate-200 bg-[#F8FAFC] shadow-[0_-8px_24px_rgba(15,23,42,0.04)]'
-            }`}
-        >
-          {/* Subtle neon glowing orb */}
-          <motion.div
-            animate={{
-              scale: [1, 1.25, 1],
-              opacity: [0.8, 1, 0.8]
-            }}
-            transition={{
-              duration: 5,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-            className={`absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-32 rounded-full blur-2xl pointer-events-none ${isDark ? 'bg-[#FFC400]/20' : 'bg-[#FFC400]/10'
-              }`}
-          />
-
-          {/* City highway background mask with smooth scrolling animation */}
-          <FooterBannerImage footerSettings={uiSettings?.footer || {}} fallbackImage={seamlessHighwayBg} />
-
-          {/* Light overlay optimized for dark text contrast in both themes */}
-          <motion.div
-            animate={{
-              opacity: [0.8, 0.9, 0.8]
-            }}
-            transition={{
-              duration: 8,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-            className="absolute inset-0 pointer-events-none z-[1] bg-gradient-to-b from-white/15 via-white/45 to-white/80"
-          />
-
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8, delay: 0.1 }}
-            className="go-appzeto-content relative z-10 space-y-3 py-2 w-full max-w-sm"
-          >
-            <motion.h3
-              initial={{ opacity: 0, y: -15 }}
-              animate={{
-                opacity: 1,
-                y: [0, -4, 0]
-              }}
-              transition={{
-                opacity: { duration: 0.8 },
-                y: { duration: 4, repeat: Infinity, ease: "easeInOut" }
-              }}
-              className="text-[28px] font-[900] tracking-tight uppercase font-display leading-none text-[#0B1220]"
-              style={{
-                textShadow: 'none'
-              }}
-            >
-              #GOAPPZETO
-            </motion.h3>
-
-            {/* Holiday taxi inline image removed to show background image only */}
-
-            <motion.p
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-[13px] font-black uppercase tracking-widest font-sans flex items-center justify-center gap-1 text-[#0B1220]"
-              style={{ textShadow: 'none' }}
-            >
-              MADE FOR INDIA
-            </motion.p>
-            <motion.p
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="text-[10px] font-bold uppercase tracking-[0.16em] mt-1 text-[#64748B]"
-              style={{ textShadow: 'none' }}
-            >
-              CRAFTED FOR RIDERS
-            </motion.p>
-          </motion.div>
-        </motion.div>
       </div>
     );
   };
@@ -1442,22 +1202,15 @@ const Home = () => {
     return renderGoPlacesSection();
   }, [uiSettings?.goPlaces, uiSettings?.homeSections?.enableGoPlaces, isDark, settingsLoading]);
 
-  const footerSection = useMemo(() => {
-    return renderFooterSection();
-  }, [uiSettings?.footer, uiSettings?.homeSections?.enableFooter, isDark, settingsLoading]);
-
   return (
     <div className="min-h-screen w-full lg:max-w-7xl mx-auto relative font-sans no-scrollbar overflow-x-hidden transition-colors duration-300 user-app-theme shadow-2xl">
-      <div className={`absolute -top-16 right-[-40px] h-44 w-44 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-yellow-500/5' : 'bg-orange-100/60'}`} />
-      <div className={`absolute top-52 left-[-60px] h-52 w-52 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-yellow-500/5' : 'bg-emerald-100/60'}`} />
-      <div className={`absolute bottom-28 right-[-40px] h-40 w-40 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-yellow-500/5' : 'bg-blue-100/60'}`} />
 
       {/* 1. MOBILE LAYOUT: Google Map component + Sticky Search Bar + HomeContent */}
       <div className="block lg:hidden">
         <div className="user-home">
           {/* Solid top app bar — location + Food/Taxi switcher. Own space, not
               floated over the map, so nothing overlaps. */}
-          <SuperAppHomeHeader activeVertical="taxi" />
+          <SuperAppHomeHeader activeVertical="taxi" notificationCount={unreadNotifications} />
 
           {/* Map — sits below the app bar, fully visible, own box. */}
           <div className="map-header">
@@ -1470,14 +1223,14 @@ const Home = () => {
             {/* Pickup Address Pill: overlays the map's own bottom edge only */}
             <div
               onClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'pickup', flow: 'ride' } })}
-              className={`pickup-address-pill flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_20px_rgba(0,0,0,0.18)] border transition-colors duration-300 cursor-pointer ${isDark ? 'bg-[#111827] border-zinc-800 text-white hover:bg-zinc-800' : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
-                }`}
+              className="pickup-address-pill flex items-center gap-2.5 rounded-full py-2 pl-4 pr-2 cursor-pointer"
+              style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: '0 8px 24px rgba(15,23,42,0.22)', color: 'var(--user-text-primary)' }}
             >
-              <div className="w-[11px] h-[11px] rounded-full bg-[#168a45] shrink-0" />
-              <span className="text-xs font-bold truncate flex-1 leading-none">
+              <div className="w-[10px] h-[10px] rounded-full bg-[#168a45] shrink-0 ring-4 ring-[#168a45]/20" />
+              <span className="text-[13px] font-semibold truncate flex-1 leading-none">
                 {isLocationLoading ? 'Pinning your current location...' : pickupAddress}
               </span>
-              <span className="text-[10.5px] font-[900] text-yellow-500 dark:text-yellow-400 uppercase tracking-wider border-l border-slate-200/50 dark:border-white/10 pl-2 shrink-0">
+              <span className="text-[11px] font-bold rounded-full px-3 py-1.5 shrink-0 leading-none" style={{ background: 'var(--user-accent)', color: 'var(--user-accent-ink)' }}>
                 Change
               </span>
             </div>
@@ -1495,13 +1248,13 @@ const Home = () => {
                 type="button"
                 whileTap={{ scale: 0.99 }}
                 onClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'drop', flow: 'ride' } })}
-                className={`flex w-full items-center gap-3 rounded-full px-4 py-3.5 text-left transition-all relative overflow-hidden shadow-sm border ${isDark
-                  ? 'bg-[#111827] border-zinc-800 text-white'
-                  : 'bg-white border-slate-250 text-slate-900'
-                  }`}
+                className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-all relative overflow-hidden"
+                style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: 'var(--user-card-shadow)' }}
               >
-                <Search size={18} className={isDark ? 'text-white' : 'text-slate-900'} strokeWidth={2.5} />
-                <span className={`min-w-0 flex-1 truncate text-[14px] font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'var(--user-accent)', color: 'var(--user-accent-ink)' }}>
+                  <Search size={16} strokeWidth={2.6} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-medium" style={{ color: 'var(--user-text-primary)' }}>
                   Where do you want to go?
                 </span>
               </motion.button>
@@ -1542,7 +1295,7 @@ const Home = () => {
                       You have an active ride
                     </span>
                   </div>
-                  <span className="text-[12px] font-black text-emerald-650 dark:text-emerald-400 hover:opacity-80 shrink-0 flex items-center gap-0.5 leading-none">
+                  <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 hover:opacity-80 shrink-0 flex items-center gap-0.5 leading-none">
                     View details <ChevronRight size={14} className="mt-0.5" />
                   </span>
                 </motion.button>
@@ -1601,18 +1354,6 @@ const Home = () => {
               </motion.div>
             )}
 
-            {/* Footer Branding Illustration */}
-            {footerSection && (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.32 }}
-                className="go-appzeto-section"
-              >
-                {footerSection}
-              </motion.div>
-            )}
-
             {/* Active Scheduled Ride Tracker */}
             {isScheduledAcceptedRide && (
               <div className="pt-2">
@@ -1620,7 +1361,7 @@ const Home = () => {
                   type="button"
                   whileTap={{ scale: 0.99 }}
                   onClick={() => navigate(trackingPath, { state: currentRide })}
-                  className="block w-full overflow-hidden rounded-[28px] border border-slate-850 p-5 text-left bg-slate-900 text-white shadow-xl"
+                  className="block w-full overflow-hidden rounded-[28px] border border-slate-800 p-5 text-left bg-slate-900 text-white shadow-xl"
                 >
                   <div className="flex items-center justify-between">
                     <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] bg-yellow-400/10 text-yellow-400">
@@ -1650,7 +1391,7 @@ const Home = () => {
                     </div>
                   </div>
 
-                  <div className="mt-5 flex items-center justify-between rounded-xl p-2.5 bg-slate-950/60 border border-slate-850">
+                  <div className="mt-5 flex items-center justify-between rounded-xl p-2.5 bg-slate-950/60 border border-slate-800">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="h-8 w-8 shrink-0 rounded-full bg-slate-900 border border-slate-800 text-yellow-400 flex items-center justify-center">
                         <User size={16} />
@@ -1687,7 +1428,7 @@ const Home = () => {
               whileTap={{ scale: 0.99 }}
               onClick={() => navigate(trackingPath, { state: currentRide })}
               className={`w-full flex items-center justify-between px-5 py-4 rounded-[24px] border text-left shadow-md transition-all duration-200 ${isDark
-                ? 'bg-slate-900 border-slate-800 text-white hover:bg-slate-850'
+                ? 'bg-slate-900 border-slate-800 text-white hover:bg-slate-800'
                 : 'bg-emerald-50/40 border-emerald-100/60 text-slate-900 hover:bg-emerald-50/75'
                 }`}
             >
@@ -1720,9 +1461,6 @@ const Home = () => {
 
           {/* Go Places Section */}
           {goPlacesSection}
-
-          {/* Footer Branding Illustration */}
-          {footerSection}
         </div>
 
         {/* Right Column (Map) */}
@@ -1734,21 +1472,6 @@ const Home = () => {
           ) : (
             <div className="lg:h-[calc(100vh-14rem)] min-h-[480px] h-[480px] animate-pulse rounded-[20px] border border-white/80 bg-white/70 shadow-[0_10px_22px_rgba(15,23,42,0.05)]" />
           )}
-
-          {/* Desktop Branding Footer */}
-          <div className="hidden lg:block pt-6">
-            <div className="flex flex-col items-start px-2 py-2">
-              <div className="text-[48px] font-[900] tracking-[-0.03em] text-[#FFC400] drop-shadow-[0_10px_30px_rgba(255,196,0,0.4)] leading-none uppercase">
-                Appzeto
-              </div>
-              <div className="mt-2 text-[14px] font-sans italic font-bold tracking-[0.04em] text-slate-800 dark:text-slate-200">
-                #goAppzeto 24
-              </div>
-              <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Made for India, Crafted for riders.
-              </div>
-            </div>
-          </div>
         </div>
 
       </div>
@@ -1768,9 +1491,6 @@ const Home = () => {
 };
 
 const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
-  const { theme } = useUserTheme();
-  const isDark = theme === 'dark';
-  const navigate = useNavigate();
 
   useEffect(() => {
     // Reset window and body scroll positions when opening All Services bottom sheet
@@ -1820,39 +1540,38 @@ const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 26, stiffness: 240 }}
         onClick={(e) => e.stopPropagation()}
-        className={`all-services-sheet border-t shadow-2xl flex flex-col ${isDark
-          ? 'bg-[#0B1220] text-white border-zinc-800 shadow-[0_-12px_40px_rgba(0,0,0,0.8)]'
-          : 'bg-white text-slate-900 border-slate-200/80 shadow-[0_-12px_30px_rgba(15,23,42,0.12)]'
-          }`}
+        className="all-services-sheet flex flex-col"
+        style={{ color: 'var(--user-text-primary)', boxShadow: '0 -16px 48px rgba(8,12,20,0.35)' }}
       >
-        {/* Pull Indicator */}
+        {/* Pull indicator */}
         <div className="w-full flex justify-center pb-3 cursor-pointer" onClick={onClose}>
-          <div className={`w-12 h-1 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-slate-250'}`} />
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--user-text-muted)', opacity: 0.35 }} />
         </div>
 
-        {/* Header Title & Close Button */}
-        <div className={`flex items-center justify-between pb-3 border-b ${isDark ? 'border-zinc-800/85' : 'border-slate-100'}`}>
-          <span className={`text-[19px] font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            All Services
-          </span>
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--user-border)' }}>
+          <span className="text-[18px] font-bold tracking-tight">All Services</span>
           <button
+            type="button"
             onClick={onClose}
-            className={`p-1.5 rounded-full transition-all active:scale-95 ${isDark ? 'bg-zinc-900 hover:bg-zinc-850 text-zinc-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-95"
+            style={{ background: 'var(--user-card-soft)', color: 'var(--user-text-secondary)' }}
           >
             <X size={16} strokeWidth={2.5} />
           </button>
         </div>
 
-        {/* Services Grid (Rapido style: 4 columns grid, dark rounded rectangle icons, white text/yellow accent) */}
-        <div className="flex-1 overflow-y-auto mt-5 pr-1 py-1 no-scrollbar">
+        {/* Services grid — 4 across */}
+        <div className="flex-1 overflow-y-auto mt-5 no-scrollbar">
           <motion.div
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-4 gap-y-6 gap-x-2"
+            className="grid grid-cols-4 gap-y-5 gap-x-2"
           >
             {services.map((service, index) => {
-              const { icon, label } = service;
+              const { icon, label, hasImage } = service;
               return (
                 <motion.div key={index} variants={itemVariants} className="flex justify-center">
                   <button
@@ -1862,23 +1581,10 @@ const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
                     }}
                     className="flex flex-col items-center group cursor-pointer focus:outline-none"
                   >
-                    {/* Dark rounded rectangle icon container */}
-                    <div className="w-16 h-16 rounded-[20px] bg-[#121824] dark:bg-[#1A202C] flex items-center justify-center relative overflow-hidden shadow-md transition-all duration-300 border border-slate-800/10 dark:border-white/5 group-hover:scale-105 group-active:scale-95">
-                      <div className="absolute inset-0 bg-[#FFC400]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <img
-                        src={icon}
-                        alt={label}
-                        className="w-11 h-11 object-contain"
-                        style={{
-                          objectFit: 'contain',
-                          opacity: 1,
-                          filter: 'none'
-                        }}
-                      />
+                    <div className="service-art h-16 w-16 rounded-[18px] transition-transform duration-200 group-active:scale-95">
+                      <ServiceArt src={hasImage ? icon : ''} label={label} hint={label} size={28} imgClassName="h-full w-full object-contain p-2" />
                     </div>
-                    {/* Service Name below */}
-                    <span className={`text-[10px] font-black tracking-wide text-center mt-2 leading-tight max-w-[76px] break-words whitespace-normal ${isDark ? 'text-zinc-300 group-hover:text-yellow-400' : 'text-slate-800 group-hover:text-[#FFB300]'
-                      }`}>
+                    <span className="mt-2 max-w-[78px] break-words whitespace-normal text-center text-[12px] font-semibold leading-tight" style={{ color: 'var(--user-text-primary)' }}>
                       {label}
                     </span>
                   </button>

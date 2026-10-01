@@ -439,9 +439,10 @@ const Activity = () => {
   const isDark = theme === 'dark';
 
   return (
-    <div className={`mx-auto flex min-h-screen max-w-lg flex-col font-sans pb-28 transition-colors duration-300 ${
-      isDark ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'
-    }`}>
+    <div
+      className="mx-auto flex min-h-screen max-w-lg flex-col font-sans pb-28 transition-colors duration-300"
+      style={{ background: 'var(--user-bg)', color: 'var(--user-text-primary)' }}
+    >
       <ActivityHeader helperText={helperText} onBack={() => navigate(-1)} />
       <ActivityTabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
@@ -451,11 +452,8 @@ const Activity = () => {
           <div className="mb-4">
             <div
               onClick={() => navigate(trackingPath, { state: currentRide })}
-              className={`w-full overflow-hidden rounded-[24px] border p-5 text-left shadow-lg cursor-pointer transition-all duration-300 ${
-                isDark 
-                  ? 'border-slate-800 bg-slate-900/90 text-white' 
-                  : 'border-slate-200 bg-white text-slate-900'
-              }`}
+              className="w-full overflow-hidden rounded-[22px] p-5 text-left cursor-pointer transition-all duration-300"
+              style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: 'var(--user-card-shadow)', color: 'var(--user-text-primary)' }}
             >
               <div className="flex items-center justify-between">
                 <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${
@@ -476,10 +474,10 @@ const Activity = () => {
 
               <div className="mt-4 flex items-end justify-between">
                 <div>
-                  <h2 className="text-[20px] font-black tracking-tight leading-none">
+                  <h2 className="text-[19px] font-bold tracking-tight leading-tight">
                     {rideStageContextLabel}
                   </h2>
-                  <p className="mt-1 text-[11px] font-bold opacity-60">
+                  <p className="mt-1 text-[12px] font-medium opacity-70">
                     {isScheduledAcceptedRide ? scheduledDateLabel : 'Active Booking'}
                   </p>
                 </div>
