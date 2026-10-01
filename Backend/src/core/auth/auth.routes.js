@@ -16,7 +16,8 @@ import {
     updateAdminProfileController,
     changeAdminPasswordController,
     requestAdminForgotPasswordOtpController,
-    resetAdminPasswordWithOtpController
+    resetAdminPasswordWithOtpController,
+    pendingApprovalStatusController
 } from './auth.controller.js';
 import {
     requestUnifiedOtpController,
@@ -44,6 +45,10 @@ router.post('/restaurant/verify-otp', authRateLimiter, verifyRestaurantOtpContro
 // Delivery partner OTP login
 router.post('/delivery/request-otp', authRateLimiter, requestDeliveryOtpController);
 router.post('/delivery/verify-otp', authRateLimiter, verifyDeliveryOtpController);
+
+// "Under review" screens poll these; approved → returns a login session.
+router.post('/restaurant/pending-status', pendingApprovalStatusController('restaurant'));
+router.post('/delivery/pending-status', pendingApprovalStatusController('delivery'));
 
 // Admin login
 router.post('/admin/login', authRateLimiter, adminLoginController);

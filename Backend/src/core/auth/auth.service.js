@@ -55,6 +55,23 @@ const verifyRecoveryToken = (token) => {
   return payload;
 };
 
+// Proof that this phone passed restaurant/delivery OTP while the account is
+// not approved yet. The "under review" screen polls with it and gets a real
+// login session the moment admin approves — no second OTP login needed.
+// Not a login token: no userId/role, so authMiddleware role checks reject it.
+const PENDING_TICKET_TTL = "30d";
+const PENDING_TICKET_PURPOSE = "pending_approval";
+
+const signPendingTicket = (kind, phone) => {
+  const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
+  if (last10.length !== 10) return null;
+  return jwt.sign(
+    { kind, phone: last10, purpose: PENDING_TICKET_PURPOSE },
+    config.jwtAccessSecret,
+    { expiresIn: PENDING_TICKET_TTL },
+  );
+};
+
 const DEFAULT_CREDENTIALS = {
   adminEmail: String(process.env.DEFAULT_ADMIN_EMAIL || "admin@helloparth.com")
     .trim()
@@ -449,6 +466,7 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     return {
       needsRegistration: true,
       phone,
+      pendingTicket: signPendingTicket("restaurant", phone),
     };
   }
 
@@ -474,14 +492,30 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
   }
 
   // If restaurant approval status is used, only allow login for approved restaurants.
+  // Pending/rejected get the "under review" screen plus a ticket to poll with
+  // (the frontend already handles `pendingApproval`).
   if (restaurantDoc.status && restaurantDoc.status !== "approved") {
-    throw new AuthError(
-      restaurantDoc.status === "pending"
-        ? "Your restaurant registration is pending approval."
-        : "Your restaurant registration has been rejected. Please contact support.",
-    );
+    const isRejected = restaurantDoc.status === "rejected";
+    if (restaurantDoc.status !== "pending" && !isRejected) {
+      throw new AuthError("Your restaurant has been disabled. Please contact support.");
+    }
+    return {
+      pendingApproval: true,
+      isRejected,
+      rejectionReason: isRejected ? restaurantDoc.rejectionReason || null : null,
+      message: isRejected
+        ? restaurantDoc.rejectionReason
+          ? `Your restaurant registration has been rejected. Reason: ${restaurantDoc.rejectionReason}`
+          : "Your restaurant registration has been rejected. Please contact support."
+        : "Your restaurant registration is pending approval.",
+      pendingTicket: signPendingTicket("restaurant", phone),
+    };
   }
 
+  return issueRestaurantSession(restaurantDoc);
+};
+
+const issueRestaurantSession = async (restaurantDoc) => {
   const payload = { userId: restaurantDoc._id.toString(), role: ROLES.RESTAURANT };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
@@ -550,7 +584,7 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
   }
 
   if (!deliveryPartner) {
-    return { needsRegistration: true, phone };
+    return { needsRegistration: true, phone, pendingTicket: signPendingTicket("delivery", phone) };
   }
 
   // Update FCM token if provided - CRITICAL: do this BEFORE returning pendingApproval
@@ -587,9 +621,14 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
               ? `Your account was rejected: ${deliveryPartner.rejectionReason}`
               : "Your delivery account was not approved. Please contact support.")
           : "Your account is pending admin verification. You will be notified once approved.",
+      pendingTicket: signPendingTicket("delivery", phone),
     };
   }
 
+  return issueDeliverySession(deliveryPartner);
+};
+
+const issueDeliverySession = async (deliveryPartner) => {
   const payload = {
     userId: deliveryPartner._id.toString(),
     role: ROLES.DELIVERY_PARTNER,
@@ -611,6 +650,43 @@ export const verifyDeliveryOtpAndLogin = async (phone, otp, fcmToken, platform) 
     user: deliveryPartner,
     needsRegistration: false,
   };
+};
+
+/**
+ * "Under review" screen poll. Returns the current approval status for the
+ * phone in the ticket; once approved it also returns a normal login session.
+ */
+export const checkPendingApproval = async (kind, ticket) => {
+  let payload;
+  try {
+    payload = jwt.verify(String(ticket || ""), config.jwtAccessSecret);
+  } catch {
+    throw new AuthError("Session expired. Please log in again.");
+  }
+  if (payload?.purpose !== PENDING_TICKET_PURPOSE || payload.kind !== kind) {
+    throw new AuthError("Invalid session");
+  }
+  const last10 = String(payload.phone || "");
+  const phoneMatch = (field) => [
+    { [field]: last10 },
+    { [field]: { $regex: new RegExp(`${last10}$`) } },
+  ];
+
+  const doc =
+    kind === "restaurant"
+      ? await FoodRestaurant.findOne({ $or: [...phoneMatch("ownerPhone"), ...phoneMatch("primaryContactNumber")] })
+      : await FoodDeliveryPartner.findOne({ $or: phoneMatch("phone") });
+
+  if (!doc) return { status: "not_registered" };
+
+  const status = String(doc.status || "").toLowerCase() || "approved";
+  if (status !== "approved") {
+    return { status, rejectionReason: doc.rejectionReason || null };
+  }
+
+  const session =
+    kind === "restaurant" ? await issueRestaurantSession(doc) : await issueDeliverySession(doc);
+  return { status: "approved", ...session };
 };
 
 export const logout = async (refreshToken, fcmToken, platform) => {

@@ -241,7 +241,14 @@ export const createOrUpdateOtp = async (phone, scope = 'default') => {
     }
 
     const resolved = resolveOtpForPhone(normalizedPhone);
-    const otp = resolved.otp;
+    let otp = resolved.otp;
+    // A resend overwrites the stored code, so only the newest OTP verifies.
+    // Never re-issue the same digits — the old code must not keep working.
+    if (!resolved.isStatic && existing?.otp) {
+        for (let i = 0; i < 5 && otp === String(existing.otp); i += 1) {
+            otp = resolveOtpForPhone(normalizedPhone).otp;
+        }
+    }
 
     logger.info(
         `[OTP] phone=${normalizedPhone} scope=${normalizedScope} mode=${resolved.reason} otp=${otp}`,

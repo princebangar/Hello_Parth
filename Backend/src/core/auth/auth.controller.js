@@ -16,6 +16,7 @@ import {
   changeAdminPassword,
   requestAdminForgotPasswordOtp,
   resetAdminPasswordWithOtp,
+  checkPendingApproval,
 } from "./auth.service.js";
 import { validateUserOtpRequestDto } from "../../dtos/auth/userOtpRequest.dto.js";
 import { validateUserOtpVerifyDto } from "../../dtos/auth/userOtpVerify.dto.js";
@@ -133,6 +134,16 @@ export const verifyDeliveryOtpController = async (req, res, next) => {
     const { phone, otp, fcmToken, platform } = validateDeliveryOtpVerifyDto(req.body);
     const result = await verifyDeliveryOtpAndLogin(phone, otp, fcmToken, platform);
     return sendResponse(res, 200, "Login successful", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Polled by the restaurant / delivery "under review" screen.
+export const pendingApprovalStatusController = (kind) => async (req, res, next) => {
+  try {
+    const result = await checkPendingApproval(kind, req.body?.pendingTicket);
+    return sendResponse(res, 200, "Approval status fetched", result);
   } catch (error) {
     next(error);
   }
