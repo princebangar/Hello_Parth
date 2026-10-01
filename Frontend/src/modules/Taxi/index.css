@@ -1,6 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+/* Web fonts (Plus Jakarta Sans, Inter, Outfit) are requested once from index.html - an @import here made the
+   whole Taxi stylesheet, and so the Taxi route chunk, wait on a Google round trip. */
 
-:root {
+/* Gated on `html.taxi-app-active` (set by TaxiApp.jsx while the URL is under /taxi). This sheet stays
+   loaded after the first Taxi visit, and these used to be global, so Food picked up Outfit and the
+   Taxi root colours too. `:where()` keeps the specificity exactly what it was before. */
+:root:where(.taxi-app-active) {
   font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -14,7 +18,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
+:where(html.taxi-app-active) body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
@@ -243,6 +247,114 @@ body {
   transition: all 0.2s ease-in-out !important;
 }
 
+/* ==========================================================================
+   TAXI ADMIN — shared building blocks
+   Pages used these class names (admin-card, admin-btn-*, admin-input, admin-badge) but no stylesheet
+   defined them, so cards had no padding/border and buttons looked like plain text. One neutral,
+   professional palette: white surfaces, slate borders, signal-yellow only for the primary action.
+   ========================================================================== */
+.admin-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 0;
+}
+.admin-card .card-label {
+  letter-spacing: 0.08em;
+}
+
+.admin-btn-primary,
+.admin-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.admin-btn-primary {
+  background: #ffc400;
+  color: #0b1220;
+  border: 1px solid #ffc400;
+}
+.admin-btn-primary:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+.admin-btn-secondary {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #d9dee7;
+}
+.admin-btn-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #c3cad6;
+}
+.admin-btn-primary:disabled,
+.admin-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d9dee7;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  outline: none;
+}
+.admin-input:focus {
+  border-color: #ffc400;
+  box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.2);
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+.admin-badge-success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+/* One page frame for every admin screen. 63 of 114 pages brought their own padding AND their own background
+   (gray-50 / #F9FAFB / #F8FAFC / slate-50) on top of <main>'s padding: double gaps and patchwork backgrounds.
+   <main> now owns the spacing and the page background; a page's own outer wrapper is flattened into it.
+   Full-screen centred states (loaders / empty screens use justify-center) are left alone. */
+.taxi-admin-main > .min-h-screen:not(.justify-center) {
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* The dark sidebar's "Search Menu" box must look like Food's (dark), not like a white form field. */
+.redigo-admin-root input.admin-sidebar-search[type="text"] {
+  background-color: #171717 !important; /* neutral-900 */
+  border-color: #262626 !important; /* neutral-800 */
+  color: #ffffff !important;
+}
+.redigo-admin-root input.admin-sidebar-search[type="text"]:focus {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4) !important;
+}
+
 .redigo-admin-root input[type="text"]:focus,
 .redigo-admin-root input[type="number"]:focus,
 .redigo-admin-root input[type="email"]:focus,
@@ -250,10 +362,10 @@ body {
 .redigo-admin-root input[type="password"]:focus,
 .redigo-admin-root select:focus,
 .redigo-admin-root textarea:focus {
-  border-color: #4f46e5 !important; /* Indigo-600 */
+  border-color: #e0ac00 !important; /* brand yellow (was indigo, which clashed with the rest of the admin) */
   outline: 2px solid transparent !important;
   outline-offset: 2px !important;
-  box-shadow: 0 0 0 1px #4f46e5 !important;
+  box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.25) !important;
 }
 
 /* 5. Card and Border Uniformity */
@@ -311,28 +423,35 @@ body {
   font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
 }
 
-/* 2. Color Schemes for Dark Mode (Default) */
-.user-app-theme.dark {
-  --user-bg: #0a0a0a;
-  --user-card-bg: #141414;
-  --user-card-soft: #1c1c1c;
-  --user-text-primary: #ffffff;
-  --user-text-secondary: #b8c2d6;
-  --user-text-muted: #7d8aa5;
-  --user-border: rgba(255,255,255,0.12);
-  --user-accent: #ffc400;
+/* 2. Colour tokens — ONE set per theme, defined in "User Theme Custom Variables" further down.
+   (This file used to carry three competing copies of these; the last one silently won.) */
+
+/* Weight scale. The customer screens were written with font-black / font-extrabold almost
+   everywhere (600+ uses), which reads shouty and cheap. Collapse the heavy end once, here,
+   instead of editing every screen: black/extrabold -> 700, bold -> 600. */
+.user-app-theme .font-black,
+.user-app-theme .font-extrabold,
+.user-app-theme [class*="font-[900]"],
+.user-app-theme [class*="font-[800]"] {
+  font-weight: 700 !important;
+}
+.user-app-theme .font-bold {
+  font-weight: 600 !important;
 }
 
-/* 3. Color Schemes for Light Mode */
-.user-app-theme.light {
-  --user-bg: #f6f7fb;
-  --user-card-bg: #ffffff;
-  --user-card-soft: #f1f3f8;
-  --user-text-primary: #0b1220;
-  --user-text-secondary: #334155;
-  --user-text-muted: #64748b;
-  --user-border: rgba(15,23,42,0.12);
-  --user-accent: #ffc400;
+/* Legibility floor: 8–9.5px captions (50+ of them across the ride/bus/pooling screens) are unreadable
+   on a phone. */
+.user-app-theme [class*="text-[8px]"],
+.user-app-theme [class*="text-[9px]"],
+.user-app-theme [class*="text-[9.5px]"] {
+  font-size: 10.5px !important;
+}
+
+/* Decorative blurred colour blobs sit behind many screens (orange / emerald / indigo patches). They
+   carry no information and make the pages look patchy, so they are switched off app-wide. */
+.user-app-theme .blur-3xl,
+.user-app-theme .blur-2xl {
+  display: none !important;
 }
 
 /* 4. Adaptive Utility Class Mappings inside User App */
@@ -777,15 +896,26 @@ body {
   border: 1px solid rgba(63, 63, 70, 0.8) !important;
 }
 
-/* User Theme Custom Variables */
+/* User Theme Custom Variables — the single source of truth for the customer app palette.
+   Brand: signal-yellow accent on deep navy ink. Cards are white (light) / near-black (dark) and
+   separated from the page by a tinted background + a soft shadow, not by heavy borders. */
 :root {
   --user-bg: #0a0a0a;
   --user-card-bg: #141414;
   --user-card-soft: #1c1c1c;
   --user-text-primary: #FFFFFF;
   --user-text-secondary: #CBD5E1;
+  --user-text-muted: #94A3B8;
   --user-border: rgba(255,255,255,0.10);
   --user-accent: #FFC400;
+  --user-accent-ink: #0B1220;
+  --user-card-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5);
+  --user-nav-bg: #1a1a1a;
+  --user-nav-border: rgba(255,255,255,0.10);
+  --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
+  --user-nav-idle: #9CA3AF;
+  --user-nav-active-bg: rgba(255,196,0,0.12);
+  --user-nav-active-fg: #FFC400;
   --user-profile-header-bg: #0a0a0a;
   --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
 }
@@ -793,15 +923,24 @@ body {
 .user-app-theme.light,
 .user-app-theme .light,
 .user-app-theme[class*="light"] {
-  --user-bg: #F8FAFC;
+  --user-bg: #F1F4F9;
   --user-card-bg: #FFFFFF;
-  --user-card-soft: #f1f3f8;
+  --user-card-soft: #E9EDF4;
   --user-text-primary: #0B1220;
-  --user-text-secondary: #64748B;
+  --user-text-secondary: #475569;
+  --user-text-muted: #64748B;
   --user-border: rgba(15,23,42,0.10);
   --user-accent: #FFC400;
+  --user-accent-ink: #0B1220;
+  --user-card-shadow: 0 1px 2px rgba(15,23,42,0.05), 0 8px 24px -10px rgba(15,23,42,0.14);
+  --user-nav-bg: #FFFFFF;
+  --user-nav-border: #F3F4F6;
+  --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
+  --user-nav-idle: #4B5563;
+  --user-nav-active-bg: #FFF6D6;
+  --user-nav-active-fg: #9A6B00;
   --user-profile-header-bg: #FFFFFF;
-  --user-profile-header-gradient: linear-gradient(180deg, rgba(238, 242, 255, 0.5) 0%, rgba(248, 250, 252, 0) 100%);
+  --user-profile-header-gradient: linear-gradient(180deg, rgba(238, 242, 255, 0.5) 0%, rgba(241, 244, 249, 0) 100%);
 }
 
 .user-app-theme.dark,
@@ -812,8 +951,17 @@ body {
   --user-card-soft: #1c1c1c;
   --user-text-primary: #FFFFFF;
   --user-text-secondary: #CBD5E1;
+  --user-text-muted: #94A3B8;
   --user-border: rgba(255,255,255,0.12);
   --user-accent: #FFC400;
+  --user-accent-ink: #0B1220;
+  --user-card-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5);
+  --user-nav-bg: #1a1a1a;
+  --user-nav-border: rgba(255,255,255,0.10);
+  --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
+  --user-nav-idle: #9CA3AF;
+  --user-nav-active-bg: rgba(255,196,0,0.12);
+  --user-nav-active-fg: #FFC400;
   --user-profile-header-bg: #0a0a0a;
   --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
 }
@@ -861,12 +1009,52 @@ body {
 .user-bottom-nav {
   position: fixed !important;
   left: 50% !important;
-  bottom: max(16px, env(safe-area-inset-bottom)) !important;
+  bottom: calc(24px + env(safe-area-inset-bottom)) !important;
   transform: translateX(-50%) !important;
   z-index: 9997 !important;
-  width: calc(100% - 32px) !important;
-  max-width: 390px !important;
+  width: calc(100% - 48px) !important;
+  max-width: 382px !important;
   pointer-events: auto !important;
+}
+
+/* Same bar as Food's bottom navigation: white / #1a1a1a, 72px tall, big radius, soft drop shadow. */
+.user-bottom-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 72px;
+  padding: 0 8px;
+  border-radius: 2rem;
+  background: var(--user-nav-bg);
+  border: 1px solid var(--user-nav-border);
+  box-shadow: var(--user-nav-shadow);
+}
+
+.user-bottom-nav-item {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 1.5rem;
+  color: var(--user-nav-idle);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Active = tinted fill + coloured icon/label (like Food's red-on-light-red), not a solid block. */
+.user-bottom-nav-item.is-active {
+  background: var(--user-nav-active-bg);
+  color: var(--user-nav-active-fg);
 }
 
 .user-home-scroll {
@@ -933,7 +1121,7 @@ html, body, #root {
   margin-top: 0 !important;
   border-radius: 28px 28px 0 0 !important;
   background: var(--user-bg) !important;
-  padding: 16px 16px 110px 16px !important;
+  padding: 16px 16px 124px 16px !important;
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -950,11 +1138,12 @@ html, body, #root {
 .all-services-backdrop {
   position: fixed !important;
   inset: 0 !important;
-  background: rgba(0, 0, 0, 0.70) !important;
-  backdrop-blur: none !important;
+  background: rgba(8, 12, 20, 0.55) !important;
   z-index: 9998 !important;
 }
 
+/* Sizes to its content (a handful of services used to float in an 85vh white slab), capped so a
+   long list still scrolls inside the sheet. */
 .all-services-sheet {
   position: fixed !important;
   left: 50% !important;
@@ -962,12 +1151,13 @@ html, body, #root {
   transform: translateX(-50%) !important;
   width: 100% !important;
   max-width: 430px !important;
-  height: 85vh !important;
-  background: var(--user-bg) !important;
-  border-radius: 36px 36px 0 0 !important;
+  height: auto !important;
+  max-height: 85vh !important;
+  background: var(--user-card-bg) !important;
+  border-radius: 28px 28px 0 0 !important;
   z-index: 9999 !important;
   overflow-y: auto !important;
-  padding: 20px !important;
+  padding: 12px 20px calc(28px + env(safe-area-inset-bottom)) !important;
 }
 
 /* Centrally force all max-w-lg page wrapper elements to be mobile responsive */
@@ -982,7 +1172,9 @@ html, body, #root {
 }
 
 /* Centrally enforce Outfit font-family globally across all elements to override explicit custom font families */
-*, ::before, ::after,
+:where(html.taxi-app-active) *,
+:where(html.taxi-app-active) *::before,
+:where(html.taxi-app-active) *::after,
 .redigo-app,
 .redigo-app * {
   font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
@@ -1062,8 +1254,7 @@ html, body, #root {
 .everything-section,
 .explore-section,
 .promo-section,
-.go-places-section,
-.go-appzeto-section {
+.go-places-section {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -1071,8 +1262,7 @@ html, body, #root {
 }
 
 .user-search-bar,
-.promo-carousel,
-.go-appzeto-banner {
+.promo-carousel {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -1090,30 +1280,89 @@ html, body, #root {
   box-sizing: border-box !important;
 }
 
-.go-appzeto-banner {
-  position: relative !important;
-  text-align: center !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+/* Section headings used across the customer app (was 19px / font-black everywhere) */
+.user-section-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--user-text-primary);
 }
 
-.go-appzeto-banner img,
-.go-appzeto-banner video {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
+/* Service art tile: the uploaded image if there is one, otherwise a glyph on a soft yellow tint. */
+.service-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(255, 196, 0, 0.16);
+  color: #8A6100;
+}
+.user-app-theme.dark .service-art {
+  background: rgba(255, 196, 0, 0.14);
+  color: var(--user-accent);
+}
+.service-art-glyph {
+  color: inherit;
 }
 
-.go-appzeto-content {
-  position: absolute !important;
-  inset: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center !important;
-  padding: 20px !important;
+/* "Everything In Minutes" cards: theme-aware surface (they were a fixed near-black in BOTH themes,
+   with the picture stretched to 190% width and cropped behind a gradient). */
+.everything-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 96px;
+  padding: 12px 12px 12px 16px;
+  text-align: left;
+  border-radius: 20px;
+  background: var(--user-card-bg) !important;
+  border: 1px solid var(--user-border);
+  box-shadow: var(--user-card-shadow);
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.everything-card:active {
+  transform: scale(0.98);
+}
+.everything-card-content {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.everything-card-content span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--user-text-muted) !important;
+}
+.everything-card-content h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--user-text-primary) !important;
+}
+.everything-card-art {
+  flex: 0 0 auto;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+}
+.everything-card-art img {
+  padding: 6px;
 }
 
 /* Splash screen specific styles */
