@@ -54,7 +54,10 @@ export async function listCustomers(query = {}) {
   const status = String(query.status || 'all').toLowerCase();
   const term = String(query.search || '').trim().slice(0, 80);
 
-  const filter = { ...notDeleted };
+  // Same rule as Food admin > Customers: a number that stopped at OTP (no name
+  // yet) is not a customer.
+  const signedUp = { name: { $regex: '\\S', $nin: ['null', 'Null', 'NULL'] } };
+  const filter = { ...notDeleted, ...signedUp };
   const and = [];
 
   if (status === 'active') and.push(activeOnly);
@@ -70,8 +73,8 @@ export async function listCustomers(query = {}) {
   const [users, total, totalAll, totalBlocked] = await Promise.all([
     Customer.find(filter).select(USER_FIELDS).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Customer.countDocuments(filter),
-    Customer.countDocuments(notDeleted),
-    Customer.countDocuments({ ...notDeleted, ...blockedOnly }),
+    Customer.countDocuments({ ...notDeleted, ...signedUp }),
+    Customer.countDocuments({ ...notDeleted, ...signedUp, ...blockedOnly }),
   ]);
 
   const ids = users.map((user) => user._id);

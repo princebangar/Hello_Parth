@@ -36,6 +36,10 @@ export const sendNotification = asyncHandler(async (req, res) =>
   ok(res, await promotionsService.createNotification(req.body)),
 );
 
+export const getNotificationRecipients = asyncHandler(async (req, res) =>
+  ok(res, { results: await promotionsService.searchNotificationRecipients(req.query) }),
+);
+
 export const deleteNotification = asyncHandler(async (req, res) => {
   await promotionsService.deleteNotification(req.params.id);
   ok(res, { deleted: true });

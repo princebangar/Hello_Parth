@@ -43,6 +43,14 @@ const promoCodeSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    // Who may use the code: everyone, brand-new users (no completed ride yet),
+    // returning users (at least one completed ride) or one chosen user.
+    audience: {
+      type: String,
+      enum: ['all', 'first_time', 'existing', 'specific'],
+      default: 'all',
+      index: true,
+    },
     transport_type: {
       type: String,
       enum: ['taxi', 'delivery', 'pooling', 'bus', 'self_drive', 'all'],
