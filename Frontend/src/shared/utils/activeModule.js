@@ -139,14 +139,59 @@ export function prefetchTaxiAdmin() {
   ]).catch(() => {})
 }
 
-/** Warm Food user shell so Food ↔ Taxi user tab switches stay SPA-smooth. */
+/**
+ * Warm the Food user app: its shell AND the user router behind it (the router is a second lazy chunk, so warming
+ * only the shell still left the Food skeleton up while the router downloaded).
+ */
 export function prefetchFoodUser() {
   return Promise.all([
     import('../../modules/Food/routes.jsx'),
-  ]).catch(() => {})
+    import('../../modules/Food/components/user/UserRouter.jsx'),
+  ])
+    .then(() => warmFoodZone())
+    .catch(() => {})
 }
 
-/** Warm Taxi user shell + main tabs so Food ↔ Taxi / bottom-nav switches stay SPA-smooth. */
+/**
+ * Food holds its whole screen on the skeleton the first time a signed-in person opens it, until it knows which
+ * delivery zone they are in. Taxi already shares their location, so look the zone up in the background (same
+ * request, same storage as Food's own zone check) - opening Food then starts straight away. Food re-checks the zone
+ * itself once it is open, exactly as it does on every start.
+ */
+async function warmFoodZone() {
+  if (typeof localStorage === 'undefined' || localStorage.getItem('userZoneId')) return
+  let lat = NaN
+  let lng = NaN
+  try {
+    const saved = JSON.parse(localStorage.getItem('userLocation') || 'null')
+    lat = Number(saved?.latitude)
+    lng = Number(saved?.longitude)
+  } catch {
+    return
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+  try {
+    const [{ zoneAPI }, { storeZonePayload }] = await Promise.all([
+      import('../../services/api/index.js'),
+      import('../../modules/Food/hooks/useZone.jsx'),
+    ])
+    const response = await zoneAPI.detectZone(lat, lng)
+    const zone = response?.data?.success ? response.data.data : null
+    // only an in-service answer is kept; anything else is left for Food to work out itself when it opens
+    if (zone?.status === 'IN_SERVICE' && zone.zoneId && !localStorage.getItem('userZoneId')) {
+      storeZonePayload(zone)
+    }
+  } catch {
+    // purely an optimisation - Food does its own check when it opens
+  }
+}
+
+/**
+ * Warm Taxi user shell + main tabs so Food ↔ Taxi / bottom-nav switches stay SPA-smooth. Once the code is here it
+ * also fetches Taxi's public first-screen data (settings, service tiles) into the caches the home screen reads, so
+ * the first Taxi screen after login does not start from loading placeholders.
+ */
 export function prefetchTaxiUser() {
   return Promise.all([
     import('../../modules/Taxi/TaxiApp.jsx'),
@@ -154,7 +199,41 @@ export function prefetchTaxiUser() {
     import('../../modules/Taxi/modules/user/pages/Activity.jsx'),
     import('../../modules/Taxi/modules/user/pages/Profile.jsx'),
     import('../../modules/Taxi/modules/user/pages/ride/Support.jsx'),
-  ]).catch(() => {})
+  ])
+    .then(() =>
+      Promise.allSettled([
+        import('../../modules/Taxi/shared/context/SettingsContext.jsx').then((mod) => mod.prefetchTaxiSettings()),
+        import('../../modules/Taxi/modules/user/components/ServiceGrid.jsx').then((mod) => mod.prefetchServiceModules()),
+      ]),
+    )
+    .catch(() => {})
+}
+
+const dataSaverOn = () => {
+  try {
+    return Boolean(navigator.connection?.saveData)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * For the login screen: while the person types their number and OTP, quietly download what the app opens with -
+ * Taxi first (that is where a login lands), then Food (Skip for now / switching tabs). Returns a cleanup function.
+ */
+export function prefetchConsumerAppsWhenIdle() {
+  if (typeof window === 'undefined' || dataSaverOn()) return () => {}
+
+  const run = () => {
+    prefetchTaxiUser().then(() => prefetchFoodUser())
+  }
+
+  if (typeof window.requestIdleCallback === 'function') {
+    const id = window.requestIdleCallback(run, { timeout: 2500 })
+    return () => window.cancelIdleCallback?.(id)
+  }
+  const id = window.setTimeout(run, 1000)
+  return () => window.clearTimeout(id)
 }
 
 /** Prefetch the sibling consumer vertical (call on idle / hover). */
