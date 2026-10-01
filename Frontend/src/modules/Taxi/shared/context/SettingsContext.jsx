@@ -204,6 +204,30 @@ const writeCachedSettings = (settings) => {
   }
 };
 
+const settingsFromBootstrap = (data = {}) => buildSettingsState({
+  general: data.settings?.general || {},
+  customization: data.settings?.customization || {},
+  transportRide: data.settings?.transportRide || {},
+  bidRide: data.settings?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
+  paymentGateway: data.settings?.paymentGateway || null,
+  userHomeSettings: data.settings?.userHomeSettings || {},
+});
+
+/**
+ * Downloads the public start-up settings ahead of time (the login screen calls this while the person types their
+ * number) and stores them in the cache SettingsProvider reads when Taxi opens, so the first Taxi screen already has
+ * its settings instead of a loading header and nav bar. Needs no login; never throws.
+ */
+export const prefetchTaxiSettings = async () => {
+  if (readCachedSettings()) return; // a copy is already there - the provider refreshes it on its own
+  try {
+    const response = await api.get('/users/bootstrap');
+    writeCachedSettings(settingsFromBootstrap(response?.data?.data || response?.data || {}));
+  } catch {
+    // purely an optimisation
+  }
+};
+
 export const SettingsProvider = ({ children }) => {
   const cachedSettings = readCachedSettings();
   const [settings, setSettings] = useState(cachedSettings || DEFAULT_SETTINGS_CONTEXT.settings);
@@ -221,14 +245,7 @@ export const SettingsProvider = ({ children }) => {
       const response = await api.get('/users/bootstrap');
       const data = response?.data?.data || response?.data || {};
 
-      const nextSettings = buildSettingsState({
-        general: data.settings?.general || {},
-        customization: data.settings?.customization || {},
-        transportRide: data.settings?.transportRide || {},
-        bidRide: data.settings?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
-        paymentGateway: data.settings?.paymentGateway || null,
-        userHomeSettings: data.settings?.userHomeSettings || {},
-      });
+      const nextSettings = settingsFromBootstrap(data);
 
       setSettings(nextSettings);
       setModules(data.modules || []);

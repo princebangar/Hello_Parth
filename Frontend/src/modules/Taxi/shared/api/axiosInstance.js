@@ -95,10 +95,24 @@ const createCompatibleResponseView = (payload) => {
 };
 
 const DEDUPED_GET_TTL_MS = 2500;
+// Admin reference lists (service areas, zones, vehicle types...) rarely change but ~11 admin pages each
+// re-fetched them on every open. They are served from memory for a minute; ANY admin write clears them.
+const REFERENCE_GET_TTL_MS = 60000;
 const dedupedGetRequests = new Map();
 const recentDedupedGetResponses = new Map();
 
+const isReferenceGet = (url = '') => {
+  const requestPath = String(url || '').split('?')[0];
+
+  return /^\/admin\/(service-locations|zones|preferences|types\/vehicle-types\/list|types\/rental-packages|countries)$/.test(requestPath) ||
+    /^\/countries$/.test(requestPath);
+};
+
 const isDedupedGet = (url = '') => {
+  if (isReferenceGet(url)) {
+    return true;
+  }
+
   const requestPath = String(url || '').split('?')[0];
 
   return /^\/users\/me$/.test(requestPath) ||
@@ -447,8 +461,9 @@ api.get = (url, config = {}) => {
   const key = getDedupedRequestKey(url, config);
   const now = Date.now();
   const cached = recentDedupedGetResponses.get(key);
+  const ttl = isReferenceGet(url) ? REFERENCE_GET_TTL_MS : DEDUPED_GET_TTL_MS;
 
-  if (cached && now - cached.timestamp < DEDUPED_GET_TTL_MS) {
+  if (cached && now - cached.timestamp < ttl) {
     return Promise.resolve(cached.data);
   }
 
@@ -473,5 +488,29 @@ api.get = (url, config = {}) => {
   dedupedGetRequests.set(key, request);
   return request;
 };
+
+// Any write may change a reference list, so drop the cached ones (after success AND failure — a failed
+// write can still have changed something server-side).
+const clearReferenceCache = () => {
+  Array.from(recentDedupedGetResponses.keys()).forEach((key) => {
+    if (isReferenceGet(key.split('|')[0])) {
+      recentDedupedGetResponses.delete(key);
+    }
+  });
+};
+
+['post', 'put', 'patch', 'delete'].forEach((method) => {
+  const rawMethod = api[method].bind(api);
+  api[method] = (...args) => rawMethod(...args).then(
+    (response) => {
+      clearReferenceCache();
+      return response;
+    },
+    (error) => {
+      clearReferenceCache();
+      throw error;
+    },
+  );
+});
 
 export default api;
