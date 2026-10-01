@@ -164,7 +164,7 @@ const SharedTaxiSeats = () => {
             </div>
             <div className="flex items-center gap-1 bg-yellow-50 border border-yellow-100 rounded-full px-2 py-0.5 shrink-0">
               <Star size={9} className="text-yellow-500 fill-yellow-500" />
-              <span className="text-[10px] font-extrabold text-slate-850">{route.rating}</span>
+              <span className="text-[10px] font-extrabold text-slate-800">{route.rating}</span>
             </div>
           </motion.div>
 
@@ -191,7 +191,7 @@ const SharedTaxiSeats = () => {
                       onClick={() => seat.status !== 'gap' && toggle(seat.id)}
                       className={`w-14 h-14 rounded-[14px] border-2 flex flex-col items-center justify-center gap-0.5 transition-all ${
                         seat.status === 'gap'       ? 'invisible pointer-events-none' :
-                        seat.status === 'booked'    ? 'bg-slate-100 border-slate-100 cursor-not-allowed opacity-60 text-slate-350' :
+                        seat.status === 'booked'    ? 'bg-slate-100 border-slate-100 cursor-not-allowed opacity-60 text-slate-300' :
                         seat.status === 'selected'  ? 'bg-[#20A354] border-[#20A354] shadow-[0_4px_12px_rgba(32,163,84,0.2)] text-white animate-pulse' :
                                                       'bg-white border-slate-200 hover:border-emerald-300 text-slate-400'
                       }`}>
@@ -211,7 +211,7 @@ const SharedTaxiSeats = () => {
                       onClick={() => seat.status !== 'gap' && toggle(seat.id)}
                       className={`w-14 h-14 rounded-[14px] border-2 flex flex-col items-center justify-center gap-0.5 transition-all ${
                         seat.status === 'gap'       ? 'invisible pointer-events-none' :
-                        seat.status === 'booked'    ? 'bg-slate-100 border-slate-100 cursor-not-allowed opacity-60 text-slate-350' :
+                        seat.status === 'booked'    ? 'bg-slate-100 border-slate-100 cursor-not-allowed opacity-60 text-slate-300' :
                         seat.status === 'selected'  ? 'bg-[#20A354] border-[#20A354] shadow-[0_4px_12px_rgba(32,163,84,0.2)] text-white animate-pulse' :
                                                       'bg-white border-slate-200 hover:border-emerald-300 text-slate-400'
                       }`}>
@@ -263,7 +263,7 @@ const SharedTaxiSeats = () => {
         <motion.button whileTap={{ scale: 0.98 }} disabled={selected.length === 0}
           onClick={() => navigate(`${basePath}/cab/shared/confirm`, { state: { route, date, seats: selected, total, serviceTaxPercentage } })}
           className={`pointer-events-auto w-full py-4 rounded-[18px] text-[15px] font-extrabold text-white shadow-[0_8px_24px_rgba(32,163,84,0.25)] flex items-center justify-center gap-2 transition-all ${
-            selected.length > 0 ? 'bg-[#20A354] hover:bg-[#1a8543]' : 'bg-slate-350 cursor-not-allowed'
+            selected.length > 0 ? 'bg-[#20A354] hover:bg-[#1a8543]' : 'bg-slate-300 cursor-not-allowed'
           }`}>
           Continue to Booking <ChevronRight size={17} strokeWidth={3} className="opacity-50" />
         </motion.button>

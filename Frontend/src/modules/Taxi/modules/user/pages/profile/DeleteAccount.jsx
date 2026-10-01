@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, AlertTriangle, X } from 'lucide-react';
 import { clearLocalUserSession, userAuthService } from '../../services/authService';
+import { preloadAuthApp } from '@/shared/utils/preloadLogin.js';
+import { hideLogoutCoverWhenLoginShown, showLogoutCover } from '@/shared/utils/logoutTransition.js';
 import { clearCurrentRide } from '../../services/currentRideService';
 import { socketService } from '../../../../shared/api/socket';
 
@@ -40,6 +42,8 @@ const DeleteAccount = () => {
     setSuccess(null);
     try {
       await userAuthService.requestAccountDeletion(reason);
+      showLogoutCover();
+      await preloadAuthApp();
       clearCurrentRide();
       socketService.disconnect();
       clearLocalUserSession();
@@ -47,6 +51,7 @@ const DeleteAccount = () => {
       setLoading(false);
       setShowConfirm(false);
       navigate('/login', { replace: true });
+      hideLogoutCoverWhenLoginShown();
     } catch (requestError) {
       setError(requestError?.message || 'Something went wrong. Please try again.');
       setLoading(false);

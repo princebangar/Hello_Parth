@@ -5,6 +5,8 @@ import { userAuthService, clearLocalUserSession } from '../../services/authServi
 import { clearCurrentRide } from '../../services/currentRideService';
 import { socketService } from '../../../../shared/api/socket';
 import UserDeleteAccountDialog from '@/shared/components/UserDeleteAccountDialog.jsx';
+import { preloadAuthApp } from '@/shared/utils/preloadLogin.js';
+import { hideLogoutCover, hideLogoutCoverWhenLoginShown, showLogoutCover } from '@/shared/utils/logoutTransition.js';
 
 /** Settings hub — same shape and colours as Food's (Edit Profile + Delete
  *  Account rows). Plain neutral grays, not Taxi's `--user-text-secondary`
@@ -20,11 +22,15 @@ export default function Settings() {
     setIsDeleting(true);
     try {
       await userAuthService.requestAccountDeletion('Requested via account settings');
+      showLogoutCover();
+      await preloadAuthApp();
       clearCurrentRide();
       socketService.disconnect();
       clearLocalUserSession();
       navigate('/login', { replace: true });
+      hideLogoutCoverWhenLoginShown();
     } catch {
+      hideLogoutCover();
       setIsDeleting(false);
     }
   };
