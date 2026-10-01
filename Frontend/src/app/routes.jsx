@@ -12,12 +12,13 @@ import {
   prefetchTaxiAdmin,
 } from '../shared/utils/activeModule.js'
 import AdminModulesKeepAlive, { AdminKeepAliveSlot } from './AdminModulesKeepAlive.jsx'
-import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
+import AppRouteFallback from '@/shared/components/AppRouteFallback'
+import { loadAuthApp, preloadAuthAppWhenIdle } from '@/shared/utils/preloadLogin.js'
 
 // Lazy load the Food service module (Quick-spicy app)
 const FoodApp = lazy(() => import('../modules/Food/routes'))
 const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp'))
-const AuthApp = lazy(() => import('../modules/auth/routes'))
+const AuthApp = lazy(loadAuthApp)
 const PlatformLanding = lazy(() => import('../modules/Landing/pages/PlatformLanding'))
 
 // Auth only — Food and Taxi get a real skeleton below instead (see
@@ -39,13 +40,13 @@ const SoftFallback = () => <div className="min-h-screen bg-transparent" aria-hid
 // other module for the first time in a session). AppShellSkeleton is safe
 // to show here now instead of blank, since it won't fire on every click.
 const FoodAppWrapper = () => (
-  <Suspense fallback={<AppShellSkeleton />}>
+  <Suspense fallback={<AppRouteFallback />}>
     <FoodApp />
   </Suspense>
 )
 
 const TaxiAppWrapper = () => (
-  <Suspense fallback={<AppShellSkeleton />}>
+  <Suspense fallback={<AppRouteFallback />}>
     <TaxiApp />
   </Suspense>
 )
@@ -77,6 +78,9 @@ const AppRoutes = () => {
     syncActiveModule(location.pathname)
     rememberLoginReturnTo(location.pathname)
   }, [location.pathname])
+
+  // Logging out (or being signed out) lands on /login. Have that screen's chunk ready so the swap is instant.
+  useEffect(() => preloadAuthAppWhenIdle(), [])
 
   // Taxi lives under /taxi/* only — never embed it on /food/user. Moved out
   // of FoodAppWrapper (see its comment) so this one-off deep-link check
