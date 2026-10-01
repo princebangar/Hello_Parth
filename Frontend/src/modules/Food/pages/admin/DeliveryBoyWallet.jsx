@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Search, PiggyBank, Loader2, Package, RefreshCw } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
 const debugError = (...args) => {}
 
 const formatCurrency = (amount) => {
@@ -53,11 +54,9 @@ export default function DeliveryBoyWallet() {
   useEffect(() => {
     fetchWallets()
 
-    const interval = setInterval(() => {
+    return setVisibleInterval(() => {
       fetchWallets({ silent: true })
-    }, 5000)
-
-    return () => clearInterval(interval)
+    }, 15000)
   }, [fetchWallets])
 
   useEffect(() => {
