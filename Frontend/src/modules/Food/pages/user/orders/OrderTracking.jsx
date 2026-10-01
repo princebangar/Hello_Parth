@@ -1687,6 +1687,13 @@ export default function OrderTracking() {
 
     return () => {
       isSubscribed = false;
+      // Unmounted before the first load finished (StrictMode's dev remount does
+      // exactly this): its response is dropped above, so let the next mount
+      // start the load again — otherwise "Loading order details..." never clears.
+      if (!orderRef.current) {
+        isInitialPollRequestedRef.current = null;
+        lastPollExecutionRef.current = 0;
+      }
     };
   }, [orderId, fetchOrderDetailsWithFallback, resolveOrderFromList]);
 

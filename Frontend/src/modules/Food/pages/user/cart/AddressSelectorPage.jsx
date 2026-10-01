@@ -638,6 +638,18 @@ export default function AddressSelectorPage() {
     setShowAddressForm(true)
   }
 
+  // Checkout's Home / Work / Other chip with no saved address of that type
+  // opens this page straight into "add address" with that label picked.
+  const presetAddLabel = routerLocation.state?.addLabel
+  const presetAddHandledRef = useRef(false)
+  useEffect(() => {
+    if (presetAddHandledRef.current || !presetAddLabel || profileLoading) return
+    presetAddHandledRef.current = true
+    handleAddAddressClick()
+    setAddressFormData((prev) => ({ ...prev, label: normalizeLabelForForm(presetAddLabel) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetAddLabel, profileLoading])
+
   const handleEditAddressClick = (event, addr) => {
     event.stopPropagation()
     if (!isAuthenticated) {

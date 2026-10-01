@@ -2992,18 +2992,25 @@ export default function Cart() {
                               return (
                                 <button
                                   key={label}
+                                  type="button"
                                   onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
-                                    handleSelectAddressByLabel(label)
+                                    if (addressExists) {
+                                      handleSelectAddressByLabel(label)
+                                    } else {
+                                      // No saved address of this type yet → add one with this label.
+                                      navigate("/food/user/address-selector", {
+                                        state: { from: window.location.pathname, addLabel: label },
+                                      })
+                                    }
                                   }}
-                                  disabled={!addressExists}
                                   className={`text-xs px-4 py-1.5 rounded-full font-semibold transition-all ${addressExists
                                     ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-gray-800 dark:text-gray-300'
-                                    : 'bg-gray-50 text-gray-400 border border-gray-100 cursor-not-allowed dark:bg-gray-900'
+                                    : 'bg-white text-slate-500 border border-dashed border-slate-300 hover:border-slate-400 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700'
                                     }`}
                                 >
-                                  {label}
+                                  {addressExists ? label : `+ ${label}`}
                                 </button>
                               )
                             })}
@@ -3121,7 +3128,7 @@ export default function Cart() {
                       />
                     </div>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                      Agar aap kisi aur ke liye order kar rahe ho, to yahan uska naam aur phone save kar do.
+                      Ordering for someone else? Save their name and phone number here.
                     </p>
                   </div>
                 )}
