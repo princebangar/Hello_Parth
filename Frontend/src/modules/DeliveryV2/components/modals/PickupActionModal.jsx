@@ -194,7 +194,9 @@ export const PickupActionModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-110 p-0 sm:p-4 flex items-end justify-center">
+    // Stops above the bottom nav (92px): with multi-order the rider must still
+    // reach the Orders tab while this panel is open (it used to cover the nav).
+    <div className="fixed inset-x-0 top-0 bottom-[92px] z-110 p-0 sm:p-4 flex items-end justify-center">
       {/* Background Dim */}
       <motion.div
         initial={{ opacity: 0 }}

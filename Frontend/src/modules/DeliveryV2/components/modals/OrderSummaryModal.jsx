@@ -7,7 +7,9 @@ import { CheckCircle, ArrowRight, Wallet, Star } from 'lucide-react';
  * Post-delivery success screen.
  */
 export const OrderSummaryModal = ({ order, onDone }) => {
-  const earnings = order?.earnings || order?.riderEarning || (order?.orderAmount * 0.1) || 0;
+  // Only what the server credited — never an estimate.
+  const earnings = order?.earnings || order?.riderEarning || 0;
+  const orderRef = order?.displayOrderId || order?.orderId || '';
 
   return (
     <div className="fixed inset-0 z-[160] overflow-y-auto bg-[#15498b]">
@@ -47,9 +49,11 @@ export const OrderSummaryModal = ({ order, onDone }) => {
             Go Back Home <ArrowRight className="w-6 h-6" />
           </button>
 
-          <p className="text-white/60 text-[10px] font-medium tracking-wide mt-6 sm:mt-8 bg-white/10 rounded-lg px-3 py-1.5 border border-white/20 inline-block">
-            Order Ref: <span className="font-bold text-white/80 text-xs">{order?.orderId || order?.displayOrderId || 'FOD-1234'}</span>
-          </p>
+          {orderRef ? (
+            <p className="text-white/60 text-[10px] font-medium tracking-wide mt-6 sm:mt-8 bg-white/10 rounded-lg px-3 py-1.5 border border-white/20 inline-block">
+              Order Ref: <span className="font-bold text-white/80 text-xs">{orderRef}</span>
+            </p>
+          ) : null}
         </motion.div>
       </div>
     </div>

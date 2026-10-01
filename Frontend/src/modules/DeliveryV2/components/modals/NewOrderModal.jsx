@@ -21,7 +21,12 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
 
   if (!order) return null;
 
-  const earnings = order.earnings || order.riderEarning || (order.orderAmount ? order.orderAmount * 0.1 : 0);
+  // Only what the server says the rider earns — never an estimate.
+  const earnings = order.earnings || order.riderEarning || 0;
+  // "FOD-…" number (skip bare Mongo ids).
+  const displayOrderId = [order.displayOrderId, order.orderId, order.order_id]
+    .map((v) => String(v || '').trim())
+    .find((v) => v && !/^[0-9a-f]{24}$/i.test(v)) || '';
   const restaurantName = order.restaurantName || order.restaurant_name || (order.restaurantId?.name) || 'Restaurant';
   const restaurantAddress = order.restaurantAddress || order.restaurant_address || (order.restaurantId?.location?.address) || 'Address not available';
   const restaurantPhone =
@@ -152,7 +157,9 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
           style={{ background: 'linear-gradient(33deg, #15498b 0%, #000000 100%)' }}
         >
           <div>
-            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incoming Request</p>
+            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1">
+              Incoming Request{displayOrderId ? ` · #${displayOrderId}` : ''}
+            </p>
             <h2 className="text-2xl sm:text-4xl font-bold tracking-tighter">₹{Number(earnings || 0).toFixed(2)}</h2>
           </div>
           {onToggleMute && (
