@@ -6,6 +6,7 @@ import { formatRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
 import useNotificationInbox from "@food/hooks/useNotificationInbox"
 import { useRestaurantNotifications } from "@food/hooks/useRestaurantNotifications"
+import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailability"
 import { Utensils } from "lucide-react"
 
 const debugLog = (...args) => {}
@@ -183,23 +184,57 @@ export default function RestaurantNavbar({
     }
   }, [restaurantData, propLocation])
 
+  // Weekly outlet schedule — the toggle alone isn't enough: on a closed day /
+  // outside hours the restaurant can't take orders, so it must not read "Online".
+  const [outletTimings, setOutletTimings] = useState(null)
+  const [clockTick, setClockTick] = useState(0)
+  useEffect(() => {
+    let active = true
+    const loadTimings = () =>
+      restaurantAPI
+        .getOutletTimings()
+        .then((res) => {
+          const timings = res?.data?.data?.outletTimings || res?.data?.outletTimings || null
+          if (active && timings) setOutletTimings(timings)
+        })
+        .catch(() => {})
+    loadTimings()
+    window.addEventListener("outletTimingsUpdated", loadTimings)
+    // Re-check open/closed every minute (opening/closing time can pass while the page is open).
+    const tick = setInterval(() => setClockTick((t) => t + 1), 60 * 1000)
+    return () => {
+      active = false
+      window.removeEventListener("outletTimingsUpdated", loadTimings)
+      clearInterval(tick)
+    }
+  }, [])
+
   // Load status from localStorage on mount and listen for changes
   useEffect(() => {
+    const isOpenBySchedule = () => {
+      if (!restaurantData) return true
+      return getRestaurantAvailabilityStatus(
+        { ...restaurantData, outletTimings: outletTimings || restaurantData.outletTimings },
+        new Date(),
+        { ignoreOperationalStatus: true },
+      ).isOpen
+    }
+    const applyStatus = (toggleOnline) => {
+      if (!toggleOnline) setStatus("Offline")
+      else setStatus(isOpenBySchedule() ? "Online" : "Closed")
+    }
     const updateStatus = () => {
       try {
         const savedStatus = localStorage.getItem('restaurant_online_status')
         if (savedStatus !== null) {
-          const isOnline = JSON.parse(savedStatus)
-          setStatus(isOnline ? "Online" : "Offline")
+          applyStatus(Boolean(JSON.parse(savedStatus)))
         } else {
           // If not stored yet, fallback to backend value (when available).
-          const isOnline = Boolean(restaurantData?.isAcceptingOrders)
-          setStatus(isOnline ? "Online" : "Offline")
+          applyStatus(Boolean(restaurantData?.isAcceptingOrders))
         }
       } catch (error) {
         debugError("Error loading restaurant status:", error)
-        const isOnline = Boolean(restaurantData?.isAcceptingOrders)
-        setStatus(isOnline ? "Online" : "Offline")
+        applyStatus(Boolean(restaurantData?.isAcceptingOrders))
       }
     }
 
@@ -207,17 +242,16 @@ export default function RestaurantNavbar({
     updateStatus()
 
     // Listen for status changes from RestaurantStatus page
-  const handleStatusChange = (event) => {
-      const isOnline = event.detail?.isOnline || false
-      setStatus(isOnline ? "Online" : "Offline")
-  }
+    const handleStatusChange = (event) => {
+      applyStatus(Boolean(event.detail?.isOnline))
+    }
 
     window.addEventListener('restaurantStatusChanged', handleStatusChange)
-    
+
     return () => {
       window.removeEventListener('restaurantStatusChanged', handleStatusChange)
     }
-  }, [restaurantData])
+  }, [restaurantData, outletTimings, clockTick])
 
   const handleStatusClick = () => {
     navigate("/food/restaurant/status", { state: { from: routerLocation.pathname } })

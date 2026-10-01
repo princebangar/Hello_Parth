@@ -21,7 +21,9 @@ export const ImageSourcePicker = ({
   title = "Update photo",
   description = "Choose how you want to upload your photo.",
   fileNamePrefix = "upload",
-  galleryInputRef = null
+  galleryInputRef = null,
+  // Gallery may return several images; onFileSelect is called once per image.
+  multiple = false,
 }) => {
   const internalInputRef = useRef(null)
   
@@ -45,6 +47,7 @@ export const ImageSourcePicker = ({
         onSelectFile: onFileSelect,
         fileNamePrefix,
         fallbackInputRef: galleryInputRef || internalInputRef,
+        multiple,
       })
     } catch (error) {
       console.error("Gallery error caught in ImageSourcePicker:", error)

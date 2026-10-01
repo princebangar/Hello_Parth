@@ -4,6 +4,8 @@ import ProtectedRoute from "@food/components/ProtectedRoute"
 import AuthRedirect from "@food/components/AuthRedirect"
 import Loader from "@food/components/Loader"
 import { OnboardingSkeleton } from "@food/components/ui/loading-skeletons"
+import PolicyPageLoader from "@/shared/components/PolicyPageLoader"
+import { isPolicyPath } from "@/shared/utils/policyPaths"
 import "./restaurantTheme.css"
 import { toast } from "sonner"
 
@@ -58,6 +60,7 @@ export default function RestaurantRouter() {
   const location = useLocation()
   const navigate = useNavigate()
   const isOnboarding = location.pathname.includes("/onboarding")
+  const isPolicyScreen = isPolicyPath(location.pathname)
 
   React.useEffect(() => {
     const handleAuthFailure = (e) => {
@@ -86,7 +89,9 @@ export default function RestaurantRouter() {
   return (
     <div className="restaurant-theme">
       <Suspense fallback={
-        isOnboarding ? (
+        isPolicyScreen ? (
+          <PolicyPageLoader />
+        ) : isOnboarding ? (
           <OnboardingSkeleton />
         ) : (
           <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex items-center justify-center">
