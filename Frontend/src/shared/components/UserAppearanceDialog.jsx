@@ -7,6 +7,7 @@ import {
   saveFoodUserTheme,
   THEME_CHANGE_EVENT,
 } from "@/shared/utils/theme.js";
+import useBodyScrollLock from "@/shared/hooks/useBodyScrollLock.js";
 
 export default function UserAppearanceDialog({ open, onOpenChange }) {
   const [theme, setTheme] = useState(() => getFoodUserTheme());
@@ -30,32 +31,7 @@ export default function UserAppearanceDialog({ open, onOpenChange }) {
     };
   }, []);
 
-  // Plain `overflow:hidden` on body doesn't reliably block touch-drag
-  // scrolling on mobile WebViews. Pinning body with `position:fixed` at the
-  // current scroll offset (and restoring it on close) blocks scroll on both
-  // touch and desktop, and doesn't jump the page on close.
-  useEffect(() => {
-    if (!open || typeof document === "undefined") return undefined;
-    const scrollY = window.scrollY || window.pageYOffset || 0;
-    const body = document.body;
-    const previous = {
-      overflow: body.style.overflow,
-      position: body.style.position,
-      top: body.style.top,
-      width: body.style.width,
-    };
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-    return () => {
-      body.style.overflow = previous.overflow;
-      body.style.position = previous.position;
-      body.style.top = previous.top;
-      body.style.width = previous.width;
-      window.scrollTo(0, scrollY);
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   const selectTheme = (nextTheme) => {
     instantCloseRef.current = true;

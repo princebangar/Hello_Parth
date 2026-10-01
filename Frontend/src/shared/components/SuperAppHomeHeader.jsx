@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, startTransition } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MapPin, ChevronDown } from 'lucide-react';
+import { MapPin, ChevronDown, Bell, Wallet } from 'lucide-react';
 import { getVerticalTheme } from '@/shared/constants/superAppVerticalTheme';
 import { syncThemeForPath } from '@/shared/utils/theme.js';
 import {
@@ -120,6 +120,18 @@ const VERTICALS = [
   },
 ];
 
+const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
+
+// Same avatar Food shows: the user's photo, or the default avatar when there is none.
+function readStoredProfileImage() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem('userInfo') || '{}');
+    return stored?.profileImage || '';
+  } catch {
+    return '';
+  }
+}
+
 export default function SuperAppHomeHeader({
   activeVertical: activeVerticalProp,
   location: locationProp,
@@ -130,6 +142,8 @@ export default function SuperAppHomeHeader({
   tabsOnly = false,
   /** When true, render only the tabs row — parent supplies the themed background wrapper. */
   embedded = false,
+  /** Unread count shown on the bell (Taxi passes its own; Food has its own header). */
+  notificationCount = 0,
 }) {
   const navigate = useNavigate();
   const reactLocation = useLocation();
@@ -203,6 +217,22 @@ export default function SuperAppHomeHeader({
   }, [activeVertical]);
 
   const [storedLocation, setStoredLocation] = useState(() => readHelloParthLocation());
+  const [profileImage, setProfileImage] = useState(readStoredProfileImage);
+  const [avatarBroken, setAvatarBroken] = useState(false);
+
+  useEffect(() => {
+    const syncProfileImage = () => {
+      setProfileImage(readStoredProfileImage());
+      setAvatarBroken(false);
+    };
+    syncProfileImage();
+    window.addEventListener('storage', syncProfileImage);
+    window.addEventListener('focus', syncProfileImage);
+    return () => {
+      window.removeEventListener('storage', syncProfileImage);
+      window.removeEventListener('focus', syncProfileImage);
+    };
+  }, [locationPath]);
 
   useEffect(() => {
     const syncLocation = () => setStoredLocation(readHelloParthLocation());
@@ -219,6 +249,8 @@ export default function SuperAppHomeHeader({
 
   const location = locationProp ?? storedLocation;
   const walletPath = isTaxi ? '/taxi/user/wallet' : '/food/user/wallet';
+  const notificationsPath = isTaxi ? '/taxi/user/profile/notifications' : '/food/user/notifications';
+  const profilePath = isTaxi ? '/taxi/user/profile' : '/food/user/profile';
 
   const displayTitle = useMemo(() => {
     if (locationTitle?.trim()) return locationTitle.trim();
@@ -331,17 +363,46 @@ export default function SuperAppHomeHeader({
           </div>
         </button>
 
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        {/* Bell, wallet and profile avatar — same trio and sizes as Food's header. White icons
+            via inline colour: this bar is always the brand's dark colour in both app themes. */}
+        <div className="flex items-center gap-3 flex-shrink-0">
           <button
             type="button"
-            className="h-10 w-10 relative flex items-center justify-center rounded-full shadow-sm hover:bg-gray-50 transition-all"
+            onClick={() => navigate(notificationsPath)}
+            aria-label="Notifications"
+            className="relative flex items-center justify-center p-1.5 active:scale-90 transition-all"
+          >
+            <Bell className="h-[24px] w-[24px]" strokeWidth={2} style={{ color: '#ffffff' }} />
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] bg-green-400 text-white text-[8px] font-semibold rounded-full flex items-center justify-center px-[3px] leading-none border border-white/80 shadow z-10">
+                {notificationCount > 9 ? '9+' : notificationCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => navigate(walletPath)}
             aria-label="Wallet"
-            style={{ backgroundColor: '#ffffff' }}
+            className="flex items-center justify-center p-1.5 active:scale-90 transition-all"
           >
-            <div className="w-5 h-5 border-2 rounded flex items-center justify-center" style={{ borderColor: '#1f2937' }}>
-              <span className="text-[10px] font-bold font-serif" style={{ color: '#1f2937' }}>₹</span>
-            </div>
+            <Wallet className="h-[26px] w-[26px]" strokeWidth={2.2} style={{ color: '#ffffff' }} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(profilePath)}
+            aria-label="Profile"
+            className="h-9 w-9 relative flex items-center justify-center rounded-full cursor-pointer active:scale-95 transition-all overflow-hidden"
+            style={{ border: '1.5px solid #ffffff', backgroundColor: '#FFF5E6' }}
+          >
+            <img
+              src={!avatarBroken && profileImage ? profileImage : DEFAULT_AVATAR}
+              alt="Profile"
+              className="h-full w-full object-cover"
+              draggable={false}
+              onError={() => setAvatarBroken(true)}
+            />
           </button>
         </div>
       </div>

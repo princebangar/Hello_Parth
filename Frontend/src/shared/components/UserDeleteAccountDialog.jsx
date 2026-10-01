@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { AlertTriangle, Trash2 } from "lucide-react";
+import useBodyScrollLock from "@/shared/hooks/useBodyScrollLock.js";
 
 /**
  * Shared "type DELETE to confirm" account-deletion dialog — same one Food's
@@ -21,11 +23,16 @@ export default function UserDeleteAccountDialog({
     if (!open) setCaptcha("");
   }, [open]);
 
-  if (!open) return null;
+  useBodyScrollLock(open);
+
+  if (!open || typeof document === "undefined") return null;
 
   const canConfirm = captcha === "DELETE" && !isDeleting;
 
-  return (
+  // Rendered straight into <body> (like the logout dialog). Inside Taxi's `.user-app-theme` scope the
+  // !important colour remaps turned `text-white` on the red button dark and the red warning box grey,
+  // so the dialog looked different from Food's. Out here only the plain Tailwind classes apply.
+  return createPortal(
     <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-sm">
       <div className="flex min-h-screen items-center justify-center p-4 py-10">
         <motion.div
@@ -37,7 +44,7 @@ export default function UserDeleteAccountDialog({
             <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
               <Trash2 className="h-7 w-7 text-red-600 dark:text-red-400" />
             </div>
-            <h3 className="text-xl font-black text-gray-900 dark:text-white">Delete Your Account?</h3>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Delete Your Account?</h3>
           </div>
 
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 leading-relaxed text-center">
@@ -47,7 +54,7 @@ export default function UserDeleteAccountDialog({
           <div className="mb-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-r-xl p-3">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-              <span className="text-sm font-bold text-red-700 dark:text-red-400">Warning</span>
+              <span className="text-sm font-semibold text-red-700 dark:text-red-400">Warning</span>
             </div>
             <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">{warningText}</p>
           </div>
@@ -58,7 +65,7 @@ export default function UserDeleteAccountDialog({
               placeholder="Type DELETE to confirm"
               value={captcha}
               onChange={(e) => setCaptcha(e.target.value.toUpperCase())}
-              className="w-full h-12 px-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-transparent dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-50 dark:focus:ring-red-900/20 outline-none transition-all font-bold text-center tracking-widest placeholder:tracking-normal placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="w-full h-12 px-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-transparent dark:text-white focus:border-red-500 focus:ring-4 focus:ring-red-50 dark:focus:ring-red-900/20 outline-none transition-all font-medium text-center tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
           </div>
 
@@ -67,7 +74,7 @@ export default function UserDeleteAccountDialog({
               type="button"
               onClick={onClose}
               disabled={isDeleting}
-              className="flex-1 h-12 rounded-xl text-md font-bold border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors outline-none disabled:opacity-60"
+              className="flex-1 h-12 rounded-xl text-md font-semibold border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors outline-none disabled:opacity-60"
             >
               Cancel
             </button>
@@ -75,13 +82,14 @@ export default function UserDeleteAccountDialog({
               type="button"
               onClick={onConfirm}
               disabled={!canConfirm}
-              className="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white text-md font-bold shadow-lg shadow-red-600/20 disabled:opacity-60 disabled:cursor-not-allowed transition-all outline-none"
+              className="flex-1 h-12 rounded-xl bg-[#FF3131] hover:bg-[#E02626] text-white text-md font-semibold shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-[#FF3131] transition-all outline-none"
             >
               {isDeleting ? "Deleting..." : "Delete Account"}
             </button>
           </div>
         </motion.div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
