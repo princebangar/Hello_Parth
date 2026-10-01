@@ -3,12 +3,15 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { Clock3, ShieldCheck, XCircle, AlertTriangle, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@food/components/ui/button"
-import { restaurantAPI } from "@food/api"
+import apiClient, { restaurantAPI } from "@food/api"
 import {
   clearRestaurantPendingPhone,
   getModuleToken,
   getRestaurantPendingPhone,
   clearModuleAuth,
+  getPendingTicket,
+  clearPendingTicket,
+  setAuthData,
 } from "@food/utils/auth"
 import { clearOnboardingFromLocalStorage } from "@food/utils/onboardingUtils"
 import {
@@ -149,9 +152,52 @@ export default function VerificationPending() {
   useEffect(() => {
     let cancelled = false
 
+    // No session yet (pending accounts get none): poll with the pending ticket
+    // from OTP. Approved → the response carries a login session, so the
+    // dashboard opens straight away without logging in again.
+    const checkWithPendingTicket = async () => {
+      const ticket = getPendingTicket("restaurant")
+      if (!ticket) return
+      try {
+        const res = await apiClient.post(
+          "/food/auth/restaurant/pending-status",
+          { pendingTicket: ticket },
+          { contextModule: "restaurant" },
+        )
+        const data = res?.data?.data || {}
+        if (cancelled) return
+        const status = String(data.status || "").toLowerCase()
+        if (status === "approved" && data.accessToken) {
+          setAuthData("restaurant", data.accessToken, data.user, data.refreshToken)
+          window.dispatchEvent(new Event("restaurantAuthChanged"))
+          clearPendingTicket("restaurant")
+          clearRestaurantPendingPhone()
+          localStorage.removeItem("restaurant_pendingStatus")
+          localStorage.removeItem("restaurant_pendingMessage")
+          toast.success("Your restaurant is approved! 🎉")
+          window.location.replace("/food/restaurant")
+        } else if (status === "rejected") {
+          const msg = data.rejectionReason
+            ? `Your restaurant registration has been rejected. Reason: ${data.rejectionReason}`
+            : "Your restaurant registration has been rejected. Please contact support."
+          setLocalStatus("rejected")
+          setLocalMessage(msg)
+          localStorage.setItem("restaurant_pendingStatus", "rejected")
+          localStorage.setItem("restaurant_pendingMessage", msg)
+        } else if (status === "pending") {
+          setLocalStatus("pending")
+          localStorage.setItem("restaurant_pendingStatus", "pending")
+        }
+      } catch (err) {
+        // Ticket expired/invalid: drop it, the restaurant can still log in manually.
+        if (err?.response?.status === 401) clearPendingTicket("restaurant")
+      }
+    }
+
     const checkApprovalStatus = async () => {
       const token = getModuleToken("restaurant")
       if (!token) {
+        await checkWithPendingTicket()
         if (!cancelled) setCheckingStatus(false)
         return
       }
@@ -222,9 +268,14 @@ export default function VerificationPending() {
 
     window.addEventListener("focus", handleVisibilityOrFocus)
     document.addEventListener("visibilitychange", handleVisibilityOrFocus)
+    // Auto-refresh while the screen is open, so approval shows up by itself.
+    const pollId = setInterval(() => {
+      if (document.visibilityState === "visible") checkApprovalStatus()
+    }, 15000)
 
     return () => {
       cancelled = true
+      clearInterval(pollId)
       window.removeEventListener("focus", handleVisibilityOrFocus)
       document.removeEventListener("visibilitychange", handleVisibilityOrFocus)
     }

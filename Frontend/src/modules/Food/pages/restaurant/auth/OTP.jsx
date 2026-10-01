@@ -348,6 +348,9 @@ export default function RestaurantOTP() {
     try {
       const purpose = authData.isSignUp ? "register" : "login"
       await restaurantAPI.sendOTP(authData.phone, purpose, authData.email)
+      // The old code stops working after a resend — clear it from the boxes.
+      setOtp(["", "", "", ""])
+      setTimeout(() => inputRefs.current?.[0]?.focus?.(), 50)
       setResendTimer(59)
       sessionStorage.setItem(getResendKey(), (Date.now() + (59 * 1000)).toString())
       toast.success("OTP resent successfully.")
@@ -375,26 +378,6 @@ export default function RestaurantOTP() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col relative overflow-hidden font-['Poppins']">
-      <style>
-        {`
-          @keyframes floatDish1 {
-            0%, 100% { transform: translateX(0vw) translateY(0px) rotate(0deg); }
-            50% { transform: translateX(25vw) translateY(-15px) rotate(8deg); }
-          }
-          @keyframes floatDish2 {
-            0%, 100% { transform: translateX(0vw) translateY(0px) rotate(0deg); }
-            50% { transform: translateX(-25vw) translateY(-15px) rotate(-8deg); }
-          }
-          .animate-float-dish-1 {
-            animation: floatDish1 12s ease-in-out infinite;
-          }
-          .animate-float-dish-2 {
-            animation: floatDish2 12s ease-in-out infinite;
-          }
-        `}
-      </style>
-
-
       {/* Top Wave (Log In style) */}
       <div className="absolute top-0 left-0 w-full h-[40vh] pointer-events-none z-0 transform scale-[1.05] origin-center">
         <svg viewBox="0 0 1440 320" className="w-full h-full block" preserveAspectRatio="none" overflow="visible">
@@ -406,11 +389,6 @@ export default function RestaurantOTP() {
           </defs>
           <path fill="url(#topRedGrad)" d="M -50,-50 L -50,280 C 200,100 800,100 1490,100 L 1490,-50 Z" filter="drop-shadow(0px 5px 15px rgba(0,0,0,0.15))" />
         </svg>
-        <img
-          src="/assets/images/Restaurant_logo_2.png"
-          alt="Restaurant Partner"
-          className="absolute top-[8%] left-[5%] w-[14vh] h-[14vh] md:w-[120px] md:h-[120px] object-contain animate-float-dish-1 drop-shadow-xl"
-        />
       </div>
 
       {/* Bottom Wave (Log In style) */}
@@ -424,11 +402,6 @@ export default function RestaurantOTP() {
           </defs>
           <path fill="url(#botRedGrad)" d="M -50,370 L -50,220 C 640,220 1240,220 1490,40 L 1490,370 Z" filter="drop-shadow(0px -5px 15px rgba(0,0,0,0.15))" />
         </svg>
-        <img
-          src="/assets/images/Restaurant_logo_1.png"
-          alt="Restaurant Partner"
-          className="absolute bottom-[13%] right-[5%] w-[18vh] h-[18vh] md:w-[150px] md:h-[150px] object-contain animate-float-dish-2 drop-shadow-2xl"
-        />
       </div>
 
       {/* Main Content */}
