@@ -527,7 +527,6 @@ function setupFcmTokenRefreshOnVisibility(moduleName) {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
     const activeModule = normalizeModuleFromPath(window.location.pathname);
-    if (activeModule === "admin") return;
 
     const accessToken = localStorage.getItem(`${activeModule}_accessToken`);
     if (accessToken) {
@@ -1172,6 +1171,14 @@ async function saveTokenByModule(moduleName, token, platform = "web") {
     await deliveryAPI.saveFcmToken(normalizedToken, platform);
   } else if (moduleName === "user") {
     await userAPI.saveFcmToken(normalizedToken, { platform });
+  } else if (moduleName === "admin") {
+    // Admin panel: pending approvals (restaurants, delivery, items) are pushed
+    // to every active admin's registered devices.
+    await apiClient.post(
+      platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save",
+      { token: normalizedToken, platform },
+      { contextModule: "admin" },
+    );
   } else {
     return;
   }
@@ -1345,6 +1352,10 @@ function attachServiceWorkerMessageListener() {
 }
 
 function scheduleForegroundNotification(payload) {
+  // Taxi pushes share this service worker; they belong to the Taxi app and never show inside Food.
+  const moduleName = String(payload?.data?.module || payload?.module || "").toLowerCase();
+  if (moduleName === "taxi") return;
+
   // Keep message handlers fast to avoid Chrome [Violation] warnings.
   // Defer heavier work (toast, audio) to idle time / next tick.
   const run = () => showForegroundNotification(payload);
@@ -1369,10 +1380,6 @@ export function initPushNotificationClient() {
   });
 
   attachServiceWorkerMessageListener();
-
-  if (moduleName === "admin") {
-    return;
-  }
 
   if (isPushSoundEnabled()) {
     pushSoundUnlocked = true;
@@ -1480,7 +1487,6 @@ async function attachForegroundListener(firebaseAppInstance) {
 
 export async function registerWebPushForCurrentModule(pathname = window.location.pathname) {
   const moduleName = normalizeModuleFromPath(pathname);
-  if (moduleName === "admin") return;
 
   initPushNotificationClient();
 

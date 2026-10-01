@@ -213,12 +213,13 @@ const isFlutterImageSelectionCancelled = (result) => {
   return false
 }
 
-const buildFlutterImageHandlerArgs = (handlerName, { isCamera, quality }) => {
+const buildFlutterImageHandlerArgs = (handlerName, { isCamera, quality, multiple = false }) => {
   const source = isCamera ? "camera" : "gallery"
+  const allowMultiple = !isCamera && multiple === true
   const baseArgs = {
     source,
     accept: "image/*",
-    multiple: false,
+    multiple: allowMultiple,
     quality,
     type: "image",
   }
@@ -236,11 +237,18 @@ const buildFlutterImageHandlerArgs = (handlerName, { isCamera, quality }) => {
       source,
       quality,
       mediaType: "photo",
-      allowMultiple: false,
+      allowMultiple,
     }
   }
 
   return baseArgs
+}
+
+// Multi-pick replies may carry a list instead of a single image.
+const getFlutterResultList = (result) => {
+  if (Array.isArray(result)) return result
+  const list = result?.files || result?.images || result?.data?.files || result?.data?.images
+  return Array.isArray(list) ? list : null
 }
 
 const invokeFlutterImageHandlers = async ({
@@ -251,14 +259,36 @@ const invokeFlutterImageHandlers = async ({
   onCancel,
   compressOptions,
   shouldCompress = true,
+  multiple = false,
 }) => {
   const handlerNames = isCamera ? CAMERA_BRIDGE_HANDLERS : GALLERY_BRIDGE_HANDLERS
   let lastError = null
 
   for (const handlerName of handlerNames) {
     try {
-      const handlerArgs = buildFlutterImageHandlerArgs(handlerName, { isCamera, quality })
+      const handlerArgs = buildFlutterImageHandlerArgs(handlerName, { isCamera, quality, multiple })
       const result = await window.flutter_inappwebview.callHandler(handlerName, handlerArgs)
+
+      const resultList = getFlutterResultList(result)
+      if (resultList) {
+        const files = resultList
+          .map((entry) => {
+            try {
+              return fileFromFlutterImageResult(entry, fileNamePrefix)
+            } catch {
+              return null
+            }
+          })
+          .filter((file) => file && String(file.type || "").startsWith("image/"))
+        if (!files.length) {
+          if (typeof onCancel === "function") onCancel()
+          return { status: "cancelled" }
+        }
+        for (const file of files) {
+          await notifySelectedFile(file, onSelectFile, compressOptions, shouldCompress)
+        }
+        return { status: "success", handlerName }
+      }
 
       if (isFlutterImageSelectionCancelled(result)) {
         if (typeof onCancel === "function") {
@@ -300,6 +330,7 @@ export const handleImageUpload = async ({
   onCancel,
   compress = true,
   compressOptions = undefined,
+  multiple = false,
 }) => {
   if (!onSelectFile || typeof onSelectFile !== "function") {
     console.warn("handleImageUpload: onSelectFile callback not provided")
@@ -322,6 +353,7 @@ export const handleImageUpload = async ({
       onCancel,
       compressOptions,
       shouldCompress: compress,
+      multiple,
     })
 
     if (outcome.status === "failed") {
@@ -383,6 +415,7 @@ export const openGallery = async ({
   onCancel,
   compress = true,
   compressOptions = undefined,
+  multiple = false,
 }) => {
   return handleImageUpload({
     source: "gallery",
@@ -392,5 +425,6 @@ export const openGallery = async ({
     onCancel,
     compress,
     compressOptions,
+    multiple,
   })
 }
