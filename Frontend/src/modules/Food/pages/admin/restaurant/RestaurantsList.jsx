@@ -1256,10 +1256,10 @@ export default function RestaurantsList() {
                   <span>Add Restaurant</span>
                 </button>
               )}
-              <div className="relative flex-1 sm:flex-initial min-w-[250px]">
+              <div className="relative flex-1 sm:flex-initial min-w-[340px]">
                 <input
                   type="text"
-                  placeholder="Ex: search by Restaurant n"
+                  placeholder="Search restaurant, owner or phone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

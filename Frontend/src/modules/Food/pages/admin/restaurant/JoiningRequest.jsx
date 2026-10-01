@@ -23,6 +23,14 @@ const formatTime12Hour = (timeStr) => {
   return `${String(hour).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`
 }
 
+// Same short form as the restaurants list ("REST" + last 6 of the id) instead
+// of the full 24-character Mongo id.
+const toShortRestaurantId = (r) => {
+  const display = String(r?.restaurantId || "")
+  if (/^REST[0-9a-z]{6}$/i.test(display)) return display
+  const raw = String(r?._id || r?.id || display || "")
+  return raw ? `REST${raw.slice(-6)}` : "N/A"
+}
 
 export default function JoiningRequest() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -330,10 +338,12 @@ export default function JoiningRequest() {
       // Check response structure
       if (response?.data?.success) {
         const data = response.data.data
+        // The detail API has no zone name; the list row does.
+        const withZone = (details) => ({ ...details, zone: details?.zone || request.zone || null })
         if (data?.restaurant) {
-          setRestaurantDetails(data.restaurant)
+          setRestaurantDetails(withZone(data.restaurant))
         } else if (data) {
-          setRestaurantDetails(data)
+          setRestaurantDetails(withZone(data))
         } else {
           setRestaurantDetails(request)
         }
@@ -375,10 +385,10 @@ export default function JoiningRequest() {
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <div className="relative flex-1 sm:flex-initial min-w-[250px]">
+              <div className="relative flex-1 sm:flex-initial min-w-[340px]">
                 <input
                   type="text"
-                  placeholder="Ex: Search by restaurant na"
+                  placeholder="Search restaurant, owner, phone, email"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -856,9 +866,9 @@ export default function JoiningRequest() {
                             </span>
                           </div>
                         )}
-                        <div className="flex items-center gap-1 text-slate-600">
+                        <div className="flex items-center gap-1 text-slate-600" title={String(r?._id || r?.restaurantId || "")}>
                           <Building2 className="w-4 h-4" />
-                          <span className="text-sm">{r?.restaurantId || r?._id || "N/A"}</span>
+                          <span className="text-sm">{toShortRestaurantId(r)}</span>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           approvalStatus === "approved" ? "bg-green-100 text-green-700" : approvalStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
@@ -916,6 +926,15 @@ export default function JoiningRequest() {
                             </div>
                           ) : null
                         })()}
+                        <div className="flex items-start gap-3">
+                          <MapPin className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs text-slate-500">Zone</p>
+                            <p className="text-sm font-medium text-slate-900">
+                              {r?.zone || r?.zoneId?.zoneName || r?.zoneId?.name || "Not assigned"}
+                            </p>
+                          </div>
+                        </div>
                         {r?.pureVegRestaurant != null && (
                           <div className="flex items-center gap-3">
                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${r.pureVegRestaurant ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
@@ -1243,7 +1262,7 @@ export default function JoiningRequest() {
                         {r.restaurantId && (
                           <div>
                             <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
-                            <p className="font-medium text-slate-900">{r.restaurantId}</p>
+                            <p className="font-medium text-slate-900" title={String(r._id || r.restaurantId)}>{toShortRestaurantId(r)}</p>
                           </div>
                         )}
                         {r.approvedAt != null && (
