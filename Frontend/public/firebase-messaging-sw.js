@@ -177,10 +177,12 @@ self.addEventListener("notificationclick", (event) => {
     data: event?.notification?.data || {},
   });
   event.notification.close();
+  const notificationData = event?.notification?.data || {};
+  // click_action is often a non-URL marker (FLUTTER_NOTIFICATION_CLICK); it must not beat targetUrl.
   const rawLink =
-    event?.notification?.data?.link ||
-    event?.notification?.data?.click_action ||
-    event?.notification?.data?.targetUrl ||
+    notificationData.link ||
+    notificationData.targetUrl ||
+    (String(notificationData.click_action || "").startsWith("/") ? notificationData.click_action : "") ||
     "/";
   const targetUrl = String(rawLink || "/").startsWith("/") ? String(rawLink || "/") : "/";
   event.waitUntil(

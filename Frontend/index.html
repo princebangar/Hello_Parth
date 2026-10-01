@@ -4,13 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/hello-parth-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <title>Hello Parth</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+    <!-- Web fonts: ONE request for every family the screens use, loaded without blocking the first paint (the
+         boot skeleton below must not wait on a third-party round trip; display=swap shows the text in a fallback
+         font until the font arrives). The Taxi and Delivery stylesheets used to @import their own copy, which held
+         their route chunk back until Google answered. -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Nunito+Sans:wght@500;600;700;800&family=Sora:wght@600;700&family=Caveat:wght@600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Nunito+Sans:wght@500;600;700;800&family=Sora:wght@600;700&family=Caveat:wght@600;700&display=swap"></noscript>
     <script>
       (function() {
         try {
@@ -40,6 +42,16 @@
           root.classList.add(theme);
           root.dataset.theme = theme;
           root.style.colorScheme = theme;
+
+          // Which placeholder to paint before the JS arrives: the home-shaped skeleton belongs to the consumer app
+          // screens only (signed-in "/", Taxi and Food user); Terms / Privacy / Support get the plain loader (kept
+          // in step with shared/utils/policyPaths.js); login, admin and the partner portals show nothing but the
+          // page colour instead of a skeleton of a screen they will never show.
+          var signedIn = !!(localStorage.getItem('userToken') || localStorage.getItem('user_accessToken'));
+          var policy = /^\/(?:food\/user\/profile\/(?:terms|privacy|support-info|refund|shipping|cancellation)|food\/restaurant\/(?:terms|privacy|help-content|help-centre\/support)|food\/delivery\/(?:terms|privacy|profile\/terms|profile\/privacy|help\/content)|taxi\/(?:driver|owner)\/legal\/(?:terms|privacy|support)|taxi\/(?:terms|terms-and-conditions|privacy|privacy-policy|refund|cancellation))\/?$/.test(path);
+          var partnerPortal = /^\/food\/(?:restaurant|delivery|admin)(?:\/|$)/.test(path);
+          var consumerApp = (path === '/' && signedIn) || path.indexOf('/taxi/user') === 0 || (/^\/food(?:\/|$)/.test(path) && !partnerPortal);
+          root.setAttribute('data-boot', policy ? 'policy' : consumerApp ? 'app' : 'plain');
         } catch(e) {}
       })();
     </script>
@@ -87,10 +99,32 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
       }
+
+      /* Only the consumer app screens get the skeleton; everything else stays on the plain page colour. */
+      html[data-boot="plain"] #boot-skeleton,
+      html[data-boot="policy"] #boot-skeleton { display: none; }
+
+      /* Terms / Privacy / Support: the same loader the React screen shows (shared/components/PolicyPageLoader.jsx). */
+      #boot-loader { display: none; }
+      html[data-boot="policy"] #boot-loader {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 24px; background: #ffffff;
+      }
+      html[data-boot="policy"][data-theme="dark"] #boot-loader { background: #0a0a0a; }
+      #boot-loader svg { animation: boot-spin 1s linear infinite; }
+      #boot-loader p {
+        margin: 16px 0 0; font: 700 10px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        letter-spacing: 0.1em; text-transform: uppercase; color: #6b7280;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
-    <div id="root"><div id="boot-skeleton" aria-hidden="true">
+    <div id="root"><div id="boot-loader" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#CB202D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <p>Loading...</p>
+    </div><div id="boot-skeleton" aria-hidden="true">
       <div class="boot-row">
         <div class="boot-bar" style="width:160px;height:44px;border-radius:999px;"></div>
         <div class="boot-actions">

@@ -4,7 +4,7 @@ import { Toaster } from 'sonner'
 import App from './app/App.jsx'
 import { isModuleAuthenticated } from './shared/utils/moduleAuth.js'
 import { syncThemeForPath } from './shared/utils/theme.js'
-import { NATIVE_LAST_ROUTE_KEY, resolveAppColdStartRoute } from './shared/utils/activeModule.js'
+import { NATIVE_LAST_ROUTE_KEY, resolveAppColdStartRoute, isConsumerLoggedIn } from './shared/utils/activeModule.js'
 import './shared/styles/global.css'
 
 // ─── Quick-spicy Food Module Initialization ───────────────────────────────────
@@ -120,7 +120,18 @@ function bootstrapNativeHashRoute() {
   window.history.replaceState(null, '', `#${targetPath}${search}`)
 }
 
+// Opening "/" while signed in used to render the router once just to redirect into the app, and that extra pass
+// showed as a blank flash between the boot skeleton and the app skeleton. Do the same redirect before React starts.
+function redirectSignedInStartToApp() {
+  if (typeof window === 'undefined' || isNativeLikeShell()) return
+  if (window.location.hash) return
+  if ((window.location.pathname || '/') !== '/') return
+  if (!isConsumerLoggedIn()) return
+  window.history.replaceState(window.history.state, '', resolveAppColdStartRoute())
+}
+
 bootstrapNativeHashRoute()
+redirectSignedInStartToApp()
 syncThemeForPath(getInitialPathname())
 
 // ─── Suppress known non-critical errors ──────────────────────────────────────

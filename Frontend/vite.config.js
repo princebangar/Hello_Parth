@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module';
+import routePreloadHints from './scripts/routePreloadHints.js'
 
 const require = createRequire(import.meta.url);
 
@@ -13,7 +14,7 @@ const foodSrc = path.resolve(__dirname, './src/modules/Food')
 const servicesApi = path.resolve(__dirname, './src/services/api')
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), routePreloadHints()],
   resolve: {
     alias: {
       // More specific first so @food/api/* resolves to services (no backend)
