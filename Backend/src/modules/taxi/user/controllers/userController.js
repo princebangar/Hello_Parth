@@ -16,6 +16,12 @@ import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatew
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
 import { softDeleteSharedUser } from '../../../../core/users/accountDeletion.service.js';
 import {
+  ensureUserReferralCode,
+  findUserIdByReferralCode,
+  needsFreshReferralCode,
+} from '../../../../core/users/referralCode.util.js';
+import { isReferralEnabled } from '../../../../core/platform/referralSwitch.service.js';
+import {
   consumeUserSignupSession,
   requireVerifiedUserSignupSession,
   startUserOtp,
@@ -1219,12 +1225,6 @@ const createUserSession = (user) => ({
   user: toUserPayload(user),
 });
 
-const generateUserReferralCode = (user) => {
-  const idPart = String(user?._id || '').slice(-6).toUpperCase();
-  const phonePart = String(user?.phone || '').slice(-4);
-  return `USR${phonePart}${idPart}`.replace(/\W/g, '');
-};
-
 const getUserReferralProgramSettings = async () => {
   const setting = await AdminBusinessSetting.findOne({ scope: 'default' }).lean();
   const userReferral = setting?.referral?.user || {};
@@ -1244,7 +1244,21 @@ const findUserByReferralCode = async (referralCode) => {
     return null;
   }
 
-  return User.findOne({ referralCode: normalizedCode });
+  const referrerId = await findUserIdByReferralCode(normalizedCode);
+  return referrerId ? User.findById(referrerId) : null;
+};
+
+// A code typed at sign-up. While the Global admin has referral switched off it is simply ignored.
+const resolveSignupReferrer = async (referralCode) => {
+  if (!referralCode || !(await isReferralEnabled())) {
+    return null;
+  }
+
+  const referrer = await findUserByReferralCode(referralCode);
+  if (!referrer) {
+    throw new ApiError(400, 'Invalid referral code');
+  }
+  return referrer;
 };
 
 const creditUserWalletByReference = async ({ userId, amount, title, referenceKey }) => {
@@ -1297,7 +1311,7 @@ const processSignupReferralRewards = async ({ user, referrer }) => {
   }
 
   const settings = await getUserReferralProgramSettings();
-  if (!settings.enabled || settings.amount <= 0) {
+  if (!settings.enabled || settings.amount <= 0 || !(await isReferralEnabled())) {
     return;
   }
 
@@ -1342,12 +1356,8 @@ export const registerUser = async (req, res) => {
 
   const existingUser = await User.findOne({ phone });
 
-  const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
+  const referrer = await resolveSignupReferrer(referralCode);
   const employee = employeeCode ? await findActiveEmployeeByCode(employeeCode) : null;
-
-  if (referralCode && !referrer) {
-    throw new ApiError(400, 'Invalid referral code');
-  }
 
   if (employeeCode && !employee) {
     throw new ApiError(400, 'Invalid employee code');
@@ -1374,9 +1384,8 @@ export const registerUser = async (req, res) => {
     ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { new: true, runValidators: true })
     : await User.create(userPayload);
 
-  if (!String(user.referralCode || '').trim()) {
-    user.referralCode = generateUserReferralCode(user);
-    await user.save();
+  if (needsFreshReferralCode(user.referralCode)) {
+    user.referralCode = await ensureUserReferralCode(user._id, user.referralCode);
   }
 
   if (referrer?._id) {
@@ -1467,12 +1476,8 @@ export const signupUser = async (req, res) => {
 
   const existingUser = await User.findOne({ phone });
 
-  const referrer = referralCode ? await findUserByReferralCode(referralCode) : null;
+  const referrer = await resolveSignupReferrer(referralCode);
   const employee = employeeCode ? await findActiveEmployeeByCode(employeeCode) : null;
-
-  if (referralCode && !referrer) {
-    throw new ApiError(400, 'Invalid referral code');
-  }
 
   if (employeeCode && !employee) {
     throw new ApiError(400, 'Invalid employee code');
@@ -1499,9 +1504,8 @@ export const signupUser = async (req, res) => {
     ? await User.findByIdAndUpdate(existingUser._id, { $set: userPayload }, { new: true, runValidators: true })
     : await User.create(userPayload);
 
-  if (!String(user.referralCode || '').trim()) {
-    user.referralCode = generateUserReferralCode(user);
-    await user.save();
+  if (needsFreshReferralCode(user.referralCode)) {
+    user.referralCode = await ensureUserReferralCode(user._id, user.referralCode);
   }
 
   if (referrer?._id) {
@@ -1674,9 +1678,8 @@ export const getCurrentUser = async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
-  if (!String(user.referralCode || '').trim()) {
-    user.referralCode = generateUserReferralCode(user);
-    await user.save();
+  if (needsFreshReferralCode(user.referralCode)) {
+    user.referralCode = await ensureUserReferralCode(user._id, user.referralCode);
   }
 
   const subscriptionSummary = await getUserSubscriptionSummary(user._id);

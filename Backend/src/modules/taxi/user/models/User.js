@@ -165,6 +165,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+      index: true,
     },
     referredBy: {
       type: mongoose.Schema.Types.ObjectId,

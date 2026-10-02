@@ -19,6 +19,8 @@ import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
+import { FoodReferralLog } from '../../food/admin/models/referralLog.model.js';
+import { isReferralEnabled } from '../../../core/platform/referralSwitch.service.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -210,6 +212,16 @@ const processCompletedRideReferralReward = async (ride) => {
     .lean();
 
   if (!referredUser?.referredBy || referredUser?.referralRewardGrantedAt) {
+    return;
+  }
+
+  // Global admin switched the customer referral system off.
+  if (!(await isReferralEnabled())) {
+    return;
+  }
+
+  // The friend signed up through Food and the referrer was already paid there - never pay twice for one friend.
+  if (await FoodReferralLog.exists({ refereeId: ride.userId, role: 'USER', status: 'credited' })) {
     return;
   }
 

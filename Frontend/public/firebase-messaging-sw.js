@@ -74,12 +74,36 @@ async function hasVisibleClientForTarget(payload = {}) {
   return Boolean(visibleClient);
 }
 
+// The page registers this worker as /firebase-messaging-sw.js?apiKey=...&projectId=... (see
+// src/shared/utils/firebaseServiceWorkerUrl.js), so the config is available the moment the worker starts - also
+// when a push wakes it with no page open - and there is nothing to download.
+function readFirebaseWebConfigFromUrl() {
+  try {
+    const query = new URL(self.location.href).searchParams;
+    const config = {
+      apiKey: sanitize(query.get("apiKey")),
+      authDomain: sanitize(query.get("authDomain")),
+      projectId: sanitize(query.get("projectId")),
+      appId: sanitize(query.get("appId")),
+      messagingSenderId: sanitize(query.get("messagingSenderId")),
+      storageBucket: sanitize(query.get("storageBucket")),
+      measurementId: sanitize(query.get("measurementId")),
+    };
+    if (config.apiKey && config.projectId && config.appId && config.messagingSenderId) {
+      return config;
+    }
+  } catch {
+    // fall through to the backend lookup
+  }
+  return null;
+}
+
 async function loadFirebaseWebConfig() {
-  const candidates = [
-    "/api/v1/food/public/env",
-    "/api/v1/env/public",
-    "/api/env/public",
-  ];
+  const fromUrl = readFirebaseWebConfigFromUrl();
+  if (fromUrl) return fromUrl;
+
+  // Older registrations without a config in the URL: ask the backend (the only real endpoint).
+  const candidates = ["/api/v1/food/public/env"];
   for (const url of candidates) {
     try {
       const response = await fetch(url, { cache: "no-store" });

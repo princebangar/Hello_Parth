@@ -14,10 +14,9 @@ import {
 import AdminModulesKeepAlive, { AdminKeepAliveSlot } from './AdminModulesKeepAlive.jsx'
 import AppRouteFallback from '@/shared/components/AppRouteFallback'
 import { loadAuthApp, preloadAuthAppWhenIdle } from '@/shared/utils/preloadLogin.js'
+import { FoodApp, TaxiApp } from '@/shared/utils/appChunks.js'
 
 // Lazy load the Food service module (Quick-spicy app)
-const FoodApp = lazy(() => import('../modules/Food/routes'))
-const TaxiApp = lazy(() => import('../modules/Taxi/TaxiApp'))
 const AuthApp = lazy(loadAuthApp)
 const PlatformLanding = lazy(() => import('../modules/Landing/pages/PlatformLanding'))
 

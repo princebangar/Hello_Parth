@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Toaster } from 'sonner'
+import './shared/utils/legacyStorageMigration.js' // moves data saved under the old name to the helloparth names (first import: runs before anything reads storage)
 import App from './app/App.jsx'
 import { isModuleAuthenticated } from './shared/utils/moduleAuth.js'
 import { syncThemeForPath } from './shared/utils/theme.js'

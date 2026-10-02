@@ -8,6 +8,7 @@ import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/modul
 import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo, CONSUMER_GUEST_HOME, prefetchConsumerAppsWhenIdle } from "@/shared/utils/activeModule.js"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { prefetchPolicyContentWhenIdle } from "@/shared/utils/policyPages"
+import { buildMessagingServiceWorkerUrl } from "@/shared/utils/firebaseServiceWorkerUrl"
 
 // Typed number survives a trip to Terms / Privacy / Support and back.
 const PHONE_DRAFT_KEY = "login_phone_draft"
@@ -203,7 +204,7 @@ export default function UnifiedOTPFastLogin() {
     }
 
     const app = getApps()[0] || initializeApp(firebaseConfig)
-    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js")
+    const registration = await navigator.serviceWorker.register(buildMessagingServiceWorkerUrl(firebaseConfig))
     const messaging = getMessaging(app)
     const token = await getToken(messaging, {
       vapidKey,
