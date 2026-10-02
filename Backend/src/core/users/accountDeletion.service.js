@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { FoodUser } from './user.model.js';
 import { FoodRefreshToken } from '../refreshTokens/refreshToken.model.js';
+import { invalidateUserActive } from '../auth/userActiveCache.js';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -16,6 +17,7 @@ import { logger } from '../../utils/logger.js';
 
 export async function softDeleteSharedUser(userId, { reason = 'user_delete_request' } = {}) {
   if (!mongoose.Types.ObjectId.isValid(userId)) return null;
+  invalidateUserActive(userId);
 
   const updated = await FoodUser.findOneAndUpdate(
     { _id: userId, deletedAt: null },
@@ -62,6 +64,7 @@ export async function findDeletedUserByPhone(phone) {
 /** Restores a soft-deleted account exactly as it was left (no data wipe). */
 export async function recoverSharedUser(userId) {
   if (!mongoose.Types.ObjectId.isValid(userId)) return null;
+  invalidateUserActive(userId);
 
   return FoodUser.findOneAndUpdate(
     { _id: userId, deletedAt: { $ne: null } },

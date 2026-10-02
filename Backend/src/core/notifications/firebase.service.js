@@ -509,7 +509,7 @@ export const sendNotificationToOwner = async ({ ownerType, ownerId, payload, pla
     const enrichedPayload = { ...payload };
 
     // 🏷️ Add Highlighter Prefix to the Title
-    // Zomato/Swiggy style: keep notification title as is without emoji prefixes or custom highlighter
+    // Hello Parth style: keep notification title as is without emoji prefixes or custom highlighter
     // If title is missing, fallback to notification.title or a generic placeholder
     if (!enrichedPayload.title && enrichedPayload.notification?.title) {
         enrichedPayload.title = enrichedPayload.notification.title;

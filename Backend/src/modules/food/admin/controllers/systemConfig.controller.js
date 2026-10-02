@@ -2,6 +2,7 @@ import { FoodSystemConfig } from '../models/systemConfig.model.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import { invalidateMaintenanceModeCache } from '../services/maintenanceMode.service.js';
 import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
+import { isReferralEnabled } from '../../../../core/platform/referralSwitch.service.js';
 
 // Customization toggles live in FoodSystemConfig as individual keys.
 const CUSTOMIZATION_TOGGLES = [
@@ -77,9 +78,10 @@ export async function getCustomizationSettings(req, res) {
 // What the customer apps see: Food's own "Online Payment" toggle AND the Global Razorpay switch.
 export async function getPublicCustomizationSettings(req, res) {
     const keys = getCustomizationAllowlist();
-    const [docs, razorpayActive] = await Promise.all([
+    const [docs, razorpayActive, referralEnabled] = await Promise.all([
         FoodSystemConfig.find({ key: { $in: keys } }).lean(),
-        isPaymentGatewayActive('razorpay')
+        isPaymentGatewayActive('razorpay'),
+        isReferralEnabled()
     ]);
     const map = new Map(docs.map(d => [d.key, d]));
 
@@ -88,6 +90,8 @@ export async function getPublicCustomizationSettings(req, res) {
         data[t.key] = resolveToggleValue(map.get(t.key) || null, t.defaultValue);
     }
     data.online_payment_enabled = data.online_payment_enabled === true && razorpayActive;
+    // Global admin > Customization Settings > Referral System (Food + Taxi wallets)
+    data.referral_enabled = referralEnabled;
 
     res.json({ success: true, data });
 }

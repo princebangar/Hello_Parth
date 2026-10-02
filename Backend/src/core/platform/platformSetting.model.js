@@ -18,6 +18,10 @@ const platformSettingSchema = new mongoose.Schema(
       razorpay: { type: gatewaySwitchSchema, default: () => ({ enabled: true }) },
       phonepe: { type: gatewaySwitchSchema, default: () => ({ enabled: false }) },
     },
+    // Customer referral programme (Food + Taxi wallets). On unless the Global admin switches it off.
+    referral: {
+      enabled: { type: Boolean, default: true },
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
   },
   { timestamps: true, collection: 'platform_settings', minimize: false },

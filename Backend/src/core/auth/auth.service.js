@@ -21,6 +21,8 @@ import { logger } from "../../utils/logger.js";
 import { sendAdminResetOtpEmail } from "../../utils/email.js";
 import mongoose from "mongoose";
 import { creditReferralReward } from "../../modules/food/user/services/userWallet.service.js";
+import { ensureUserReferralCode, findUserIdByReferralCode, needsFreshReferralCode } from "../users/referralCode.util.js";
+import { isReferralEnabled } from "../platform/referralSwitch.service.js";
 
 const ROLES = {
   USER: "USER",
@@ -227,18 +229,16 @@ export const verifyUserOtpAndLogin = async (
     }
   }
 
-  // Ensure referralCode exists (used for share links on older accounts).
-  if (!userDoc.referralCode) {
-    userDoc.referralCode = String(userDoc._id);
-    await userDoc.save();
-  }
+  // Ensure a proper referral code exists (older accounts only had their database id as the code).
+  userDoc.referralCode = await ensureUserReferralCode(userDoc._id, userDoc.referralCode);
 
   // Referral crediting: only for brand new accounts.
   const refRaw = typeof ref === "string" ? String(ref).trim() : "";
-  if (isNewUser && refRaw) {
+  if (isNewUser && refRaw && !userDoc.referredBy && (await isReferralEnabled())) {
     try {
-      if (mongoose.Types.ObjectId.isValid(refRaw)) {
-        const referrerId = new mongoose.Types.ObjectId(refRaw);
+      const referrerIdValue = await findUserIdByReferralCode(refRaw);
+      if (referrerIdValue) {
+        const referrerId = new mongoose.Types.ObjectId(referrerIdValue);
         if (String(referrerId) !== String(userDoc._id)) {
           const [referrer, settingsDoc] = await Promise.all([
             FoodUser.findById(referrerId).select("_id referralCount").lean(),
@@ -733,6 +733,9 @@ export const getProfile = async (userId, role) => {
   switch (role) {
     case ROLES.USER:
       profile = await FoodUser.findById(id).lean();
+      if (profile && needsFreshReferralCode(profile.referralCode)) {
+        profile.referralCode = await ensureUserReferralCode(id, profile.referralCode);
+      }
       break;
     case ROLES.ADMIN: {
       const adminDoc = await FoodAdmin.findById(id).select("-password").lean();
@@ -916,7 +919,7 @@ export const updateAdminProfile = async (userId, body) => {
   if (body.phone !== undefined) admin.phone = String(body.phone || "").trim();
   if (body.profileImage !== undefined)
     admin.profileImage = String(body.profileImage || "").trim();
-  // Normalize servicesAccess so legacy values (e.g. 'zomato') don't fail schema validation on save
+  // Normalize servicesAccess so legacy values (e.g. an old service name) don't fail schema validation on save
   if (Array.isArray(admin.servicesAccess)) {
     const valid = admin.servicesAccess.filter((s) =>
       ADMIN_SERVICES_ALLOWED.includes(s),
@@ -1141,8 +1144,8 @@ export const recoverAccount = async (recoveryToken) => {
  * The OLD account is NOT reused or wiped in place — its phone is freed up
  * (renamed) and it's left exactly as it was, still linked to its old orders/
  * rides/payments for admin records. A genuinely new document (new _id, zero
- * history) is created with the real phone number. This mirrors the original
- * RedGo-V2 implementation this project's Food module was merged from.
+ * history) is created with the real phone number. This follows the
+ * original behaviour of the Food module.
  */
 export const startFreshAccount = async (recoveryToken, { name } = {}) => {
   const { userId } = verifyRecoveryToken(recoveryToken);
