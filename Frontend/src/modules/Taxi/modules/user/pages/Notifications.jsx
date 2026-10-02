@@ -14,6 +14,10 @@ import {
 } from '../utils/realtimeNotificationStore';
 import toast from 'react-hot-toast';
 import { markTaxiNotificationsSeen } from '../utils/useTaxiNotificationUnread';
+import NumberSkeleton from '@/shared/components/NumberSkeleton';
+import { recallLastKnown, rememberLastKnown } from '@/shared/utils/lastKnown';
+
+const NOTIFICATIONS_KEY = 'taxi:notifications';
 
 const formatNotificationTime = (value) => {
   if (!value) return 'Recently';
@@ -48,8 +52,12 @@ const SkeletonCard = () => (
 
 const Notifications = () => {
   const navigate = useNavigate();
-  const [serverNotifications, setServerNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // The last list seen shows at once (and its count); it is refreshed in the background. Nothing seen yet -> skeletons.
+  const [serverNotifications, setServerNotifications] = useState(() => {
+    const remembered = recallLastKnown(NOTIFICATIONS_KEY);
+    return Array.isArray(remembered) ? remembered : [];
+  });
+  const [loading, setLoading] = useState(() => !Array.isArray(recallLastKnown(NOTIFICATIONS_KEY)));
   const [error, setError] = useState(null);
   const [clearing, setClearing] = useState(false);
 
@@ -66,11 +74,13 @@ const Notifications = () => {
   }, [serverNotifications]);
 
   const fetchNotifications = async () => {
-    setLoading(true);
+    setLoading(!Array.isArray(recallLastKnown(NOTIFICATIONS_KEY)));
     setError(null);
     try {
       const response = await userAuthService.getNotifications();
-      setServerNotifications(response?.data?.results || []);
+      const results = response?.data?.results || [];
+      setServerNotifications(results);
+      rememberLastKnown(NOTIFICATIONS_KEY, results);
     } catch (err) {
       setError(err?.message || 'Failed to load notifications');
     } finally {
@@ -107,6 +117,7 @@ const Notifications = () => {
       await userAuthService.clearAllNotifications();
       clearRealtimeNotifications();
       setServerNotifications([]);
+      rememberLastKnown(NOTIFICATIONS_KEY, []);
       toast.success('All notifications cleared', {
         icon: <CheckCircle2 size={18} className="text-emerald-500" />,
         className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-emerald-50 bg-white',
@@ -159,7 +170,7 @@ const Notifications = () => {
             <h1 className={`text-[19px] font-black tracking-tight leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Notifications</h1>
           </div>
           <div className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm ${isDark ? 'bg-yellow-400 text-slate-950' : 'bg-slate-900 text-white'}`}>
-            {totalCount}
+            {loading ? <NumberSkeleton width="1.2em" /> : totalCount}
           </div>
         </div>
       </header>

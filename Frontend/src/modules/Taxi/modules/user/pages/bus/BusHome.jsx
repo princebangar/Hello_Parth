@@ -16,6 +16,8 @@ import {
   X,
 } from 'lucide-react';
 import userBusService from '../../services/busService';
+import NumberSkeleton from '@/shared/components/NumberSkeleton';
+import { recallLastKnown, rememberLastKnown } from '@/shared/utils/lastKnown';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 // ... removed BottomNavbar import ...
 
@@ -98,6 +100,14 @@ const getRouteKey = (route, index) => {
   return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || index}`;
 };
 
+// The route list (and so the Routes / Cities counts and Popular Routes) is remembered: a later visit shows it at once and
+// refreshes it quietly. The very first time the counts show a skeleton, never a "0" that then jumps.
+const BUS_ROUTES_KEY = 'taxi:bus:routes';
+const rememberedRoutes = () => {
+  const routes = recallLastKnown(BUS_ROUTES_KEY);
+  return Array.isArray(routes) ? routes : null;
+};
+
 const BusHome = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -109,7 +119,8 @@ const BusHome = () => {
   const [toCity, setToCity] = useState('');
   const [date, setDate] = useState(getTodayDate());
   const [error, setError] = useState('');
-  const [routeSuggestions, setRouteSuggestions] = useState([]);
+  const [routeSuggestions, setRouteSuggestions] = useState(() => rememberedRoutes() || []);
+  const [routesKnown, setRoutesKnown] = useState(() => Boolean(rememberedRoutes()));
   const [routesLoading, setRoutesLoading] = useState(false);
   const [routesError, setRoutesError] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -124,12 +135,16 @@ const BusHome = () => {
     let active = true;
 
     const loadRoutes = async () => {
-      setRoutesLoading(true);
+      // with a remembered list on screen this is a quiet refresh - no spinner
+      setRoutesLoading(!rememberedRoutes());
       setRoutesError('');
       try {
         const response = await userBusService.getRoutes();
         if (!active) return;
-        setRouteSuggestions(Array.isArray(response?.data?.results) ? response.data.results : []);
+        const routes = Array.isArray(response?.data?.results) ? response.data.results : [];
+        setRouteSuggestions(routes);
+        setRoutesKnown(true);
+        rememberLastKnown(BUS_ROUTES_KEY, routes);
       } catch (err) {
         if (!active) return;
         setRoutesError(err?.message || 'Failed to load route suggestions');
@@ -346,11 +361,11 @@ const BusHome = () => {
           <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
             <div>
               <p className="text-[10px] font-bold uppercase text-slate-400">Routes</p>
-              <p className="mt-1 text-lg font-bold">{routeSuggestions.length || 0}</p>
+              <p className="mt-1 text-lg font-bold">{routesKnown ? routeSuggestions.length : routesError ? 0 : <NumberSkeleton />}</p>
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase text-slate-400">Cities</p>
-              <p className="mt-1 text-lg font-bold">{cityOptions.length || 0}</p>
+              <p className="mt-1 text-lg font-bold">{routesKnown ? cityOptions.length : routesError ? 0 : <NumberSkeleton />}</p>
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase text-slate-400">Date</p>
@@ -530,7 +545,7 @@ const BusHome = () => {
             ))}
           </div>
 
-          {!routesLoading && !featuredRoutes.length && !routesError && (
+          {routesKnown && !routesLoading && !featuredRoutes.length && !routesError && (
             <p className="text-center py-8 text-sm font-medium text-slate-400">No active routes found.</p>
           )}
 

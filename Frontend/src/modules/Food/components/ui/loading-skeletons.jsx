@@ -1,6 +1,6 @@
 import { Skeleton } from "@food/components/ui/skeleton"
 import { cn } from "@food/utils/utils"
-import { BootShellHeader, shouldShowBootShell } from "@/shared/components/BootShell"
+import { BootShellBody, BootShellHeader, shouldShowBootShell } from "@/shared/components/BootShell"
 
 const DEFAULT_CARD_COUNT = 4
 
@@ -328,16 +328,12 @@ function AppShellSkeleton({ className }) {
   // the same header index.html paints before any script runs - and only the part below it is a skeleton.
   const shellVertical = shouldShowBootShell()
   if (shellVertical) {
+    // The body is drawn like the real Taxi / Food home and is the very same markup index.html paints first
+    // (".bs-body"), so nothing changes shape between the plain-HTML stage, this one and the real screen.
     return (
-      <LoadingSkeletonRegion label="Loading application" className={cn("min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8ef,transparent_34%),linear-gradient(180deg,#fffdf9_0%,#fff8f1_100%)] dark:bg-[linear-gradient(180deg,#0b0b0b_0%,#151515_100%)]", className)}>
+      <LoadingSkeletonRegion label="Loading application" className={cn("min-h-screen", shellVertical === "taxi" ? "bs-page-taxi" : "bs-page-food", className)}>
         <BootShellHeader vertical={shellVertical} />
-        <div className="space-y-5 px-5 pt-6">
-          <div className="space-y-3">
-            <Skeleton className="h-7 w-52 rounded-full" />
-            <CategoryChipRowSkeleton count={5} />
-          </div>
-          <RestaurantGridSkeleton count={3} />
-        </div>
+        <BootShellBody vertical={shellVertical} />
       </LoadingSkeletonRegion>
     )
   }

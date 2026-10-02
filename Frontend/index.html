@@ -23,6 +23,15 @@
           // correct it, leaving native form bits (text caret, hover I-beam cursor) rendered in
           // their dark-mode colour on an all-white admin page.
           var path = window.location.pathname || '';
+          // The installed app runs this site in a WebView with "#/route" addresses: the path is then only the app's fixed
+          // start page (often /food/user), the screen the person is on is in the hash. With no hash yet, index.jsx still
+          // has to pick the start screen, so paint nothing screen-specific.
+          var ua = (navigator.userAgent || '').toLowerCase();
+          var nativeShell = !!(window.flutter_inappwebview || window.ReactNativeWebView || window.location.protocol === 'file:' || ua.indexOf(' wv') > -1 || ua.indexOf('; wv') > -1);
+          if (nativeShell) {
+            var hashRoute = window.location.hash || '';
+            path = hashRoute.indexOf('#/') === 0 ? (hashRoute.slice(1).split('?')[0] || '/') : '/';
+          }
           var isUserAppPath = path.indexOf('/food/') === 0 || path.indexOf('/taxi/user') === 0;
           var theme = 'light';
           if (isUserAppPath) {
@@ -51,7 +60,14 @@
           var policy = /^\/(?:food\/user\/profile\/(?:terms|privacy|support-info|refund|shipping|cancellation)|food\/restaurant\/(?:terms|privacy|help-content|help-centre\/support)|food\/delivery\/(?:terms|privacy|profile\/terms|profile\/privacy|help\/content)|taxi\/(?:driver|owner)\/legal\/(?:terms|privacy|support)|taxi\/(?:terms|terms-and-conditions|privacy|privacy-policy|refund|cancellation))\/?$/.test(path);
           var partnerPortal = /^\/food\/(?:restaurant|delivery|admin)(?:\/|$)/.test(path);
           var consumerApp = (path === '/' && signedIn) || path.indexOf('/taxi/user') === 0 || (/^\/food(?:\/|$)/.test(path) && !partnerPortal);
-          root.setAttribute('data-boot', policy ? 'policy' : consumerApp ? 'app' : 'plain');
+          // The home screens (Taxi / Food home and Food's other browse tabs) get the home skeleton. A Taxi screen
+          // (Rides, Profile, Support ...) gets its own placeholder right away - the same drawing React shows next, so there
+          // is one skeleton, never a blank page and never two different ones. Other screens keep the default skeleton.
+          var bootPath = path.replace(/\/+$/, '') || '/';
+          var homeLike = (path === '/' && signedIn) || /^\/(?:taxi\/user|food|food\/user|food\/user\/home|food\/user\/(?:takeaway|dining|under-250))$/.test(bootPath);
+          var taxiPage = consumerApp && !homeLike && bootPath.indexOf('/taxi/user/') === 0;
+          root.setAttribute('data-boot', policy ? 'policy' : taxiPage ? 'taxi-page' : consumerApp ? 'app' : 'plain');
+          if (taxiPage) window.__bootTaxiPath = bootPath;
 
           // The Taxi / Food home on a phone: which header to paint, and the saved location to put in it.
           var homePath = path.replace(/\/+$/, '');
@@ -151,6 +167,32 @@
       /* Only the consumer app screens get the skeleton; everything else stays on the plain page colour. */
       html[data-boot="plain"] #boot-skeleton,
       html[data-boot="policy"] #boot-skeleton { display: none; }
+      /* a Taxi screen: only its own placeholder (#boot-taxi-page, drawn by window.__taxiPageSkeleton below) */
+      html[data-boot="taxi-page"] #boot-skeleton { padding: 0; max-width: none; background: #f1f4f9; }
+      html[data-boot="taxi-page"] #boot-skeleton > :not(#boot-taxi-page) { display: none !important; }
+      html[data-theme="dark"][data-boot="taxi-page"] #boot-skeleton { background: #0b0b0b; }
+
+      /* Taxi screen placeholders - shared with React (shared/components/TaxiPageSkeleton.jsx) */
+      .tp { min-height: 100vh; background: #f1f4f9; padding-bottom: 120px; box-sizing: border-box; font-size: 0; text-align: left; }
+      .tp-b { display: block; background: rgba(226, 232, 240, .9); border-radius: 999px; animation: boot-pulse 1.6s ease-in-out infinite; }
+      .tp-c { background: #fff; border-radius: 20px; box-shadow: 0 1px 4px rgba(15, 23, 42, .06); box-sizing: border-box; }
+      .tp-top { display: flex; align-items: flex-start; gap: 14px; padding: 20px 16px 16px; background: #fff; border-bottom: 1px solid rgba(226, 232, 240, .7); box-sizing: border-box; }
+      .tp-row { display: flex; align-items: center; gap: 12px; }
+      .tp-col { flex: 1; min-width: 0; }
+      .tp-stack { display: flex; flex-direction: column; gap: 12px; padding: 16px; box-sizing: border-box; }
+      .tp-chips { padding: 12px 16px; background: #fff; border-bottom: 1px solid rgba(226, 232, 240, .7); }
+      .tp-chips-in { display: flex; gap: 8px; overflow: hidden; padding: 5px; border-radius: 999px; background: #eef2f7; }
+      html[data-theme="dark"] .tp { background: #0b0b0b; }
+      html[data-theme="dark"] .tp-c, html[data-theme="dark"] .tp-top, html[data-theme="dark"] .tp-chips { background: #141414; box-shadow: none; border-color: rgba(255, 255, 255, .08); }
+      html[data-theme="dark"] .tp-b { background: rgba(255, 255, 255, .1); }
+      html[data-theme="dark"] .tp-chips-in { background: rgba(255, 255, 255, .05); }
+
+      /* default skeleton's restaurant cards - same as RestaurantCardSkeleton, so React's default skeleton only takes over */
+      .boot-rcard { margin-top: 16px; border-radius: 24px; border: 1px solid #efe2d4; background: #fff; overflow: hidden; }
+      .boot-rcard-img { height: 176px; background: radial-gradient(circle at top left, rgba(235, 89, 14, .2), transparent 25%), linear-gradient(135deg, #fff7ee 0%, #ffe7cf 100%); }
+      .boot-rcard-body { padding: 16px; }
+      html[data-theme="dark"] .boot-rcard { border-color: rgba(255, 255, 255, .1); background: #141414; }
+      html[data-theme="dark"] .boot-rcard-img { background: linear-gradient(135deg, #262626 0%, #181818 100%); }
 
       /* Terms / Privacy / Support: the same loader the React screen shows (shared/components/PolicyPageLoader.jsx). */
       #boot-loader { display: none; }
@@ -177,8 +219,7 @@
       @media (max-width: 767px) {
         html[data-boot="app"][data-vertical] .boot-shell { display: block; }
         html[data-boot="app"][data-vertical] #boot-skeleton { padding: 0; }
-        html[data-boot="app"][data-vertical] #boot-skeleton > .boot-row { display: none; }
-        html[data-boot="app"][data-vertical] #boot-skeleton > :not(.boot-shell) { margin-left: 20px; margin-right: 20px; }
+        html[data-boot="app"][data-vertical] .boot-generic { display: none; }
         html[data-vertical="taxi"] .boot-only-taxi { display: block; }
         html[data-vertical="food"] .boot-only-food { display: block; }
       }
@@ -205,13 +246,147 @@
       .boot-search-pill { display: block; height: 46px; width: 76%; border-radius: 16px; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
       .boot-map { height: 200px; border-radius: 0 !important; margin-left: 0 !important; margin-right: 0 !important; background: rgba(203, 213, 225, .8); }
       html[data-theme="dark"] .boot-map { background: rgba(255,255,255,.08); }
+
+      /* ---- Body of the Taxi / Food home skeleton (phones), drawn like the real screen ------------------------------
+         Same markup and sizes as BodySkeleton in shared/components/BootShell.jsx, which React renders when it takes over,
+         so the hand-off changes nothing on screen and the real content simply replaces it. "bs-on" shows a body whatever
+         the <html> flags say (React uses it). */
+      .bs-body { display: none; box-sizing: border-box; padding: 0 16px 120px; font-size: 0; }
+      .bs-on { display: block !important; }
+      .bs-b { display: block; background: rgba(226, 232, 240, .9); border-radius: 999px; animation: boot-pulse 1.6s ease-in-out infinite; }
+      .bs-c { background: #fff; border-radius: 20px; box-shadow: 0 1px 4px rgba(15, 23, 42, .06); box-sizing: border-box; }
+      .bs-flex { display: flex; align-items: center; }
+      .bs-row { display: flex; gap: 12px; overflow: hidden; }
+      .bs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+      .bs-nav { position: fixed; left: 24px; right: 24px; bottom: 25px; height: 70px; border-radius: 35px; background: #fff; box-shadow: 0 8px 30px rgba(15, 23, 42, .15); display: flex; align-items: center; justify-content: space-around; padding: 0 12px; box-sizing: border-box; z-index: 5; }
+      .bs-nav > div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .bs-page-taxi { background: #f1f4f9 !important; }
+      .bs-page-food { background: #fff !important; }
+      html[data-theme="dark"] .bs-page-taxi, html[data-theme="dark"] .bs-page-food { background: #0b0b0b !important; }
+      html[data-theme="dark"] .bs-b { background: rgba(255, 255, 255, .1); }
+      html[data-theme="dark"] .bs-c, html[data-theme="dark"] .bs-nav { background: #141414; box-shadow: none; }
+      @media (max-width: 767px) {
+        html[data-boot="app"][data-vertical="taxi"] #boot-skeleton { background: #f1f4f9; }
+        html[data-boot="app"][data-vertical="food"] #boot-skeleton { background: #fff; }
+        html[data-theme="dark"][data-boot="app"][data-vertical] #boot-skeleton { background: #0b0b0b; }
+        html[data-boot="app"][data-vertical="taxi"] .bs-taxi,
+        html[data-boot="app"][data-vertical="food"] .bs-food { display: block; }
+      }
     </style>
+    <script>
+      // The Taxi screens' loading placeholders (Rides, Profile, Support, Wallet, Bus, any other page), drawn in ONE place.
+      // Used here for the very first paint after a refresh (before any app JavaScript has arrived) and by React too
+      // (shared/components/TaxiPageSkeleton.jsx calls these same functions), so the first paint and React's placeholder
+      // are identical and only one skeleton is ever seen. Plain ES5 + inline styles: nothing else has loaded yet.
+      (function () {
+        function b(w, h, extra) {
+          return '<i class="tp-b" style="width:' + w + ';height:' + h + 'px;' + (extra || '') + '"></i>';
+        }
+        function card(inner, style) {
+          return '<div class="tp-c" style="' + (style || '') + '">' + inner + '</div>';
+        }
+        function top(sub) {
+          return '<div class="tp-top">' + b('24px', 24, 'margin-top:2px;flex:none') + '<div class="tp-col">' +
+            (sub ? b('84px', 10, 'margin-bottom:8px') : '') + b('170px', 22, 'border-radius:8px') +
+            (sub ? b('220px', 10, 'margin-top:9px') : '') + '</div></div>';
+        }
+        function listItem() {
+          return card('<div class="tp-row">' + b('48px', 48, 'border-radius:16px;flex:none') + '<div class="tp-col">' +
+            b('60%', 14) + b('82%', 10, 'margin-top:9px') + b('42%', 10, 'margin-top:9px') + '</div>' +
+            b('54px', 22, 'flex:none') + '</div>', 'padding:16px');
+        }
+        function repeat(fn, n) {
+          var s = '';
+          for (var i = 0; i < n; i++) s += fn(i);
+          return s;
+        }
+        function rows(n) {
+          return card(repeat(function (i) {
+            return '<div class="tp-row" style="padding:14px 16px' + (i ? ';border-top:1px solid rgba(226,232,240,.6)' : '') + '">' +
+              b('38px', 38, 'border-radius:12px;flex:none') + '<div class="tp-col">' + b('46%', 13) + b('64%', 9, 'margin-top:8px') + '</div>' +
+              b('8px', 14, 'flex:none;border-radius:4px') + '</div>';
+          }, n), 'overflow:hidden');
+        }
+        function optionCard() {
+          return card('<div class="tp-row">' + b('44px', 44, 'border-radius:14px;flex:none') + '<div class="tp-col">' + b('40%', 14) +
+            b('58%', 10, 'margin-top:8px') + '</div>' + b('8px', 14, 'flex:none;border-radius:4px') + '</div>', 'padding:16px');
+        }
+        function label(w) {
+          return b(w, 10, 'margin:8px 0 0 4px');
+        }
+        function stack(inner, style) {
+          return '<div class="tp-stack" style="' + (style || '') + '">' + inner + '</div>';
+        }
+        function chips() {
+          var widths = [56, 64, 76, 48, 72];
+          return '<div class="tp-chips"><div class="tp-chips-in">' + repeat(function (i) {
+            return b(widths[i] + 'px', 34, 'flex:none' + (i ? '' : ';background:rgba(250,204,21,.55)'));
+          }, widths.length) + '</div></div>';
+        }
+        var pages = {
+          activity: function () { return top(true) + chips() + stack(repeat(listItem, 4)); },
+          // just the list - the Rides screen's own "loading your trips" state, under its real header and filters
+          'activity-list': function () { return stack(repeat(listItem, 4), 'padding:0'); },
+          profile: function () {
+            var stats = repeat(function () {
+              return '<div class="tp-col">' + b('46px', 9, 'margin:0 auto') + b('30px', 16, 'margin:9px auto 0') + '</div>';
+            }, 3);
+            return '<div class="tp-top" style="padding:18px 16px 14px">' + b('96px', 24, 'border-radius:8px') + '</div>' + stack(
+              card('<div class="tp-row">' + b('64px', 64, 'border-radius:20px;flex:none') + '<div class="tp-col">' + b('130px', 18) +
+                b('120px', 10, 'margin-top:9px') + b('70px', 10, 'margin-top:9px') + '</div></div>' +
+                '<div class="tp-row" style="margin-top:18px;padding-top:16px;border-top:1px solid rgba(226,232,240,.6)">' + stats + '</div>', 'padding:18px') +
+              rows(3) + label('80px') + rows(3));
+          },
+          support: function () { return top(true) + stack(repeat(optionCard, 3) + label('110px') + rows(4)); },
+          wallet: function () {
+            return top(false) + stack(
+              card(b('96px', 10) + b('120px', 30, 'margin-top:10px;border-radius:10px') + b('100%', 44, 'margin-top:22px;border-radius:14px'), 'padding:18px') +
+              card('<div class="tp-row">' + b('40px', 40, 'border-radius:12px;flex:none') + '<div class="tp-col">' + b('40%', 13) + b('70%', 9, 'margin-top:8px') + '</div></div>', 'padding:14px 16px') +
+              label('130px') + rows(3));
+          },
+          bus: function () {
+            var stats = repeat(function () {
+              return '<div class="tp-col">' + b('40px', 9) + b('28px', 16, 'margin-top:9px') + '</div>';
+            }, 3);
+            return top(true) + stack(
+              card('<div class="tp-row"><div class="tp-col">' + b('55%', 18) + b('80%', 10, 'margin-top:10px') + '</div>' + b('44px', 44, 'border-radius:14px;flex:none') + '</div>' +
+                '<div class="tp-row" style="margin-top:18px;padding-top:16px;border-top:1px solid rgba(226,232,240,.6)">' + stats + '</div>', 'padding:18px') +
+              card(b('40%', 16) + b('100%', 56, 'margin-top:18px;border-radius:16px') + b('100%', 56, 'margin-top:12px;border-radius:16px') +
+                b('100%', 48, 'margin-top:12px;border-radius:16px'), 'padding:18px'));
+          },
+          page: function () { return top(false) + stack(repeat(listItem, 3)); }
+        };
+        window.__taxiSkeletonVariant = function (path) {
+          var p = String(path || '').split('?')[0];
+          while (p.length > 1 && p.charAt(p.length - 1) === '/') p = p.slice(0, -1);
+          var ends = function (s) { return p.length >= s.length && p.slice(-s.length) === s; };
+          if (ends('/activity')) return 'activity';
+          if (ends('/profile')) return 'profile';
+          if (ends('/support')) return 'support';
+          if (ends('/wallet')) return 'wallet';
+          if (ends('/bus')) return 'bus';
+          return 'page';
+        };
+        window.__taxiPageSkeleton = function (variant) {
+          var draw = pages[variant] || pages.page;
+          return variant === 'activity-list' ? draw() : '<div class="tp">' + draw() + '</div>';
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"><div id="boot-loader" aria-hidden="true">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#CB202D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       <p>Loading...</p>
-    </div><div id="boot-skeleton" aria-hidden="true">
+    </div><div id="boot-skeleton" aria-hidden="true"><div id="boot-taxi-page"></div><script>
+      // drawn here, straight after its slot, so the very first paint already has it (not an empty page first)
+      (function () {
+        try {
+          if (document.documentElement.getAttribute('data-boot') !== 'taxi-page' || !window.__taxiPageSkeleton) return;
+          document.getElementById('boot-taxi-page').innerHTML = window.__taxiPageSkeleton(window.__taxiSkeletonVariant(window.__bootTaxiPath));
+        } catch (e) {}
+      })();
+    </script>
       <div class="boot-shell" aria-hidden="true">
         <div class="boot-hdr">
           <div class="boot-top">
@@ -233,6 +408,30 @@
         </div>
         <div class="boot-only-taxi boot-map boot-bar"></div>
       </div>
+      <div class="bs-body bs-taxi">
+        <div class="bs-c bs-flex" style="margin-top:27px;height:60px;border-radius:16px;gap:12px;padding:0 12px"><i class="bs-b" style="width:36px;height:36px"></i><i class="bs-b" style="width:170px;height:14px"></i></div>
+        <i class="bs-b" style="width:170px;height:18px;margin:10px 0 12px;border-radius:9px"></i>
+        <div class="bs-grid">
+          <div class="bs-c bs-flex" style="height:94px;justify-content:space-between;padding:0 14px 0 18px"><div><i class="bs-b" style="width:64px;height:9px"></i><i class="bs-b" style="width:88px;height:16px;margin-top:10px"></i></div><i class="bs-b" style="width:56px;height:56px;border-radius:18px"></i></div>
+          <div class="bs-c bs-flex" style="height:94px;justify-content:space-between;padding:0 14px 0 18px"><div><i class="bs-b" style="width:70px;height:9px"></i><i class="bs-b" style="width:80px;height:16px;margin-top:10px"></i></div><i class="bs-b" style="width:56px;height:56px;border-radius:18px"></i></div>
+          <div class="bs-c bs-flex" style="height:94px;justify-content:space-between;padding:0 14px 0 18px"><div><i class="bs-b" style="width:76px;height:9px"></i><i class="bs-b" style="width:96px;height:16px;margin-top:10px"></i></div><i class="bs-b" style="width:56px;height:56px;border-radius:18px"></i></div>
+          <div class="bs-c bs-flex" style="height:94px;justify-content:space-between;padding:0 14px 0 18px"><div><i class="bs-b" style="width:60px;height:9px"></i><i class="bs-b" style="width:84px;height:16px;margin-top:10px"></i></div><i class="bs-b" style="width:56px;height:56px;border-radius:18px"></i></div>
+        </div>
+        <i class="bs-b" style="width:90px;height:18px;margin:23px 0 14px;border-radius:9px"></i>
+        <div class="bs-row"><div class="bs-c" style="width:88px;height:98px;flex:none"></div><div class="bs-c" style="width:88px;height:98px;flex:none"></div><div class="bs-c" style="width:88px;height:98px;flex:none"></div><div class="bs-c" style="width:88px;height:98px;flex:none"></div></div>
+        <div class="bs-nav"><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div></div>
+      </div>
+      <div class="bs-body bs-food">
+        <div class="bs-row" style="margin-top:17px;gap:16px;padding-left:8px"><div style="width:80px;flex:none"><i class="bs-b" style="width:80px;height:80px"></i><i class="bs-b" style="width:48px;height:9px;margin:12px auto 0"></i></div><div style="width:80px;flex:none"><i class="bs-b" style="width:80px;height:80px"></i><i class="bs-b" style="width:48px;height:9px;margin:12px auto 0"></i></div><div style="width:80px;flex:none"><i class="bs-b" style="width:80px;height:80px"></i><i class="bs-b" style="width:48px;height:9px;margin:12px auto 0"></i></div><div style="width:80px;flex:none"><i class="bs-b" style="width:80px;height:80px"></i><i class="bs-b" style="width:48px;height:9px;margin:12px auto 0"></i></div></div>
+        <div class="bs-row" style="margin-top:20px"><i class="bs-b" style="width:108px;height:37px;flex:none"></i><i class="bs-b" style="width:108px;height:37px;flex:none"></i><i class="bs-b" style="width:108px;height:37px;flex:none"></i><i class="bs-b" style="width:108px;height:37px;flex:none"></i></div>
+        <i class="bs-b" style="width:96px;height:9px;margin:20px 0 17px"></i>
+        <div class="bs-row"><i class="bs-b" style="width:88px;height:88px;border-radius:20px;flex:none"></i><i class="bs-b" style="width:88px;height:88px;border-radius:20px;flex:none"></i><i class="bs-b" style="width:88px;height:88px;border-radius:20px;flex:none"></i><i class="bs-b" style="width:88px;height:88px;border-radius:20px;flex:none"></i></div>
+        <i class="bs-b" style="width:190px;height:9px;margin:48px 0 12px"></i>
+        <i class="bs-b" style="width:220px;height:22px;border-radius:11px"></i>
+        <i class="bs-b" style="height:200px;margin-top:25px;border-radius:24px"></i>
+        <div class="bs-nav"><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div><div><i class="bs-b" style="width:22px;height:22px"></i><i class="bs-b" style="width:34px;height:8px"></i></div></div>
+      </div>
+      <div class="boot-generic">
       <div class="boot-row">
         <div class="boot-bar" style="width:160px;height:44px;border-radius:999px;"></div>
         <div class="boot-actions">
@@ -250,6 +449,9 @@
         <div class="boot-bar" style="height:36px;width:80px;border-radius:999px;"></div>
         <div class="boot-bar" style="height:36px;width:112px;border-radius:999px;"></div>
         <div class="boot-bar" style="height:36px;width:96px;border-radius:999px;"></div>
+      </div>
+      <div class="boot-rcard" style="margin-top:20px"><div class="boot-rcard-img"></div><div class="boot-rcard-body"><div class="boot-bar" style="height:20px;width:80%"></div><div class="boot-bar" style="height:16px;width:66%;margin-top:8px"></div><div class="boot-bar" style="height:16px;width:100%;margin-top:16px"></div><div class="boot-bar" style="height:16px;width:66%;margin-top:8px"></div></div></div>
+      <div class="boot-rcard"><div class="boot-rcard-img"></div><div class="boot-rcard-body"><div class="boot-bar" style="height:20px;width:80%"></div><div class="boot-bar" style="height:16px;width:66%;margin-top:8px"></div><div class="boot-bar" style="height:16px;width:100%;margin-top:16px"></div><div class="boot-bar" style="height:16px;width:66%;margin-top:8px"></div></div></div>
       </div>
     </div></div>
     <script>

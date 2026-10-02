@@ -12,6 +12,7 @@ import {
 import { isUnifiedAuthenticated } from '@/shared/utils/moduleAuth.js';
 import { prefetchWallet } from '@/shared/utils/walletPrefetch.js';
 import { whenAppSettled } from '@/shared/utils/whenSettled.js';
+import { preloadTaxiTab } from '@/modules/Taxi/modules/user/components/tabPages';
 import { readSharedFoodLocation, getFoodStyleLocationParts, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
 
 function readHelloParthLocation() {
@@ -384,6 +385,9 @@ export default function SuperAppHomeHeader({
           <button
             type="button"
             onClick={() => navigate(profilePath)}
+            onPointerDown={() => {
+              if (isTaxi) preloadTaxiTab(profilePath);
+            }}
             aria-label="Profile"
             className="h-9 w-9 relative flex items-center justify-center rounded-full cursor-pointer active:scale-95 transition-all overflow-hidden"
             style={{ border: '1.5px solid #ffffff', backgroundColor: '#FFF5E6' }}

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Clock, Map } from 'lucide-react';
 import { useSettings, normalizeAssetUrl } from '../../../shared/context/SettingsContext';
 import busIcon from '../../../assets/3d images/AutoCab/bus.png';
+import { preloadTaxiTab } from './tabPages';
 
 const isEnabledFlag = (value) => {
   if (typeof value === 'boolean') {
@@ -64,6 +65,8 @@ const BottomNavbar = () => {
               key={label}
               type="button"
               onClick={() => navigate(path)}
+              // the screen's code and first data start loading as soon as a finger lands, not when it lifts
+              onPointerDown={() => preloadTaxiTab(path)}
               aria-current={isActive ? 'page' : undefined}
               className={`user-bottom-nav-item outline-none ${isActive ? 'is-active' : ''}`}
             >

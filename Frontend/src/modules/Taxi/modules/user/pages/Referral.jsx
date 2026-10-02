@@ -16,6 +16,7 @@ import {
   USER_REFERRAL_TRANSLATION_FIELDS,
 } from '../../shared/utils/referralTranslationFields';
 import { useSettings } from '../../../shared/context/SettingsContext';
+import NumberSkeleton from '@/shared/components/NumberSkeleton';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 
 
@@ -47,7 +48,8 @@ const Referral = () => {
     const stored = readStoredUserInfo();
     return {
       referralCode: stored.referralCode || '',
-      referralCount: Number(stored.referralCount || 0),
+      // saved by an earlier visit -> shown at once; never loaded yet -> null (skeleton, not a fake 0)
+      referralCount: stored.referralCount === undefined || stored.referralCount === null ? null : Number(stored.referralCount) || 0,
     };
   });
   const [translation, setTranslation] = useState({
@@ -129,6 +131,7 @@ const Referral = () => {
         }
       } finally {
         setLoading(false);
+        setProfile((current) => (current.referralCount === null ? { ...current, referralCount: 0 } : current));
       }
     };
 
@@ -305,7 +308,7 @@ const Referral = () => {
             ) : (
               <div className={`rounded-2xl border border-dashed px-5 py-8 text-center transition-colors ${isDark ? 'border-slate-800 bg-slate-950/30' : 'border-gray-200 bg-gray-50'}`}>
                 <p className={`text-sm font-bold ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Successful referrals</p>
-                <p className={`text-4xl font-extrabold mt-2 ${isDark ? 'text-white' : 'text-slate-950'}`}>{profile.referralCount}</p>
+                <p className={`text-4xl font-extrabold mt-2 ${isDark ? 'text-white' : 'text-slate-950'}`}>{profile.referralCount === null ? <NumberSkeleton /> : profile.referralCount}</p>
                 <p className="text-xs text-slate-400 mt-2">Detailed referral history is not available on this screen yet.</p>
               </div>
             )}

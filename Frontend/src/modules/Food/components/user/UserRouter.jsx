@@ -92,6 +92,14 @@ const Wallet = lazy(() => import("@food/pages/user/Wallet"))
 const SubmitComplaint = lazy(() => import("@food/pages/user/complaints/SubmitComplaint"))
 
 import PageLoader from "@/shared/components/PolicyPageLoader"
+import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
+import { hasFirstScreenShown } from "@/shared/utils/firstScreen"
+
+// Right after a refresh the app is still on the skeleton it started with: keep it until this screen is ready, instead
+// of a white spinner page in between. Once a screen has been shown, opening another one uses the light spinner.
+function RouteLoader() {
+  return hasFirstScreenShown() ? <PageLoader /> : <AppShellSkeleton />
+}
 
 /** Main tabs render via MainTabKeepAlive in UserLayout — route match only. */
 const MainTabRoutePlaceholder = () => null
@@ -136,7 +144,7 @@ export default function UserRouter() {
   // using it here too makes the one-time per-route chunk-load moment
   // consistent instead of sometimes-spinner, sometimes-full-skeleton.
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteLoader />}>
       <Routes>
         <Route element={<RequireInitialAuth><UserLayout /></RequireInitialAuth>}>
           {/* ========================================== */}

@@ -1,65 +1,18 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import BottomNavbar from './BottomNavbar';
 import RouteSkeleton from '../../shared/components/RouteSkeleton';
+import TaxiPageSkeleton from '@/shared/components/TaxiPageSkeleton';
 import { whenAppSettled } from '@/shared/utils/whenSettled';
+import { Activity, Profile, Support, BusHome, preloadTaxiMainTabs } from './tabPages';
 // Eager (not lazy): this is the default landing tab — bundling it with
 // TaxiApp's own chunk skips a second chunk-fetch + Suspense flash on first
 // visit, instead of waiting on its own separate lazy import.
 import UserHome from '../pages/Home';
 
-// Named import functions (not inlined into lazy() below) so the loading
-// tracker can call the exact same import() and share the browser's module
-// cache — it resolves instantly once lazy() has already fetched the chunk,
-// and doesn't trigger a second network request the first time either.
-const importActivity = () => import('../pages/Activity');
-const importProfile = () => import('../pages/Profile');
-const importSupport = () => import('../pages/ride/Support');
-const importBusHome = () => import('../pages/bus/BusHome');
-
-const Activity = lazy(importActivity);
-const Profile = lazy(importProfile);
-const Support = lazy(importSupport);
-const BusHome = lazy(importBusHome);
-
-const TAB_IMPORTERS = {
-  activity: importActivity,
-  profile: importProfile,
-  support: importSupport,
-  bus: importBusHome,
-};
-
-// Shared full-viewport skeleton (RouteSkeleton) — same one used for the
-// top-level route Suspense in TaxiApp.jsx, so every tab shows the same
-// "global" loading skeleton instead of each having its own half-filled one.
-const SoftFallback = RouteSkeleton;
-
-/** Tracks whether the active tab's own chunk has finished loading — 'ride'
- *  (Home) is bundled in eagerly so it's ready from the start. Lets the nav
- *  bar stay hidden while a tab's skeleton is showing (matching Food, which
- *  hides its bottom nav during its own initial-load skeleton) instead of
- *  floating over a screen that isn't ready yet. Once a tab has loaded once
- *  it stays marked ready, so revisiting it never re-hides the nav. */
-function useTabReady(activeTab) {
-  const [readyTabs, setReadyTabs] = useState(() => new Set(['ride']));
-
-  useEffect(() => {
-    const importer = TAB_IMPORTERS[activeTab];
-    if (!importer || readyTabs.has(activeTab)) return undefined;
-
-    let cancelled = false;
-    importer().then(() => {
-      if (!cancelled) {
-        setReadyTabs((prev) => (prev.has(activeTab) ? prev : new Set(prev).add(activeTab)));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, readyTabs]);
-
-  return activeTab ? readyTabs.has(activeTab) : false;
-}
+// The tab screens and how they are loaded ahead of time live in ./tabPages. While a tab's code is still on its way it
+// shows a Taxi-shaped placeholder for THAT tab (this used to be Food's restaurant-list skeleton for every tab).
+const tabFallback = (variant) => <TaxiPageSkeleton variant={variant} />;
 
 const resolveMainTab = (pathname = '') => {
   const path = String(pathname || '').replace(/\/$/, '') || '/';
@@ -85,21 +38,16 @@ const resolveMainTab = (pathname = '') => {
 export default function UserMainTabKeepAlive() {
   const { pathname } = useLocation();
   const activeTab = useMemo(() => resolveMainTab(pathname), [pathname]);
-  const isTabReady = useTabReady(activeTab);
 
   // Warm the *other* three tabs' chunks on idle, once, so tapping any
   // bottom-nav tab for the first time is instant instead of waiting on a
   // fresh chunk fetch — this is what made switching tabs feel like it took
   // "a second" to go in.
   useEffect(() => {
-    const warm = () => {
-      importActivity().catch(() => {});
-      importProfile().catch(() => {});
-      importSupport().catch(() => {});
-      importBusHome().catch(() => {});
-    };
     // after the open screen settled (shared/utils/whenSettled.js)
-    return whenAppSettled(warm);
+    return whenAppSettled(() => {
+      preloadTaxiMainTabs();
+    });
   }, []);
 
   if (!activeTab) {
@@ -110,7 +58,7 @@ export default function UserMainTabKeepAlive() {
     <div className="taxi-user-main-tabs relative min-h-screen">
       {activeTab === 'ride' && (
         <div className="taxi-main-tab-pane" data-tab="ride">
-          <Suspense fallback={<SoftFallback />}>
+          <Suspense fallback={<RouteSkeleton />}>
             <UserHome hideBottomNav />
           </Suspense>
         </div>
@@ -118,7 +66,7 @@ export default function UserMainTabKeepAlive() {
 
       {activeTab === 'activity' && (
         <div className="taxi-main-tab-pane" data-tab="activity">
-          <Suspense fallback={<SoftFallback />}>
+          <Suspense fallback={tabFallback('activity')}>
             <Activity embedded />
           </Suspense>
         </div>
@@ -126,7 +74,7 @@ export default function UserMainTabKeepAlive() {
 
       {activeTab === 'bus' && (
         <div className="taxi-main-tab-pane" data-tab="bus">
-          <Suspense fallback={<SoftFallback />}>
+          <Suspense fallback={tabFallback('bus')}>
             <BusHome embedded />
           </Suspense>
         </div>
@@ -134,7 +82,7 @@ export default function UserMainTabKeepAlive() {
 
       {activeTab === 'support' && (
         <div className="taxi-main-tab-pane" data-tab="support">
-          <Suspense fallback={<SoftFallback />}>
+          <Suspense fallback={tabFallback('support')}>
             <Support embedded />
           </Suspense>
         </div>
@@ -142,13 +90,13 @@ export default function UserMainTabKeepAlive() {
 
       {activeTab === 'profile' && (
         <div className="taxi-main-tab-pane" data-tab="profile">
-          <Suspense fallback={<SoftFallback />}>
+          <Suspense fallback={tabFallback('profile')}>
             <Profile embedded />
           </Suspense>
         </div>
       )}
 
-      {isTabReady && <BottomNavbar />}
+      <BottomNavbar />
     </div>
   );
 }

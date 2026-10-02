@@ -24,6 +24,8 @@ import { getRestaurantAvailabilityStatus } from "@food/utils/restaurantAvailabil
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { filterPublicOffers, mapPublicOfferToCartCoupon } from "@food/utils/offerUtils"
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
+import NumberSkeleton from "@/shared/components/NumberSkeleton"
+import { recallLastKnown, rememberLastKnown } from "@/shared/utils/lastKnown"
 const zoopSound = "/assets/media/zomato_sms.mp3"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
@@ -165,6 +167,14 @@ export default function Cart() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash")
   const [showPaymentSheet, setShowPaymentSheet] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
+  // Shown balance: the fresh one once loaded, until then the last one seen (null = never seen -> skeleton). The checks
+  // ("enough balance?") keep using only the fresh walletBalance.
+  const [rememberedWalletBalance] = useState(() => {
+    const value = recallLastKnown("food:walletBalance")
+    return typeof value === "number" ? value : null
+  })
+  const [walletBalanceLoaded, setWalletBalanceLoaded] = useState(false)
+  const shownWalletBalance = walletBalanceLoaded ? walletBalance : rememberedWalletBalance
   const [isLoadingWallet, setIsLoadingWallet] = useState(false)
   const [restaurantNote, setRestaurantNote] = useState(() => {
     try {
@@ -1242,12 +1252,15 @@ export default function Cart() {
         setIsLoadingWallet(true)
         const response = await userAPI.getWallet()
         if (response?.data?.success && response?.data?.data?.wallet) {
-          setWalletBalance(response.data.data.wallet.balance || 0)
+          const balance = Number(response.data.data.wallet.balance) || 0
+          setWalletBalance(balance)
+          rememberLastKnown("food:walletBalance", balance)
         }
       } catch (error) {
         debugError("Error fetching wallet balance:", error)
         setWalletBalance(0)
       } finally {
+        setWalletBalanceLoaded(true)
         setIsLoadingWallet(false)
       }
     }
@@ -2194,7 +2207,9 @@ export default function Cart() {
         try {
           const walletResponse = await userAPI.getWallet()
           if (walletResponse?.data?.success && walletResponse?.data?.data?.wallet) {
-            setWalletBalance(walletResponse.data.data.wallet.balance || 0)
+            const balance = Number(walletResponse.data.data.wallet.balance) || 0
+            setWalletBalance(balance)
+            rememberLastKnown("food:walletBalance", balance)
           }
         } catch (error) {
           debugError("Error refreshing wallet balance:", error)
@@ -3282,7 +3297,7 @@ export default function Cart() {
                     </p>
                     {selectedPaymentMethod === "wallet" && (
                       <p className="text-[10px] text-green-600 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/20 px-1 rounded">
-                        {RUPEE_SYMBOL}{walletBalance.toFixed(0)}
+                        {shownWalletBalance === null ? <NumberSkeleton /> : `${RUPEE_SYMBOL}${shownWalletBalance.toFixed(0)}`}
                       </p>
                     )}
                   </div>
@@ -3609,7 +3624,7 @@ export default function Cart() {
                           icon: <Wallet className="w-5 h-5" />,
                           color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400',
                           selectedColor: 'bg-blue-500 text-white',
-                          subInfo: `Bal: ${RUPEE_SYMBOL}${walletBalance.toFixed(0)}`,
+                          subInfo: shownWalletBalance === null ? <>Bal: <NumberSkeleton /></> : `Bal: ${RUPEE_SYMBOL}${shownWalletBalance.toFixed(0)}`,
                           disabled: walletBalance < total || !isPaymentMethodEnabled("wallet"),
                           disabledText: !isPaymentMethodEnabled("wallet") ? 'Wallet Disabled' : 'Low Balance'
                         },

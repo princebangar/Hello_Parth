@@ -5,6 +5,7 @@ import App from './app/App.jsx'
 import { isModuleAuthenticated } from './shared/utils/moduleAuth.js'
 import { syncThemeForPath } from './shared/utils/theme.js'
 import { NATIVE_LAST_ROUTE_KEY, resolveAppColdStartRoute, isConsumerLoggedIn } from './shared/utils/activeModule.js'
+import { isNativeLikeShell, isNativeSessionRunning, markNativeSessionRunning } from './shared/utils/nativeShell.js'
 import './shared/styles/global.css'
 
 // ─── Quick-spicy Food Module Initialization ───────────────────────────────────
@@ -26,22 +27,12 @@ function getInitialPathname() {
   return pathname.replace(/\/index\.html$/i, '') || '/'
 }
 
-function isNativeLikeShell() {
-  if (typeof window === 'undefined') return false
+// The consumer screens (Food / Taxi user app). Partner panels have their own logins and are not part of this.
+const isConsumerPath = (p = '') => p === '/food' || p === '/user' || p.startsWith('/food/user') || p.startsWith('/user/') || p.startsWith('/taxi/user')
+// Start pages that mean "the app's front door" and not a link to one particular screen.
+const FRONT_DOOR_PATHS = new Set(['/food', '/food/user', '/food/user/home', '/taxi', '/taxi/user'])
 
-  const protocol = String(window.location?.protocol || '').toLowerCase()
-  const userAgent = String(window.navigator?.userAgent || '').toLowerCase()
-
-  return (
-    Boolean(window.flutter_inappwebview) ||
-    Boolean(window.ReactNativeWebView) ||
-    protocol === 'file:' ||
-    userAgent.includes(' wv') ||
-    userAgent.includes('; wv')
-  )
-}
-
-function resolveNativeInitialRoute() {
+function resolveNativeInitialRoute(freshLaunch) {
   if (typeof window === 'undefined') return '/login'
 
   const rawPathname = String(window.location?.pathname || '')
@@ -57,6 +48,16 @@ function resolveNativeInitialRoute() {
     '/intercity/details', '/intercity/confirm',
   ]
   const isTransient = (r) => TRANSIENT_SEGMENTS.some((s) => r.includes(s))
+
+  // The app's start page is a fixed address of the site (often /food/user), not something the person chose. On a fresh
+  // launch it must not let them straight into the app: someone who is not logged in starts at the login screen (they
+  // get in as a guest only through "Skip for now"), and a logged-in person gets the usual first screen (Taxi) instead
+  // of whichever app that fixed address happens to belong to.
+  const bare = pathname.replace(/\/+$/, '') || '/'
+  if (freshLaunch && bare !== '/' && isConsumerPath(bare)) {
+    if (!isConsumerLoggedIn()) return '/login'
+    if (FRONT_DOOR_PATHS.has(bare)) return resolveAppColdStartRoute()
+  }
 
   // Explicit deep-link / in-app path still wins (except broken transient ride flows).
   if (pathname.startsWith('/taxi/')) return isTransient(pathname) ? '/taxi/user' : pathname
@@ -91,11 +92,27 @@ function resolveNativeInitialRoute() {
 function bootstrapNativeHashRoute() {
   if (!isNativeLikeShell() || typeof window === 'undefined') return
 
+  // First start since the app was opened, or a reload (pull-to-refresh) of a session that is already running?
+  const freshLaunch = !isNativeSessionRunning()
+  markNativeSessionRunning()
+
   const currentHash = String(window.location?.hash || '')
   const hashPath = currentHash.startsWith('#') ? currentHash.slice(1).split('?')[0] : ''
   const rawPathname = String(window.location?.pathname || '')
   const pathname = rawPathname.replace(/\/index\.html$/i, '') || '/'
-  const targetPath = resolveNativeInitialRoute()
+
+  if (!freshLaunch) {
+    // Pull-to-refresh: stay on the screen the person was on. The address in the WebView still has the app's fixed start
+    // page as its path (e.g. /food/user) - that must not win over where they were (it threw Taxi users into Food).
+    if (hashPath.startsWith('/') && hashPath !== '/') return
+    const last = String(localStorage.getItem(NATIVE_LAST_ROUTE_KEY) || '').trim()
+    if (last.startsWith('/taxi/') || last.startsWith('/food/') || last.startsWith('/admin')) {
+      window.history.replaceState(null, '', `#${last}`)
+      return
+    }
+  }
+
+  const targetPath = resolveNativeInitialRoute(freshLaunch)
   const search = String(window.location?.search || '')
 
   if (currentHash.startsWith('#/')) {

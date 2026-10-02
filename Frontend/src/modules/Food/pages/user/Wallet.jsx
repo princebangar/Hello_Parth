@@ -11,6 +11,7 @@ import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { WalletSkeleton } from "@food/components/ui/loading-skeletons"
 import useReferralEnabled from "@/shared/hooks/useReferralEnabled"
 import { getPageCache, setPageCache, userScopedCacheKey } from "@/shared/utils/pageCache"
+import { recallLastKnown, rememberLastKnown } from "@/shared/utils/lastKnown"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -29,7 +30,8 @@ export default function Wallet() {
   const referralEnabled = useReferralEnabled()
   // Last wallet seen in this tab: shown at once while the fresh one loads (no skeleton on a repeat visit).
   const cacheKey = useMemo(() => userScopedCacheKey("food_wallet"), [])
-  const cachedWallet = useMemo(() => getPageCache(cacheKey), [cacheKey])
+  // this tab's copy first, else the last wallet seen on this device (survives closing the app)
+  const cachedWallet = useMemo(() => getPageCache(cacheKey) || recallLastKnown("food:wallet") || null, [cacheKey])
   const [selectedFilter, setSelectedFilter] = useState(TRANSACTION_TYPES.ALL)
   const [wallet, setWallet] = useState(cachedWallet || null)
   const [transactions, setTransactions] = useState(cachedWallet?.transactions || [])
@@ -48,11 +50,12 @@ export default function Wallet() {
         setWallet(walletData)
         setTransactions(walletData.transactions || [])
         setPageCache(cacheKey, walletData)
+        rememberLastKnown("food:wallet", walletData)
       }
     } catch (err) {
       debugError("Error fetching wallet:", err)
       // A wallet that is already on screen stays; only a first load with nothing to show reports the failure.
-      if (!getPageCache(cacheKey)) {
+      if (!cachedWallet && !getPageCache(cacheKey)) {
         setError(err?.response?.data?.message || "Failed to load wallet")
       }
       toast.error("Failed to load wallet data")

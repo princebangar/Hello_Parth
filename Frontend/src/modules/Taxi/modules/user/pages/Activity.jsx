@@ -117,6 +117,62 @@ const getScheduledCountdownLabel = (value, now = Date.now()) => {
 
 const AGGREGATE_FETCH_LIMIT = 60;
 
+// The "All" list (rides + bus + pooling, newest first) is the first thing Rides shows. It is fetched ahead of time -
+// when the app is idle, or the moment a finger lands on the Rides tab - and kept here, so opening Rides shows the list
+// straight away and only refreshes it in the background. Kept per signed-in customer; memory only, so it is gone after
+// a reload and never shows one account's rides to another.
+let allActivitiesCache = null; // { owner, merged }
+let allActivitiesInflight = null;
+
+const activityOwner = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user_user') || localStorage.getItem('userInfo') || 'null');
+    return String(user?._id || user?.id || 'anon');
+  } catch {
+    return 'anon';
+  }
+};
+
+const readAllActivitiesCache = () => (allActivitiesCache && allActivitiesCache.owner === activityOwner() ? allActivitiesCache.merged : null);
+
+const fetchAllActivities = async () => {
+  const [ridesResult, busResult, poolingResult] = await Promise.allSettled([
+    api.get('/rides', { params: { limit: AGGREGATE_FETCH_LIMIT, page: 1 } }),
+    userBusService.getMyBookings({ page: 1, limit: AGGREGATE_FETCH_LIMIT }),
+    userService.getMyPoolingBookings(),
+  ]);
+
+  const ridePayload = ridesResult.status === 'fulfilled' ? getPayload(ridesResult.value) : {};
+  const busPayload = busResult.status === 'fulfilled' ? getPayload(busResult.value) : {};
+  const poolingPayload = poolingResult.status === 'fulfilled' ? getPayload(poolingResult.value) : {};
+  const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
+  const bookings = Array.isArray(busPayload?.results) ? busPayload.results : [];
+  const poolingBookings = Array.isArray(poolingPayload)
+    ? poolingPayload
+    : Array.isArray(poolingPayload?.results)
+      ? poolingPayload.results
+      : [];
+
+  const merged = sortLatestFirst([
+    ...rides.map(normalizeRide).filter((item) => item.id),
+    ...bookings.map(normalizeBusBooking).filter((item) => item.id),
+    ...poolingBookings.map(normalizePoolingBooking).filter((item) => item.id),
+  ]);
+  allActivitiesCache = { owner: activityOwner(), merged };
+  return merged;
+};
+
+/** Start fetching the "All" list now (no-op while a request is already running). Never rejects. */
+export const prefetchActivityAll = () => {
+  if (!localStorage.getItem('userToken') && !localStorage.getItem('user_accessToken')) return Promise.resolve(null);
+  if (!allActivitiesInflight) {
+    allActivitiesInflight = fetchAllActivities().finally(() => {
+      allActivitiesInflight = null;
+    });
+  }
+  return allActivitiesInflight.catch(() => null);
+};
+
 const getPayload = (response) => response?.data?.data || response?.data || response || {};
 
 const buildLocalPagination = (items, page) => {
@@ -159,12 +215,17 @@ const getHelperText = (tab) => {
 
 const Activity = () => {
   const [activeTab, setActiveTab] = useState('All');
-  const [activities, setActivities] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // the cached "All" list (see prefetchActivityAll) is used for the first paint when there is one
+  const [firstPage] = useState(() => {
+    const merged = readAllActivitiesCache();
+    return merged ? buildLocalPagination(merged, 1) : null;
+  });
+  const [activities, setActivities] = useState(() => firstPage?.results || []);
+  const [loading, setLoading] = useState(() => !firstPage);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({
+  const [pagination, setPagination] = useState(() => firstPage?.pagination || {
     page: 1,
     limit: PAGE_SIZE,
     total: 0,
@@ -251,7 +312,16 @@ const Activity = () => {
     let active = true;
 
     const loadActivities = async () => {
-      setLoading(true);
+      // Rides "All" with a remembered list: show it at once and just refresh it in the background.
+      const remembered = activeTab === 'All' ? readAllActivitiesCache() : null;
+      if (remembered) {
+        const rememberedPage = buildLocalPagination(remembered, currentPage);
+        setActivities(rememberedPage.results);
+        setPagination(rememberedPage.pagination);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
       setError('');
 
       try {
@@ -292,40 +362,11 @@ const Activity = () => {
           nextActivities = localPage.results;
           nextPagination = localPage.pagination;
         } else if (activeTab === 'All') {
-          const [ridesResult, busResult, poolingResult] = await Promise.allSettled([
-            api.get('/rides', {
-              params: {
-                limit: AGGREGATE_FETCH_LIMIT,
-                page: 1,
-              },
-            }),
-            userBusService.getMyBookings({
-              page: 1,
-              limit: AGGREGATE_FETCH_LIMIT,
-            }),
-            userService.getMyPoolingBookings(),
-          ]);
-
-          const ridesResponse = ridesResult.status === 'fulfilled' ? ridesResult.value : null;
-          const busResponse = busResult.status === 'fulfilled' ? busResult.value : null;
-          const poolingResponse = poolingResult.status === 'fulfilled' ? poolingResult.value : null;
-
-          const ridePayload = ridesResponse ? getPayload(ridesResponse) : {};
-          const busPayload = busResponse ? getPayload(busResponse) : {};
-          const poolingPayload = poolingResponse ? getPayload(poolingResponse) : {};
-          const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
-          const bookings = Array.isArray(busPayload?.results) ? busPayload.results : [];
-          const poolingBookings = Array.isArray(poolingPayload)
-            ? poolingPayload
-            : Array.isArray(poolingPayload?.results)
-              ? poolingPayload.results
-              : [];
-
-          const merged = sortLatestFirst([
-            ...rides.map(normalizeRide).filter((item) => item.id),
-            ...bookings.map(normalizeBusBooking).filter((item) => item.id),
-            ...poolingBookings.map(normalizePoolingBooking).filter((item) => item.id),
-          ]);
+          // a fetch that is already running (started by prefetchActivityAll) is joined instead of repeated
+          const merged = await (allActivitiesInflight || (allActivitiesInflight = fetchAllActivities().finally(() => {
+            allActivitiesInflight = null;
+          })));
+          if (!merged) throw new Error('Could not load your ride history.');
           const localPage = buildLocalPagination(merged, currentPage);
           nextActivities = localPage.results;
           nextPagination = localPage.pagination;

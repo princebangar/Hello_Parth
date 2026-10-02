@@ -9,6 +9,8 @@ import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
 import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
 import useReferralEnabled from '@/shared/hooks/useReferralEnabled';
 import { getPageCache, setPageCache, userScopedCacheKey } from '@/shared/utils/pageCache';
+import { recallLastKnown, rememberLastKnown } from '@/shared/utils/lastKnown';
+import NumberSkeleton from '@/shared/components/NumberSkeleton';
 
 const PHONEPE_USER_WALLET_FLOW_KEY = 'user-wallet-topup';
 
@@ -25,7 +27,8 @@ const Wallet = () => {
   const referralEnabled = useReferralEnabled();
   // Last wallet seen in this tab is shown at once while the fresh one loads (no spinner on a repeat visit).
   const walletCacheKey = useMemo(() => userScopedCacheKey('taxi_wallet'), []);
-  const cachedWallet = useMemo(() => getPageCache(walletCacheKey), [walletCacheKey]);
+  // this tab's copy first, else the last wallet seen on this device (survives closing the app)
+  const cachedWallet = useMemo(() => getPageCache(walletCacheKey) || recallLastKnown('taxi:wallet') || null, [walletCacheKey]);
   const [walletLoading, setWalletLoading] = React.useState(!cachedWallet);
   const [walletError, setWalletError] = React.useState('');
   const [wallet, setWallet] = React.useState(cachedWallet || { balance: 0, currency: 'INR', recentTransactions: [] });
@@ -68,9 +71,10 @@ const Wallet = () => {
       };
       setWallet(nextWallet);
       setPageCache(walletCacheKey, nextWallet);
+      rememberLastKnown('taxi:wallet', nextWallet);
     } catch (err) {
       // A wallet already on screen stays; only a first load with nothing to show reports the failure.
-      if (!getPageCache(walletCacheKey)) {
+      if (!cachedWallet && !getPageCache(walletCacheKey)) {
         setWalletError(err?.message || 'Failed to load wallet');
       }
     } finally {
@@ -328,7 +332,7 @@ const Wallet = () => {
               <p className={`font-bold uppercase tracking-wider text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Available Balance</p>
               <h2 className="text-3xl font-black tracking-tight">
                 {walletLoading ? (
-                  <>₹ 0<span className={`text-xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>.00</span></>
+                  <NumberSkeleton width="4.5em" />
                 ) : (
                   <>₹ {balanceText.whole}<span className={`text-xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>.{balanceText.decimals}</span></>
                 )}

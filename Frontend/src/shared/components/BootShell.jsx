@@ -1,4 +1,5 @@
 import { getFoodStyleLocationParts, readSharedFoodLocation, readTaxiLocation } from '@/shared/utils/sharedUserLocation'
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 
 /**
  * The real top of the Taxi / Food home - the person's saved location, the Taxi | Food switch and the icons, in the
@@ -21,7 +22,8 @@ export function getBootVertical(pathname = '') {
 export function shouldShowBootShell() {
   if (typeof window === 'undefined') return ''
   if (!window.matchMedia(`(max-width: ${BOOT_SHELL_MAX_WIDTH}px)`).matches) return ''
-  return getBootVertical(window.location.pathname)
+  // the screen being opened - in the app's WebView that is the "#/..." part, the path there is only the app's start page
+  return getBootVertical(getAppRoutePath())
 }
 
 const readTitleAndSubtitle = () => {
@@ -123,4 +125,90 @@ export function BootShellHeader({ vertical }) {
       {vertical === 'taxi' ? <div style={{ height: 200, background: 'rgba(203,213,225,.8)' }} className="dark:!bg-white/10" /> : null}
     </div>
   )
+}
+
+/**
+ * The part under the header while the Taxi / Food home loads: the same shapes as the real screen (search bar and service
+ * tiles for Taxi; categories, filters, offers and the first restaurant for Food) and the floating bottom bar. The same
+ * markup and sizes are in index.html (".bs-body"), whose stylesheet also styles this - so the plain-HTML stage and this
+ * one look identical, and the real screen replaces it without anything jumping.
+ */
+const bar = (width, height, extra) => <i className="bs-b" style={{ width, height, ...extra }} />
+
+function BottomBarSkeleton() {
+  return (
+    <div className="bs-nav">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i}>
+          {bar(22, 22)}
+          {bar(34, 8)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function BootShellBody({ vertical }) {
+  if (vertical === 'taxi') {
+    const tiles = [[88, 64], [80, 70], [96, 76], [84, 60]]
+    return (
+      <div className="bs-body bs-on bs-taxi" aria-hidden="true">
+        <div className="bs-c bs-flex" style={{ marginTop: 27, height: 60, borderRadius: 16, gap: 12, padding: '0 12px' }}>
+          {bar(36, 36)}
+          {bar(170, 14)}
+        </div>
+        {bar(170, 18, { margin: '10px 0 12px', borderRadius: 9 })}
+        <div className="bs-grid">
+          {tiles.map(([title, sub], i) => (
+            <div key={i} className="bs-c bs-flex" style={{ height: 94, justifyContent: 'space-between', padding: '0 14px 0 18px' }}>
+              <div>
+                {bar(sub, 9)}
+                {bar(title, 16, { marginTop: 10 })}
+              </div>
+              {bar(56, 56, { borderRadius: 18 })}
+            </div>
+          ))}
+        </div>
+        {bar(90, 18, { margin: '23px 0 14px', borderRadius: 9 })}
+        <div className="bs-row">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="bs-c" style={{ width: 88, height: 98, flex: 'none' }} />
+          ))}
+        </div>
+        <BottomBarSkeleton />
+      </div>
+    )
+  }
+
+  if (vertical === 'food') {
+    return (
+      <div className="bs-body bs-on bs-food" aria-hidden="true">
+        <div className="bs-row" style={{ marginTop: 17, gap: 16, paddingLeft: 8 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ width: 80, flex: 'none' }}>
+              {bar(80, 80)}
+              {bar(48, 9, { margin: '12px auto 0' })}
+            </div>
+          ))}
+        </div>
+        <div className="bs-row" style={{ marginTop: 20 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <i key={i} className="bs-b" style={{ width: 108, height: 37, flex: 'none' }} />
+          ))}
+        </div>
+        {bar(96, 9, { margin: '20px 0 17px' })}
+        <div className="bs-row">
+          {[0, 1, 2, 3].map((i) => (
+            <i key={i} className="bs-b" style={{ width: 88, height: 88, borderRadius: 20, flex: 'none' }} />
+          ))}
+        </div>
+        {bar(190, 9, { margin: '48px 0 12px' })}
+        {bar(220, 22, { borderRadius: 11 })}
+        {bar('auto', 200, { marginTop: 25, borderRadius: 24 })}
+        <BottomBarSkeleton />
+      </div>
+    )
+  }
+
+  return null
 }

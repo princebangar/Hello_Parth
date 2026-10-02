@@ -1,12 +1,17 @@
 import { useLocation } from "react-router-dom"
 import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
 import PolicyPageLoader from "./PolicyPageLoader"
+import TaxiPageSkeleton, { taxiSkeletonVariant } from "./TaxiPageSkeleton"
 import { isPolicyPath } from "../utils/policyPaths"
 
 // The admin panels (/admin/*, /taxi/admin/*) are not the customer app: while one of their screens loads they must not
 // flash the customer home skeleton. Same look as the admin chrome instead - dark sidebar, light page - so the real
 // panel simply fills in.
 const isAdminPath = (pathname = "") => /^\/(taxi\/)?admin(\/|$)/.test(pathname)
+
+// Every Taxi screen except its home (which has its own phone-shaped skeleton) gets a Taxi-shaped placeholder instead
+// of Food's restaurant list.
+const isTaxiScreen = (pathname = "") => pathname.startsWith("/taxi/") && pathname.replace(/\/+$/, "") !== "/taxi/user"
 
 function AdminRouteFallback() {
   return (
@@ -26,5 +31,7 @@ function AdminRouteFallback() {
 export default function AppRouteFallback() {
   const { pathname } = useLocation()
   if (isAdminPath(pathname)) return <AdminRouteFallback />
-  return isPolicyPath(pathname) ? <PolicyPageLoader /> : <AppShellSkeleton />
+  if (isPolicyPath(pathname)) return <PolicyPageLoader />
+  if (isTaxiScreen(pathname)) return <TaxiPageSkeleton variant={taxiSkeletonVariant(pathname)} />
+  return <AppShellSkeleton />
 }

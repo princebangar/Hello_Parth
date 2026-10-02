@@ -18,11 +18,19 @@ import UserLogoutConfirmDialog from '@/shared/components/UserLogoutConfirmDialog
 import { preloadAuthApp } from '@/shared/utils/preloadLogin.js';
 import { logoutWithTransition } from '@/shared/utils/logoutTransition.js';
 import useReferralEnabled from '@/shared/hooks/useReferralEnabled';
+import NumberSkeleton from '@/shared/components/NumberSkeleton';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
 
 const pickObject = (...values) => values.find((value) => value && typeof value === 'object' && !Array.isArray(value)) || {};
+
+// A number saved by an earlier visit, or null when there is none yet (the stat then shows a skeleton, not a fake 0).
+const storedNumber = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const pickNumber = (...values) => {
   for (const value of values) {
@@ -114,10 +122,11 @@ const Profile = () => {
       name: stored?.name || '',
       phone: stored?.phone || '',
       profileImage: stored?.profileImage || '',
+      // last known stats (saved below after every load) show at once; null = never loaded -> skeleton
       stats: {
-        trips: 0,
-        rating: 0,
-        wallet: 0
+        trips: storedNumber(stored?.totalRides),
+        rating: storedNumber(stored?.rating),
+        wallet: storedNumber(stored?.walletBalance),
       }
     };
   });
@@ -239,6 +248,11 @@ const Profile = () => {
         }));
       } catch (err) {
         console.error('Failed to load profile', err);
+        // nothing could be loaded: stop the skeletons, show what is known (or 0)
+        setProfile((prev) => ({
+          ...prev,
+          stats: { trips: prev.stats.trips ?? 0, rating: prev.stats.rating ?? 0, wallet: prev.stats.wallet ?? 0 },
+        }));
       }
     };
 
@@ -398,7 +412,7 @@ const Profile = () => {
                 >
                   Total Trips
                 </p>
-                <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.trips}</p>
+                <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.trips === null ? <NumberSkeleton /> : profile.stats.trips}</p>
               </div>
               <div 
                 style={{ borderColor: 'var(--user-border)' }}
@@ -412,7 +426,7 @@ const Profile = () => {
                 </p>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                  <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.rating || '—'}</p>
+                  <p className="font-['Outfit'] text-[18px] font-extrabold mt-1">{profile.stats.rating === null ? <NumberSkeleton /> : profile.stats.rating || '—'}</p>
                 </div>
               </div>
               <div className="text-center">
@@ -426,7 +440,7 @@ const Profile = () => {
                   style={{ color: 'var(--user-accent)' }}
                   className="font-['Outfit'] text-[18px] font-extrabold mt-1"
                 >
-                  ₹{profile.stats.wallet}
+                  {profile.stats.wallet === null ? <NumberSkeleton width="2.4em" /> : `₹${profile.stats.wallet}`}
                 </p>
               </div>
             </div>

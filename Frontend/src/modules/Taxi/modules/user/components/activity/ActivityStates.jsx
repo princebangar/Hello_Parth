@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Headset, Loader2 } from 'lucide-react';
+import { AlertCircle, Headset } from 'lucide-react';
+import TaxiPageSkeleton from '@/shared/components/TaxiPageSkeleton';
 
 const iconTileStyle = {
   background: 'var(--user-card-bg)',
@@ -38,18 +39,9 @@ export const ActivitySupportState = ({ onContact }) => (
   </motion.div>
 );
 
-export const ActivityLoadingState = () => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    className="flex flex-col items-center justify-center py-20 text-center gap-3"
-  >
-    <div className="w-14 h-14 rounded-3xl flex items-center justify-center" style={iconTileStyle}>
-      <Loader2 size={24} className="animate-spin" strokeWidth={2.6} style={{ color: 'var(--user-text-secondary)' }} />
-    </div>
-    <p className="text-[14px] font-medium" style={{ color: 'var(--user-text-secondary)' }}>Loading your trips</p>
-  </motion.div>
-);
+// The trip list while it loads: skeleton cards, the same ones the Rides placeholder shows before the screen's code has
+// arrived (TaxiPageSkeleton "activity"), so opening Rides goes placeholder -> list with nothing changing shape between.
+export const ActivityLoadingState = () => <TaxiPageSkeleton variant="activity-list" />;
 
 export const ActivityErrorState = ({ error, onRetry }) => (
   <motion.div

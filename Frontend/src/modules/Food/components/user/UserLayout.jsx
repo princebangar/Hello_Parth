@@ -20,6 +20,7 @@ import { useCartZoneGuard } from "../../hooks/useCartZoneGuard"
 import OutOfZoneScreen from "./OutOfZoneScreen"
 import { isModuleAuthenticated } from "../../utils/auth"
 import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
+import { markFirstScreenShown } from "@/shared/utils/firstScreen"
 import LoginRequiredModal from "./LoginRequiredModal"
 import MainTabKeepAlive from "./MainTabKeepAlive"
 import { getMainTabFromPath, isExactMainTabPath, rememberMainTabBeforeProfile, shouldPreserveMainTabsUnderPath, getCategorySlugFromPath, isRestaurantDetailPath, rememberCategoryKeepAliveSlug, peekCategoryKeepAliveSlug, clearCategoryKeepAliveSlug } from "@food/utils/mainTabRoutes"
@@ -582,6 +583,10 @@ function UserLayoutContent() {
 
 export default function UserLayout() {
   useUserNotifications()
+  // a real Food screen is on screen from here on (see shared/utils/firstScreen.js)
+  useEffect(() => {
+    markFirstScreenShown()
+  }, [])
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">

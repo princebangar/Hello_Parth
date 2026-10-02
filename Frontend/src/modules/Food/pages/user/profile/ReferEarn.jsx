@@ -9,6 +9,8 @@ import { useProfile } from "@food/context/ProfileContext";
 import { toast } from "sonner";
 import { userAPI } from "@food/api";
 import useReferralEnabled from "@/shared/hooks/useReferralEnabled";
+import NumberSkeleton from "@/shared/components/NumberSkeleton";
+import { recallLastKnown, rememberLastKnown } from "@/shared/utils/lastKnown";
 
 const statusMeta = {
   credited: {
@@ -31,8 +33,11 @@ const statusMeta = {
 export default function ReferEarn() {
   const { userProfile } = useProfile();
   const companyName = useCompanyName();
+  // What this screen showed last time comes up at once and is refreshed quietly; the first time ever the numbers show a
+  // small skeleton instead of 0.
+  const [remembered] = useState(() => recallLastKnown("food:referral") || null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState(() => remembered?.stats || {
     referralCount: 0,
     totalReferralEarnings: 0,
     rewardAmount: 0,
@@ -41,9 +46,11 @@ export default function ReferEarn() {
     pendingCount: 0,
     rejectedCount: 0,
   });
-  const [invitedFriends, setInvitedFriends] = useState([]);
-  const [referralCode, setReferralCode] = useState("");
-  const [serverEnabled, setServerEnabled] = useState(true);
+  const [invitedFriends, setInvitedFriends] = useState(() => remembered?.invitedFriends || []);
+  const [referralCode, setReferralCode] = useState(() => remembered?.referralCode || "");
+  const [serverEnabled, setServerEnabled] = useState(() => remembered?.enabled !== false);
+  const numbersPending = loading && !remembered;
+  const num = (value, prefix = "") => (numbersPending ? <NumberSkeleton /> : `${prefix}${value}`);
   const flagEnabled = useReferralEnabled();
   const programOn = flagEnabled && serverEnabled;
 
@@ -68,6 +75,20 @@ export default function ReferEarn() {
             rejectedCount: Number(nextStats.rejectedCount) || 0,
           });
           setInvitedFriends(Array.isArray(nextInvited) ? nextInvited : []);
+          rememberLastKnown("food:referral", {
+            stats: {
+              referralCount: Number(nextStats.referralCount) || 0,
+              totalReferralEarnings: Number(nextStats.totalReferralEarnings) || 0,
+              rewardAmount: Number(nextStats.rewardAmount) || 0,
+              totalInvited: Number(nextStats.totalInvited) || 0,
+              creditedCount: Number(nextStats.creditedCount) || 0,
+              pendingCount: Number(nextStats.pendingCount) || 0,
+              rejectedCount: Number(nextStats.rejectedCount) || 0,
+            },
+            invitedFriends: Array.isArray(nextInvited) ? nextInvited : [],
+            referralCode: String(res?.data?.data?.referralCode || "").trim(),
+            enabled: res?.data?.data?.enabled !== false,
+          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -168,7 +189,7 @@ export default function ReferEarn() {
               <div className="min-w-0">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Your referral code</p>
                 <p className="text-lg font-bold tracking-widest text-gray-900 dark:text-white truncate">
-                  {refId || (loading ? "..." : "Not available")}
+                  {refId || (loading ? <NumberSkeleton width="6em" /> : "Not available")}
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={handleCopyCode} disabled={!refId} className="shrink-0">
@@ -179,12 +200,12 @@ export default function ReferEarn() {
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Reward per invite</p>
-                <p className="text-lg font-bold text-[#DC2626]">{"\u20B9"}{stats.rewardAmount}</p>
+                <p className="text-lg font-bold text-[#DC2626]">{num(stats.rewardAmount, "\u20B9")}</p>
               </div>
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Referral earnings</p>
                 <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                  {"\u20B9"}{stats.totalReferralEarnings}
+                  {num(stats.totalReferralEarnings, "\u20B9")}
                 </p>
               </div>
             </div>
@@ -208,7 +229,7 @@ export default function ReferEarn() {
                 <Users className="h-3.5 w-3.5" />
                 Invited
               </div>
-              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{stats.totalInvited}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{num(stats.totalInvited)}</p>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm bg-white dark:bg-[#1a1a1a]">
@@ -217,7 +238,7 @@ export default function ReferEarn() {
                 <CircleCheck className="h-3.5 w-3.5" />
                 Credited
               </div>
-              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{stats.creditedCount}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{num(stats.creditedCount)}</p>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm bg-white dark:bg-[#1a1a1a]">
@@ -226,7 +247,7 @@ export default function ReferEarn() {
                 <Wallet className="h-3.5 w-3.5" />
                 Total
               </div>
-              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{"\u20B9"}{stats.totalReferralEarnings}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{num(stats.totalReferralEarnings, "\u20B9")}</p>
             </CardContent>
           </Card>
         </div>
