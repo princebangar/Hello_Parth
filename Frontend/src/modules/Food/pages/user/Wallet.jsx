@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2, History } from "lucide-react"
+import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2, History, Gift, ChevronRight } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Card, CardContent } from "@food/components/ui/card"
 import AnimatedPage from "@food/components/user/AnimatedPage"
@@ -9,6 +9,8 @@ import { userAPI } from "@food/api"
 import { toast } from "sonner"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { WalletSkeleton } from "@food/components/ui/loading-skeletons"
+import useReferralEnabled from "@/shared/hooks/useReferralEnabled"
+import { getPageCache, setPageCache, userScopedCacheKey } from "@/shared/utils/pageCache"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -24,16 +26,19 @@ const TRANSACTION_TYPES = {
 export default function Wallet() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
+  const referralEnabled = useReferralEnabled()
+  // Last wallet seen in this tab: shown at once while the fresh one loads (no skeleton on a repeat visit).
+  const cacheKey = useMemo(() => userScopedCacheKey("food_wallet"), [])
+  const cachedWallet = useMemo(() => getPageCache(cacheKey), [cacheKey])
   const [selectedFilter, setSelectedFilter] = useState(TRANSACTION_TYPES.ALL)
-  const [wallet, setWallet] = useState(null)
-  const [transactions, setTransactions] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [wallet, setWallet] = useState(cachedWallet || null)
+  const [transactions, setTransactions] = useState(cachedWallet?.transactions || [])
+  const [loading, setLoading] = useState(!cachedWallet)
   const [error, setError] = useState(null)
   const [addMoneyModalOpen, setAddMoneyModalOpen] = useState(false)
 
   const fetchWalletData = async () => {
     try {
-      setLoading(true)
       setError(null)
 
       const response = await userAPI.getWallet()
@@ -42,10 +47,14 @@ export default function Wallet() {
       if (walletData) {
         setWallet(walletData)
         setTransactions(walletData.transactions || [])
+        setPageCache(cacheKey, walletData)
       }
     } catch (err) {
       debugError("Error fetching wallet:", err)
-      setError(err?.response?.data?.message || "Failed to load wallet")
+      // A wallet that is already on screen stays; only a first load with nothing to show reports the failure.
+      if (!getPageCache(cacheKey)) {
+        setError(err?.response?.data?.message || "Failed to load wallet")
+      }
       toast.error("Failed to load wallet data")
     } finally {
       setLoading(false)
@@ -195,6 +204,23 @@ export default function Wallet() {
                 </Button>
               </div>
             </div>
+
+            {referralEnabled && (
+              <button
+                type="button"
+                onClick={() => navigate("/food/user/profile/refer-earn")}
+                className="w-full flex items-center gap-4 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] p-4 md:p-5 text-left shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center shrink-0">
+                  <Gift className="h-5 w-5 md:h-6 md:w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm md:text-base text-gray-900 dark:text-white">Refer &amp; Earn</p>
+                  <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Invite friends and get money in your wallet</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
+              </button>
+            )}
 
             <div className="space-y-4 md:space-y-6 lg:space-y-8">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-6">

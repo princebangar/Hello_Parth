@@ -17,9 +17,9 @@ import {
 } from "@food/utils/browseScrollMemory"
 import { isModuleAuthenticated } from "@food/utils/auth"
 import AppRouteFallback from "@/shared/components/AppRouteFallback"
+import { FoodUserRouter as UserRouter } from "@/shared/utils/appChunks"
 
 // Lazy Loading Components
-const UserRouter = lazy(() => import("@food/components/user/UserRouter"))
 
 // Restaurant Module
 const RestaurantRouter = lazy(() => import("@food/components/restaurant/RestaurantRouter"))

@@ -2159,7 +2159,7 @@ const DriverHome = () => {
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">Daily check-in</p>
                             <h3 className="mt-2 text-[20px] font-black tracking-tight text-slate-950">Upload today&apos;s selfie</h3>
                             <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
-                                Before going online, submit a fresh selfie for today. This helps verify the driver account like Rapido-style daily check-in.
+                                Before going online, submit a fresh selfie for today. This helps verify the driver account as part of the daily check-in.
                             </p>
 
                             {selfieError ? (

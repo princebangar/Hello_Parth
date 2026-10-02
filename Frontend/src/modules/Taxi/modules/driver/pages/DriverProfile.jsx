@@ -135,12 +135,12 @@ const DriverProfile = () => {
             driver_app: {
                 title: 'Driver Application',
                 Icon: UserPlus,
-                description: 'Join the Appzeto 24 fleet as a certified driver.',
-                content: `Appzeto 24 is always looking for professional, dedicated drivers to join our growing ecosystem. 
+                description: 'Join the Hello Parth fleet as a certified driver.',
+                content: `Hello Parth is always looking for professional, dedicated drivers to join our growing ecosystem. 
 
 Steps to apply:
 1. Ensure you have a valid Commercial Driving License.
-2. Visit the Appzeto 24 Driver Onboarding center or use the Mobile App.
+2. Visit the Hello Parth Driver Onboarding center or use the Mobile App.
 3. Submit required documents: Aadhaar, PAN, License, and Police Verification.
 4. Complete the Biometric enrollment process at any authorized Service Center.
 5. Once approved, you can start accepting rides and managing your earnings via the dashboard.`
@@ -148,21 +148,21 @@ Steps to apply:
             terms: {
                 title: 'Terms and Conditions',
                 Icon: FileText,
-                description: 'General rules for using the Appzeto 24 platform.',
-                content: `By using the Appzeto 24 platform, you agree to comply with all applicable transport regulations and our safety standards.
+                description: 'General rules for using the Hello Parth platform.',
+                content: `By using the Hello Parth platform, you agree to comply with all applicable transport regulations and our safety standards.
 
 Key Highlights:
 • Professionalism: Drivers and Staff must maintain a high standard of service.
 • Vehicle Readiness: All vehicles listed must be in active, roadworthy condition.
 • Compliance: You must ensure all permits and insurance are valid.
-• Platform Fees: Appzeto 24 charges a service fee for every successful booking handled.
+• Platform Fees: Hello Parth charges a service fee for every successful booking handled.
 • Account Security: You are responsible for keeping your credentials and biometric data secure.`
             },
             privacy: {
                 title: 'Privacy Policy',
                 Icon: Shield,
                 description: 'How we handle your data and biometrics.',
-                content: `Appzeto 24 takes data security seriously. We collect specific information to ensure safety and service quality.
+                content: `Hello Parth takes data security seriously. We collect specific information to ensure safety and service quality.
 
 Data Collected:
 • Biometrics: Fingerprint hashes are stored encrypted (AES-256) for verification only. Raw images are never stored permanently.
@@ -491,13 +491,13 @@ Processing Time: Refunds are typically credited back to the original payment met
                     </div>
 
                     <div className="space-y-5">
-                        <a href="mailto:customercare@Appzeto 24.com" className="flex items-center gap-4 group">
+                        <a href="mailto:customercare@helloparth.in" className="flex items-center gap-4 group">
                             <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
                                 <Mail size={18} />
                             </div>
                             <div>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Support</p>
-                                <p className="text-[14px] font-bold text-slate-800">customercare@Appzeto 24.com</p>
+                                <p className="text-[14px] font-bold text-slate-800">customercare@helloparth.in</p>
                             </div>
                         </a>
 

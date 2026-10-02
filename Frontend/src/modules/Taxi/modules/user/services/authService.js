@@ -121,7 +121,7 @@ export const userAuthService = {
   verifyPhonePeWalletTopup: (merchantTransactionId) =>
     api.get(`/users/wallet/phonepe/status/${merchantTransactionId}`, withUserAuth()),
   requestAccountDeletion: (reason) => api.post('/users/me/delete-request', { reason }),
-  getNotifications: () => api.get('/users/notifications', withUserAuth()),
+  getNotifications: (config = {}) => api.get('/users/notifications', withUserAuth(config)),
   deleteNotification: (id) => api.delete(`/users/notifications/${id}`, withUserAuth()),
   clearAllNotifications: () => api.delete('/users/notifications', withUserAuth()),
   saveFcmToken: (token, platform) => api.post('/users/fcm-token', { token, platform }, withUserAuth()),

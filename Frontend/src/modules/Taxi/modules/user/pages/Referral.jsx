@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import useReferralEnabled from '@/shared/hooks/useReferralEnabled';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CheckCircle2, Copy, Gift, Loader2, Share2 } from 'lucide-react';
@@ -35,6 +36,7 @@ const replaceLegacyReferralBrand = (value, appName) => {
 
 const Referral = () => {
   const navigate = useNavigate();
+  const referralEnabled = useReferralEnabled();
   const { settings } = useSettings();
   const { theme } = useUserTheme();
   const isDark = theme === 'dark';
@@ -207,6 +209,14 @@ const Referral = () => {
         </div>
       </header>
 
+      {!referralEnabled ? (
+        <div className="px-5 pt-5">
+          <div className={`rounded-[28px] border shadow-sm px-5 py-8 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+            <p className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Referral program is off right now</p>
+            <p className="text-sm text-slate-400 mt-2">New referral rewards are paused. Check back later.</p>
+          </div>
+        </div>
+      ) : (
       <div className="px-5 pt-5">
         <div className={`rounded-[28px] border shadow-sm overflow-hidden transition-colors ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
           <div className={`px-5 py-5 flex items-center justify-between border-b ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-gradient-to-r from-amber-100 via-yellow-100 to-yellow-50 border-yellow-200/50'}`}>
@@ -311,6 +321,7 @@ const Referral = () => {
           Refer now <Share2 size={16} />
         </button>
       </div>
+      )}
 
       <AnimatePresence>
         {copied ? (

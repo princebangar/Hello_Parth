@@ -1,9 +1,9 @@
 export const SUPPORT_INFO = {
-  companyName: 'Appzeto 24 Trawler',
+  companyName: 'Hello Parth',
   ownerName: 'Sandeep Kumar',
   phone: '91-93-911-911',
   phoneHref: '91-93-911-911',
-  email: 'customercare@Appzeto 24.com',
+  email: 'customercare@helloparth.in',
   supportLabel: '24/7 client support',
   responseTime: 'Replies typically within 2 hours',
   serviceArea: 'Taxi rides, parcels, bookings, payments, and account help',

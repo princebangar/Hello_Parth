@@ -1,12 +1,16 @@
 /**
  * Session-scoped page cache for Food user main tabs.
- * In-memory first (instant tab switches); sessionStorage mirrors for resilience.
- * Cleared on tab/window close via pagehide.
+ * In-memory first (instant tab switches); sessionStorage mirrors it so a REFRESH of the tab shows the last lists at
+ * once (the screens then refresh them quietly). sessionStorage disappears with the tab, and a cache older than
+ * CACHE_MAX_AGE_MS is thrown away at start-up, so nothing stale is ever kept for long.
+ *
+ * It used to be wiped on every "pagehide" - which also fires on reload - so every refresh started with empty lists
+ * and a skeleton, no matter that the home screen was written to keep its lists across a refresh.
  */
 
 const MEMORY = new Map();
 const CACHE_PREFIX = "food_page_cache_";
-const LEGACY_PREFIXES = ["food_home_restaurants", "food_home_categories"];
+const LEGACY_PREFIXES = ["food_home_restaurants", "food_home_categories", "food_home_hero_banners"];
 
 export const FOOD_PAGE_INVALIDATE_EVENT = "food-pages-invalidate";
 
@@ -177,8 +181,35 @@ export function invalidateFoodPages(detail = {}) {
 
 let listenersRegistered = false;
 
+/** Per-session FCM "already synced" markers are the one thing that must be redone on every load. */
+function clearFcmSyncMarkers() {
+  try {
+    Object.keys(sessionStorage).forEach((key) => {
+      if (key.startsWith("fcm_backend_synced_")) sessionStorage.removeItem(key);
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 export function registerFoodPageCacheLifecycle() {
   if (listenersRegistered || typeof window === "undefined") return;
   listenersRegistered = true;
-  window.addEventListener("pagehide", clearFoodSessionCaches);
+  window.addEventListener("pagehide", clearFcmSyncMarkers);
 }
+
+// Start-up: keep what the tab saved for a refresh, but not for long.
+const CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+const CACHE_STARTED_AT_KEY = "food_cache_started_at";
+(function pruneOldFoodCaches() {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    const startedAt = Number(sessionStorage.getItem(CACHE_STARTED_AT_KEY) || 0);
+    if (!startedAt || Date.now() - startedAt > CACHE_MAX_AGE_MS) {
+      clearFoodSessionCaches();
+      sessionStorage.setItem(CACHE_STARTED_AT_KEY, String(Date.now()));
+    }
+  } catch {
+    /* ignore */
+  }
+})();

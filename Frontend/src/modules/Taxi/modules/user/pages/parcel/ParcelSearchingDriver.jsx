@@ -51,7 +51,7 @@ const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted' };
 const ACTIVE_DELIVERY_POLL_MS = 8000;
 const ACTIVE_DELIVERY_POLL_DELAY_MS = 6000;
 const SEARCH_TIMEOUT_MS = 20000;
-const CONSUMED_SEARCH_NONCE_PREFIX = 'Appzeto 24_consumed_parcel_search_nonce:';
+const CONSUMED_SEARCH_NONCE_PREFIX = 'helloparth_consumed_parcel_search_nonce:';
 const ACTIVE_SEARCH_NONCES = new Set();
 const ACTIVE_SEARCH_NONCE_CLEANUPS = new Map();
 

@@ -86,7 +86,7 @@ export default function useNotificationInbox(module, options = {}) {
         if (!isFresh) setLoading(true);
 
         const request = notificationAPI
-          .getInbox({ page: 1, limit }, { contextModule: module })
+          .getInbox({ page: 1, limit }, { contextModule: module, background: options?.background === true })
           .then((response) => {
             const payload = response?.data?.data || {};
             const normalized = {
@@ -112,7 +112,7 @@ export default function useNotificationInbox(module, options = {}) {
         setLoading(false);
       }
     },
-    [cacheKey, enabled, limit, module],
+    [cacheKey, enabled, limit, module, options?.background],
   );
 
   useEffect(() => {

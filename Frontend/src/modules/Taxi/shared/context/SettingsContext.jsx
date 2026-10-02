@@ -221,7 +221,8 @@ const settingsFromBootstrap = (data = {}) => buildSettingsState({
 export const prefetchTaxiSettings = async () => {
   if (readCachedSettings()) return; // a copy is already there - the provider refreshes it on its own
   try {
-    const response = await api.get('/users/bootstrap');
+    // Warm-up read made from the OTHER app (Food): runs behind that screen's own requests.
+    const response = await api.get('/users/bootstrap', { background: true });
     writeCachedSettings(settingsFromBootstrap(response?.data?.data || response?.data || {}));
   } catch {
     // purely an optimisation

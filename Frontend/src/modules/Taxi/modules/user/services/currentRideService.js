@@ -1,6 +1,6 @@
-const CURRENT_RIDE_STORAGE_KEY = 'Appzeto 24_current_ride';
+const CURRENT_RIDE_STORAGE_KEY = 'helloparth_current_ride';
 
-export const CURRENT_RIDE_UPDATED_EVENT = 'Appzeto 24:current-ride-updated';
+export const CURRENT_RIDE_UPDATED_EVENT = 'helloparth:current-ride-updated';
 
 // `arrived` = driver reached the drop and is collecting payment; the ride is not finished yet.
 const ACTIVE_RIDE_STATUSES = new Set(['accepted', 'arriving', 'started', 'ongoing', 'arrived', 'assigned', 'confirmed', 'end_requested']);

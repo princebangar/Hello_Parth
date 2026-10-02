@@ -1,3 +1,5 @@
+import { FoodApp, FoodUserRouter, TaxiApp, FoodAdminRouter } from './appChunks.js'
+
 export const ACTIVE_MODULE_KEY = 'hello_parth_active_module'
 export const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
 export const LOGIN_RETURN_TO_KEY = 'hello_parth_login_return_to'
@@ -125,7 +127,7 @@ export function consumeLoginReturnTo() {
 /** Warm Food admin chunks so Food ↔ Taxi admin tab switches stay SPA-smooth. */
 export function prefetchFoodAdmin() {
   return Promise.all([
-    import('../../modules/Food/components/admin/AdminRouter.jsx'),
+    FoodAdminRouter.preload(),
     import('../../modules/Food/pages/admin/AdminHome.jsx'),
   ]).catch(() => {})
 }
@@ -133,7 +135,7 @@ export function prefetchFoodAdmin() {
 /** Warm Taxi admin chunks so Food ↔ Taxi admin tab switches stay SPA-smooth. */
 export function prefetchTaxiAdmin() {
   return Promise.all([
-    import('../../modules/Taxi/TaxiApp.jsx'),
+    TaxiApp.preload(),
     import('../../modules/Taxi/modules/admin/components/AdminLayout.jsx'),
     import('../../modules/Taxi/modules/admin/pages/dashboard/MainDashboard.jsx'),
   ]).catch(() => {})
@@ -145,8 +147,8 @@ export function prefetchTaxiAdmin() {
  */
 export function prefetchFoodUser() {
   return Promise.all([
-    import('../../modules/Food/routes.jsx'),
-    import('../../modules/Food/components/user/UserRouter.jsx'),
+    FoodApp.preload(),
+    FoodUserRouter.preload(),
   ])
     .then(() => warmFoodZone())
     .catch(() => {})
@@ -194,12 +196,14 @@ async function warmFoodZone() {
  */
 export function prefetchTaxiUser() {
   return Promise.all([
-    import('../../modules/Taxi/TaxiApp.jsx'),
+    TaxiApp.preload(),
     import('../../modules/Taxi/modules/user/pages/Home.jsx'),
     import('../../modules/Taxi/modules/user/pages/Activity.jsx'),
     import('../../modules/Taxi/modules/user/pages/Profile.jsx'),
     import('../../modules/Taxi/modules/user/pages/ride/Support.jsx'),
   ])
+    // Taxi's own screens are lazy too: mark the common ones as loaded so the first visit renders without a fallback.
+    .then(([taxiModule]) => taxiModule?.preloadTaxiUserPages?.())
     .then(() =>
       Promise.allSettled([
         import('../../modules/Taxi/shared/context/SettingsContext.jsx').then((mod) => mod.prefetchTaxiSettings()),

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CreditCard, Loader2, SlidersHorizontal, TriangleAlert } from "lucide-react"
+import { CreditCard, Gift, Loader2, SlidersHorizontal, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import { Switch } from "@food/components/ui/switch"
 import { hasGlobalSection, readAdminProfile } from "@/shared/utils/adminAccess.js"
-import { apiErrorMessage, globalAdminAPI } from "../api/globalAdminAPI"
+import { getPageCache, setPageCache } from "@/shared/utils/pageCache.js"
+import { CUSTOMIZATION_CACHE_KEY, apiErrorMessage, globalAdminAPI } from "../api/globalAdminAPI"
 
 /** Who uses which gateway — shown on its card so the admin knows what a switch affects. */
 const GATEWAY_USAGE = {
@@ -15,20 +16,29 @@ export default function GlobalCustomizationSettings() {
   const profile = useMemo(() => readAdminProfile(), [])
   const canEdit = hasGlobalSection(profile, "customization", "edit")
 
-  const [loading, setLoading] = useState(true)
-  const [gateways, setGateways] = useState([])
+  const cached = useMemo(() => getPageCache(CUSTOMIZATION_CACHE_KEY), [])
+  const [loading, setLoading] = useState(!cached)
+  const [gateways, setGateways] = useState(cached?.paymentGateways || [])
+  const [referralEnabled, setReferralEnabled] = useState(cached?.referral?.enabled !== false)
   const [savingKey, setSavingKey] = useState(null)
+
+  const applySettings = useCallback((data) => {
+    if (!data) return
+    setGateways(data.paymentGateways || [])
+    setReferralEnabled(data.referral?.enabled !== false)
+    setPageCache(CUSTOMIZATION_CACHE_KEY, data)
+  }, [])
 
   const fetchSettings = useCallback(async () => {
     try {
       const response = await globalAdminAPI.getCustomizationSettings()
-      setGateways(response?.data?.data?.paymentGateways || [])
+      applySettings(response?.data?.data)
     } catch (error) {
       toast.error(apiErrorMessage(error, "Failed to load customization settings"))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [applySettings])
 
   useEffect(() => {
     fetchSettings()
@@ -38,10 +48,27 @@ export default function GlobalCustomizationSettings() {
     setSavingKey(gateway.key)
     try {
       const response = await globalAdminAPI.updatePaymentGateways({ [gateway.key]: enabled })
-      setGateways(response?.data?.data?.paymentGateways || [])
+      const paymentGateways = response?.data?.data?.paymentGateways || []
+      setGateways(paymentGateways)
+      setPageCache(CUSTOMIZATION_CACHE_KEY, { ...(getPageCache(CUSTOMIZATION_CACHE_KEY) || {}), paymentGateways })
       toast.success(`${gateway.label} ${enabled ? "ON" : "OFF"}`)
     } catch (error) {
       toast.error(apiErrorMessage(error, `Failed to update ${gateway.label}`))
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  const toggleReferral = async (enabled) => {
+    setSavingKey("referral")
+    try {
+      const response = await globalAdminAPI.updateReferral(enabled)
+      const next = response?.data?.data?.referral?.enabled !== false
+      setReferralEnabled(next)
+      setPageCache(CUSTOMIZATION_CACHE_KEY, { ...(getPageCache(CUSTOMIZATION_CACHE_KEY) || {}), referral: { enabled: next } })
+      toast.success(`Referral system ${next ? "ON" : "OFF"}`)
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Failed to update referral system"))
     } finally {
       setSavingKey(null)
     }
@@ -110,6 +137,46 @@ export default function GlobalCustomizationSettings() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Gift className="w-4 h-4 text-slate-500" />
+            <h2 className="text-sm font-semibold text-slate-900">Referral System</h2>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            Customer "Refer &amp; Earn" in the Food and Taxi wallets. Turning it off hides it in both apps and stops
+            new referral rewards. Rewards already paid stay in the wallets. Driver / rider referral is separate.
+          </p>
+
+          {loading ? (
+            <div className="py-6 text-center text-sm text-slate-500">
+              <Loader2 className="inline w-5 h-5 animate-spin mr-2" />
+              Loading...
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 p-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">Customer referral</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">
+                  Reward amount and limits are set in each app's own Referral settings.
+                </p>
+              </div>
+              <div className="shrink-0 pt-0.5">
+                {savingKey === "referral" ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                ) : (
+                  <Switch
+                    checked={referralEnabled}
+                    onCheckedChange={toggleReferral}
+                    disabled={!canEdit}
+                    aria-label="Referral system on or off"
+                    className="data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-slate-300"
+                  />
+                )}
+              </div>
             </div>
           )}
         </div>

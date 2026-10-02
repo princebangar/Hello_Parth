@@ -1,5 +1,6 @@
 import { Skeleton } from "@food/components/ui/skeleton"
 import { cn } from "@food/utils/utils"
+import { BootShellHeader, shouldShowBootShell } from "@/shared/components/BootShell"
 
 const DEFAULT_CARD_COUNT = 4
 
@@ -323,6 +324,24 @@ function RestaurantDetailSkeleton({ className }) {
 }
 
 function AppShellSkeleton({ className }) {
+  // On a phone, the Taxi / Food home shows its real header (saved location, Taxi | Food switch, icons) right away -
+  // the same header index.html paints before any script runs - and only the part below it is a skeleton.
+  const shellVertical = shouldShowBootShell()
+  if (shellVertical) {
+    return (
+      <LoadingSkeletonRegion label="Loading application" className={cn("min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8ef,transparent_34%),linear-gradient(180deg,#fffdf9_0%,#fff8f1_100%)] dark:bg-[linear-gradient(180deg,#0b0b0b_0%,#151515_100%)]", className)}>
+        <BootShellHeader vertical={shellVertical} />
+        <div className="space-y-5 px-5 pt-6">
+          <div className="space-y-3">
+            <Skeleton className="h-7 w-52 rounded-full" />
+            <CategoryChipRowSkeleton count={5} />
+          </div>
+          <RestaurantGridSkeleton count={3} />
+        </div>
+      </LoadingSkeletonRegion>
+    )
+  }
+
   return (
     <LoadingSkeletonRegion label="Loading application" className={cn("min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8ef,transparent_34%),linear-gradient(180deg,#fffdf9_0%,#fff8f1_100%)] dark:bg-[linear-gradient(180deg,#0b0b0b_0%,#151515_100%)]", className)}>
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">

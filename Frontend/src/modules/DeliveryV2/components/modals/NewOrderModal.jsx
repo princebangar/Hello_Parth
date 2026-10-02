@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 /**
  * NewOrderModal - Ported to Original 1:1 Theme with Slider Accept.
- * Matches the Zomato/Swiggy style Green Header + White Card.
+ * Matches the Hello Parth style Green Header + White Card.
  */
 export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted = false, onToggleMute }) => {
   const { riderLocation } = useDeliveryStore();

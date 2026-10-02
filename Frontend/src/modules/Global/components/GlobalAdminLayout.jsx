@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { API_BASE_URL } from "@food/api/config"
-import { getAdminHomePath, getModuleAccess, readAdminProfile } from "@/shared/utils/adminAccess.js"
+import { getAdminHomePath, getModuleAccess, hasGlobalSection, readAdminProfile } from "@/shared/utils/adminAccess.js"
 import GlobalSidebar from "./GlobalSidebar"
 import GlobalTopbar from "./GlobalTopbar"
 import { refreshAdminProfile } from "../utils/adminSession"
 import { warmAdminPages } from "@/shared/utils/warmAdminPages.js"
+import { prefetchCustomizationSettings } from "../api/globalAdminAPI"
 
 const readCollapsed = () => {
   try {
@@ -34,6 +35,14 @@ export default function GlobalAdminLayout() {
 
   // Load the Global admin pages in the background so sidebar clicks open instantly.
   useEffect(() => warmAdminPages(import.meta.glob("../pages/**/*.jsx")), [])
+
+  // Customization Settings is the page admins open most: fetch its data a moment after the panel is up, so the
+  // switches are already there when it is clicked.
+  useEffect(() => {
+    if (!hasGlobalSection(readAdminProfile(), "customization", "view")) return undefined
+    const timer = window.setTimeout(() => prefetchCustomizationSettings(), 1200)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   // A change made by the super admin (modules, sidebar options) reaches an open panel without a new sign-in.
   useEffect(() => {

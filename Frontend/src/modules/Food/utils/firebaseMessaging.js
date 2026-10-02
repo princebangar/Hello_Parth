@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { showNotificationToast } from "@/shared/utils/customToasts";
 import apiClient, { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/api";
 import { initializeApp, getApp, getApps } from "firebase/app";
+import { buildMessagingServiceWorkerUrl } from "@/shared/utils/firebaseServiceWorkerUrl";
 const fallbackNotificationSound = "/assets/media/alert.mp3";
 
 const pushNotificationSoundPath = "/assets/media/zomato_sms.mp3";
@@ -1000,7 +1001,7 @@ async function syncFirebaseConfigToServiceWorker(registration, firebasePublicEnv
 async function registerMessagingServiceWorker(firebasePublicEnv) {
   // Cache-bust so closed-app background handler updates after deploys
   const registration = await navigator.serviceWorker.register(
-    `/firebase-messaging-sw.js?v=20260724`,
+    buildMessagingServiceWorkerUrl(firebasePublicEnv),
     {
       scope: "/",
       updateViaCache: "none",

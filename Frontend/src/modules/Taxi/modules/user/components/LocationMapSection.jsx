@@ -1,15 +1,14 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Navigation } from 'lucide-react';
-import { GoogleMap } from '@react-google-maps/api';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../admin/utils/googleMaps';
 import { getSavedLocation, saveLocation, LOCATION_UPDATED_EVENT } from '../services/locationStore';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
+import { markLocationSessionFetched, hasLocationSessionFetched, locationPartsFromGoogleResult } from '@/shared/utils/sharedUserLocation';
+import { acquirePersistentMap, hasPersistentMap, releasePersistentMap } from '../utils/persistentMap';
 
 const DEFAULT_CENTER = { lat: 17.385, lon: 78.4867 };
 const DEFAULT_ZOOM = 16;
-const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
-const AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 const areCentersNearlyEqual = (first, second, threshold = 0.00001) => (
   Math.abs(Number(first?.lat ?? 0) - Number(second?.lat ?? 0)) < threshold &&
   Math.abs(Number(first?.lon ?? 0) - Number(second?.lon ?? 0)) < threshold
@@ -105,14 +104,15 @@ const LocationMapSection = () => {
   const setStatus = (newStatus) => {
     setStatusState(newStatus);
     try {
-      window.dispatchEvent(new CustomEvent('Appzeto 24:location-status', { detail: newStatus }));
+      window.dispatchEvent(new CustomEvent('helloparth:location-status', { detail: newStatus }));
     } catch (e) {
       console.error(e);
     }
   };
   const [isDragging, setIsDragging] = useState(false);
   const [map, setMap] = useState(null);
-  const [tilesLoaded, setTilesLoaded] = useState(false);
+  const [tilesLoaded, setTilesLoaded] = useState(() => hasPersistentMap());
+  const mapHostRef = useRef(null);
   const isDraggingRef = useRef(false);
   const requestedLocationRef = useRef(false);
   const { isLoaded, loadError } = useBaseGoogleMapsLoader();
@@ -155,8 +155,18 @@ const LocationMapSection = () => {
     });
   };
 
-  const persistAddress = (address) => {
-    saveLocation({ address: String(address || '').trim() });
+  // `result` is a Google geocoder result: the full address stays as the pickup text, and area / state / pincode
+  // are kept as well so Food can show the same spot with its short label.
+  const persistAddress = (result) => {
+    const full = String(result?.formatted_address || '').trim();
+    if (!full) return;
+    const parts = locationPartsFromGoogleResult(result);
+    saveLocation({
+      address: full,
+      ...(parts.area ? { area: parts.area } : {}),
+      ...(parts.state ? { state: parts.state } : {}),
+      ...(parts.pincode ? { pincode: parts.pincode } : {}),
+    });
   };
 
   // The GPS fix can arrive before the Google Maps script has loaded, and then the address was never looked up
@@ -174,7 +184,7 @@ const LocationMapSection = () => {
 
     new window.google.maps.Geocoder().geocode({ location: { lat: coords.lat, lng: coords.lon } }, (results, geocodeStatus) => {
       if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
-        persistAddress(results[0].formatted_address);
+        persistAddress(results[0]);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,21 +196,16 @@ const LocationMapSection = () => {
       persistCoords({ lat: saved.lat, lon: saved.lon }, { touch: false });
     }
 
-    const shouldRefreshCurrentLocation =
-      !saved
-      || typeof saved?.lat !== 'number'
-      || typeof saved?.lon !== 'number'
-      || !saved?.updatedAt
-      || (Date.now() - saved.updatedAt) > AUTO_REFRESH_INTERVAL_MS;
+    const hasSavedFix = typeof saved?.lat === 'number' && typeof saved?.lon === 'number';
+
+    // The location is taken ONCE per app session (by whichever app opens first - Taxi or Food) and then stays put,
+    // also while the user hops between Taxi and Food, until the user changes it (Update button, dragging the pin,
+    // picking an address). Remounting this screen must not fetch GPS again or move the pin.
+    const shouldRefreshCurrentLocation = !hasSavedFix || !hasLocationSessionFetched();
 
     if (shouldRefreshCurrentLocation && !requestedLocationRef.current) {
       requestedLocationRef.current = true;
-      // Silent when we already have a saved fix to show (just background-
-      // refreshing a stale one) — every remount of this component (e.g.
-      // switching back to Taxi from Food) re-ran this same effect and
-      // unconditionally flipped the UI to "loading" even though the map
-      // already had a perfectly good pin to show while it quietly re-checked.
-      const hasSavedFix = typeof saved?.lat === 'number' && typeof saved?.lon === 'number';
+      // Silent when a saved fix is already on screen (a new session only re-checks it quietly).
       requestLocation({ silent: hasSavedFix });
     }
   }, []);
@@ -226,6 +231,8 @@ const LocationMapSection = () => {
         lon: position.coords.longitude,
       };
 
+      // This app session now has its GPS fix: Food (and a later visit to this screen) will use it as it is.
+      markLocationSessionFetched();
       persistCoords(next);
       if (map) {
         map.panTo({ lat: next.lat, lng: next.lon });
@@ -237,7 +244,7 @@ const LocationMapSection = () => {
         geocoder.geocode({ location: { lat: next.lat, lng: next.lon } }, (results, geocodeStatus) => {
           if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
             try {
-              persistAddress(results[0].formatted_address);
+              persistAddress(results[0]);
             } catch {
               // ignore
             }
@@ -250,6 +257,8 @@ const LocationMapSection = () => {
       handleSuccess,
       (error) => {
         if (error?.code === 1) {
+          // Permission denied: do not ask again on every return to this screen.
+          if (silent) markLocationSessionFetched();
           if (!silent) setStatus('denied');
           return;
         }
@@ -258,7 +267,8 @@ const LocationMapSection = () => {
           handleSuccess,
           () => {
             // A silent background refresh failing shouldn't blow away an
-            // already-good "ready" state with an error one.
+            // already-good "ready" state with an error one (and is not retried on every return either).
+            if (silent) markLocationSessionFetched();
             if (!silent) setStatus('error');
           },
           { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
@@ -287,6 +297,115 @@ const LocationMapSection = () => {
     gestureHandling: 'greedy',
     styles: theme === 'dark' ? darkMapStyle : undefined,
   }), [theme]);
+
+  const handleDragStart = () => {
+    isDraggingRef.current = true;
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    isDraggingRef.current = false;
+    setIsDragging(false);
+    if (!map) {
+      return;
+    }
+
+    const center = map.getCenter();
+    if (!center) {
+      return;
+    }
+
+    persistCoords({ lat: center.lat(), lon: center.lng() });
+    if (window.google?.maps?.Geocoder) {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode(
+        { location: { lat: center.lat(), lng: center.lng() } },
+        (results, geocodeStatus) => {
+          if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
+            persistAddress(results[0]);
+          }
+        },
+      );
+    }
+  };
+
+  const handleIdle = () => {
+    if (!map) {
+      return;
+    }
+
+    const center = map.getCenter();
+    if (!center) {
+      return;
+    }
+
+    const next = { lat: center.lat(), lon: center.lng() };
+
+    if (areCentersNearlyEqual(centerCoords, next)) {
+      return;
+    }
+
+    setCenterCoords(next);
+
+    if (!isDraggingRef.current && status === 'ready') {
+      saveLocation(next);
+    }
+  };
+
+  // The listeners are attached once per mount but must always run the latest handlers (they read current state).
+  const handlersRef = useRef({});
+  handlersRef.current = { onDragStart: handleDragStart, onDragEnd: handleDragEnd, onIdle: handleIdle };
+
+  // The map can go into the page as soon as Google's script is loaded - and when the persistent map already exists
+  // there is nothing to wait for (useJsApiLoader only reports isLoaded one render after mounting).
+  const mapsReady = HAS_VALID_GOOGLE_MAPS_KEY
+    && !loadError
+    && Boolean(window.google?.maps)
+    && (isLoaded || hasPersistentMap());
+
+  // Put the persistent map into this screen's host div (the first time it is created, later it is simply re-used).
+  // A layout effect: the map is in place before the browser paints, so coming back shows it straight away.
+  useLayoutEffect(() => {
+    if (!mapsReady || !mapHostRef.current) {
+      return undefined;
+    }
+
+    const host = mapHostRef.current;
+    const saved = getSavedLocation();
+    const startCenter = Number.isFinite(saved?.lat) && Number.isFinite(saved?.lon)
+      ? { lat: saved.lat, lng: saved.lon }
+      : { lat: centerCoords.lat, lng: centerCoords.lon };
+
+    const { map: persistentMap, reused } = acquirePersistentMap(host, {
+      center: startCenter,
+      zoom: DEFAULT_ZOOM,
+      options: mapOptions,
+    });
+    setMap(persistentMap);
+    if (reused) {
+      setTilesLoaded(true);
+    }
+
+    const listeners = [
+      persistentMap.addListener('tilesloaded', () => setTilesLoaded(true)),
+      persistentMap.addListener('dragstart', () => handlersRef.current.onDragStart?.()),
+      persistentMap.addListener('dragend', () => handlersRef.current.onDragEnd?.()),
+      persistentMap.addListener('idle', () => handlersRef.current.onIdle?.()),
+    ];
+
+    return () => {
+      listeners.forEach((listener) => listener.remove());
+      releasePersistentMap(host);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapsReady]);
+
+  // Theme switch: light / dark map styling.
+  useEffect(() => {
+    if (map) {
+      map.setOptions(mapOptions);
+    }
+  }, [map, mapOptions]);
 
   return (
     <motion.section
@@ -411,66 +530,10 @@ const LocationMapSection = () => {
               </div>
             )}
 
-            {HAS_VALID_GOOGLE_MAPS_KEY && !loadError && isLoaded && (
-              <GoogleMap
-                mapContainerStyle={MAP_CONTAINER_STYLE}
-                center={{ lat: centerCoords.lat, lng: centerCoords.lon }}
-                zoom={DEFAULT_ZOOM}
-                onLoad={(nextMap) => setMap(nextMap)}
-                onTilesLoaded={() => setTilesLoaded(true)}
-                onDragStart={() => {
-                  isDraggingRef.current = true;
-                  setIsDragging(true);
-                }}
-                onDragEnd={() => {
-                  isDraggingRef.current = false;
-                  setIsDragging(false);
-                  if (!map) {
-                    return;
-                  }
-
-                  const center = map.getCenter();
-                  if (!center) {
-                    return;
-                  }
-
-                  persistCoords({ lat: center.lat(), lon: center.lng() });
-                  if (window.google?.maps?.Geocoder) {
-                    const geocoder = new window.google.maps.Geocoder();
-                    geocoder.geocode(
-                      { location: { lat: center.lat(), lng: center.lng() } },
-                      (results, geocodeStatus) => {
-                        if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
-                          persistAddress(results[0].formatted_address);
-                        }
-                      },
-                    );
-                  }
-                }}
-                onIdle={() => {
-                  if (!map) {
-                    return;
-                  }
-
-                  const center = map.getCenter();
-                  if (!center) {
-                    return;
-                  }
-
-                  const next = { lat: center.lat(), lon: center.lng() };
-
-                  if (areCentersNearlyEqual(centerCoords, next)) {
-                    return;
-                  }
-
-                  setCenterCoords(next);
-
-                  if (!isDraggingRef.current && status === 'ready') {
-                    saveLocation(next);
-                  }
-                }}
-                options={mapOptions}
-              />
+            {/* The map itself is a persistent instance (utils/persistentMap.js) that is put into this div, so coming
+                back from Food shows the same map at once instead of building a new one. */}
+            {HAS_VALID_GOOGLE_MAPS_KEY && !loadError && (
+              <div ref={mapHostRef} className="h-full w-full" />
             )}
 
             {/* The Pinpoint */}

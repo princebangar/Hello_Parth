@@ -40,7 +40,8 @@ const readModuleList = (response) =>
 export const prefetchServiceModules = async () => {
   if (getPageCache(SERVICE_MODULES_CACHE_KEY) || readPersistedModules()) return;
   try {
-    const response = await userService.getAppModules({ limit: 100 });
+    // Warm-up read made from the OTHER app (Food): runs behind that screen's own requests.
+    const response = await userService.getAppModules({ limit: 100 }, { background: true });
     const list = readModuleList(response);
     if (Array.isArray(list) && list.length > 0) {
       setPageCache(SERVICE_MODULES_CACHE_KEY, list);
@@ -383,7 +384,7 @@ const ServiceGrid = ({
       if (settings?.userHomeSettings && Object.keys(settings.userHomeSettings).length > 0) {
         return settings.userHomeSettings;
       }
-      const saved = window.localStorage.getItem('Appzeto 24:admin:user-app-settings');
+      const saved = window.localStorage.getItem('helloparth:admin:user-app-settings');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error(e);
@@ -405,7 +406,7 @@ const ServiceGrid = ({
   useEffect(() => {
     const handleStorageChange = () => {
       try {
-        const saved = window.localStorage.getItem('Appzeto 24:admin:user-app-settings');
+        const saved = window.localStorage.getItem('helloparth:admin:user-app-settings');
         if (saved) {
           const parsed = JSON.parse(saved);
           setUiSettings(prev => {
@@ -436,8 +437,8 @@ const ServiceGrid = ({
     const handleOpenModal = () => {
       setShowAllModal(true);
     };
-    window.addEventListener('Appzeto 24:open-all-services-modal', handleOpenModal);
-    return () => window.removeEventListener('Appzeto 24:open-all-services-modal', handleOpenModal);
+    window.addEventListener('helloparth:open-all-services-modal', handleOpenModal);
+    return () => window.removeEventListener('helloparth:open-all-services-modal', handleOpenModal);
   }, []);
 
   useEffect(() => {

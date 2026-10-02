@@ -8,6 +8,7 @@ import useNotificationInbox from "@food/hooks/useNotificationInbox";
 import VoiceSearchOverlay from "@food/components/user/VoiceSearchOverlay";
 import { useVoiceSearch } from "@food/hooks/useVoiceSearch";
 import { isModuleAuthenticated } from "@food/utils/auth";
+import { prefetchWallet } from "@/shared/utils/walletPrefetch.js";
 import SuperAppHomeHeader from "@/shared/components/SuperAppHomeHeader";
 
 // Images for banner - exactly as in FestBanner.jsx
@@ -68,7 +69,9 @@ export default function HomeHeader({
     navigate(`/food/user/search?q=${encodeURIComponent(transcript)}&mode=delivery`);
     setIsVoiceOverlayOpen(false);
   });
+  // Bell badge only - starts after the home screen's own requests (see shared/utils/backgroundRequests.js).
   const { unreadCount: broadcastUnread } = useNotificationInbox("user", {
+    background: true,
     pollMs: 60000,
     enabled: isTabActive,
   });
@@ -106,6 +109,12 @@ export default function HomeHeader({
   }, [routerLocation.pathname]);
 
   const unreadCount = broadcastUnread + localUnread;
+
+  // Wallet balance starts loading as soon as a finger / pointer lands on the icon (see shared/utils/walletPrefetch.js).
+  const warmWallet = () => {
+    if (!isModuleAuthenticated('user')) return;
+    prefetchWallet('food');
+  };
 
   // FestBanner Logic
   const [imgIndex, setImgIndex] = useState(0);
@@ -229,6 +238,9 @@ export default function HomeHeader({
               <Link
                 to="/food/user/wallet"
                 state={{ from: '/food/user' }}
+                onPointerDown={warmWallet}
+                onMouseEnter={warmWallet}
+                onFocus={warmWallet}
                 onClick={(e) => {
                   if (!isModuleAuthenticated('user')) {
                     e.preventDefault();

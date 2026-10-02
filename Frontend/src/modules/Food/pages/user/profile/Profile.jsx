@@ -57,7 +57,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@food/components/ui/dialog";
-import { authAPI, userAPI } from "@food/api";
+import { authAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import { toast } from "sonner";
 import { showAccountDeletedToast } from "@/shared/utils/customToasts";
@@ -129,7 +129,6 @@ export default function Profile() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [referralReward, setReferralReward] = useState(0);
   const [walletBalance, setWalletBalance] = useState(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -320,61 +319,6 @@ export default function Profile() {
 
   const profileCompletion = calculateProfileCompletion();
   const isComplete = profileCompletion === 100;
-  useEffect(() => {
-    let mounted = true;
-    userAPI
-      .getReferralStats()
-      .then((res) => {
-        const reward = res?.data?.data?.stats?.rewardAmount;
-        if (mounted) setReferralReward(Number(reward) || 0);
-      })
-      .catch(() => { });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    userAPI
-      .getWallet()
-      .then((res) => {
-        const w = res?.data?.data?.wallet || res?.data?.wallet;
-        const bal = Number(w?.balance);
-        if (mounted) setWalletBalance(Number.isFinite(bal) ? bal : 0);
-      })
-      .catch(() => { });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const refId =
-    userProfile?._id || userProfile?.id || userProfile?.referralCode || "";
-  const referralLink = refId
-    ? `${window.location.origin}/login?ref=${encodeURIComponent(String(refId))}`
-    : "";
-
-  const handleShareReferral = async () => {
-    if (!referralLink) return;
-    const rewardText = referralReward > 0 ? `\u20B9${referralReward}` : "rewards";
-    const shareText = `Join ${companyName} and earn ${rewardText}.`;
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `${companyName} referral`,
-          text: shareText,
-          url: referralLink,
-        });
-      } else {
-        const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${referralLink}`)}`;
-        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
-      }
-    } catch (error) {
-      debugError("Failed to share referral:", error);
-    }
-  };
-
   // Handle logout
   const handleLogout = async () => {
     if (isLoggingOut) return;

@@ -7,6 +7,8 @@
 // login screen renders in the same frame as the route change and no fallback is ever shown.
 // Food, Taxi and every forced sign-out share this.
 
+import { whenAppSettled } from './whenSettled.js';
+
 const loaded = new Map();
 
 const makeLoader = (key, importer) => () => {
@@ -39,15 +41,4 @@ export const preloadAuthApp = () => {
 };
 
 /** Warms the login chunks when the browser is idle, so a later logout is instant. */
-export const preloadAuthAppWhenIdle = () => {
-  if (typeof window === 'undefined') return () => {};
-  const run = () => {
-    preloadAuthApp();
-  };
-  if (typeof window.requestIdleCallback === 'function') {
-    const id = window.requestIdleCallback(run, { timeout: 4000 });
-    return () => window.cancelIdleCallback?.(id);
-  }
-  const id = window.setTimeout(run, 2000);
-  return () => window.clearTimeout(id);
-};
+export const preloadAuthAppWhenIdle = () => whenAppSettled(preloadAuthApp);

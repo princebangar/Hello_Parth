@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Share2, Users, Wallet, CircleCheck, Clock3, CircleX } from "lucide-react";
+import { ArrowLeft, Share2, Users, Wallet, CircleCheck, Clock3, CircleX, Copy } from "lucide-react";
 import AnimatedPage from "@food/components/user/AnimatedPage";
 import { Button } from "@food/components/ui/button";
 import { Card, CardContent } from "@food/components/ui/card";
@@ -8,6 +8,7 @@ import { useCompanyName } from "@food/hooks/useCompanyName";
 import { useProfile } from "@food/context/ProfileContext";
 import { toast } from "sonner";
 import { userAPI } from "@food/api";
+import useReferralEnabled from "@/shared/hooks/useReferralEnabled";
 
 const statusMeta = {
   credited: {
@@ -41,6 +42,10 @@ export default function ReferEarn() {
     rejectedCount: 0,
   });
   const [invitedFriends, setInvitedFriends] = useState([]);
+  const [referralCode, setReferralCode] = useState("");
+  const [serverEnabled, setServerEnabled] = useState(true);
+  const flagEnabled = useReferralEnabled();
+  const programOn = flagEnabled && serverEnabled;
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +56,8 @@ export default function ReferEarn() {
         const nextStats = res?.data?.data?.stats || {};
         const nextInvited = res?.data?.data?.invitedFriends || [];
         if (!cancelled) {
+          setReferralCode(String(res?.data?.data?.referralCode || "").trim());
+          setServerEnabled(res?.data?.data?.enabled !== false);
           setStats({
             referralCount: Number(nextStats.referralCount) || 0,
             totalReferralEarnings: Number(nextStats.totalReferralEarnings) || 0,
@@ -78,10 +85,21 @@ export default function ReferEarn() {
     };
   }, []);
 
-  const refId = userProfile?._id || userProfile?.id || userProfile?.referralCode || "";
+  // The shareable referral code (e.g. K7M3PQ9X) - never the account's database id.
+  const refId = referralCode || (userProfile?.referralCode && !/^[0-9a-f]{24}$/i.test(userProfile.referralCode) ? userProfile.referralCode : "");
   const referralLink = refId
     ? `${window.location.origin}/login?ref=${encodeURIComponent(String(refId))}`
     : "";
+
+  const handleCopyCode = async () => {
+    if (!refId) return;
+    try {
+      await navigator.clipboard.writeText(refId);
+      toast.success("Referral code copied");
+    } catch {
+      toast.error("Could not copy the code");
+    }
+  };
 
   const shareText = useMemo(() => {
     const rewardText = stats.rewardAmount > 0 ? `\u20B9${stats.rewardAmount}` : "rewards";
@@ -129,11 +147,35 @@ export default function ReferEarn() {
           <h1 className="text-xl font-bold text-black dark:text-white">Refer & Earn</h1>
         </div>
 
+        {!programOn && (
+          <Card className="bg-white dark:bg-[#1a1a1a] rounded-2xl border-0 dark:border-gray-800 shadow-sm mb-3">
+            <CardContent className="p-4">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Referral program is off right now</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                New referral rewards are paused. Check back later.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {programOn && (
         <Card className="bg-white dark:bg-[#1a1a1a] rounded-2xl border-0 dark:border-gray-800 shadow-sm mb-3">
           <CardContent className="p-4">
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Invite friends and earn when they sign up.
             </p>
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Your referral code</p>
+                <p className="text-lg font-bold tracking-widest text-gray-900 dark:text-white truncate">
+                  {refId || (loading ? "..." : "Not available")}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={handleCopyCode} disabled={!refId} className="shrink-0">
+                <Copy className="h-4 w-4 mr-1.5" />
+                Copy
+              </Button>
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Reward per invite</p>
@@ -157,6 +199,7 @@ export default function ReferEarn() {
             </Button>
           </CardContent>
         </Card>
+        )}
 
         <div className="grid grid-cols-3 gap-2 mb-3">
           <Card className="border-0 shadow-sm bg-white dark:bg-[#1a1a1a]">

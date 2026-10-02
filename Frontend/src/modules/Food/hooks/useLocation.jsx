@@ -358,6 +358,9 @@ function bootstrapLocationModeOnAppOpen() {
     /* ignore */
   }
 
+  // hasSessionMarker is also set by Taxi when IT takes the session's GPS fix (see markLocationSessionFetched in
+  // shared/utils/sharedUserLocation.js). Opening Food after that must not start a second "Fetching Location..." pass:
+  // Food just uses the saved location, which Taxi keeps in sync, until the user changes it.
   if (hasSessionMarker || isBrowserPageReload()) {
     cachedIsNewAppSession = false
     try {
@@ -823,7 +826,7 @@ export function useLocation() {
 
         debugLog("?? Parsing formatted address for area:", { formattedAddress, addressParts, city, state, currentArea: area })
 
-        // ZOMATO-STYLE: If we have 3+ parts, first part is ALWAYS the area/locality
+        // HELLO PARTH-STYLE: If we have 3+ parts, first part is ALWAYS the area/locality
         // Format: "New Palasia, Indore, Madhya Pradesh" -> area = "New Palasia"
         if (addressParts.length >= 3) {
           const firstPart = addressParts[0]
@@ -956,7 +959,7 @@ export function useLocation() {
       }
 
       // FINAL FALLBACK: If area is still empty, force extract from formatted_address
-      // This is the last resort - be very aggressive (ZOMATO-STYLE)
+      // This is the last resort - be very aggressive (HELLO PARTH-STYLE)
       // Even if formatted_address only has 2 parts (City, State), try to extract area
       if (!area && formattedAddress) {
         const parts = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
@@ -1001,7 +1004,7 @@ export function useLocation() {
 
         // If we have 3+ parts, extract area from first part
         if (parts.length >= 3) {
-          // ZOMATO PATTERN: "New Palasia, Indore, Madhya Pradesh"
+          // HELLO PARTH PATTERN: "New Palasia, Indore, Madhya Pradesh"
           // First part = Area, Second = City, Third = State
           const potentialArea = parts[0]
           // Validate it's not state, city, or generic names
@@ -1013,7 +1016,7 @@ export function useLocation() {
             area = potentialArea
             if (!city && parts[1]) city = parts[1]
             if (!state && parts[2]) state = parts[2]
-            debugLog("??? ZOMATO-STYLE EXTRACTION:", { area, city, state })
+            debugLog("??? HELLO PARTH-STYLE EXTRACTION:", { area, city, state })
           }
         } else if (parts.length === 2) {
           // Only 2 parts: "Indore, Madhya Pradesh" - area is missing
@@ -1949,16 +1952,28 @@ export function useLocation() {
       if (!pageLoadAutoRefreshStarted) {
         pageLoadAutoRefreshStarted = true
         try {
-          sessionStorage.setItem("manual_location_update", "true")
+          // "manual_location_update" is what makes Food's screen show the blocking "Fetching Location..." cover.
+          // This hook also runs while the user is on a Taxi screen (it is mounted at the app root), where that flag
+          // would just sit there and pop the cover up the moment they switch to Food - so only raise it on Food.
+          if (window.location.pathname.startsWith("/food")) {
+            sessionStorage.setItem("manual_location_update", "true")
+          }
           localStorage.setItem("deliveryAddressMode", "current")
           window.dispatchEvent(new CustomEvent("deliveryAddressModeUpdated"))
         } catch {}
         // requestLocation clears the prior city pin and pulls live GPS (not a silent cache hit).
         runDedupedAutoRefresh(() =>
-          requestLocation().catch((err) => {
-            debugError("New-tab current location fetch failed, falling back:", err)
-            return refreshLocationIfPermitted({ showLoading: true })
-          }),
+          requestLocation()
+            .catch((err) => {
+              debugError("New-tab current location fetch failed, falling back:", err)
+              return refreshLocationIfPermitted({ showLoading: true })
+            })
+            // The fix is in (or failed): the cover must not stay armed for a later screen.
+            .finally(() => {
+              try {
+                sessionStorage.removeItem("manual_location_update")
+              } catch {}
+            }),
         )
       }
     } else {

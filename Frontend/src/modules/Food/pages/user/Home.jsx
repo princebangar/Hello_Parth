@@ -133,6 +133,18 @@ const HOME_CATEGORIES_CACHE_KEY = 'food_home_categories_v2';
 let HOME_RESTAURANTS_CACHE = getSessionCache('food_home_restaurants');
 let HOME_CATEGORIES_CACHE = getSessionCache(HOME_CATEGORIES_CACHE_KEY);
 
+// Hero banners: kept per delivery zone, like the lists above, so a refresh shows them at once and updates quietly.
+const HOME_BANNERS_CACHE_KEY = 'food_home_hero_banners_v1';
+let HOME_BANNERS_CACHE = getSessionCache(HOME_BANNERS_CACHE_KEY); // { zoneId, list }
+const getCachedBanners = (zoneId) => {
+  const wanted = String(zoneId || '');
+  return HOME_BANNERS_CACHE && String(HOME_BANNERS_CACHE.zoneId || '') === wanted && Array.isArray(HOME_BANNERS_CACHE.list) && HOME_BANNERS_CACHE.list.length > 0
+    ? HOME_BANNERS_CACHE.list
+    : null;
+};
+const bannerImagesFromList = (list) =>
+  (Array.isArray(list) ? list : []).map((b) => (b && typeof b.imageUrl === 'string' ? b.imageUrl : '')).filter(Boolean);
+
 
 // Explore More Icons
 import exploreOffers from "@food/assets/explore more icons/offers.png";
@@ -319,7 +331,7 @@ const RestaurantCardOfferCarousel = React.memo(({ coupons }) => {
   if (uniqueCoupons.length === 1) {
     return (
       <div className="flex items-center gap-2 mt-2 overflow-hidden h-[20px] relative">
-        {/* Symmetrical Scallop Icon like Zomato */}
+        {/* Symmetrical Scallop Icon like Hello Parth */}
         <div className="flex-shrink-0 flex items-center justify-center w-5 h-5">
           <ScallopBadge className="h-5 w-5 text-[#2563EB]" />
         </div>
@@ -336,7 +348,7 @@ const RestaurantCardOfferCarousel = React.memo(({ coupons }) => {
 
   return (
     <div className="flex items-center gap-2 mt-2 overflow-hidden h-[20px] relative">
-      {/* Symmetrical Scallop Icon like Zomato */}
+      {/* Symmetrical Scallop Icon like Hello Parth */}
       <div className="flex-shrink-0 flex items-center justify-center w-5 h-5">
         <ScallopBadge className="h-5 w-5 text-[#2563EB]" />
       </div>
@@ -478,9 +490,16 @@ export default function Home({ homeMode = null, isTabActive = true }) {
     };
   }, []);
 
-  const [heroBannerImages, setHeroBannerImages] = useState([]);
-  const [heroBannersData, setHeroBannersData] = useState([]); // Store full banner data with linked restaurants
-  const [loadingBanners, setLoadingBanners] = useState(true);
+  const initialZoneIdForBanners = (() => {
+    try {
+      return localStorage.getItem('userZoneId') || '';
+    } catch {
+      return '';
+    }
+  })();
+  const [heroBannerImages, setHeroBannerImages] = useState(() => bannerImagesFromList(getCachedBanners(initialZoneIdForBanners)));
+  const [heroBannersData, setHeroBannersData] = useState(() => getCachedBanners(initialZoneIdForBanners) || []); // Store full banner data with linked restaurants
+  const [loadingBanners, setLoadingBanners] = useState(() => !getCachedBanners(initialZoneIdForBanners));
   const [hasScrolledPastBanner, setHasScrolledPastBanner] = useState(false);
   const [landingCategories, setLandingCategories] = useState([]);
   const [landingExploreMore, setLandingExploreMore] = useState(
@@ -1120,7 +1139,8 @@ export default function Home({ homeMode = null, isTabActive = true }) {
   useEffect(() => {
     if (zoneLoading) return;
     let cancelled = false;
-    setLoadingBanners(true);
+    // Banners already on screen (from this tab's cache) stay while the fresh list is fetched.
+    if (!getCachedBanners(zoneId)) setLoadingBanners(true);
     publicGetOnce("/food/hero-banners/public", zoneId ? { params: { zoneId } } : {})
       .then((response) => {
         if (cancelled) return;
@@ -1136,6 +1156,8 @@ export default function Home({ homeMode = null, isTabActive = true }) {
         setHeroBannerImages(images);
         setHeroBannersData(list);
         setCurrentBannerIndex(0);
+        HOME_BANNERS_CACHE = { zoneId: zoneId || '', list };
+        setSessionCache(HOME_BANNERS_CACHE_KEY, HOME_BANNERS_CACHE);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1346,13 +1368,17 @@ export default function Home({ homeMode = null, isTabActive = true }) {
   const effectiveZoneId = zoneId;
   const effectiveZoneLoading = zoneLoading;
 
-  const showCategorySkeleton = loadingRealCategories || loadingMenuCategories || zoneLoading;
-  const showRestaurantSkeleton = isLoadingFilterResults || loadingRestaurants || zoneLoading;
+  // The zone check (a request of its own) runs on every open, but when the page already has something to show - the
+  // saved lists from this tab - it must not blank them behind a skeleton while it finishes.
+  const hasCategoriesToShow = Array.isArray(realCategories) && realCategories.length > 0;
+  const hasRestaurantsToShow = Array.isArray(restaurantsData) && restaurantsData.length > 0;
+  const showCategorySkeleton = loadingRealCategories || loadingMenuCategories || (zoneLoading && !hasCategoriesToShow);
+  const showRestaurantSkeleton = isLoadingFilterResults || loadingRestaurants || (zoneLoading && !hasRestaurantsToShow);
   // While zone/restaurants are settling, never surface a real "0 restaurants" count.
   const isRestaurantsResolving =
     loadingRestaurants ||
     isLoadingFilterResults ||
-    zoneLoading;
+    (zoneLoading && !hasRestaurantsToShow);
 
   // Only flip restaurant loading when the zone actually changes (not every detect flicker).
   const prevResolvedZoneIdRef = useRef(zoneId);

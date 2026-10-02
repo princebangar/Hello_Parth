@@ -17,6 +17,7 @@ import UserAppearanceDialog from '@/shared/components/UserAppearanceDialog.jsx';
 import UserLogoutConfirmDialog from '@/shared/components/UserLogoutConfirmDialog.jsx';
 import { preloadAuthApp } from '@/shared/utils/preloadLogin.js';
 import { logoutWithTransition } from '@/shared/utils/logoutTransition.js';
+import useReferralEnabled from '@/shared/hooks/useReferralEnabled';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
@@ -88,6 +89,14 @@ const Profile = () => {
   const navigate = useNavigate();
   const navType = useNavigationType();
   const { theme } = useUserTheme();
+  const referralEnabled = useReferralEnabled();
+  // Global admin can switch the referral system off: its menu row disappears (and an emptied group with it).
+  const visibleSections = menuSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => referralEnabled || item.path !== '/taxi/user/referral'),
+    }))
+    .filter((section) => section.items.length > 0);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -435,7 +444,7 @@ const Profile = () => {
           animate="visible"
           className="px-4 space-y-5"
         >
-          {menuSections.map((section, sIdx) => (
+          {visibleSections.map((section, sIdx) => (
             <div key={section.heading || `section-${sIdx}`} className="space-y-3">
               {section.heading && (
                 <div className="flex items-center gap-2 px-1">

@@ -52,6 +52,51 @@
           var partnerPortal = /^\/food\/(?:restaurant|delivery|admin)(?:\/|$)/.test(path);
           var consumerApp = (path === '/' && signedIn) || path.indexOf('/taxi/user') === 0 || (/^\/food(?:\/|$)/.test(path) && !partnerPortal);
           root.setAttribute('data-boot', policy ? 'policy' : consumerApp ? 'app' : 'plain');
+
+          // The Taxi / Food home on a phone: which header to paint, and the saved location to put in it.
+          var homePath = path.replace(/\/+$/, '');
+          var vertical = '';
+          if (consumerApp) {
+            if (homePath === '/taxi/user' || (path === '/' && signedIn)) vertical = 'taxi';
+            else if (homePath === '/food' || homePath === '/food/user' || homePath === '/food/user/home') vertical = 'food';
+          }
+          if (vertical) {
+            root.setAttribute('data-vertical', vertical);
+            if (vertical === 'taxi') {
+              // The Taxi home has a Google map: open the connections to Google while the app's own files download.
+              ['https://maps.googleapis.com', 'https://maps.gstatic.com'].forEach(function (origin) {
+                var l = document.createElement('link');
+                l.rel = 'preconnect';
+                l.href = origin;
+                l.crossOrigin = '';
+                document.head.appendChild(l);
+              });
+            }
+            var parse = function (k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
+            var loc = parse('userLocation');
+            var taxiLoc = parse('helloparth:lastLocation');
+            var title = '', sub = '';
+            var isNum = function (v) { return /^-?\d/.test(v); };
+            if (loc && (loc.area || loc.address || loc.formattedAddress)) {
+              var city = String(loc.city || '').toLowerCase(), state = String(loc.state || '').toLowerCase();
+              var area = String(loc.area || loc.subLocality || loc.mainTitle || loc.neighborhood || '').trim();
+              if (area && !isNum(area) && area.toLowerCase() !== city && area.toLowerCase() !== state) title = area;
+              if (!title) {
+                var parts = String(loc.address || loc.formattedAddress || '').split(',');
+                for (var j = 0; j < parts.length; j++) {
+                  var part = parts[j].trim(), low = part.toLowerCase();
+                  if (part.length > 2 && low !== city && low !== state && !isNum(part) && low !== 'select location') { title = part; break; }
+                }
+              }
+              if (!title) title = area || String(loc.city || '');
+              sub = [loc.state, loc.pincode || loc.zipCode || loc.postalCode].filter(Boolean).join(', ');
+            } else if (taxiLoc && (taxiLoc.address || taxiLoc.area)) {
+              var chunks = String(taxiLoc.address || taxiLoc.area).split(',');
+              title = String(taxiLoc.area || chunks[0] || '').trim();
+              sub = [taxiLoc.state, taxiLoc.pincode].filter(Boolean).join(', ');
+            }
+            window.__bootLoc = { title: title || 'Select Location', sub: sub };
+          }
         } catch(e) {}
       })();
     </script>
@@ -59,6 +104,9 @@
       /* Match the app's own background before React mounts, so a hard
          reload shows a plain themed colour instead of a stark white flash. */
       html, body { background-color: #fffdf9; }
+      /* the browser's default 8px body margin would show as a white frame around the full-width header until the
+         app's own stylesheet arrives (it only arrives with the JavaScript in dev) */
+      html, body { margin: 0; }
       html[data-theme="dark"], html[data-theme="dark"] body { background-color: #0b0b0b; }
 
       /* Static placeholder — plain HTML/CSS shown the instant the document
@@ -118,6 +166,45 @@
         letter-spacing: 0.1em; text-transform: uppercase; color: #6b7280;
       }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
+
+      /* ---- Real top of the Taxi / Food home, painted from this file alone ------------------------------------
+         On a phone the first thing on screen after a refresh is the actual header - the person's saved location,
+         the Taxi | Food switch and the icons - in the app's own colours, instead of grey bars. Only the part below
+         it is a skeleton. Keep in step with shared/components/SuperAppHomeHeader.jsx and with
+         BootShellHeader in shared/components/BootShell.jsx (React shows the same header while the app loads). */
+      .boot-shell { display: none; }
+      .boot-only-food, .boot-only-taxi { display: none; }
+      @media (max-width: 767px) {
+        html[data-boot="app"][data-vertical] .boot-shell { display: block; }
+        html[data-boot="app"][data-vertical] #boot-skeleton { padding: 0; }
+        html[data-boot="app"][data-vertical] #boot-skeleton > .boot-row { display: none; }
+        html[data-boot="app"][data-vertical] #boot-skeleton > :not(.boot-shell) { margin-left: 20px; margin-right: 20px; }
+        html[data-vertical="taxi"] .boot-only-taxi { display: block; }
+        html[data-vertical="food"] .boot-only-food { display: block; }
+      }
+      .boot-hdr { width: 100%; box-sizing: border-box; color: #fff; font-family: 'Outfit', 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      html[data-vertical="taxi"] .boot-hdr { background: #0B172A; height: 130px; }
+      html[data-vertical="food"] .boot-hdr { background: #D91F3A; height: 393px; border-radius: 0 0 36px 36px; }
+      .boot-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 16px 8px; box-sizing: border-box; height: 62px; }
+      .boot-loc { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+      .boot-pin { flex: none; fill: #5B9BD5; stroke: #5B9BD5; }
+      html[data-vertical="food"] .boot-pin { fill: #FF6B7A; stroke: #FF6B7A; }
+      .boot-loc-text { display: flex; flex-direction: column; min-width: 0; }
+      .boot-loc-title { display: flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 700; line-height: 20px; min-width: 0; }
+      .boot-loc-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .boot-loc-sub { font-size: 11px; font-weight: 500; line-height: 14px; opacity: .8; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 14px; }
+      .boot-icons { display: flex; align-items: center; gap: 12px; flex: none; }
+      .boot-avatar { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #fff; background: #FFF5E6; overflow: hidden; display: block; box-sizing: border-box; }
+      .boot-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .boot-tabs { padding: 0 16px 12px; box-sizing: border-box; }
+      .boot-tabs-in { display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: rgba(0,0,0,.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); box-sizing: border-box; }
+      .boot-tab { flex: 1; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 15px; font-weight: 700; color: rgba(255,255,255,.85); }
+      html[data-vertical="taxi"] .boot-tab-taxi { background: #2563EB; color: #fff; }
+      html[data-vertical="food"] .boot-tab-food { background: #FF5C72; color: #fff; }
+      .boot-search { padding: 4px 16px 0; box-sizing: border-box; }
+      .boot-search-pill { display: block; height: 46px; width: 76%; border-radius: 16px; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+      .boot-map { height: 200px; border-radius: 0 !important; margin-left: 0 !important; margin-right: 0 !important; background: rgba(203, 213, 225, .8); }
+      html[data-theme="dark"] .boot-map { background: rgba(255,255,255,.08); }
     </style>
   </head>
   <body>
@@ -125,6 +212,27 @@
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#CB202D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       <p>Loading...</p>
     </div><div id="boot-skeleton" aria-hidden="true">
+      <div class="boot-shell" aria-hidden="true">
+        <div class="boot-hdr">
+          <div class="boot-top">
+            <div class="boot-loc">
+              <svg class="boot-pin" width="20" height="20" viewBox="0 0 24 24" stroke-width="1.5"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="#fff" stroke="none"/></svg>
+              <div class="boot-loc-text">
+                <div class="boot-loc-title"><span id="boot-loc-title"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.9"><path d="m6 9 6 6 6-6"/></svg></div>
+                <div class="boot-loc-sub" id="boot-loc-sub"></div>
+              </div>
+            </div>
+            <div class="boot-icons">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+              <span class="boot-avatar"><img src="/assets/images/profile_avatar.webp" alt="" width="36" height="36" /></span>
+            </div>
+          </div>
+          <div class="boot-tabs"><div class="boot-tabs-in"><span class="boot-tab boot-tab-taxi">Taxi</span><span class="boot-tab boot-tab-food">Food</span></div></div>
+          <div class="boot-only-food boot-search"><span class="boot-search-pill"></span></div>
+        </div>
+        <div class="boot-only-taxi boot-map boot-bar"></div>
+      </div>
       <div class="boot-row">
         <div class="boot-bar" style="width:160px;height:44px;border-radius:999px;"></div>
         <div class="boot-actions">
@@ -144,6 +252,17 @@
         <div class="boot-bar" style="height:36px;width:96px;border-radius:999px;"></div>
       </div>
     </div></div>
+    <script>
+      (function () {
+        try {
+          var l = window.__bootLoc;
+          if (!l) return;
+          var t = document.getElementById('boot-loc-title'), s = document.getElementById('boot-loc-sub');
+          if (t) t.textContent = l.title;
+          if (s) s.textContent = l.sub;
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>

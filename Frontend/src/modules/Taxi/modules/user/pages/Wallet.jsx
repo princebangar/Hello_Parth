@@ -7,6 +7,8 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import { openExternalCheckout } from '../../../shared/utils/externalNavigation';
 import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
+import useReferralEnabled from '@/shared/hooks/useReferralEnabled';
+import { getPageCache, setPageCache, userScopedCacheKey } from '@/shared/utils/pageCache';
 
 const PHONEPE_USER_WALLET_FLOW_KEY = 'user-wallet-topup';
 
@@ -20,9 +22,13 @@ const Wallet = () => {
   const [amount, setAmount] = React.useState('');
   const [isAdding, setIsAdding] = React.useState(false);
   const [isSuccess, setIsSuccess] = React.useState(false);
-  const [walletLoading, setWalletLoading] = React.useState(true);
+  const referralEnabled = useReferralEnabled();
+  // Last wallet seen in this tab is shown at once while the fresh one loads (no spinner on a repeat visit).
+  const walletCacheKey = useMemo(() => userScopedCacheKey('taxi_wallet'), []);
+  const cachedWallet = useMemo(() => getPageCache(walletCacheKey), [walletCacheKey]);
+  const [walletLoading, setWalletLoading] = React.useState(!cachedWallet);
   const [walletError, setWalletError] = React.useState('');
-  const [wallet, setWallet] = React.useState({ balance: 0, currency: 'INR', recentTransactions: [] });
+  const [wallet, setWallet] = React.useState(cachedWallet || { balance: 0, currency: 'INR', recentTransactions: [] });
 
   const basePath = useMemo(
     () => (window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
@@ -51,18 +57,22 @@ const Wallet = () => {
 
   const refreshWallet = async () => {
     setWalletError('');
-    setWalletLoading(true);
 
     try {
       const response = await userAuthService.getWallet();
       const data = response?.data || {};
-      setWallet({
+      const nextWallet = {
         balance: Number(data.balance || 0),
         currency: data.currency || 'INR',
         recentTransactions: Array.isArray(data.recentTransactions) ? data.recentTransactions : [],
-      });
+      };
+      setWallet(nextWallet);
+      setPageCache(walletCacheKey, nextWallet);
     } catch (err) {
-      setWalletError(err?.message || 'Failed to load wallet');
+      // A wallet already on screen stays; only a first load with nothing to show reports the failure.
+      if (!getPageCache(walletCacheKey)) {
+        setWalletError(err?.message || 'Failed to load wallet');
+      }
     } finally {
       setWalletLoading(false);
     }
@@ -349,6 +359,7 @@ const Wallet = () => {
         </Motion.div>
       </div>
 
+      {referralEnabled && (
       <div className="px-5 mt-6">
         <Motion.button
           whileHover={{ scale: 1.02, y: -2 }}
@@ -361,14 +372,13 @@ const Wallet = () => {
             <Gift size={20} />
           </div>
           <div className="flex-1 text-left">
-            <h4 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Refer & Earn <span className="text-emerald-600 dark:text-emerald-400 font-extrabold ml-1">₹50</span>
-            </h4>
+            <h4 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Refer & Earn</h4>
             <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Invite friends to {appName}</p>
           </div>
           <ArrowLeft size={18} className={`rotate-180 transition-all duration-300 group-hover:translate-x-1 ${isDark ? 'text-slate-600 group-hover:text-white' : 'text-slate-900'}`} />
         </Motion.button>
       </div>
+      )}
 
       <div className="px-5 mt-10">
         <div className="flex items-center justify-between mb-4 px-1">

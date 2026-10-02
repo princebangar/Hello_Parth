@@ -15,6 +15,7 @@ import AdminModulesKeepAlive, { AdminKeepAliveSlot } from './AdminModulesKeepAli
 import AppRouteFallback from '@/shared/components/AppRouteFallback'
 import { loadAuthApp, preloadAuthAppWhenIdle } from '@/shared/utils/preloadLogin.js'
 import { FoodApp, TaxiApp } from '@/shared/utils/appChunks.js'
+import { whenAppSettled } from '@/shared/utils/whenSettled.js'
 
 // Lazy load the Food service module (Quick-spicy app)
 const AuthApp = lazy(loadAuthApp)
@@ -106,17 +107,8 @@ const AppRoutes = () => {
       }
     }
 
-    const idle = window.requestIdleCallback
-      ? window.requestIdleCallback(warm, { timeout: 1200 })
-      : window.setTimeout(warm, 300)
-
-    return () => {
-      if (window.cancelIdleCallback && typeof idle === 'number') {
-        window.cancelIdleCallback(idle)
-      } else {
-        window.clearTimeout(idle)
-      }
-    }
+    // Not before the screen that is open has loaded and settled - see shared/utils/whenSettled.js.
+    return whenAppSettled(warm)
   }, [location.pathname])
 
   useEffect(() => {

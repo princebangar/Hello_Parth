@@ -78,7 +78,7 @@ export default function BackToTop() {
     accumulatorRef.current = 0
     setShow(false)
 
-    // Zomato-style "warped" scroll: zip up 1000px then snap to top
+    // Hello Parth-style "warped" scroll: zip up 1000px then snap to top
     const startY = window.scrollY
     const startTime = performance.now()
     const warpDistance = 1000

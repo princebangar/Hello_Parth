@@ -7,7 +7,7 @@ const withTimeout = (promise, timeoutMs = 1500) =>
   ]);
 
 const isAndroidWebView = () => {
-  if (globalThis.window?.__isAppzeto24WebView) return true;
+  if (globalThis.window?.__isHelloParthWebView) return true;
   const ua = String(globalThis.navigator?.userAgent || '');
   // Standard Android WebView marker: "; wv)" in the user agent.
   if (/; wv\)/i.test(ua)) return true;
@@ -164,10 +164,10 @@ const callNativeInterface = (targetUrl, checkoutPayload) => {
   if (typeof globalThis.Appzeto24Native?.openExternalUrl === 'function') {
     try {
       globalThis.Appzeto24Native.openExternalUrl({ url: targetUrl });
-      recordCheckoutDiagnostic({ status: 'Appzeto24-native-bridge-called', targetUrl });
+      recordCheckoutDiagnostic({ status: 'native-bridge-called', targetUrl });
       return true;
     } catch (error) {
-      recordCheckoutDiagnostic({ status: 'Appzeto24-native-bridge-failed', message: error?.message || String(error) });
+      recordCheckoutDiagnostic({ status: 'native-bridge-failed', message: error?.message || String(error) });
     }
   }
 
@@ -234,7 +234,7 @@ const callNativeInterface = (targetUrl, checkoutPayload) => {
 const redirectInCurrentWindow = (targetUrl, status = 'browser-redirect') => {
   recordCheckoutDiagnostic({ status });
 
-  if (isAndroidWebView() || globalThis.window?.__isAppzeto24WebView) {
+  if (isAndroidWebView() || globalThis.window?.__isHelloParthWebView) {
     const intentUrl = convertToAndroidIntentUrl(targetUrl);
     recordCheckoutDiagnostic({ status: 'android-webview-intent-redirect', intentUrl });
     globalThis.location.href = intentUrl;
@@ -359,7 +359,7 @@ export const openExternalCheckout = async (url) => {
     }
 
     // 3. Try intent-based redirection fallback or custom Chrome protocol handler FIRST!
-    if (isAndroidWebView() || globalThis.window?.__isAppzeto24WebView) {
+    if (isAndroidWebView() || globalThis.window?.__isHelloParthWebView) {
       const chromeCustomUrl = `googlechromes://navigate?url=${encodeURIComponent(targetUrl)}`;
       try {
         globalThis.location.href = chromeCustomUrl;

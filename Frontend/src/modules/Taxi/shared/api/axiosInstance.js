@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from './runtimeConfig';
+import { isBackgroundGet, runInBackground } from '../../../../shared/utils/backgroundRequests';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -122,7 +123,8 @@ const isDedupedGet = (url = '') => {
     /^\/admin\/general-settings\/[^/]+$/.test(requestPath) ||
     /^\/common\/payment-gateway$/.test(requestPath) ||
     /^\/admin\/(countries|service-locations|notification-channels)$/.test(requestPath) ||
-    /^\/(countries|common\/ride_modules)$/.test(requestPath);
+    /^\/(countries|common\/ride_modules)$/.test(requestPath) ||
+    /^\/users\/(app-modules|bootstrap)$/.test(requestPath);
 };
 
 const getDedupedRequestKey = (url = '', config = {}) => {
@@ -453,9 +455,24 @@ api.interceptors.response.use(
 
 const rawGet = api.get.bind(api);
 
-api.get = (url, config = {}) => {
+const dedupedApiGet = (url, config = {}) => {
   if (!isDedupedGet(url)) {
-    return rawGet(url, config);
+    // Everything else: GETs in flight at the same moment share one request (nothing is kept afterwards).
+    if (config?.signal || config?.responseType === 'blob' || config?.responseType === 'arraybuffer' || config?.dedupe === false) {
+      return rawGet(url, config);
+    }
+    const liveKey = getDedupedRequestKey(url, config);
+    const live = dedupedGetRequests.get(liveKey);
+    if (live) {
+      return live;
+    }
+    const liveRequest = rawGet(url, config).finally(() => {
+      if (dedupedGetRequests.get(liveKey) === liveRequest) {
+        dedupedGetRequests.delete(liveKey);
+      }
+    });
+    dedupedGetRequests.set(liveKey, liveRequest);
+    return liveRequest;
   }
 
   const key = getDedupedRequestKey(url, config);
@@ -489,6 +506,10 @@ api.get = (url, config = {}) => {
   return request;
 };
 
+// Reads that only feed a badge / reminder start a moment later so they never queue in front of the open screen.
+api.get = (url, config = {}) =>
+  isBackgroundGet(url, config) ? runInBackground(() => dedupedApiGet(url, config)) : dedupedApiGet(url, config);
+
 // Any write may change a reference list, so drop the cached ones (after success AND failure — a failed
 // write can still have changed something server-side).
 const clearReferenceCache = () => {
@@ -501,16 +522,20 @@ const clearReferenceCache = () => {
 
 ['post', 'put', 'patch', 'delete'].forEach((method) => {
   const rawMethod = api[method].bind(api);
-  api[method] = (...args) => rawMethod(...args).then(
-    (response) => {
-      clearReferenceCache();
-      return response;
-    },
-    (error) => {
-      clearReferenceCache();
-      throw error;
-    },
-  );
+  api[method] = (...args) => {
+    // A GET sent after a write must not join a read that started before it.
+    dedupedGetRequests.clear();
+    return rawMethod(...args).then(
+      (response) => {
+        clearReferenceCache();
+        return response;
+      },
+      (error) => {
+        clearReferenceCache();
+        throw error;
+      },
+    );
+  };
 });
 
 export default api;

@@ -103,6 +103,8 @@ const PromoBannerImage = ({ promo, fallbackImage }) => {
 };
 
 import { getLocalUserToken, clearLocalUserSession } from '../services/authService';
+import { getSavedLocation, LOCATION_UPDATED_EVENT } from '../services/locationStore';
+import { hasPersistentMap } from '../utils/persistentMap';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
   getCurrentRide,
@@ -176,7 +178,7 @@ const defaultSettings = {
     { id: '4', title: 'Bike', image: '', route: '/taxi/user/ride/select-location', order: 4, status: 'active' }
   ],
   promos: [
-    { id: '1', title: 'Experience A New Standard With Appzeto ', subtitle: 'A premier private hire service where luxury and reliability converge.', image: '', route: '/taxi/user/ride/select-location', order: 1, status: 'active' },
+    { id: '1', title: 'Experience A New Standard With Hello Parth', subtitle: 'A premier private hire service where luxury and reliability converge.', image: '', route: '/taxi/user/ride/select-location', order: 1, status: 'active' },
     { id: '2', title: 'Need to Send Packages? Try Parcel!', subtitle: 'Fast and secure delivery across your city at affordable prices.', image: '', route: '/taxi/user/parcel/type', order: 2, status: 'active' }
   ],
   goPlaces: [
@@ -264,7 +266,7 @@ const RecentLocationsList = ({ routePrefix }) => {
 
   const [recentLocations, setRecentLocations] = useState(() => {
     try {
-      const saved = window.localStorage.getItem('Appzeto 24:recentLocations');
+      const saved = window.localStorage.getItem('helloparth:recentLocations');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -277,21 +279,17 @@ const RecentLocationsList = ({ routePrefix }) => {
   });
 
   const getSavedLocationCoords = () => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:lastLocation') || '{}');
-      const lat = Number(saved?.lat);
-      const lon = Number(saved?.lon);
-      if (Number.isFinite(lat) && Number.isFinite(lon)) {
-        return [lon, lat];
-      }
-    } catch (e) { }
+    const saved = getSavedLocation();
+    if (Number.isFinite(saved?.lat) && Number.isFinite(saved?.lon)) {
+      return [saved.lon, saved.lat];
+    }
     return null;
   };
 
   useEffect(() => {
     const handleRefresh = () => {
       try {
-        const saved = window.localStorage.getItem('Appzeto 24:recentLocations');
+        const saved = window.localStorage.getItem('helloparth:recentLocations');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -301,10 +299,10 @@ const RecentLocationsList = ({ routePrefix }) => {
       } catch (e) { }
     };
     window.addEventListener('storage', handleRefresh);
-    window.addEventListener('Appzeto 24:recent-locations-updated', handleRefresh);
+    window.addEventListener('helloparth:recent-locations-updated', handleRefresh);
     return () => {
       window.removeEventListener('storage', handleRefresh);
-      window.removeEventListener('Appzeto 24:recent-locations-updated', handleRefresh);
+      window.removeEventListener('helloparth:recent-locations-updated', handleRefresh);
     };
   }, []);
 
@@ -369,7 +367,7 @@ const RecentLocationsList = ({ routePrefix }) => {
                   return loc;
                 });
                 setRecentLocations(updated);
-                localStorage.setItem('Appzeto 24:recentLocations', JSON.stringify(updated));
+                localStorage.setItem('helloparth:recentLocations', JSON.stringify(updated));
               }}
               className={`hover:text-rose-500 transition-colors px-1 shrink-0 ${item.favourite ? 'text-rose-500' : 'text-slate-400'
                 }`}
@@ -399,7 +397,7 @@ const Home = () => {
       if (settings?.userHomeSettings && Object.keys(settings.userHomeSettings).length > 0) {
         return settings.userHomeSettings;
       }
-      const saved = window.localStorage.getItem('Appzeto 24:admin:user-app-settings');
+      const saved = window.localStorage.getItem('helloparth:admin:user-app-settings');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error(e);
@@ -421,7 +419,7 @@ const Home = () => {
   useEffect(() => {
     const handleStorageChange = () => {
       try {
-        const saved = window.localStorage.getItem('Appzeto 24:admin:user-app-settings');
+        const saved = window.localStorage.getItem('helloparth:admin:user-app-settings');
         if (saved) {
           const parsed = JSON.parse(saved);
           setUiSettings(prev => {
@@ -453,38 +451,23 @@ const Home = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAllServicesOpen, setIsAllServicesOpen] = useState(false);
   const [activeServices, setActiveServices] = useState([]);
-  const [pickupAddress, setPickupAddress] = useState(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:lastLocation') || '{}');
-      return String(saved?.address || '').trim() || PICKUP_PLACEHOLDER;
-    } catch (e) {
-      return PICKUP_PLACEHOLDER;
-    }
-  });
-  const [isLocationLoading, setIsLocationLoading] = useState(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:lastLocation') || '{}');
-      return !saved?.address;
-    } catch {
-      return true;
-    }
-  });
+  const [pickupAddress, setPickupAddress] = useState(() => (
+    String(getSavedLocation()?.address || '').trim() || PICKUP_PLACEHOLDER
+  ));
+  const [isLocationLoading, setIsLocationLoading] = useState(() => !getSavedLocation()?.address);
 
   useEffect(() => {
     const handleLocationUpdate = () => {
-      try {
-        const saved = JSON.parse(window.localStorage.getItem('Appzeto 24:lastLocation') || '{}');
-        setPickupAddress(String(saved?.address || '').trim() || PICKUP_PLACEHOLDER);
-      } catch (e) { }
+      setPickupAddress(String(getSavedLocation()?.address || '').trim() || PICKUP_PLACEHOLDER);
     };
     const handleLocationStatus = (e) => {
       setIsLocationLoading(e.detail === 'loading');
     };
-    window.addEventListener('Appzeto 24:location-updated', handleLocationUpdate);
-    window.addEventListener('Appzeto 24:location-status', handleLocationStatus);
+    window.addEventListener(LOCATION_UPDATED_EVENT, handleLocationUpdate);
+    window.addEventListener('helloparth:location-status', handleLocationStatus);
     return () => {
-      window.removeEventListener('Appzeto 24:location-updated', handleLocationUpdate);
-      window.removeEventListener('Appzeto 24:location-status', handleLocationStatus);
+      window.removeEventListener(LOCATION_UPDATED_EVENT, handleLocationUpdate);
+      window.removeEventListener('helloparth:location-status', handleLocationStatus);
     };
   }, []);
 
@@ -493,7 +476,22 @@ const Home = () => {
     return isActiveCurrentRide(ride) ? ride : null;
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const [showDeferredSections, setShowDeferredSections] = useState(false);
+  // The map is mounted a beat after the first paint on a cold start (keeps the first screen light). When the map
+  // already exists - coming back from Food - there is nothing heavy left to wait for: mount it straight away, or
+  // the screen shows a grey placeholder where the map was a moment ago.
+  const [showDeferredSections, setShowDeferredSections] = useState(() => hasPersistentMap());
+  // Home renders a phone layout and a desktop layout and hides one with CSS. The map (and its GPS / geocoding work)
+  // must exist only once, in the layout that is actually on screen.
+  const [isDesktopLayout, setIsDesktopLayout] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const onChange = (event) => setIsDesktopLayout(event.matches);
+    setIsDesktopLayout(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
   const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
   const [isHoveringPromo, setIsHoveringPromo] = useState(false);
   const touchStartX = useRef(0);
@@ -1214,7 +1212,7 @@ const Home = () => {
 
           {/* Map — sits below the app bar, fully visible, own box. */}
           <div className="map-header">
-            {showDeferredSections ? (
+            {showDeferredSections && !isDesktopLayout ? (
               <LocationMapSection />
             ) : (
               <div className={`h-full w-full animate-pulse ${isDark ? 'bg-[#0f172a]' : 'bg-slate-200'}`} />
@@ -1465,7 +1463,7 @@ const Home = () => {
 
         {/* Right Column (Map) */}
         <div className="lg:col-span-7 space-y-6 lg:sticky lg:top-6 self-start">
-          {showDeferredSections ? (
+          {showDeferredSections && isDesktopLayout ? (
             <div className="lg:h-[calc(100vh-14rem)] min-h-[480px]">
               <LocationMapSection />
             </div>

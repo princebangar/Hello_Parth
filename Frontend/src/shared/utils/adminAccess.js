@@ -35,7 +35,7 @@ export const GLOBAL_SECTIONS = [
     label: 'Customization Settings',
     path: `${GLOBAL_ADMIN_HOME}/customization`,
     actions: ['view', 'edit'],
-    hint: 'Edit = turn Razorpay / PhonePe on or off for Food and Taxi',
+    hint: 'Edit = turn Razorpay / PhonePe and the customer Referral system on or off for Food and Taxi',
   },
 ]
 

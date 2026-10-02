@@ -1,4 +1,6 @@
-import React, { Suspense, lazy, useEffect } from "react"
+import React, { Suspense, useEffect } from "react"
+import lazy from "@/shared/utils/lazyPreloaded"
+import { whenAppSettled } from "@/shared/utils/whenSettled"
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom"
 import UserLayout from "./UserLayout"
 import Loader from "@food/components/Loader"
@@ -104,26 +106,20 @@ const RequireInitialAuth = ({ children }) => children;
 function usePrefetchCommonRoutes() {
   useEffect(() => {
     const warm = () => {
-      import("@food/pages/user/profile/Settings").catch(() => {})
-      import("@food/pages/user/profile/EditProfile").catch(() => {})
-      import("@food/pages/user/cart/Cart").catch(() => {})
-      import("@food/pages/user/Wallet").catch(() => {})
-      import("@food/pages/user/profile/Coupons").catch(() => {})
-      import("@food/pages/user/orders/Orders").catch(() => {})
-      import("@food/pages/user/profile/Support").catch(() => {})
-      import("@food/pages/user/profile/About").catch(() => {})
-      import("@food/pages/user/profile/Favorites").catch(() => {})
+      // preload() = fetch the chunk AND remember it, so the first click renders at once (no spinner fallback).
+      Wallet.preload()
+      Cart.preload()
+      Orders.preload()
+      Settings.preload()
+      EditProfile.preload()
+      Coupons.preload()
+      Support.preload()
+      About.preload()
+      Favorites.preload()
+      ReferEarn.preload()
     }
-    const idle = window.requestIdleCallback
-      ? window.requestIdleCallback(warm, { timeout: 2000 })
-      : window.setTimeout(warm, 500)
-    return () => {
-      if (window.cancelIdleCallback && typeof idle === "number") {
-        window.cancelIdleCallback(idle)
-      } else {
-        window.clearTimeout(idle)
-      }
-    }
+    // after the open screen settled (shared/utils/whenSettled.js)
+    return whenAppSettled(warm)
   }, [])
 }
 

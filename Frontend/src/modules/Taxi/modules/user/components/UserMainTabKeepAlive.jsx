@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import BottomNavbar from './BottomNavbar';
 import RouteSkeleton from '../../shared/components/RouteSkeleton';
+import { whenAppSettled } from '@/shared/utils/whenSettled';
 // Eager (not lazy): this is the default landing tab — bundling it with
 // TaxiApp's own chunk skips a second chunk-fetch + Suspense flash on first
 // visit, instead of waiting on its own separate lazy import.
@@ -97,16 +98,8 @@ export default function UserMainTabKeepAlive() {
       importSupport().catch(() => {});
       importBusHome().catch(() => {});
     };
-    const idle = window.requestIdleCallback
-      ? window.requestIdleCallback(warm, { timeout: 2000 })
-      : window.setTimeout(warm, 500);
-    return () => {
-      if (window.cancelIdleCallback && typeof idle === 'number') {
-        window.cancelIdleCallback(idle);
-      } else {
-        window.clearTimeout(idle);
-      }
-    };
+    // after the open screen settled (shared/utils/whenSettled.js)
+    return whenAppSettled(warm);
   }, []);
 
   if (!activeTab) {

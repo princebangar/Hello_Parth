@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useLayoutEffect } from 'react';
+import { Suspense, useEffect, useLayoutEffect } from 'react';
+import lazy from '@/shared/utils/lazyPreloaded';
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, FileText } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -114,7 +115,9 @@ const BusBookings = lazy(() => import('./modules/user/pages/profile/BusBookings'
 const BusBookingDetail = lazy(() => import('./modules/user/pages/profile/BusBookingDetail'));
 const UserSubscriptions = lazy(() => import('./modules/user/pages/profile/Subscriptions'));
 // Driver Module - Common
-import DriverLayout from './modules/driver/components/DriverLayout';
+// Driver / owner portal shell (with the ride-request listener and alert sound): only drivers and owners need it, so
+// it is its own chunk instead of part of every customer's download.
+const DriverLayout = lazy(() => import('./modules/driver/components/DriverLayout'));
 
 // Driver Module - Registration
 const LanguageSelect = lazy(() => import('./modules/driver/pages/registration/LanguageSelect'));
@@ -580,19 +583,25 @@ const UserAccountInvalidationListener = () => {
 
 const getResponsePayload = (response) => response?.data?.data || response?.data || response || {};
 
+// Reminder sync = 3 reads (bus, pooling, scheduled rides). It is background work, so it must never compete with
+// the screen the person just opened: it starts a few seconds after the screen is up, it does not repeat on every
+// in-app navigation, and focus / tab-visible events only refresh it when the last sync is a couple of minutes old.
+const REMINDER_FIRST_SYNC_DELAY_MS = 4000;
+const REMINDER_MIN_GAP_MS = 2 * 60 * 1000;
+let lastReminderSyncAt = 0;
+
 const UserUpcomingRideReminderBootstrap = () => {
   const location = useLocation();
   const { settings, loading: settingsLoading } = useSettings();
   const busEnabled = String(settings?.transportRide?.enable_bus_service || '0') === '1';
+  const isUserRoute =
+    location.pathname.startsWith('/taxi/user') ||
+    location.pathname === '/user' ||
+    location.pathname.startsWith('/ride') ||
+    location.pathname.startsWith('/pooling') ||
+    location.pathname.startsWith('/bus');
 
   useEffect(() => {
-    const isUserRoute =
-      location.pathname.startsWith('/taxi/user') ||
-      location.pathname === '/user' ||
-      location.pathname.startsWith('/ride') ||
-      location.pathname.startsWith('/pooling') ||
-      location.pathname.startsWith('/bus');
-
     if (!isUserRoute || !getLocalUserToken() || settingsLoading) {
       return undefined;
     }
@@ -600,6 +609,7 @@ const UserUpcomingRideReminderBootstrap = () => {
     let cancelled = false;
 
     const syncReminders = async () => {
+      lastReminderSyncAt = Date.now();
       try {
         const [busResult, poolingResult, scheduledRideResult] = await Promise.all([
           busEnabled
@@ -678,24 +688,26 @@ const UserUpcomingRideReminderBootstrap = () => {
       }
     };
 
-    const handleVisibilitySync = () => {
-      if (document.visibilityState === 'visible') {
-        syncReminders();
-      }
+    const syncIfStale = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastReminderSyncAt < REMINDER_MIN_GAP_MS) return;
+      syncReminders();
     };
 
-    syncReminders();
-    const intervalId = window.setInterval(syncReminders, 10 * 60 * 1000);
-    window.addEventListener('focus', syncReminders);
-    document.addEventListener('visibilitychange', handleVisibilitySync);
+    // First sync waits until the screen is up (and is skipped when a recent one already ran, e.g. Food <-> Taxi).
+    const firstSyncTimer = window.setTimeout(syncIfStale, REMINDER_FIRST_SYNC_DELAY_MS);
+    const intervalId = window.setInterval(syncIfStale, 10 * 60 * 1000);
+    window.addEventListener('focus', syncIfStale);
+    document.addEventListener('visibilitychange', syncIfStale);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(firstSyncTimer);
       window.clearInterval(intervalId);
-      window.removeEventListener('focus', syncReminders);
-      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.removeEventListener('focus', syncIfStale);
+      document.removeEventListener('visibilitychange', syncIfStale);
     };
-  }, [location.pathname, settingsLoading, busEnabled]);
+  }, [isUserRoute, settingsLoading, busEnabled]);
 
   return null;
 };
@@ -1594,5 +1606,9 @@ function TaxiApp() {
     </>
   );
 }
+
+/** The Taxi customer screens people open first - fetched and remembered ahead of time (see lazyPreloaded). */
+export const preloadTaxiUserPages = () =>
+  Promise.all([UserHome, Activity, Profile, Wallet, UserNotifications, UserReferral, PromoCodes].map((page) => page.preload()));
 
 export default TaxiApp;

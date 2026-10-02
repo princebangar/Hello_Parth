@@ -1,7 +1,9 @@
-import { getApps, initializeApp } from 'firebase/app';
-import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+// firebase/app + firebase/messaging (~70 kB) are imported inside the functions that use them, so they are not part of
+// the Taxi screen's own download.
 import { getLocalDriverToken, saveDriverFcmToken } from '../../modules/driver/services/registrationService';
 import { getLocalUserToken, userAuthService } from '../../modules/user/services/authService';
+import { buildMessagingServiceWorkerUrl } from '../../../../shared/utils/firebaseServiceWorkerUrl';
+import { whenAppSettled } from '../../../../shared/utils/whenSettled';
 
 const LAST_BROWSER_FCM_KEY = 'lastBrowserFcmRegistration';
 const FIREBASE_CONFIG = {
@@ -31,7 +33,7 @@ const isNativeContainer = () => {
   }
 
   // Primary flag set by main.jsx WebView detection.
-  if (window.__isAppzeto24WebView) {
+  if (window.__isHelloParthWebView) {
     return true;
   }
 
@@ -44,7 +46,7 @@ const isNativeContainer = () => {
       typeof window.AndroidBridge !== 'undefined' ||
       typeof window.Android !== 'undefined'
   ) {
-  window.__isAppzeto24WebView = true;
+  window.__isHelloParthWebView = true;
   return true;
 }
 
@@ -100,17 +102,18 @@ const persistRegistration = (payload) => {
   }));
 };
 
-const getFirebaseApp = () => {
+const getFirebaseApp = async () => {
   if (!hasFirebaseConfig()) {
     return null;
   }
 
+  const { getApps, initializeApp } = await import('firebase/app');
   return getApps()[0] || initializeApp(FIREBASE_CONFIG);
 };
 
 const getMessagingSupport = async () => {
   if (!messagingSupportPromise) {
-    messagingSupportPromise = isSupported().catch(() => false);
+    messagingSupportPromise = import('firebase/messaging').then(({ isSupported }) => isSupported()).catch(() => false);
   }
 
   return messagingSupportPromise;
@@ -140,18 +143,7 @@ const getAuthenticatedRoles = () => {
   return roles;
 };
 
-const createServiceWorkerUrl = () => {
-  const params = new URLSearchParams({
-    apiKey: FIREBASE_CONFIG.apiKey,
-    authDomain: FIREBASE_CONFIG.authDomain,
-    projectId: FIREBASE_CONFIG.projectId,
-    storageBucket: FIREBASE_CONFIG.storageBucket,
-    messagingSenderId: FIREBASE_CONFIG.messagingSenderId,
-    appId: FIREBASE_CONFIG.appId,
-  });
-
-  return `/firebase-messaging-sw.js?${params.toString()}`;
-};
+const createServiceWorkerUrl = () => buildMessagingServiceWorkerUrl(FIREBASE_CONFIG);
 
 const saveTokenForRole = async (role, token) => {
   const platform = getPushPlatform();
@@ -214,11 +206,12 @@ const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
     }
   }
 
-  const app = getFirebaseApp();
+  const app = await getFirebaseApp();
   if (!app) {
     return { ok: false, reason: 'firebase-app-missing' };
   }
 
+  const { getMessaging, getToken } = await import('firebase/messaging');
   const serviceWorkerRegistration = await navigator.serviceWorker.register(createServiceWorkerUrl());
   const messaging = getMessaging(app);
   const token = await getToken(messaging, {
@@ -250,7 +243,11 @@ const registerBrowserFcmToken = async ({ interactive = false } = {}) => {
 export const installBrowserFcmRegistration = () => {
   window.__registerBrowserFcmToken = (options) => registerBrowserFcmToken(options);
 
+  // Push registration is background work: it must not start (and pull the firebase code) while the screen is still
+  // loading - "pageshow" and "focus" both fire right at page load.
+  let screenSettled = false;
   const retryPassiveRegistration = () => {
+    if (!screenSettled) return;
     registerBrowserFcmToken({ interactive: false }).catch(() => { });
   };
 
@@ -263,5 +260,8 @@ export const installBrowserFcmRegistration = () => {
     }
   });
 
-  window.setTimeout(retryPassiveRegistration, 2000);
+  whenAppSettled(() => {
+    screenSettled = true;
+    retryPassiveRegistration();
+  }, { delay: 1500 });
 };

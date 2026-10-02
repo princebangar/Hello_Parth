@@ -10,6 +10,8 @@ import {
   prefetchSiblingUserVertical,
 } from '@/shared/utils/activeModule.js';
 import { isUnifiedAuthenticated } from '@/shared/utils/moduleAuth.js';
+import { prefetchWallet } from '@/shared/utils/walletPrefetch.js';
+import { whenAppSettled } from '@/shared/utils/whenSettled.js';
 import { readSharedFoodLocation, getFoodStyleLocationParts, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
 
 function readHelloParthLocation() {
@@ -165,6 +167,12 @@ export default function SuperAppHomeHeader({
   const currentVertical = VERTICALS.find((v) => v.id === activeVertical) || VERTICALS[0];
   const verticalTheme = getVerticalTheme(activeVertical);
 
+  // Wallet balance starts loading as soon as a finger / pointer lands on the icon (see shared/utils/walletPrefetch.js).
+  const warmWallet = useCallback(() => {
+    if (!isUnifiedAuthenticated()) return;
+    prefetchWallet(activeVertical);
+  }, [activeVertical]);
+
   const handleVerticalTabClick = useCallback((verticalId) => {
     if (verticalId === 'food') {
       ensureFoodGuestSession();
@@ -192,28 +200,9 @@ export default function SuperAppHomeHeader({
 
   // Warm the sibling vertical after first paint so Food ↔ Taxi feels instant.
   useEffect(() => {
-    let cancelled = false;
-    const warm = () => {
-      if (!cancelled) prefetchSiblingUserVertical(activeVertical);
-    };
-    let idleId;
-    if (typeof window.requestIdleCallback === 'function') {
-      idleId = window.requestIdleCallback(warm, { timeout: 1500 });
-    } else {
-      idleId = window.setTimeout(warm, 400);
-    }
-    return () => {
-      cancelled = true;
-      if (typeof window.cancelIdleCallback === 'function' && typeof idleId === 'number') {
-        try {
-          window.cancelIdleCallback(idleId);
-        } catch {
-          window.clearTimeout(idleId);
-        }
-      } else {
-        window.clearTimeout(idleId);
-      }
-    };
+    // Not before this screen has loaded and settled - otherwise the other app is downloaded in parallel with it
+    // and slows it down (see shared/utils/whenSettled.js).
+    return whenAppSettled(() => prefetchSiblingUserVertical(activeVertical));
   }, [activeVertical]);
 
   const [storedLocation, setStoredLocation] = useState(() => readHelloParthLocation());
@@ -383,6 +372,9 @@ export default function SuperAppHomeHeader({
           <button
             type="button"
             onClick={() => navigate(walletPath)}
+            onPointerDown={warmWallet}
+            onMouseEnter={warmWallet}
+            onFocus={warmWallet}
             aria-label="Wallet"
             className="flex items-center justify-center p-1.5 active:scale-90 transition-all"
           >

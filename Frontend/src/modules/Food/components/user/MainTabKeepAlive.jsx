@@ -1,4 +1,6 @@
-import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import lazy from "@/shared/utils/lazyPreloaded";
+import { whenAppSettled } from "@/shared/utils/whenSettled";
 import Home from "@food/pages/user/Home";
 import ProtectedRoute from "@food/components/ProtectedRoute";
 import { AppShellSkeleton } from "@food/components/ui/loading-skeletons";
@@ -45,6 +47,16 @@ export default function MainTabKeepAlive({ activeTab, isVisible = true }) {
 
   useEffect(() => {
     registerFoodPageCacheLifecycle();
+  }, []);
+
+  // The other bottom-nav tabs: fetch them once the open one has settled so switching tabs never shows a fallback.
+  useEffect(() => {
+    const warm = () => {
+      Profile.preload();
+      Dining.preload();
+      Under250.preload();
+    };
+    return whenAppSettled(warm);
   }, []);
 
   useEffect(() => {

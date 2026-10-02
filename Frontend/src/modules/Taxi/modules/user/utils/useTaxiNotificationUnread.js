@@ -42,7 +42,8 @@ export default function useTaxiNotificationUnread({ enabled = true, pollMs = 600
 
   const fetchServer = useCallback(async () => {
     try {
-      const response = await userAuthService.getNotifications();
+      // Bell badge only - starts after the screen's own requests (see shared/utils/backgroundRequests.js).
+      const response = await userAuthService.getNotifications({ background: true });
       const results = response?.data?.results || [];
       setServerTimes(results.map((item) => toTime(item.sentAt)));
     } catch {

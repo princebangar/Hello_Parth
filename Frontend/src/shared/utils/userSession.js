@@ -1,5 +1,4 @@
 import { authAPI } from "@food/api";
-import { firebaseAuth } from "@food/firebase";
 import { clearModuleAuth } from "@/shared/utils/moduleAuth.js";
 
 export const USER_SESSION_PREFERENCE_KEYS = [
@@ -56,7 +55,9 @@ async function resolveLogoutFcmToken() {
 
 async function signOutFirebaseIfNeeded() {
   try {
-    const { signOut } = await import("firebase/auth");
+    // Loaded only now: firebase auth + database are ~100 kB that every screen used to download just to be able to
+    // sign out of Firebase here.
+    const [{ signOut }, { firebaseAuth }] = await Promise.all([import("firebase/auth"), import("@food/firebase")]);
     if (firebaseAuth?.currentUser) {
       await signOut(firebaseAuth);
     }

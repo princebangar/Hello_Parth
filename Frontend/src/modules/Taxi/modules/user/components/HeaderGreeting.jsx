@@ -21,8 +21,7 @@ const HeaderGreeting = ({ floating = false, hideSearch = false }) => {
 
   const { settings, loading, hasBootstrapSettings } = useSettings();
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
-  let appName = settings.general?.app_name || 'Appzeto ';
-  if (appName === 'Appzeto') appName = 'Appzeto ';
+  const appName = settings.general?.app_name || 'Hello Parth';
   const [locationLabel, setLocationLabel] = useState(getSavedLocationLabel);
   const showBrandingSkeleton = loading && !hasBootstrapSettings && !appLogo;
 

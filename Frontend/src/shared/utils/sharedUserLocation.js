@@ -3,6 +3,27 @@ export const TAXI_LOCATION_STORAGE_KEY = "helloparth:lastLocation"
 export const TAXI_LOCATION_UPDATED_EVENT = "helloparth:location-updated"
 export const FOOD_LOCATION_UPDATED_EVENT = "userLocationUpdated"
 export const LOCATION_ALLOWED_KEY = "helloparth_location_allowed"
+/**
+ * sessionStorage marker: "this app session has already taken its GPS fix". Whichever app (Taxi or Food) opens first
+ * takes it and sets the marker; the other app then simply uses the saved location instead of asking for GPS again,
+ * so switching Taxi <-> Food never changes the location - only the user can (Update button / picking an address).
+ * Cleared when the tab / WebView is closed (new app session) and on logout.
+ */
+export const LOCATION_SESSION_KEY = "helloparth_location_session"
+
+export function markLocationSessionFetched() {
+  try {
+    sessionStorage.setItem(LOCATION_SESSION_KEY, "1")
+  } catch {}
+}
+
+export function hasLocationSessionFetched() {
+  try {
+    return sessionStorage.getItem(LOCATION_SESSION_KEY) === "1"
+  } catch {
+    return false
+  }
+}
 
 export function getFoodStyleLocationParts(foodLoc = {}) {
   const area = String(foodLoc?.area || foodLoc?.subLocality || foodLoc?.mainTitle || foodLoc?.neighborhood || "").trim()
@@ -118,7 +139,61 @@ const emitLocationEvents = () => {
   } catch {}
 }
 
-export function persistFoodUserLocation(foodLoc) {
+const parseJson = (raw) => {
+  try {
+    const parsed = JSON.parse(raw || "null")
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** Taxi's saved location (the shared record both apps use). */
+export function readTaxiLocation() {
+  if (typeof window === "undefined") return {}
+  return parseJson(localStorage.getItem(TAXI_LOCATION_STORAGE_KEY)) || {}
+}
+
+const MOVED_THRESHOLD = 0.0005 // ~55 m
+
+/** Keeps Food's saved location on the same spot as Taxi's. Food-only details (city, zone ...) are left as they are. */
+function mirrorTaxiLocationToFood(taxiLoc) {
+  const lat = toFiniteNumber(taxiLoc?.lat)
+  const lon = toFiniteNumber(taxiLoc?.lon)
+  if (lat == null || lon == null) return
+
+  const existingFood = parseJson(localStorage.getItem(FOOD_USER_LOCATION_KEY)) || {}
+  const address = String(taxiLoc.address || "").trim()
+  const foodPayload = { ...existingFood, latitude: lat, longitude: lon }
+  if (address) {
+    const area = String(taxiLoc.area || "").trim() || getFoodStyleLocationParts({ address }).title
+    foodPayload.address = address
+    foodPayload.formattedAddress = address
+    if (area && area !== "Select Location") foodPayload.area = area
+    if (taxiLoc.state) foodPayload.state = taxiLoc.state
+    if (taxiLoc.pincode) foodPayload.pincode = taxiLoc.pincode
+  }
+  try {
+    localStorage.setItem(FOOD_USER_LOCATION_KEY, JSON.stringify(foodPayload))
+  } catch {}
+}
+
+/**
+ * Taxi's way to save its location (used by Taxi's locationStore): writes the shared store, mirrors the spot into
+ * Food's store and tells every listener once.
+ */
+export function saveTaxiLocation(partial = {}) {
+  if (typeof window === "undefined") return null
+  const next = { ...readTaxiLocation(), ...partial }
+  try {
+    localStorage.setItem(TAXI_LOCATION_STORAGE_KEY, JSON.stringify(next))
+  } catch {}
+  mirrorTaxiLocationToFood(next)
+  emitLocationEvents()
+  return next
+}
+
+export function persistFoodUserLocation(foodLoc, { touch = true } = {}) {
   if (typeof window === "undefined" || !foodLoc || typeof foodLoc !== "object") return foodLoc
 
   const lat = toFiniteNumber(foodLoc.latitude ?? foodLoc.lat)
@@ -141,6 +216,8 @@ export function persistFoodUserLocation(foodLoc) {
   } catch {}
 
   if (lat != null && lon != null) {
+    // Re-saving an already-saved fix (app start) must not make it look freshly detected.
+    const previousTaxi = parseJson(localStorage.getItem(TAXI_LOCATION_STORAGE_KEY)) || {}
     try {
       localStorage.setItem(
         TAXI_LOCATION_STORAGE_KEY,
@@ -149,7 +226,7 @@ export function persistFoodUserLocation(foodLoc) {
           area: parts.title || foodLoc.area || "",
           lat,
           lon,
-          updatedAt: Date.now(),
+          updatedAt: touch ? Date.now() : toFiniteNumber(previousTaxi.updatedAt) ?? Date.now(),
         }),
       )
     } catch {}
@@ -221,8 +298,6 @@ export function markLocationAllowed() {
   } catch {}
 }
 
-const LOCATION_SESSION_KEY = "helloparth_location_session"
-
 /**
  * Drops the shared last-known-location data on logout — Food and Taxi both
  * read/write it, so a shared device shouldn't hand the next person who
@@ -243,20 +318,19 @@ export function syncSharedLocationStoresOnBoot() {
   if (typeof window === "undefined") return
   try {
     const foodRaw = localStorage.getItem(FOOD_USER_LOCATION_KEY)
-    const taxiRaw = localStorage.getItem(TAXI_LOCATION_STORAGE_KEY)
     const food = foodRaw ? JSON.parse(foodRaw) : null
-    const taxi = taxiRaw ? JSON.parse(taxiRaw) : null
+    const taxi = readTaxiLocation()
     const foodLat = toFiniteNumber(food?.latitude)
     const foodLon = toFiniteNumber(food?.longitude)
     const taxiLat = toFiniteNumber(taxi?.lat)
     const taxiLon = toFiniteNumber(taxi?.lon)
 
     if (foodLat != null && foodLon != null) {
-      persistFoodUserLocation(food)
+      persistFoodUserLocation(food, { touch: false })
       return
     }
     if (taxiLat != null && taxiLon != null && (foodLat == null || foodLon == null)) {
-      persistTaxiUserLocation(taxi)
+      saveTaxiLocation({})
     }
   } catch {}
 }

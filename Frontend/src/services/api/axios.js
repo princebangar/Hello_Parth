@@ -7,6 +7,7 @@
  */
 
 import axios from "axios";
+import { isBackgroundGet, runInBackground } from "../../shared/utils/backgroundRequests.js";
 
 // Prefer explicit env. If not set, default to /api/v1 so the Vite proxy can forward to backend.
 // This avoids hardcoding ports like 5000 that may conflict with local setups.
@@ -235,5 +236,51 @@ apiClient.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+// ---------------------------------------------------------------------------------------------------------------
+// Identical GETs fired at the same moment share ONE network request.
+// A screen is built from many components / hooks / context providers that each ask for the same thing (cart, offers,
+// public settings, /me ...), and React StrictMode in dev doubles every effect. Without this each of them became its
+// own request, which filled the browser's 6-connections-per-host queue and made the page the user actually asked for
+// (e.g. the wallet) wait behind them. Only requests that are in flight at the same time are merged - nothing is
+// cached afterwards - and any write drops the merge table so a GET sent after a change is always a fresh one.
+// Opt out for a single call with { dedupe: false }.
+// ---------------------------------------------------------------------------------------------------------------
+const inflightGets = new Map();
+const rawGet = apiClient.get.bind(apiClient);
+
+const dedupedGet = (url, config = {}) => {
+  if (config?.dedupe === false || config?.signal || config?.responseType === "blob" || config?.responseType === "arraybuffer") {
+    return rawGet(url, config);
+  }
+
+  const key = [
+    typeof url === "string" ? url : String(url?.url || ""),
+    JSON.stringify(config?.params || {}),
+    JSON.stringify(config?.headers || {}),
+    getAccessToken({ url, contextModule: config?.contextModule }) || "",
+  ].join("|");
+
+  const pending = inflightGets.get(key);
+  if (pending) return pending;
+
+  const request = rawGet(url, config).finally(() => {
+    if (inflightGets.get(key) === request) inflightGets.delete(key);
+  });
+  inflightGets.set(key, request);
+  return request;
+};
+
+// Reads that only feed a badge / reminder start a moment later so they never queue in front of the open screen.
+apiClient.get = (url, config = {}) =>
+  isBackgroundGet(url, config) ? runInBackground(() => dedupedGet(url, config)) : dedupedGet(url, config);
+
+["post", "put", "patch", "delete"].forEach((method) => {
+  const rawMethod = apiClient[method].bind(apiClient);
+  apiClient[method] = (...args) => {
+    inflightGets.clear();
+    return rawMethod(...args);
+  };
+});
 
 export default apiClient;
