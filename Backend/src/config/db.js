@@ -22,6 +22,10 @@ export const connectDB = async () => {
         const conn = await mongoose.connect(config.mongodbUri, {
             serverSelectionTimeoutMS: config.mongodbServerSelectionTimeoutMs,
             connectTimeoutMS: config.mongodbConnectTimeoutMs,
+            // A screen fires 10-20 requests at once. With an empty pool each one opens its own TLS connection to
+            // Atlas first (~100-200 ms); keeping some connections ready makes the burst start immediately.
+            minPoolSize: 8,
+            maxIdleTimeMS: 5 * 60 * 1000,
             family: 4, // Prefer IPv4 where local resolvers have IPv6/SRV issues.
         });
         logger.info(`MongoDB connected: ${conn.connection.host}`);

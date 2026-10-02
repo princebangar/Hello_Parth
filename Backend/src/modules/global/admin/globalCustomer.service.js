@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { FoodRefreshToken } from '../../../core/refreshTokens/refreshToken.model.js';
 import { ValidationError } from '../../../core/auth/errors.js';
+import { invalidateUserActive } from '../../../core/auth/userActiveCache.js';
 import { FoodOrder } from '../../food/orders/models/order.model.js';
 import { Ride } from '../../taxi/user/models/Ride.js';
 import { User as Customer } from '../../taxi/user/models/User.js';
@@ -134,6 +135,7 @@ export async function setCustomerStatus(id, isActive) {
     .select(USER_FIELDS)
     .lean();
   if (!user) return null;
+  invalidateUserActive(user._id);
 
   if (!active) {
     // Drop Food refresh tokens so an open app session is signed out at its next refresh.

@@ -4,6 +4,8 @@ import { FoodUser } from '../../../../core/users/user.model.js';
 import { FoodUserWallet } from '../models/userWallet.model.js';
 import { FoodReferralSettings } from '../../admin/models/referralSettings.model.js';
 import { FoodReferralLog } from '../../admin/models/referralLog.model.js';
+import { ensureUserReferralCode } from '../../../../core/users/referralCode.util.js';
+import { isReferralEnabled } from '../../../../core/platform/referralSwitch.service.js';
 
 export const getUserReferralStats = async (userId) => {
     const id = String(userId || '');
@@ -11,13 +13,16 @@ export const getUserReferralStats = async (userId) => {
         throw new ValidationError('User not found');
     }
     const oid = new mongoose.Types.ObjectId(id);
-    const [user, wallet, settingsDoc] = await Promise.all([
+    const [user, wallet, settingsDoc, enabled] = await Promise.all([
         FoodUser.findById(oid).select('_id referralCount referralCode').lean(),
         FoodUserWallet.findOne({ userId: oid }).select('referralEarnings').lean(),
-        FoodReferralSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean()
+        FoodReferralSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean(),
+        isReferralEnabled()
     ]);
 
     return {
+        enabled,
+        referralCode: await ensureUserReferralCode(oid, user?.referralCode),
         referralCount: Number(user?.referralCount) || 0,
         totalReferralEarnings: Number(wallet?.referralEarnings) || 0,
         rewardAmount: Math.max(0, Number(settingsDoc?.referralRewardUser) || 0)
@@ -31,14 +36,15 @@ export const getUserReferralDetails = async (userId) => {
     }
 
     const oid = new mongoose.Types.ObjectId(id);
-    const [user, wallet, settingsDoc, logs] = await Promise.all([
+    const [user, wallet, settingsDoc, logs, enabled] = await Promise.all([
         FoodUser.findById(oid).select('_id referralCount referralCode').lean(),
         FoodUserWallet.findOne({ userId: oid }).select('referralEarnings').lean(),
         FoodReferralSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean(),
         FoodReferralLog.find({ referrerId: oid, role: 'USER' })
             .sort({ createdAt: -1 })
             .limit(100)
-            .lean()
+            .lean(),
+        isReferralEnabled()
     ]);
 
     const refereeIds = Array.from(
@@ -86,6 +92,8 @@ export const getUserReferralDetails = async (userId) => {
     const rejectedCount = invitedFriends.filter((entry) => entry.status === 'rejected').length;
 
     return {
+        enabled,
+        referralCode: await ensureUserReferralCode(oid, user?.referralCode),
         stats: {
             referralCount: Number(user?.referralCount) || 0,
             totalReferralEarnings: Number(wallet?.referralEarnings) || 0,

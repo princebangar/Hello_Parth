@@ -11,6 +11,7 @@ import {
   normalizeAdminType,
 } from '../admin/services/adminAccessService.js';
 import { getAdminModuleAccess } from '../../../core/admin/adminHierarchy.service.js';
+import { readUserActive, rememberUserActive } from '../../../core/auth/userActiveCache.js';
 
 const roleModelMap = {
   admin: Admin,
@@ -72,7 +73,32 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
       throw new ApiError(401, 'Invalid authorization token');
     }
 
-    const entity = await Model.findById(subjectId);
+    let entity;
+
+    if (normalizedRole === 'user') {
+      // Customers: only the active flags are needed and nothing downstream reads the loaded document, so use a
+      // small remembered check instead of loading the whole user on every request (see userActiveCache).
+      const known = readUserActive(subjectId, 'taxi');
+      if (known) {
+        if (!known.ok) {
+          throw new ApiError(401, known.message);
+        }
+      } else {
+        const flags = await Model.findById(subjectId).select('deletedAt isActive active').lean();
+        if (!flags) {
+          rememberUserActive(subjectId, false, 'Authenticated account no longer exists', 'taxi');
+          throw new ApiError(401, 'Authenticated account no longer exists');
+        }
+        if (flags.deletedAt || flags.isActive === false || flags.active === false) {
+          rememberUserActive(subjectId, false, 'User account is not active', 'taxi');
+          throw new ApiError(401, 'User account is not active');
+        }
+        rememberUserActive(subjectId, true, '', 'taxi');
+      }
+      entity = { _id: subjectId };
+    } else {
+      entity = await Model.findById(subjectId);
+    }
 
     if (!entity) {
       throw new ApiError(401, 'Authenticated account no longer exists');

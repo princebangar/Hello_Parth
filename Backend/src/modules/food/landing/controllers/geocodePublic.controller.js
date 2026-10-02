@@ -9,6 +9,22 @@ const toFinite = (v) => {
     return Number.isFinite(n) ? n : null;
 };
 
+// The same GPS fix is reverse-geocoded several times while a screen opens (header, location picker, taxi pickup...).
+// Each call used to go to Google (200-800 ms and a billed request). A successful answer for the same spot is
+// reused for a while and concurrent identical lookups share one Google call.
+const REVERSE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const REVERSE_CACHE_MAX = 500;
+const reverseCache = new Map(); // key -> { at, data }
+const reverseInflight = new Map(); // key -> Promise<data>
+
+const fetchReverseGeocode = async (params) => {
+    const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`,
+        { signal: AbortSignal.timeout(10_000) }
+    );
+    return response.json();
+};
+
 /**
  * Proxy Google Geocoding so the API key never appears in the browser Network tab.
  * GET /food/geocode/reverse?lat=&lng=&result_type=
@@ -39,10 +55,26 @@ export const reverseGeocodePublicController = async (req, res, next) => {
         const resultType = sanitize(req.query.result_type);
         if (resultType) params.set('result_type', resultType);
 
-        const response = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`
-        );
-        const data = await response.json();
+        const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}|${resultType}`;
+        const cached = reverseCache.get(cacheKey);
+        let data = cached && Date.now() - cached.at < REVERSE_CACHE_TTL_MS ? cached.data : null;
+
+        if (!data) {
+            let pending = reverseInflight.get(cacheKey);
+            if (!pending) {
+                pending = fetchReverseGeocode(params).finally(() => reverseInflight.delete(cacheKey));
+                reverseInflight.set(cacheKey, pending);
+            }
+            data = await pending;
+
+            // Only a proper answer is worth remembering (not quota / key errors).
+            if (data?.status === 'OK' || data?.status === 'ZERO_RESULTS') {
+                if (reverseCache.size >= REVERSE_CACHE_MAX) {
+                    reverseCache.delete(reverseCache.keys().next().value);
+                }
+                reverseCache.set(cacheKey, { at: Date.now(), data });
+            }
+        }
 
         return res.status(200).json({
             success: true,

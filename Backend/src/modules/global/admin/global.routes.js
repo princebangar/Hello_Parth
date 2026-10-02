@@ -33,6 +33,8 @@ router.put('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSoci
 // Customization Settings — payment gateway on/off for the whole app. Keys are read from Backend/.env only.
 router.get('/customization', requireGlobalAccess({ section: 'customization', action: 'view' }), customizationController.getCustomizationSettings);
 router.patch('/customization/payment-gateways', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updatePaymentGateways);
+// Customer referral system on/off for Food + Taxi wallets.
+router.patch('/customization/referral', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updateReferral);
 
 // Landing page "Other Service" cards (public site content, admin-managed).
 router.get('/landing/other-services', requireGlobalAccess({ section: 'landing', action: 'view' }), otherServiceController.listOtherServices);
