@@ -32,3 +32,17 @@ export const getDocumentPreviewUrl = (documentValue) => {
   if (typeof documentValue === 'string') return documentValue;
   return documentValue.previewUrl || documentValue.secureUrl || documentValue.url || '';
 };
+
+// Today's date as a local `YYYY-MM-DD` string (the value format of <input type="date">).
+export const todayDateInputValue = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+};
+
+// A document expiry date that is already over (an empty value is not "past").
+export const isPastExpiryDate = (value) => {
+  const date = String(value || '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date < todayDateInputValue();
+};

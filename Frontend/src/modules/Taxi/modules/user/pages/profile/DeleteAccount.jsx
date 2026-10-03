@@ -60,7 +60,7 @@ const DeleteAccount = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-12 relative overflow-hidden">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] max-w-lg mx-auto font-sans pb-12 relative overflow-clip">
       <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-red-100/40 blur-3xl pointer-events-none" />
 
       {/* Header */}

@@ -81,7 +81,13 @@ const PromoCodes = () => {
     }
     setAppliedCode(promo.code);
     setErrorBanner(null);
-    showToast(`"${promo.code}" copied — apply it on the booking screen`, 'success');
+    // The booking screen picks this up and applies it as soon as a vehicle is selected.
+    try {
+      window.sessionStorage.setItem('helloparth:pendingPromo', promo.code);
+    } catch {
+      /* private mode: the copied code can still be pasted on the booking screen */
+    }
+    showToast(`"${promo.code}" saved — it is applied on your next booking`, 'success');
     setApplying(null);
   };
 
@@ -96,7 +102,7 @@ const PromoCodes = () => {
   const isDark = theme === 'dark';
 
   return (
-    <div className={`min-h-screen max-w-lg mx-auto font-sans pb-28 relative overflow-hidden transition-colors duration-300 ${isDark ? 'bg-slate-950 text-white' : 'bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] text-slate-900'}`}>
+    <div className={`min-h-screen max-w-lg mx-auto font-sans pb-28 relative overflow-clip transition-colors duration-300 ${isDark ? 'bg-slate-950 text-white' : 'bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_38%,#EEF2F7_100%)] text-slate-900'}`}>
       <div className={`absolute -top-16 right-[-40px] h-44 w-44 rounded-full blur-3xl pointer-events-none ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-100/60'}`} />
 
       {/* Header */}

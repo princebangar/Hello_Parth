@@ -232,7 +232,7 @@ const SecuritySOS = () => {
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32">
-      <header className="flex items-center gap-4 mb-8 text-slate-900 uppercase">
+      <header className="sticky top-0 z-30 -mx-6 mb-6 flex items-center gap-4 bg-[#f8f9fb] px-6 py-3 text-slate-900 uppercase">
         <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
           <ArrowLeft size={18} />
         </button>
@@ -382,15 +382,21 @@ const SecuritySOS = () => {
               </div>
 
               <div className="space-y-4">
-                <button
-                  type="button"
-                  onClick={handlePickFromDevice}
-                  disabled={!canUseContactPicker || remainingSlots === 0 || isSaving}
-                  className="w-full flex items-center justify-center gap-2 rounded-[16px] border border-slate-100 bg-slate-50 px-4 py-3 text-[12px] font-black uppercase tracking-widest text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Smartphone size={16} strokeWidth={2.5} />
-                  {canUseContactPicker ? 'Pick From Phone Contacts' : 'Phone Contact Picker Unavailable'}
-                </button>
+                {canUseContactPicker ? (
+                  <button
+                    type="button"
+                    onClick={handlePickFromDevice}
+                    disabled={remainingSlots === 0 || isSaving}
+                    className="w-full flex items-center justify-center gap-2 rounded-[16px] border border-slate-100 bg-slate-50 px-4 py-3 text-[12px] font-black uppercase tracking-widest text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Smartphone size={16} strokeWidth={2.5} />
+                    Pick From Phone Contacts
+                  </button>
+                ) : (
+                  <p className="rounded-[14px] bg-slate-50 px-4 py-3 text-[12px] font-bold text-slate-500">
+                    Type the contact's name and mobile number below.
+                  </p>
+                )}
 
                 <div>
                   <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Name</label>

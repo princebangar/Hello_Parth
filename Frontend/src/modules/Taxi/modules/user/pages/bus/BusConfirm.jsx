@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Ticket, QrCode, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
+import { CheckCircle2, Ticket, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
 import { scheduleBusBookingReminders } from '../../utils/upcomingRideReminderService';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
@@ -191,7 +191,10 @@ const BusConfirm = () => {
                 </p>
                 <p className="mt-2 text-xs font-bold text-slate-500">Paid ₹{Number(booking.amount || 0)}</p>
               </div>
-              <QrCode size={48} className="text-slate-900" strokeWidth={1.5} />
+              <div className="max-w-[120px] text-right">
+                <Ticket size={22} className="ml-auto text-slate-900" strokeWidth={1.8} />
+                <p className="mt-1 text-[10px] font-bold leading-tight text-slate-500">Show ticket code {booking.bookingCode} to the bus driver</p>
+              </div>
             </div>
           </div>
         </motion.div>

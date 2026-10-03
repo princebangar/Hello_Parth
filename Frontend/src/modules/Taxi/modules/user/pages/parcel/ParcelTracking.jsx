@@ -255,6 +255,8 @@ const ParcelTracking = () => {
   const [rating, setRating] = useState(() => Number(state.feedback?.rating || 0));
   const [comment, setComment] = useState(() => state.feedback?.comment || '');
   const [selectedTip, setSelectedTip] = useState(() => Number(state.feedback?.tipAmount || 0));
+  // Set once the sender touches rating / tip / note so live ride updates do not reset their choice.
+  const feedbackEditedRef = useRef(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(Boolean(state.feedback?.submittedAt));
   const [feedbackError, setFeedbackError] = useState('');
@@ -351,9 +353,11 @@ const ParcelTracking = () => {
       return;
     }
 
-    setRating(Number(feedback.rating || 0));
-    setComment(feedback.comment || '');
-    setSelectedTip(Number(feedback.tipAmount || 0));
+    if (feedback.submittedAt || !feedbackEditedRef.current) {
+      setRating(Number(feedback.rating || 0));
+      setComment(feedback.comment || '');
+      setSelectedTip(Number(feedback.tipAmount || 0));
+    }
     setIsFeedbackSubmitted(Boolean(feedback.submittedAt));
   }, [rideRealtime?.feedback, state.feedback]);
 
@@ -1092,6 +1096,7 @@ const ParcelTracking = () => {
                         key={amount}
                         type="button"
                         onClick={() => {
+                          feedbackEditedRef.current = true;
                           setSelectedTip(amount);
                           setFeedbackError('');
                         }}
@@ -1116,6 +1121,7 @@ const ParcelTracking = () => {
                     key={value}
                     type="button"
                     onClick={() => {
+                      feedbackEditedRef.current = true;
                       setRating(value);
                       setFeedbackError('');
                     }}
@@ -1132,7 +1138,7 @@ const ParcelTracking = () => {
               <div className="mt-4 rounded-[16px] border border-slate-100 bg-slate-50/80 px-3 py-3">
                 <textarea
                   value={comment}
-                  onChange={(event) => setComment(event.target.value)}
+                  onChange={(event) => { feedbackEditedRef.current = true; setComment(event.target.value); }}
                   rows={3}
                   maxLength={500}
                   disabled={isFeedbackSubmitted}

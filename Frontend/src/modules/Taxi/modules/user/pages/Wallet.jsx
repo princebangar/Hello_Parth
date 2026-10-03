@@ -229,7 +229,7 @@ const Wallet = () => {
   const isDark = theme === 'dark';
 
   return (
-    <div className={`min-h-screen max-w-lg mx-auto flex flex-col font-sans pb-28 relative overflow-x-hidden transition-colors duration-300 ${
+    <div className={`min-h-screen max-w-lg mx-auto flex flex-col font-sans pb-28 relative overflow-x-clip transition-colors duration-300 ${
       isDark ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'
     }`}>
       <AnimatePresence>

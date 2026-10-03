@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -14,6 +14,7 @@ import {
   Ticket,
   Navigation,
   Calendar,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
@@ -31,6 +32,27 @@ const PoolingList = () => {
 
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showFilter, setShowFilter] = useState(false);
+  const [sortBy, setSortBy] = useState('default'); // default | cheapest | priciest | earliest
+
+  const departureMinutes = (route) => {
+    const times = (route.schedules || [])
+      .filter((schedule) => String(schedule?.status || 'active') === 'active')
+      .map((schedule) => {
+        const match = String(schedule?.departureTime || '').match(/^(\d{1,2}):(\d{2})/);
+        return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+      })
+      .filter((value) => value !== null);
+    return times.length ? Math.min(...times) : Infinity;
+  };
+
+  const visibleRoutes = useMemo(() => {
+    const list = [...routes];
+    if (sortBy === 'cheapest') list.sort((a, b) => Number(a.farePerSeat || 0) - Number(b.farePerSeat || 0));
+    if (sortBy === 'priciest') list.sort((a, b) => Number(b.farePerSeat || 0) - Number(a.farePerSeat || 0));
+    if (sortBy === 'earliest') list.sort((a, b) => departureMinutes(a) - departureMinutes(b));
+    return list;
+  }, [routes, sortBy]);
 
   useEffect(() => {
     fetchRoutes();
@@ -73,10 +95,41 @@ const PoolingList = () => {
                <span className="bg-indigo-50 text-indigo-600 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Step 1/3</span>
             </div>
           </div>
-          <button className="w-11 h-11 rounded-2xl border border-slate-100 bg-white flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors">
+          <button
+            type="button"
+            onClick={() => setShowFilter((current) => !current)}
+            aria-label="Sort rides"
+            className={`w-11 h-11 rounded-2xl border flex items-center justify-center transition-colors ${sortBy !== 'default' || showFilter ? 'border-indigo-200 bg-indigo-50 text-indigo-600' : 'border-slate-100 bg-white text-slate-400 hover:text-slate-900'}`}
+          >
             <Filter size={18} />
           </button>
         </div>
+
+        {showFilter ? (
+          <div className="mb-4 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Sort by</p>
+              <button type="button" onClick={() => setShowFilter(false)} aria-label="Close"><X size={14} className="text-slate-400" /></button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                ['default', 'Recommended'],
+                ['cheapest', 'Lowest price'],
+                ['priciest', 'Highest price'],
+                ['earliest', 'Earliest departure'],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { setSortBy(key); setShowFilter(false); }}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${sortBy === key ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Progress Bar */}
         <div className="flex items-center gap-2 px-1">
@@ -118,14 +171,14 @@ const PoolingList = () => {
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between px-3">
-               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{routes.length} Available Rides</p>
+               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{visibleRoutes.length} Available Rides</p>
                <div className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest">
                   <ShieldCheck size={12} />
                   Verified
                </div>
             </div>
 
-            {routes.map((route, idx) => {
+            {visibleRoutes.map((route, idx) => {
               const vehicle = route.assignedVehicleTypeIds?.[0] || {};
               const vehicleImage = (vehicle.images && vehicle.images.length > 0) ? vehicle.images[0] : taxiImg;
               const serviceTaxPercentage = Number(vehicle.serviceTaxPercentage || 0);
@@ -192,6 +245,32 @@ const PoolingList = () => {
                     </div>
                   </div>
 
+                  {/* Departures, boarding points and stops on the way */}
+                  {(() => {
+                    const pointName = (point) => String(point?.name || point?.address || '').trim();
+                    const join = (points) => (Array.isArray(points) ? points : []).map(pointName).filter(Boolean).join(', ');
+                    const departures = (route.schedules || [])
+                      .filter((schedule) => String(schedule?.status || 'active') === 'active' && schedule?.departureTime)
+                      .map((schedule) => schedule.departureTime)
+                      .join(' · ');
+                    const rows = [
+                      ['Departs', departures],
+                      ['Pickup points', join(route.pickupPoints)],
+                      ['Drop points', join(route.dropPoints)],
+                      ['Stops on the way', join(route.stops)],
+                    ].filter(([, value]) => value);
+                    return rows.length ? (
+                      <div className="relative z-10 mt-6 space-y-2 rounded-2xl bg-slate-50 px-4 py-3">
+                        {rows.map(([label, value]) => (
+                          <div key={label} className="flex items-start gap-3 text-[11px]">
+                            <span className="w-28 shrink-0 font-black uppercase tracking-wider text-slate-400">{label}</span>
+                            <span className="min-w-0 break-words font-bold text-slate-700">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
+
                   {/* Footer Info */}
                   <div className="mt-8 flex items-center justify-between border-t border-slate-50 pt-7">
                     <div className="flex items-center gap-4">
@@ -206,12 +285,16 @@ const PoolingList = () => {
                       <div>
                         <p className="text-sm font-black text-slate-900">{route.driverName || 'Verified Captain'}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <div className="flex items-center gap-0.5">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} size={8} className={i < 4 ? "text-amber-400 fill-amber-400" : "text-slate-200 fill-slate-200"} />
-                            ))}
-                          </div>
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">4.8 • Top Pilot</span>
+                          {Number(vehicle.rating || route.driverRating || 0) > 0 ? (
+                            <>
+                              <Star size={9} className="text-amber-400 fill-amber-400" />
+                              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                                {Number(vehicle.rating || route.driverRating).toFixed(1)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">New driver</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -224,7 +307,7 @@ const PoolingList = () => {
                          </div>
                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-2 tracking-tight">
                            <Users size={12} className="text-slate-300" />
-                           {route.maxSeatsPerBooking} seats left
+                           Up to {route.maxSeatsPerBooking} seats per booking
                          </div>
                       </div>
                       <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-slate-900 text-white shadow-xl shadow-slate-200 group-hover:bg-indigo-600 group-hover:shadow-indigo-100 transition-all">

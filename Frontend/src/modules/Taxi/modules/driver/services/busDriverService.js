@@ -25,11 +25,11 @@ export const getBusDriverSeatLayout = ({ scheduleId, date }) =>
     }),
   );
 
-export const getBusDriverBookings = ({ scheduleId, date, status } = {}) =>
+export const getBusDriverBookings = ({ scheduleId, date, status, from, activeOnly } = {}) =>
   api.get(
     '/drivers/bus/bookings',
     withDriverAuth({
-      params: { scheduleId, date, status },
+      params: { scheduleId, date, status, from, activeOnly: activeOnly ? 1 : undefined },
     }),
   );
 

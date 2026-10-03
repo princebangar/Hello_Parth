@@ -87,9 +87,10 @@ const PoolingConfirm = () => {
   const navigate = useNavigate();
   const { route, vehicle, selectedSeats, totalFare, fareBreakdown: routeFareBreakdown, travelDate, schedule, pickupStop, dropStop } = location.state || {};
 
+  const savedBooking = location.state?.confirmedBooking || null;
   const [isBooking, setIsBooking] = useState(false);
-  const [isBooked, setIsBooked] = useState(false);
-  const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [isBooked, setIsBooked] = useState(Boolean(savedBooking));
+  const [confirmedBooking, setConfirmedBooking] = useState(savedBooking);
 
   useEffect(() => {
     if (!confirmedBooking) {
@@ -187,6 +188,15 @@ const PoolingConfirm = () => {
 
             setConfirmedBooking(booking);
             setIsBooked(true);
+            // Keep the confirmation in this history entry so a refresh shows the success screen, not "pay" again.
+            try {
+              navigate(`${location.pathname}${location.search}`, {
+                replace: true,
+                state: { ...(location.state || {}), confirmedBooking: JSON.parse(JSON.stringify(booking || {})) },
+              });
+            } catch {
+              // history state is a nice-to-have; the success screen is already shown
+            }
             toast.success('Pooling booking confirmed');
           } catch (verifyError) {
             const message =

@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Briefcase,
@@ -12,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { useSettings } from "../../../shared/context/SettingsContext";
+import useTypingFocus from "../../../shared/hooks/useTypingFocus";
 
 const isEnabledFlag = (value) => {
   if (typeof value === "boolean") return value;
@@ -26,6 +28,8 @@ const DriverBottomNav = () => {
   const isOwner = role === "owner";
   const routePrefix = isOwner ? "/taxi/owner" : "/taxi/driver";
   const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
+  // Hidden while the keyboard is open so it never sits on top of the field being typed in.
+  const isTyping = useTypingFocus();
 
   // Matching user's latest screenshot labels: Home, History, Earnings, Accounts
   const navItems = isOwner
@@ -89,8 +93,8 @@ const DriverBottomNav = () => {
         },
       ];
 
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+  const nav = (
+    <nav style={{ fontFamily: "'Outfit', sans-serif" }} className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
       <div
         className="mx-auto grid h-[68px] w-full max-w-lg items-stretch gap-0.5"
         style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
@@ -134,6 +138,11 @@ const DriverBottomNav = () => {
       </div>
     </nav>
   );
+
+  if (isTyping) return null;
+
+  // Rendered into <body> so a transformed/animated page wrapper can never make the bar scroll with the page.
+  return typeof document === "undefined" ? nav : createPortal(nav, document.body);
 };
 
 export default DriverBottomNav;

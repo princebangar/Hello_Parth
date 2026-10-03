@@ -1201,14 +1201,16 @@ const Home = () => {
   }, [uiSettings?.goPlaces, uiSettings?.homeSections?.enableGoPlaces, isDark, settingsLoading]);
 
   return (
-    <div className="min-h-screen w-full lg:max-w-7xl mx-auto relative font-sans no-scrollbar overflow-x-hidden transition-colors duration-300 user-app-theme shadow-2xl">
+    <div className="min-h-screen w-full lg:max-w-7xl mx-auto relative font-sans no-scrollbar overflow-x-clip transition-colors duration-300 user-app-theme shadow-2xl">
 
       {/* 1. MOBILE LAYOUT: Google Map component + Sticky Search Bar + HomeContent */}
       <div className="block lg:hidden">
         <div className="user-home">
           {/* Solid top app bar — location + Food/Taxi switcher. Own space, not
               floated over the map, so nothing overlaps. */}
-          <SuperAppHomeHeader activeVertical="taxi" notificationCount={unreadNotifications} />
+          <div className="user-home-appbar">
+            <SuperAppHomeHeader activeVertical="taxi" notificationCount={unreadNotifications} />
+          </div>
 
           {/* Map — sits below the app bar, fully visible, own box. */}
           <div className="map-header">

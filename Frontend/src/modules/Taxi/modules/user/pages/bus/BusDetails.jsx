@@ -5,6 +5,7 @@ import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2 } from 'luci
 import userBusService from '../../services/busService';
 import { userAuthService } from '../../services/authService';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
+import useTypingFocus from '../../../../shared/hooks/useTypingFocus';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -55,6 +56,7 @@ const CURRENCY_SYMBOL = '\u20B9';
 const formatMoney = (value) => Number(value || 0).toLocaleString('en-IN');
 
 const BusDetails = () => {
+  const isTyping = useTypingFocus();
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
@@ -312,7 +314,8 @@ const BusDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
+    // pb-[26rem]: the fixed fare summary at the bottom is ~14rem tall; the last fields must scroll clear of it.
+    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-[26rem]">
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -491,9 +494,17 @@ const BusDetails = () => {
             </div>
           )}
         </div>
+
+        {pricingBus?.cancellationPolicy ? (
+          <div className="rounded-3xl border border-amber-100 bg-amber-50/60 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">Cancellation policy</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{pricingBus.cancellationPolicy}</p>
+          </div>
+        ) : null}
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30">
+      {/* Hidden while the keyboard is open so it never covers the field being typed in. */}
+      <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30 ${isTyping ? 'hidden' : ''}`}>
         <div className="mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <div>

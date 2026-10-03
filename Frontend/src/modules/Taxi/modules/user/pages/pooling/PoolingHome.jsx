@@ -75,6 +75,7 @@ const PoolingHome = () => {
     date: new Date().toISOString().split('T')[0]
   });
   const [popularRoutes, setPopularRoutes] = useState([]);
+  const [showPopularRoutes, setShowPopularRoutes] = useState(true);
   const [allSuggestions, setAllSuggestions] = useState({ origins: [], destinations: [] });
   const [showFromSuggestions, setShowFromSuggestions] = useState(false);
   const [showToSuggestions, setShowToSuggestions] = useState(false);
@@ -294,6 +295,7 @@ const PoolingHome = () => {
               </div>
               <input
                 type="date"
+                min={new Date().toLocaleDateString('en-CA')}
                 value={search.date}
                 onChange={(e) => setSearch({ ...search, date: e.target.value })}
                 className="w-full rounded-[24px] bg-slate-50 py-5 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition focus:ring-4 focus:ring-indigo-50 border border-transparent focus:border-indigo-100 appearance-none"
@@ -320,14 +322,16 @@ const PoolingHome = () => {
           </div>
           <button
             type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={() => setShowPopularRoutes((value) => !value)}
+            aria-expanded={showPopularRoutes}
+            aria-label={showPopularRoutes ? 'Hide popular routes' : 'Show popular routes'}
             className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-900"
           >
-            <ChevronRight size={20} className="-rotate-90" />
+            <ChevronRight size={20} className={`transition-transform duration-200 ${showPopularRoutes ? '-rotate-90' : 'rotate-90'}`} />
           </button>
         </div>
-        
-        <div className="space-y-5">
+
+        <div className={`space-y-5 ${showPopularRoutes ? '' : 'hidden'}`}>
           {!popularRoutes.length ? (
             <div className="rounded-[32px] border-2 border-dashed border-slate-100 bg-slate-50/50 p-10 text-center">
               <History size={32} className="mx-auto text-slate-200 mb-4" />

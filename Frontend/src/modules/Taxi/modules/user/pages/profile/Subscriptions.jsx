@@ -84,8 +84,8 @@ const Subscriptions = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-10">
-      <div className="mx-auto max-w-3xl px-4 pt-8">
-        <div className="mb-6 flex items-center gap-3">
+      <div className="mx-auto max-w-3xl px-4">
+        <div className="sticky top-0 z-20 -mx-4 mb-6 flex items-center gap-3 bg-slate-50/95 px-4 pt-8 pb-3 backdrop-blur-md">
           <button
             type="button"
             onClick={() => navigate('/taxi/user/profile')}
@@ -178,14 +178,15 @@ const Subscriptions = () => {
                     <p className="text-2xl font-black text-slate-900">{formatCurrency(plan.amount)}</p>
                     <button
                       type="button"
-                      disabled={isBuying || walletBalance < Number(plan.amount || 0)}
+                      disabled={isBuying || hasSameVehicleActivePlan || walletBalance < Number(plan.amount || 0)}
                       onClick={() => handleBuy(plan.id)}
                       className="mt-4 inline-flex min-w-[170px] items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isBuying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet size={16} />}
-                      Buy With Wallet
+                      {hasSameVehicleActivePlan ? 'Already active' : 'Buy With Wallet'}
                     </button>
-                    {walletBalance < Number(plan.amount || 0) ? (
+                    {/* A plan already running on this category needs no top-up message. */}
+                    {!hasSameVehicleActivePlan && walletBalance < Number(plan.amount || 0) ? (
                       <p className="mt-2 text-xs font-semibold text-rose-500">Not enough wallet balance for this plan.</p>
                     ) : null}
                   </div>

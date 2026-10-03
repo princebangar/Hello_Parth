@@ -6,6 +6,9 @@ import UserSupportChatPanel from '../../../shared/components/UserSupportChatPane
 import { socketService } from '../../../../shared/api/socket';
 import { getCurrentRide } from '../../services/currentRideService';
 
+// Quick emoji tray for the ride chat (the device keyboard still has every emoji).
+const QUICK_EMOJIS = ['👍', '🙏', '😊', '😂', '👋', '🚗', '📍', '⏳', '✅', '❌', '🙂', '😅', '👌', '🙌', '❤️', '🎉'];
+
 const RIDE_EVENTS = {
   joined: 'ride:joined',
   state: 'ride:state',
@@ -78,6 +81,8 @@ const Chat = () => {
       : []
   ));
   const [input, setInput] = useState('');
+  const [showEmojis, setShowEmojis] = useState(false);
+  const inputRef = useRef(null);
   const [chatError, setChatError] = useState('');
   const [isJoiningRide, setIsJoiningRide] = useState(!isAdminChat);
   const [resolvedPeer, setResolvedPeer] = useState({
@@ -331,9 +336,36 @@ const Chat = () => {
           ))}
         </div>
 
+        {showEmojis ? (
+          <div className="flex flex-wrap gap-1 rounded-[16px] border border-slate-100 bg-white p-2">
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => {
+                  setInput((current) => `${current}${emoji}`);
+                  inputRef.current?.focus();
+                }}
+                className="h-9 w-9 rounded-xl text-[20px] leading-none hover:bg-slate-100 active:scale-90 transition-transform"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="flex items-center gap-2 bg-slate-50/80 rounded-[16px] px-3 py-2 border border-slate-100">
-          <Smile size={18} className="text-slate-400 shrink-0" strokeWidth={2} />
+          <button
+            type="button"
+            onClick={() => setShowEmojis((current) => !current)}
+            disabled={!rideId || isJoiningRide}
+            aria-label="Add emoji"
+            className="shrink-0 rounded-lg p-0.5 disabled:opacity-50"
+          >
+            <Smile size={18} className={showEmojis ? 'text-slate-900' : 'text-slate-400'} strokeWidth={2} />
+          </button>
           <input
+            ref={inputRef}
             type="text"
             placeholder={rideId ? 'Type a message...' : 'Ride chat unavailable'}
             value={input}

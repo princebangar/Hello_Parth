@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Banknote, CheckCircle2, ChevronRight, CreditCard, MessageSquare, Receipt, Share2, Star, Wallet } from 'lucide-react';
@@ -82,6 +82,8 @@ const RideComplete = () => {
   const [rating, setRating] = useState(() => Number(state.feedback?.rating || 0));
   const [comment, setComment] = useState(() => state.feedback?.comment || '');
   const [selectedTip, setSelectedTip] = useState(() => Number(state.feedback?.tipAmount || 0));
+  // True once the rider touches rating / tip / note: the 5-second ride refresh must not overwrite their choice.
+  const feedbackEditedRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(Boolean(state.feedback?.submittedAt));
   const [showSubmittedOverlay, setShowSubmittedOverlay] = useState(false);
@@ -183,9 +185,13 @@ const RideComplete = () => {
           return;
         }
 
-        setRating(Number(feedback.rating || 0));
-        setComment(feedback.comment || '');
-        setSelectedTip(Number(feedback.tipAmount || 0));
+        // The server copy only replaces what is on screen once feedback was really submitted; before that it
+        // holds defaults (no rating, no tip) and used to wipe the rider's selection every 5 seconds.
+        if (feedback.submittedAt || !feedbackEditedRef.current) {
+          setRating(Number(feedback.rating || 0));
+          setComment(feedback.comment || '');
+          setSelectedTip(Number(feedback.tipAmount || 0));
+        }
         setIsSubmitted(Boolean(feedback.submittedAt));
       } catch (rideError) {
         console.error('Failed to refresh completed ride receipt:', rideError);
@@ -575,11 +581,11 @@ const RideComplete = () => {
                 </div>
                 <div className="min-w-0 flex-1 space-y-3">
                   <div>
-                    <p className="truncate text-[13px] font-black text-slate-900">{pickup}</p>
+                    <p className="break-words text-[13px] font-black leading-snug text-slate-900">{pickup}</p>
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Pickup</p>
                   </div>
                   <div>
-                    <p className="truncate text-[13px] font-black text-slate-900">{drop}</p>
+                    <p className="break-words text-[13px] font-black leading-snug text-slate-900">{drop}</p>
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Drop</p>
                   </div>
                 </div>
@@ -588,7 +594,7 @@ const RideComplete = () => {
 
             <div className="rounded-[18px] border border-slate-100 bg-white p-3">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-bold text-slate-500">Base fare</span>
+                <span className="text-[12px] font-bold text-slate-500">Ride fare</span>
                 <span className="text-[13px] font-black text-slate-900">Rs {fare.toFixed(2)}</span>
               </div>
               <div className="mt-2 flex items-center justify-between">
@@ -627,6 +633,7 @@ const RideComplete = () => {
                     key={amount}
                     type="button"
                     onClick={() => {
+                      feedbackEditedRef.current = true;
                       setSelectedTip(amount);
                       setError('');
                     }}
@@ -653,6 +660,7 @@ const RideComplete = () => {
                 key={value}
                 type="button"
                 onClick={() => {
+                  feedbackEditedRef.current = true;
                   setRating(value);
                   setError('');
                 }}
@@ -675,7 +683,7 @@ const RideComplete = () => {
             </div>
             <textarea
               value={comment}
-              onChange={(event) => setComment(event.target.value)}
+              onChange={(event) => { feedbackEditedRef.current = true; setComment(event.target.value); }}
               rows={3}
               maxLength={500}
               disabled={isSubmitted}

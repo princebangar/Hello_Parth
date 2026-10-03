@@ -666,6 +666,7 @@ const SearchingDriver = () => {
           drop: routeState.dropCoords,
           pickupAddress: routeState.pickup || '',
           dropAddress: routeState.drop || '',
+          stops: (Array.isArray(routeState.stops) ? routeState.stops : []).map((stop) => String(stop || '').trim()).filter(Boolean),
           fare: routeState.baseFare || routeState.fare || routeState.vehicle?.price || 0,
           estimatedDistanceMeters: routeState.estimatedDistanceMeters || 0,
           estimatedDurationMinutes: routeState.estimatedDurationMinutes || 0,
@@ -685,9 +686,6 @@ const SearchingDriver = () => {
           bidStepAmount: routeState.bidStepAmount || 10,
           scheduledAt: routeState.scheduledAt || null,
         };
-
-        console.log('--- TEMPORARY DEBUG LOG ---');
-        console.log('booking payload vehicleType:', selectedVehicleTypeId);
 
         const response = await api.post('/rides', requestPayload, rideRequestConfig);
 
@@ -949,42 +947,44 @@ const SearchingDriver = () => {
 
   if (isScheduledRide && !isScheduledBiddingRide) {
     return (
-      <div className="min-h-screen max-w-lg mx-auto flex items-center justify-center bg-slate-950 px-6">
+      <div className="min-h-screen max-w-lg mx-auto flex items-center justify-center px-6" style={{ background: 'var(--user-bg)', color: 'var(--user-text-primary)' }}>
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full rounded-[32px] border border-white/10 bg-white/5 px-6 py-8 text-center shadow-2xl"
+          className="w-full rounded-[32px] px-6 py-8 text-center"
+          style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: 'var(--user-card-shadow)' }}
         >
-          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] ${scheduledStatus === 'scheduled' ? 'bg-emerald-600/20 text-emerald-400' :
-              scheduledStatus === 'error' ? 'bg-rose-600/20 text-rose-400' : 'bg-blue-600/20 text-blue-400'
+          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] ${scheduledStatus === 'scheduled' ? 'bg-emerald-50 text-emerald-600' :
+              scheduledStatus === 'error' ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'
             }`}>
             {scheduledStatus === 'scheduled' ? <CheckCircle2 size={26} /> : scheduledStatus === 'error' ? <AlertTriangle size={26} /> : <LoaderCircle size={26} className="animate-spin" />}
           </div>
-          <h1 className="mt-5 text-[22px] font-black text-white">
+          <h1 className="mt-5 text-[22px] font-black" style={{ color: 'var(--user-text-primary)' }}>
             {scheduledStatus === 'scheduled' ? 'Ride scheduled' : scheduledStatus === 'error' ? 'Scheduling failed' : 'Scheduling your ride'}
           </h1>
-          <p className="mt-2 text-[13px] font-bold text-white/55">
+          <p className="mt-2 text-[13px] font-bold" style={{ color: 'var(--user-text-secondary)' }}>
             {scheduledStatus === 'scheduled'
               ? 'Your booking has been saved. Drivers will be notified automatically at the scheduled time.'
               : scheduledStatus === 'error'
                 ? (scheduledError || 'Could not schedule this ride.')
                 : 'Saving your booking and preparing automatic driver notification.'}
           </p>
-          <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 px-4 py-4 text-left">
-            <div className="flex items-center gap-3 text-white">
-              <Calendar size={16} className="text-blue-300" />
+          <div className="mt-6 rounded-[24px] px-4 py-4 text-left" style={{ background: 'var(--user-card-soft)', border: '1px solid var(--user-border)' }}>
+            <div className="flex items-center gap-3" style={{ color: 'var(--user-text-primary)' }}>
+              <Calendar size={16} className="text-blue-600" />
               <span className="text-sm font-bold">Scheduled For</span>
             </div>
-            <p className="mt-2 text-lg font-black text-white">{formattedScheduledTime}</p>
-            <div className="mt-4 flex items-center gap-3 text-white/65">
-              <Clock3 size={15} />
-              <span className="text-xs font-bold uppercase tracking-[0.16em]">{routeState.pickup || 'Pickup'} to {routeState.drop || 'Drop'}</span>
+            <p className="mt-2 text-lg font-black" style={{ color: 'var(--user-text-primary)' }}>{formattedScheduledTime}</p>
+            <div className="mt-4 flex items-start gap-3" style={{ color: 'var(--user-text-secondary)' }}>
+              <Clock3 size={15} className="shrink-0 mt-0.5" />
+              <span className="text-xs font-bold break-words min-w-0">{routeState.pickup || 'Pickup'} to {routeState.drop || 'Drop'}</span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => navigate(userHomeRoute, { replace: true })}
-            className="mt-6 h-12 w-full rounded-[18px] bg-white text-sm font-black uppercase tracking-[0.16em] text-slate-900"
+            className="mt-6 h-12 w-full rounded-[18px] text-sm font-black uppercase tracking-[0.16em]"
+            style={{ background: 'var(--user-accent)', color: 'var(--user-accent-ink)' }}
           >
             {scheduledStatus === 'error' ? 'Back to Home' : 'Done'}
           </button>
