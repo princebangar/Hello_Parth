@@ -1391,7 +1391,7 @@ html, body, #root {
   padding: 0;
   width: 100%;
   min-height: 100%;
-  overflow-x: hidden !important;
+  overflow-x: clip !important; /* clip, not hidden: hidden makes these scroll containers and breaks every position:sticky header */
 }
 
 body.splash-active {

@@ -117,6 +117,11 @@ const busBookingSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // what each seat cost (window / aisle / sleeper price + its share of tax), same order as seatIds
+    seatAmounts: {
+      type: [Number],
+      default: [],
+    },
     passenger: {
       type: passengerSchema,
       default: () => ({}),

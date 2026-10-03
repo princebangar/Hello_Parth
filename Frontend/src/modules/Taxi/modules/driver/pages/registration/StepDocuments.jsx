@@ -1143,7 +1143,7 @@ const StepDocuments = () => {
                                     type="text"
                                     value={documentMeta[template.id]?.identifyNumber || ''}
                                     onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.toUpperCase())}
-                                    placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || 'Number'}`}
+                                    placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || `${template.name} number`}`}
                                     className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
                                 />
                             </div>

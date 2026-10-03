@@ -419,6 +419,8 @@ export const initSocket = async (server) => {
         registerTaxiSocketIntegration(io);
         startDriverPresenceSweep();
         startScheduledRideReminderSweep();
+        const { startRidePaymentSweep } = await import('../modules/taxi/services/ridePaymentSweepService.js');
+        startRidePaymentSweep();
         restoreScheduledDispatches().catch((err) => {
             logger.error(`Taxi scheduled dispatch restore failed: ${err.message}`);
         });

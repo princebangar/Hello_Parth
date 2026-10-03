@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
 import toast from 'react-hot-toast';
 import { schedulePoolingBookingReminders } from '../../utils/upcomingRideReminderService';
+import { formatPoolingSeatLabels } from '../../utils/poolingSeats';
 
 // Asset Imports
 import taxiImg from '../../../../assets/3d images/AutoCab/taxi.png';
@@ -164,6 +165,19 @@ const PoolingConfirm = () => {
         name: 'Pooling Booking',
         description: `${route.originLabel} to ${route.destinationLabel}`,
         order_id: order.orderId,
+        prefill: (() => {
+          let userInfo = {};
+          try {
+            userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}') || {};
+          } catch {
+            userInfo = {};
+          }
+          return {
+            name: userInfo?.name || '',
+            email: userInfo?.email || '',
+            contact: userInfo?.phone ? `+91${userInfo.phone}` : '',
+          };
+        })(),
         modal: {
           ondismiss: () => {
             setIsBooking(false);
@@ -329,7 +343,7 @@ const PoolingConfirm = () => {
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600">
                           <Armchair size={10} />
-                          Seats: {(confirmedBooking?.selectedSeats || selectedSeats).join(', ')}
+                          Seats: {formatPoolingSeatLabels(vehicle?.blueprint, confirmedBooking?.selectedSeats || selectedSeats)}
                         </span>
                       </div>
                     </div>
@@ -472,7 +486,7 @@ const PoolingConfirm = () => {
                             ))}
                           </div>
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            {selectedSeats.join(', ')}
+                            {formatPoolingSeatLabels(vehicle?.blueprint, selectedSeats)}
                           </span>
                         </div>
                       </div>

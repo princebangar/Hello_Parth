@@ -575,7 +575,8 @@ const isExpiredDateValue = (value) => {
 
 const DRIVER_ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
 const DRIVER_VEHICLE_REAPPROVAL_PENDING_KEY = 'driver_vehicle_reapproval_pending';
-const getTodaySelfieKey = () => new Date().toISOString().slice(0, 10);
+// India calendar day - must match the server's selfie day key
+const getTodaySelfieKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const readRouteBookingPreferences = () => {
     try {
@@ -730,7 +731,7 @@ const DriverHome = () => {
         return null;
     }, [walletAlertState]);
 
-    const { isLoaded } = useBaseGoogleMapsLoader();
+    const { isLoaded, loadError: mapLoadError } = useBaseGoogleMapsLoader();
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -1489,7 +1490,7 @@ const DriverHome = () => {
             setOnlineSelfie({
                 imageUrl: selfieUrl,
                 capturedAt: new Date().toISOString(),
-                forDate: new Date().toISOString().slice(0, 10),
+                forDate: getTodaySelfieKey(),
             });
             setShowSelfieCameraCapture(false);
             setShowOnlineSelfiePrompt(false);
@@ -2463,7 +2464,7 @@ const DriverHome = () => {
                     <div className="w-full h-full bg-slate-200 flex items-center justify-center">
                         <div className="text-center px-10">
                             <div className="w-16 h-16 bg-slate-300 rounded-full animate-pulse mx-auto mb-4" />
-                            <p className="text-slate-500 font-medium text-sm">Map unavailable. Configure Google Maps key.</p>
+                            <p className="text-slate-500 font-medium text-sm">{!HAS_VALID_GOOGLE_MAPS_KEY ? 'Map unavailable. Configure Google Maps key.' : mapLoadError ? 'Map could not load. Check your internet connection.' : 'Loading map...'}</p>
                         </div>
                     </div>
                 )}

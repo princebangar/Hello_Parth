@@ -1079,9 +1079,8 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Seat ${invalidSeat} is not available`);
   }
 
-  const amount = Math.round(
-    seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, availableSeatMap.get(seatId)), 0) * 100,
-  ) / 100;
+  const seatAmounts = seatIds.map((seatId) => Math.round(resolveBusSeatPrice(busService, availableSeatMap.get(seatId)) * 100) / 100);
+  const amount = Math.round(seatAmounts.reduce((sum, value) => sum + value, 0) * 100) / 100;
   const booking = await BusBooking.create({
     userId: user._id,
     busServiceId: busService._id,
@@ -1090,6 +1089,7 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     travelDate,
     seatIds,
     seatLabels: seatIds.map((seatId) => availableSeatMap.get(seatId)?.label || seatId),
+    seatAmounts,
     passenger,
     amount,
     bookingSource: 'admin',

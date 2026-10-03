@@ -569,17 +569,20 @@ const getStatusColor = (status) => {
                             <span className="text-[15px] font-black tracking-tight text-slate-800 truncate">{doc.label}</span>
                             <div className="flex flex-wrap justify-end gap-2">
                                 <span className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getStatusColor(doc.status)}`}>
-                                    Admin: {doc.status}
+                                    Review: {doc.status}
                                 </span>
-                                <span className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getProviderStatusColor(doc.providerStatus)}`}>
-                                    API: {doc.providerStatus === 'not_started' ? 'Not verified' : doc.providerStatus}
-                                </span>
+                                {/* automatic (RechargeKit) check only shown when it actually ran */}
+                                {doc.providerStatus && doc.providerStatus !== 'not_started' ? (
+                                    <span className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${getProviderStatusColor(doc.providerStatus)}`}>
+                                        Auto-check: {doc.providerStatus}
+                                    </span>
+                                ) : null}
                             </div>
                         </div>
                         {doc.providerMessage ? (
                             <div className="p-4 bg-sky-50 border border-sky-100 rounded-2xl">
                                 <p className="text-[13px] font-bold text-sky-700 leading-relaxed">
-                                    <span className="opacity-60 uppercase text-[10px] block mb-1 tracking-widest">RechargeKit status:</span>
+                                    <span className="opacity-60 uppercase text-[10px] block mb-1 tracking-widest">Auto-check:</span>
                                     {doc.providerMessage}
                                 </p>
                             </div>

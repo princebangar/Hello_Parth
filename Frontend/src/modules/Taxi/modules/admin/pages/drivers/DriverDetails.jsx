@@ -627,7 +627,10 @@ const DriverDetails = () => {
       return {
         ...doc,
         verificationType: getDocumentVerificationType(doc, doc.sourceKey),
-        verificationLabel: getDocumentVerificationLabel(getDocumentVerificationType(doc, doc.sourceKey), doc.name),
+        // "RC Verify" / "DL Verify" only when the provider really verified it; otherwise keep the document's own name (Front/Back)
+        verificationLabel: doc?.verificationResponse && Object.keys(doc.verificationResponse).length > 0
+          ? getDocumentVerificationLabel(getDocumentVerificationType(doc, doc.sourceKey), doc.name)
+          : doc.name,
         verificationFacts: getDocumentVerificationFacts(doc),
         rcChecks: getRcVerificationChecks(doc),
         isReuploaded:

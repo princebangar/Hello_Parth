@@ -257,6 +257,8 @@ const StepVehicle = () => {
     const [rcVerificationMessage, setRcVerificationMessage] = useState('');
     const [rcVerificationError, setRcVerificationError] = useState('');
     const [rcVerificationDetails, setRcVerificationDetails] = useState(session.rcVerificationDetails || null);
+    // RC check service switched off / not configured: the driver types the vehicle details himself, admin checks the papers.
+    const [rcManualEntry, setRcManualEntry] = useState(false);
     const [dlMeta, setDlMeta] = useState(() => ({
         identifyNumber: '',
         birthDate: '',
@@ -530,7 +532,7 @@ const StepVehicle = () => {
     const seatCapacityFieldKey = findAutofillCustomFieldKey(visibleCustomVehicleFields, ['seat capacity', 'seating capacity', 'seats']);
     const manufacturerFieldKey = findAutofillCustomFieldKey(visibleCustomVehicleFields, ['manufacturer', 'vehicle manufacturer', 'brand']);
     const rcAutofillCustomFieldKeys = [fuelTypeFieldKey, seatCapacityFieldKey, manufacturerFieldKey].filter(Boolean);
-    const showRcAutofilledFields = isOwner || hasRcAutofillData(formData, formData.customFields, rcAutofillCustomFieldKeys);
+    const showRcAutofilledFields = isOwner || rcManualEntry || hasRcAutofillData(formData, formData.customFields, rcAutofillCustomFieldKeys);
     const drivingLicenseTemplate = documentTemplates.find(
         (template) => normalizeVerificationType(template?.verification_type) === 'driving_license',
     ) || null;
@@ -693,7 +695,13 @@ const StepVehicle = () => {
             lastVerifiedRcRef.current = '';
             setRcVerificationDetails(null);
             setRcVerificationMessage('');
-            setRcVerificationError(err?.message || 'Unable to verify RC number');
+            const failMessage = String(err?.message || '');
+            if (/disabled in admin settings|not configured/i.test(failMessage)) {
+                setRcManualEntry(true);
+                setRcVerificationError('Automatic RC check is not available right now. Enter your vehicle details below - our team will verify your papers.');
+            } else {
+                setRcVerificationError(failMessage || 'Unable to verify RC number');
+            }
         } finally {
             setRcVerificationLoading(false);
         }

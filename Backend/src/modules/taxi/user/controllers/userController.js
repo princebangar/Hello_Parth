@@ -712,6 +712,18 @@ const computeBusCancellationQuote = ({ booking, busService, now = new Date(), tr
   };
 };
 
+// Real price of every seat in a booking (window / aisle / sleeper differ). Bookings made before seatAmounts existed, or by
+// the bus desk/admin, fall back to an equal share of the total.
+const getBookingSeatAmountMap = (booking = {}) => {
+  const seatIds = (Array.isArray(booking.seatIds) ? booking.seatIds : []).map((item) => toCleanString(item));
+  const stored = Array.isArray(booking.seatAmounts) ? booking.seatAmounts.map((item) => Number(item)) : [];
+  if (seatIds.length && stored.length === seatIds.length && stored.every((item) => Number.isFinite(item) && item >= 0)) {
+    return new Map(seatIds.map((seatId, index) => [seatId, stored[index]]));
+  }
+  const share = seatIds.length ? Math.round((Number(booking.amount || 0) / seatIds.length) * 100) / 100 : 0;
+  return new Map(seatIds.map((seatId) => [seatId, share]));
+};
+
 const buildBusPartialCancellationQuote = ({
   booking,
   busService,
@@ -746,8 +758,8 @@ const buildBusPartialCancellationQuote = ({
     };
   }
 
-  const perSeatAmount = Math.round((Number(bookingSnapshot?.amount || 0) / seatCount) * 100) / 100;
-  const partialAmount = Math.round(perSeatAmount * selectedCount * 100) / 100;
+  const seatAmountMap = getBookingSeatAmountMap(bookingSnapshot);
+  const partialAmount = Math.round(selectedSeatIds.reduce((sum, seatId) => sum + Number(seatAmountMap.get(seatId) || 0), 0) * 100) / 100;
 
   return computeBusCancellationQuote({
     booking: {
@@ -961,12 +973,13 @@ const formatBusStopLabel = (stop = null, fallback = '') => {
 };
 
 const serializeBusBooking = (booking, busService = null) => {
-  const quote = busService ? computeBusCancellationQuote({ booking, busService }) : null;
   const schedule = busService ? findBusSchedule(busService, booking?.scheduleId) : null;
   const arrivalTime = schedule?.arrivalTime || booking?.routeSnapshot?.arrivalTime || '';
   const arrivalDateTime = parseBusDateTime(booking?.travelDate, arrivalTime);
   const tripCompleted = Boolean(arrivalDateTime && arrivalDateTime.getTime() < Date.now());
-  const persistedCancellation = booking.cancellation || {};
+  // The saved cancellation block only holds real numbers after the booking was cancelled. On a live booking it is all
+  // zeros, and "persisted ?? quote" kept those zeros, so the refund preview always said "refund Rs 0, fee = full fare".
+  const persistedCancellation = String(booking.status || '') === 'cancelled' ? (booking.cancellation || {}) : {};
   const cancelledSeats = Array.isArray(booking.cancelledSeats) ? booking.cancelledSeats : [];
   const cancelledSeatIdSet = new Set(
     cancelledSeats.map((item) => toCleanString(item?.seatId)).filter(Boolean),
@@ -979,6 +992,13 @@ const serializeBusBooking = (booking, busService = null) => {
       seatLabel: originalSeatLabels[index] || seatId,
     }))
     .filter((item) => !cancelledSeatIdSet.has(toCleanString(item.seatId)));
+  // Preview for cancelling what is still booked: only the active seats, each at its real price. Using the full booking
+  // amount over-quoted the refund after a partial cancel.
+  const quote = busService
+    ? (activeSeats.length > 0
+      ? buildBusPartialCancellationQuote({ booking, busService, seatIds: activeSeats.map((item) => item.seatId) })
+      : computeBusCancellationQuote({ booking, busService }))
+    : null;
   const totalRefundedAmount = cancelledSeats.reduce(
     (sum, item) => sum + Math.max(0, Number(item?.refundAmount || 0)),
     0,
@@ -992,6 +1012,7 @@ const serializeBusBooking = (booking, busService = null) => {
   const perSeatAmount = totalSeatCount > 0
     ? Math.round((Number(booking.amount || 0) / totalSeatCount) * 100) / 100
     : 0;
+  const seatAmountMap = getBookingSeatAmountMap(booking);
   const reviewEntry = Array.isArray(busService?.reviews)
     ? busService.reviews.find((item) => String(item?.bookingId || '') === String(booking?._id || ''))
     : null;
@@ -1008,6 +1029,7 @@ const serializeBusBooking = (booking, busService = null) => {
   scheduleId: booking.scheduleId || '',
   seatIds: Array.isArray(booking.seatIds) ? booking.seatIds : [],
   seatLabels: Array.isArray(booking.seatLabels) ? booking.seatLabels : [],
+  seatAmounts: originalSeatIds.map((seatId) => Number(seatAmountMap.get(toCleanString(seatId)) || 0)),
   amount: Number(booking.amount || 0),
   currency: booking.currency || 'INR',
   passenger: booking.passenger || {},
@@ -1056,6 +1078,7 @@ const serializeBusBooking = (booking, busService = null) => {
   },
   activeSeatIds: activeSeats.map((item) => item.seatId),
   activeSeatLabels: activeSeats.map((item) => item.seatLabel),
+  activeSeatAmounts: activeSeats.map((item) => Number(seatAmountMap.get(toCleanString(item.seatId)) || 0)),
   cancelledSeats: cancelledSeats.map((item) => ({
     seatId: item.seatId || '',
     seatLabel: item.seatLabel || item.seatId || '',
@@ -2722,6 +2745,12 @@ export const createBusBookingOrder = async (req, res) => {
   const serviceTaxPercentage = Math.max(0, Number(busService.serviceTaxPercentage || 0));
   const serviceTaxAmount = Math.round(((baseAmount * serviceTaxPercentage) / 100) * 100) / 100;
   const amount = Math.round((baseAmount + serviceTaxAmount) * 100) / 100;
+  const seatAmounts = seatIds.map((seatId) => Math.round(resolveBusSeatPrice(busService, seatCellMap.get(seatId)) * (1 + serviceTaxPercentage / 100) * 100) / 100);
+  if (seatAmounts.length) {
+    // keep the per-seat amounts adding up exactly to the charged total
+    const roundingGap = Math.round((amount - seatAmounts.reduce((sum, value) => sum + value, 0)) * 100) / 100;
+    seatAmounts[seatAmounts.length - 1] = Math.round((seatAmounts[seatAmounts.length - 1] + roundingGap) * 100) / 100;
+  }
 
   const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const amountPaise = Math.round(amount * 100);
@@ -2756,6 +2785,7 @@ export const createBusBookingOrder = async (req, res) => {
     travelDate,
     seatIds,
     seatLabels: seatIds.map((seatId) => seatCellMap.get(seatId)?.label || seatId),
+    seatAmounts,
     passenger,
     amount,
     currency: busService.fareCurrency || 'INR',
@@ -3142,12 +3172,21 @@ export const cancelMyBusBooking = async (req, res) => {
     });
   }
 
-  const perSeatRefundAmount = seatsToCancel.length > 0
-    ? Math.round((cancellationQuote.refundAmount / seatsToCancel.length) * 100) / 100
-    : 0;
-  const perSeatChargeAmount = seatsToCancel.length > 0
-    ? Math.round((cancellationQuote.chargeAmount / seatsToCancel.length) * 100) / 100
-    : 0;
+  const cancelSeatAmountMap = getBookingSeatAmountMap(booking);
+  const cancelledTotal = seatsToCancel.reduce((sum, item) => sum + Number(cancelSeatAmountMap.get(toCleanString(item.seatId)) || 0), 0);
+  let refundLeft = cancellationQuote.refundAmount;
+  let chargeLeft = cancellationQuote.chargeAmount;
+  const seatSplits = seatsToCancel.map((item, index) => {
+    if (index === seatsToCancel.length - 1) {
+      return { refundAmount: Math.max(0, Math.round(refundLeft * 100) / 100), chargeAmount: Math.max(0, Math.round(chargeLeft * 100) / 100) };
+    }
+    const weight = cancelledTotal > 0 ? Number(cancelSeatAmountMap.get(toCleanString(item.seatId)) || 0) / cancelledTotal : 1 / seatsToCancel.length;
+    const refundAmount = Math.round(cancellationQuote.refundAmount * weight * 100) / 100;
+    const chargeAmount = Math.round(cancellationQuote.chargeAmount * weight * 100) / 100;
+    refundLeft -= refundAmount;
+    chargeLeft -= chargeAmount;
+    return { refundAmount, chargeAmount };
+  });
 
   booking.cancelledSeats = [
     ...cancelledSeats,
@@ -3155,12 +3194,8 @@ export const cancelMyBusBooking = async (req, res) => {
       seatId: item.seatId,
       seatLabel: item.seatLabel,
       cancelledAt,
-      refundAmount: index === seatsToCancel.length - 1
-        ? Math.max(0, Math.round((cancellationQuote.refundAmount - (perSeatRefundAmount * (seatsToCancel.length - 1))) * 100) / 100)
-        : perSeatRefundAmount,
-      chargeAmount: index === seatsToCancel.length - 1
-        ? Math.max(0, Math.round((cancellationQuote.chargeAmount - (perSeatChargeAmount * (seatsToCancel.length - 1))) * 100) / 100)
-        : perSeatChargeAmount,
+      refundAmount: seatSplits[index].refundAmount,
+      chargeAmount: seatSplits[index].chargeAmount,
       refundStatus: refundPayload ? (refundPayload.status || 'processed') : 'not_applicable',
       refundId: refundPayload?.id || '',
       refundProcessedAt: refundPayload?.created_at ? new Date(Number(refundPayload.created_at) * 1000) : cancelledAt,

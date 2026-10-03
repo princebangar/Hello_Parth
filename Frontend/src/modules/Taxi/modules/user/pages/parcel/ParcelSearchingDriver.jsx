@@ -14,6 +14,7 @@ import SuvIcon from '@/assets/icons/SUV.png';
 import BikeIcon from '@/assets/icons/bike.png';
 import CarIcon from '@/assets/icons/car.png';
 import AutoIcon from '@/assets/icons/auto.png';
+import { getUnpaidRideFromError, openUnpaidRidePayment } from '../../utils/unpaidRide';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -782,6 +783,12 @@ const ParcelSearchingDriver = () => {
         }, SEARCH_TIMEOUT_MS);
       } catch (error) {
         if (disposed) return;
+        const unpaidRide = getUnpaidRideFromError(error);
+        if (unpaidRide) {
+          setSearchStatus(unpaidRide.message);
+          setTimeout(() => { if (!disposed) openUnpaidRidePayment(navigate, window.location.pathname, unpaidRide); }, 1500);
+          return;
+        }
         const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Dispatch failed.';
         setBookingError(errorMessage);
         setSearchStatus(errorMessage);

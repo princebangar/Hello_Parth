@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Bike, HelpCircle, Repeat, Share2, Star } from 'lucide-react';
+import { ArrowLeft, Bike, Car, HelpCircle, Repeat, Share2, Star } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
@@ -84,7 +84,10 @@ const RideDetail = () => {
     const fare = Number(ride?.fare || 0);
     // Pickup waiting is added to the fare when the trip starts; it is not part of the taxed trip price.
     const waitingAmount = Math.max(0, Number(ride?.waitingCharge?.amount || 0));
-    const taxableFare = Math.max(0, fare - waitingAmount);
+    // ride.fare is what the rider pays (after the promo). The receipt lists Ride fare + Taxes - Promo discount, so
+    // the tax split has to start from the price BEFORE the discount or the lines would not add up to the total.
+    const discount = Math.max(0, Number(ride?.promo?.discount_amount || 0));
+    const taxableFare = Math.max(0, fare - waitingAmount + discount);
     // The fare already includes the tax % of the price the ride was booked with. Older rides did not record that
     // %, so they show only the total instead of a made-up split.
     const rawTaxPercent = ride?.pricingSnapshot?.service_tax;
@@ -92,7 +95,6 @@ const RideDetail = () => {
     const taxes = Number.isFinite(taxPercent) && taxPercent >= 0
       ? Math.round((taxableFare - taxableFare / (1 + taxPercent / 100)) * 100) / 100
       : null;
-    const discount = Math.max(0, Number(ride?.promo?.discount_amount || 0));
     const tip = Math.max(0, Number(ride?.feedback?.tipAmount || 0));
     const driverRating = Number(driver.rating || 0);
     const status = String(ride?.status || ride?.liveStatus || 'trip').toLowerCase();
@@ -227,11 +229,6 @@ const RideDetail = () => {
           </div>
         )}
 
-        <div className="h-40 bg-gray-100 rounded-[32px] overflow-hidden relative shadow-sm">
-          <img src="/map image.avif" className="w-full h-full object-cover opacity-60" alt="Map View" />
-          <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent" />
-        </div>
-
         <div className="relative pl-8 space-y-6">
           <div className="absolute left-[7px] top-2 bottom-2 w-0.5 border-l-2 border-dashed border-gray-100" />
 
@@ -257,7 +254,7 @@ const RideDetail = () => {
         <div className="bg-white rounded-[32px] p-6 border border-gray-50 shadow-sm space-y-4">
           <div className="flex items-center gap-3 pb-4 border-b border-gray-50">
             <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-900 shadow-sm border border-gray-100">
-              <Bike size={22} />
+              {/bike/i.test(String(details.vehicle || '')) ? <Bike size={22} /> : <Car size={22} />}
             </div>
             <div>
               <h3 className="text-[15px] font-black text-gray-900">{details.vehicle} Ride</h3>

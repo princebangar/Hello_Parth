@@ -315,52 +315,84 @@ export const topUpDriverWallet = async ({ driverId, amount, metadata = {} }) => 
   }
 };
 
+const PAID_COLLECTION_STATUSES = new Set(['paid', 'captured', 'completed']);
+
+const isRideCollectionPaid = (ride) =>
+  Boolean(ride?.driverPaymentCollection?.paidAt) ||
+  PAID_COLLECTION_STATUSES.has(String(ride?.driverPaymentCollection?.status || '').trim().toLowerCase());
+
+// Cash rides settle when the driver closes the trip (commission comes out of his wallet). Online rides pay the driver only
+// once the platform really has the money: rider paid in the app (Razorpay / wallet), paid the driver's Razorpay QR, or a
+// customer pass covered the ride. Before this an online ride credited the driver the moment he pressed "Finalize", even
+// if the rider never paid.
+export const isRideReadyForWalletSettlement = (ride) =>
+  normalizePaymentMethod(ride?.paymentMethod) === 'cash' ||
+  Boolean(ride?.subscriptionUsage?.covered) ||
+  isRideCollectionPaid(ride);
+
+// Safe to call any number of times (driver completion, rider payment, QR paid): the wallet moves at most once per ride.
 export const settleCompletedRideWallet = async ({ rideId }) => {
   const session = await mongoose.startSession();
 
   try {
     session.startTransaction();
 
-    const ride = await Ride.findOneAndUpdate(
-      { _id: rideId, walletSettledAt: null, driverId: { $ne: null } },
-      { $set: { walletSettledAt: new Date() } },
-      { returnDocument: 'after', session },
-    );
+    const ride = await Ride.findOne({ _id: rideId, driverId: { $ne: null } }).session(session);
 
-    if (!ride) {
+    if (!ride || ride.walletSettledAt || String(ride.status || '').toLowerCase() !== 'completed') {
       await session.commitTransaction();
       return null;
     }
 
+    // Promo discounts are paid by the platform (as Uber/Rapido do): the driver earns on the fare before the discount.
     const fare = normalizeAmount(ride.fare || 0, 'fare');
+    const promoDiscount = Math.max(normalizeAmount(ride.promo?.discount_amount || 0, 'promo discount'), 0);
+    const grossFare = normalizeAmount(fare + promoDiscount, 'fare');
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
     const commissionAmount = computeCommissionAmount({
-      fare,
+      fare: grossFare,
       type: commissionConfig.type,
       value: commissionConfig.value,
     });
     const paymentMethod = normalizePaymentMethod(ride.paymentMethod);
-    const driverEarnings = Math.max(Math.round((fare - commissionAmount) * 100) / 100, 0);
-    const amount = paymentMethod === 'cash' ? -commissionAmount : driverEarnings;
-    const type = paymentMethod === 'cash' ? 'commission_deduction' : 'ride_earning';
+    const driverEarnings = Math.max(Math.round((grossFare - commissionAmount) * 100) / 100, 0);
+    // Cash: the driver already holds the (discounted) fare, so the wallet gets the promo back and loses the commission.
+    const amount = paymentMethod === 'cash'
+      ? Math.round((promoDiscount - commissionAmount) * 100) / 100
+      : driverEarnings;
+    const type = amount < 0 ? 'commission_deduction' : 'ride_earning';
 
-    ride.paymentMethod = paymentMethod;
-    ride.commissionAmount = commissionAmount;
-    ride.driverEarnings = driverEarnings;
     // Keep the rest of the snapshot (tax %, waiting charge, owner commission, payment methods) — only the
     // driver commission is resolved here.
     const previousSnapshot =
       typeof ride.pricingSnapshot?.toObject === 'function' ? ride.pricingSnapshot.toObject() : ride.pricingSnapshot || {};
-    ride.pricingSnapshot = {
-      ...previousSnapshot,
-      setPriceId: ride.pricingSnapshot?.setPriceId || commissionConfig.setPriceId || null,
-      admin_commission_type_from_driver: Number(commissionConfig.type ?? ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
-      admin_commission_from_driver: Number(commissionConfig.value ?? ride.pricingSnapshot?.admin_commission_from_driver ?? 0),
-      resolvedAt: ride.pricingSnapshot?.resolvedAt || new Date(),
+    const settledFields = {
+      paymentMethod,
+      commissionAmount,
+      driverEarnings,
+      pricingSnapshot: {
+        ...previousSnapshot,
+        setPriceId: ride.pricingSnapshot?.setPriceId || commissionConfig.setPriceId || null,
+        admin_commission_type_from_driver: Number(commissionConfig.type ?? ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
+        admin_commission_from_driver: Number(commissionConfig.value ?? ride.pricingSnapshot?.admin_commission_from_driver ?? 0),
+        resolvedAt: ride.pricingSnapshot?.resolvedAt || new Date(),
+      },
     };
-    await ride.save({ session });
 
-    if (!amount) {
+    if (!isRideReadyForWalletSettlement(ride)) {
+      // Online ride not paid yet: show the earning, move no money. Settled again when the payment is confirmed.
+      await Ride.updateOne({ _id: ride._id, walletSettledAt: null }, { $set: settledFields }, { session });
+      await session.commitTransaction();
+      return null;
+    }
+
+    const claim = await Ride.updateOne(
+      { _id: ride._id, walletSettledAt: null },
+      { $set: { ...settledFields, walletSettledAt: new Date() } },
+      { session },
+    );
+
+    if (!claim.modifiedCount || !amount) {
       await session.commitTransaction();
       return null;
     }
@@ -371,10 +403,14 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       amount,
       type,
       description: paymentMethod === 'cash'
-        ? 'Commission deducted for cash ride'
+        ? (promoDiscount > 0
+          ? `Cash ride: commission Rs ${commissionAmount} deducted, promo Rs ${promoDiscount} paid by platform`
+          : 'Commission deducted for cash ride')
         : 'Driver earning credited for online ride',
       metadata: {
         fare,
+        promoDiscount,
+        grossFare,
         commissionAmount,
         driverEarnings,
         paymentMethod,

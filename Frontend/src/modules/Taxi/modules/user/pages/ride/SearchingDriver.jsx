@@ -10,6 +10,7 @@ import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../serv
 import { useBaseGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
 import { scheduleScheduledRideReminders } from '../../utils/upcomingRideReminderService';
 import { toHistorySafeState } from '../../../../shared/utils/historyState';
+import { getUnpaidRideFromError, openUnpaidRidePayment } from '../../utils/unpaidRide';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -219,6 +220,8 @@ const SearchingDriver = () => {
   const [driver, setDriver] = useState(DRIVER_PLACEHOLDER);
   const [rideOtp, setRideOtp] = useState('');
   const [searchStatus, setSearchStatus] = useState('Connecting with drivers nearby');
+  // true once the server closed the search without a driver - the sheet then offers Try again / Back to home
+  const [searchEnded, setSearchEnded] = useState(false);
   const [nearbyVehicleCount, setNearbyVehicleCount] = useState(4);
   const [rideBids, setRideBids] = useState([]);
   const [biddingSummary, setBiddingSummary] = useState(() => ({
@@ -597,6 +600,7 @@ const SearchingDriver = () => {
         ? 'No drivers available nearby'
         : (reason || 'No drivers accepted the ride request.');
       setSearchStatus(displayReason);
+      setSearchEnded(true);
       setStage(STAGES.SEARCHING);
     };
 
@@ -790,6 +794,12 @@ const SearchingDriver = () => {
         }
       } catch (error) {
         console.error('[searching-driver] Ride creation error:', error);
+        const unpaidRide = getUnpaidRideFromError(error);
+        if (!disposed && unpaidRide) {
+          setSearchStatus(unpaidRide.message);
+          setTimeout(() => { if (!disposed) openUnpaidRidePayment(navigate, window.location.pathname, unpaidRide); }, 1500);
+          return;
+        }
         if (!disposed) {
           const errorMessage = error?.response?.data?.message || error?.message || 'Network error or server down';
           const isNoDrivers = errorMessage.toLowerCase().includes('no driver') || errorMessage.toLowerCase().includes('not available');
@@ -801,6 +811,7 @@ const SearchingDriver = () => {
             return;
           }
           setSearchStatus(isNoDrivers ? 'No drivers available nearby' : errorMessage);
+          if (isNoDrivers) setSearchEnded(true);
           
           if (!isNoDrivers) {
             setTimeout(() => {
@@ -1149,7 +1160,7 @@ const SearchingDriver = () => {
               <div className="w-10 h-1.5 bg-slate-100 rounded-full mx-auto mb-2" />
 
               <div className="text-center space-y-1.5">
-                <h1 className="text-[22px] font-extrabold text-slate-950 tracking-tight">Finding your ride</h1>
+                <h1 className="text-[22px] font-extrabold text-slate-950 tracking-tight">{searchEnded ? 'No drivers found' : 'Finding your ride'}</h1>
                 <p className="text-[13px] font-semibold text-slate-400 max-w-[260px] mx-auto leading-normal">{searchStatus}</p>
               </div>
 
@@ -1271,6 +1282,24 @@ const SearchingDriver = () => {
                 </div>
               </div>
 
+              {searchEnded ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(-1)}
+                    className="w-full py-4 rounded-[22px] bg-slate-900 text-[13px] font-extrabold text-white uppercase tracking-[0.08em]"
+                  >
+                    Try again
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(userHomeRoute, { replace: true })}
+                    className="w-full py-4 rounded-[22px] bg-slate-100 text-[13px] font-extrabold text-slate-700 uppercase tracking-[0.08em]"
+                  >
+                    Back to home
+                  </motion.button>
+                </div>
+              ) : (
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowCancelConfirm(true)}
@@ -1278,6 +1307,7 @@ const SearchingDriver = () => {
               >
                 Cancel Search
               </motion.button>
+              )}
             </motion.div>
           )}
 

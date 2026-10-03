@@ -96,6 +96,9 @@ const RideComplete = () => {
   const [walletLoading, setWalletLoading] = useState(false);
   const [paymentCollection, setPaymentCollection] = useState(() => state.driverPaymentCollection || null);
   const [rideLiveStatus, setRideLiveStatus] = useState(() => String(state.liveStatus || state.status || '').toLowerCase());
+  // Server copy of the ride: fills the receipt (tax, waiting charge, promo) and the driver card when the page was opened
+  // without full state (e.g. from the "pay your previous ride" redirect).
+  const [serverRide, setServerRide] = useState(null);
   const [tipSettings, setTipSettings] = useState({
     enable_tips: '1',
     min_tip_amount: '10',
@@ -103,13 +106,23 @@ const RideComplete = () => {
 
   const routeHome = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '/';
   const rideId = state.rideId || '';
-  const fare = Number(state.fare || 0);
+  const fare = Number(serverRide?.fare ?? state.fare ?? 0);
   const paymentMethod = state.paymentMethod || 'Cash';
   const paymentMethodLabel = PAYMENT_OPTIONS.find((option) => option.id === selectedPaymentMethod)?.label || paymentMethod;
-  const pickup = state.pickup || 'Pickup';
-  const drop = state.drop || 'Drop';
+  const pickup = serverRide?.pickupAddress || state.pickup || 'Pickup';
+  const drop = serverRide?.dropAddress || state.drop || 'Drop';
   const serviceType = String(state.serviceType || state.type || 'ride').toLowerCase();
-  const driver = state.driver || {
+  // GET /rides/:id sends the driver populated under driverId
+  const serverDriver = [serverRide?.driver, serverRide?.driverId].find((item) => item && typeof item === 'object' && item.name) || null;
+  const driver = state.driver || (serverDriver ? {
+    name: serverDriver.name || 'Captain',
+    rating: serverDriver.rating || '',
+    vehicle: serverDriver.vehicleType || 'Taxi',
+    vehicleType: serverDriver.vehicleType || '',
+    plate: serverDriver.vehicleNumber || 'Assigned',
+    profileImage: serverDriver.profileImage || '',
+    vehicleImage: serverDriver.vehicleImage || '',
+  } : null) || {
     name: 'Captain',
     rating: '',
     vehicle: serviceType === 'parcel' ? 'Delivery' : 'Taxi',
@@ -126,6 +139,16 @@ const RideComplete = () => {
     vehicleIconUrl: driver.vehicleIconUrl || state.vehicleIconUrl || state.vehicle?.vehicleIconUrl || state.vehicle?.icon || '',
   });
   const totalBill = fare + Number(selectedTip || 0);
+  // Same split as the ride detail page: price before the promo -> tax part + base, then waiting charge and promo lines.
+  const receiptWaiting = Math.max(0, Number(serverRide?.waitingCharge?.amount || 0));
+  const receiptDiscount = Math.max(0, Number(serverRide?.promo?.discount_amount || 0));
+  const receiptTaxPercentRaw = serverRide?.pricingSnapshot?.service_tax;
+  const receiptTaxPercent = receiptTaxPercentRaw === null || receiptTaxPercentRaw === undefined || receiptTaxPercentRaw === '' ? null : Number(receiptTaxPercentRaw);
+  const receiptTaxable = Math.max(0, fare - receiptWaiting + receiptDiscount);
+  const receiptTax = Number.isFinite(receiptTaxPercent) && receiptTaxPercent > 0
+    ? Math.round((receiptTaxable - receiptTaxable / (1 + receiptTaxPercent / 100)) * 100) / 100
+    : 0;
+  const receiptBase = Math.round((receiptTaxable - receiptTax) * 100) / 100;
   const fareDueNow = isCollectionPaid(paymentCollection) ? 0 : fare;
   const payableNow = fareDueNow + Number(selectedTip || 0);
   const isRideFinalized = ['completed', 'delivered'].includes(rideLiveStatus) || Boolean(state.feedback?.submittedAt);
@@ -177,6 +200,7 @@ const RideComplete = () => {
         const nextLiveStatus = String(payload?.liveStatus || payload?.status || '').toLowerCase();
 
         if (active) {
+          setServerRide(payload || null);
           setPaymentCollection(payload?.driverPaymentCollection || null);
           setRideLiveStatus(nextLiveStatus);
         }
@@ -217,7 +241,8 @@ const RideComplete = () => {
     let active = true;
 
     const loadWalletSnapshot = async () => {
-      if (selectedPaymentMethod !== 'wallet') {
+      // Needed for the "Pay with" choice (online / wallet) shown while an online ride is still unpaid.
+      if (selectedPaymentMethod === 'cash') {
         return;
       }
 
@@ -493,6 +518,11 @@ const RideComplete = () => {
       </AnimatePresence>
 
       <div className="px-4 pb-8 pt-10 space-y-4">
+        {state.unpaidNotice && fareDueNow > 0 ? (
+          <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-bold text-amber-800">
+            {state.unpaidNotice} Pay below, then you can book again.
+          </div>
+        ) : null}
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 shadow-[0_8px_20px_rgba(16,185,129,0.28)]">
             <CheckCircle2 size={24} className="text-white" />
@@ -595,8 +625,26 @@ const RideComplete = () => {
             <div className="rounded-[18px] border border-slate-100 bg-white p-3">
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-bold text-slate-500">Ride fare</span>
-                <span className="text-[13px] font-black text-slate-900">Rs {fare.toFixed(2)}</span>
+                <span className="text-[13px] font-black text-slate-900">Rs {receiptBase.toFixed(2)}</span>
               </div>
+              {receiptTax > 0 ? (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-slate-500">Taxes &amp; fees ({receiptTaxPercent}%)</span>
+                  <span className="text-[13px] font-black text-slate-900">Rs {receiptTax.toFixed(2)}</span>
+                </div>
+              ) : null}
+              {receiptWaiting > 0 ? (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-slate-500">Waiting charge ({Number(serverRide?.waitingCharge?.minutes || 0)} min)</span>
+                  <span className="text-[13px] font-black text-slate-900">Rs {receiptWaiting.toFixed(2)}</span>
+                </div>
+              ) : null}
+              {receiptDiscount > 0 ? (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-emerald-600">Promo {serverRide?.promo?.code || ''}</span>
+                  <span className="text-[13px] font-black text-emerald-600">- Rs {receiptDiscount.toFixed(2)}</span>
+                </div>
+              ) : null}
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-[12px] font-bold text-slate-500">Tip</span>
                 <span className="text-[13px] font-black text-slate-900">Rs {Number(selectedTip || 0).toFixed(2)}</span>
@@ -608,6 +656,37 @@ const RideComplete = () => {
             </div>
           </div>
         </div>
+
+        {!isSubmitted && selectedPaymentMethod !== 'cash' && fareDueNow > 0 ? (
+          <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+            <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Pay with</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {[
+                { id: 'online', label: 'Online', sub: 'UPI, card or netbanking' },
+                { id: 'wallet', label: 'Wallet', sub: `Balance Rs ${Number(walletSnapshot.balance || 0).toFixed(2)}` },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => { setSelectedPaymentMethod(option.id); setError(''); }}
+                  className={`rounded-[14px] border px-3 py-3 text-left transition-all ${
+                    selectedPaymentMethod === option.id
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-slate-100 bg-slate-50'
+                  }`}
+                >
+                  <span className="block text-[13px] font-black text-slate-900">{option.label}</span>
+                  <span className="block text-[10px] font-bold text-slate-500">{walletLoading && option.id === 'wallet' ? 'Checking balance...' : option.sub}</span>
+                </button>
+              ))}
+            </div>
+            {selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0) ? (
+              <p className="mt-2 text-center text-[11px] font-bold text-red-500">
+                Wallet balance is lower than Rs {Number(payableNow || 0).toFixed(2)}. Add money in Wallet or pay online.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
           {isSubmitted ? (

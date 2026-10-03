@@ -38,6 +38,7 @@ import {
   applyDriverWalletAdjustment,
   ensureDriverWalletCanAcceptRide,
   serializeDriverWallet,
+  settleCompletedRideWallet,
   topUpDriverWallet,
 } from "../services/walletService.js";
 import {
@@ -1056,6 +1057,7 @@ const serializeBusDriverProfile = async (busDriver) => {
           coachType: busService.coachType || "",
           busCategory: busService.busCategory || "",
           seatPrice: Number(busService.seatPrice || 0),
+          variantPricing: busService.variantPricing || {},
           fareCurrency: busService.fareCurrency || "INR",
           driverName: busService.driverName || "",
           driverPhone: busService.driverPhone || "",
@@ -1605,7 +1607,7 @@ const serializeDriverPaymentCollection = (collection = {}) => {
   };
 };
 
-const refreshDriverPaymentCollection = async (ride) => {
+export const refreshDriverPaymentCollection = async (ride) => {
   const collection = ride?.driverPaymentCollection || {};
   const providerId = String(collection.providerId || "").trim();
 
@@ -2005,7 +2007,8 @@ export const goOnline = async (req, res) => {
     throw new ApiError(404, "Driver not found");
   }
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  // India calendar day (the UTC day changes at 05:30 IST, which asked for a second selfie in the early morning)
+  const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const hasTodaySelfie =
     String(existingDriver.onlineSelfie?.forDate || "") === todayKey &&
     String(existingDriver.onlineSelfie?.imageUrl || "").trim();
@@ -3732,7 +3735,9 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(409, `Seat ${invalidSeat} is not available`);
   }
 
-  const amount = Math.round(Number(busService.seatPrice || 0) * seatIds.length * 100) / 100;
+  // Same seat price as the rider app: sleeper / window / aisle can each have their own price.
+  const seatAmounts = seatIds.map((seatId) => Math.round(resolveOwnerBusSeatPrice(busService, availableSeatMap.get(seatId)) * 100) / 100);
+  const amount = Math.round(seatAmounts.reduce((sum, value) => sum + value, 0) * 100) / 100;
   const booking = await BusBooking.create({
     userId: busDriver._id,
     busServiceId: busService._id,
@@ -3741,6 +3746,7 @@ export const createBusDriverReservation = async (req, res) => {
     travelDate,
     seatIds,
     seatLabels: seatIds.map((seatId) => availableSeatMap.get(seatId)?.label || seatId),
+    seatAmounts,
     passenger,
     amount,
     bookingSource: "bus_driver",
@@ -5201,6 +5207,17 @@ export const getDriverPaymentQrStatus = async (req, res) => {
   }
 
   const collection = await refreshDriverPaymentCollection(ride);
+
+  // QR paid after the trip was already closed: this is the moment the online earning may reach the wallet.
+  if (collection?.paid) {
+    const settlement = await settleCompletedRideWallet({ rideId }).catch(() => null);
+    if (settlement?.transaction) {
+      emitToDriver(req.auth.sub, "driver:wallet:updated", {
+        wallet: settlement.wallet,
+        transaction: settlement.transaction,
+      });
+    }
+  }
 
   res.json({
     success: true,

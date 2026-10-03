@@ -20,7 +20,6 @@ import {
   User,
   Pencil,
   ArrowUpDown,
-  PhoneCall,
   Briefcase,
   Compass
 } from 'lucide-react';
@@ -114,6 +113,9 @@ const IntercityHome = () => {
 
   // Map Picker State
   const [showMapPicker, setShowMapPicker] = useState(false);
+  // Explore Cabs opened the pickup map because the pickup was missing: after Confirm Pickup carry on to the vehicles
+  const exploreAfterPickupRef = useRef(false);
+  const [continueAfterPickup, setContinueAfterPickup] = useState(false);
   const [mapCenter, setMapCenter] = useState(INDIA_CENTER);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -547,6 +549,7 @@ const IntercityHome = () => {
   const handleExploreCabs = () => {
     if (!pickupAddress) {
       toast.error('Please set your Pickup Location');
+      exploreAfterPickupRef.current = true;
       setShowMapPicker(true);
       return;
     }
@@ -586,6 +589,17 @@ const IntercityHome = () => {
       }
     });
   };
+
+  useEffect(() => {
+    if (!continueAfterPickup || !pickupAddress) {
+      return;
+    }
+    setContinueAfterPickup(false);
+    const pkg = selectedPackage || packages.find((p) => p.destination.toLowerCase().trim() === toCitySearch.toLowerCase().trim());
+    if (pkg) {
+      proceedWithPackage(pkg);
+    }
+  }, [continueAfterPickup, pickupAddress]);
 
   const displayDateStr = formatDateToDDMMYYYY(travelDate);
   const displayTimeStr = formatTimeTo12Hour(travelTime);
@@ -726,6 +740,10 @@ const IntercityHome = () => {
                   const lat = center?.lat?.() ?? lastCenterRef.current.lat;
                   setPickupCoords([lng, lat]);
                   setShowMapPicker(false);
+                  if (exploreAfterPickupRef.current) {
+                    exploreAfterPickupRef.current = false;
+                    setContinueAfterPickup(true);
+                  }
                 }}
                 disabled={isGeocoding}
                 className="w-full h-16 bg-blue-600 rounded-[22px] text-white font-black text-[16px] uppercase tracking-widest shadow-xl shadow-blue-500/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-40"
@@ -949,66 +967,6 @@ const IntercityHome = () => {
             EXPLORE CABS
           </button>
 
-        </div>
-      </div>
-
-      {/* Horizontal Scroll Banners */}
-      <div className="mt-6">
-        <div className="flex gap-4 overflow-x-auto px-5 py-2 scrollbar-hide">
-
-          {/* Banner 1: Chardham */}
-          <div className="w-[280px] shrink-0 h-[140px] rounded-2xl overflow-hidden relative shadow-md group">
-            <img
-              src="/chardham_banner.png"
-              alt="Chardham Cab Packages"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex flex-col justify-end p-4">
-              <span className="self-start bg-black/75 border border-amber-400/40 text-amber-400 text-[8px] font-extrabold px-2 py-0.5 rounded-full tracking-wider uppercase mb-1">
-                ★ Exclusive ★
-              </span>
-              <h4 className="text-white text-[15px] font-black uppercase tracking-tight leading-tight">
-                Chardham Cab Packages
-              </h4>
-            </div>
-          </div>
-
-          {/* Banner 2: Offers */}
-          <div className="w-[280px] shrink-0 h-[140px] rounded-2xl overflow-hidden relative shadow-md group">
-            <img
-              src="/offers_banner.png"
-              alt="Beach Cab Offers"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex flex-col justify-end p-4">
-              <span className="self-start bg-amber-500 text-slate-900 text-[8px] font-extrabold px-2 py-0.5 rounded-full tracking-wider uppercase mb-1">
-                Offers
-              </span>
-              <h4 className="text-white text-[15px] font-black uppercase tracking-tight leading-tight">
-                First Intercity Trip? Get 20% Off!
-              </h4>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Travel Expert CTA Banner */}
-      <div className="px-5 mt-6">
-        <div className="p-4 bg-gradient-to-r from-[#E3F2FD]/80 to-[#E1F5FE]/80 border border-blue-100 rounded-2xl flex items-center justify-between shadow-sm">
-          <div className="min-w-0 flex-1 pr-3">
-            <p className="text-[8px] font-extrabold text-blue-500 tracking-wider uppercase mb-0.5">SAY HELLO TO</p>
-            <h4 className="text-[13px] font-extrabold text-slate-900 leading-tight">YOUR TRAVEL EXPERT</h4>
-            <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">Get expert advice for smarter travel plans!</p>
-          </div>
-          <button
-            onClick={() => window.open('tel:+918000000000', '_self')}
-            type="button"
-            className="bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 rounded-xl px-3 py-2 flex items-center gap-1.5 shadow-sm transition-all text-[11px] font-black cursor-pointer shrink-0 active:scale-95"
-          >
-            <PhoneCall size={12} className="text-[#1E90FF]" />
-            Call Expert | 24x7
-          </button>
         </div>
       </div>
 

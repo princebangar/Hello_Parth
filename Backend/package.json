@@ -16,7 +16,6 @@
     "seed:default-credentials": "node scripts/seed-default-credentials.js",
     "seed:taxi-driver-default": "node scripts/seed-taxi-driver-default.js",
     "seed:taxi-config": "node scripts/seed-taxi-config.js",
-    "seed:taxi-demo-fleet": "node scripts/seed-taxi-demo-fleet.js",
     "seed:food-restaurant-delivery-default": "node scripts/seed-food-restaurant-delivery-default.js",
     "debug:taxi-promo-users": "node scripts/check-taxi-promo-users.js",
     "migrate:remove-restaurant-billing": "node scripts/remove-restaurant-billing-fields.js",
@@ -25,7 +24,8 @@
     "audit:collections": "node scripts/audit-collections.js",
     "db:ensure-collections": "node scripts/ensure-collections.js",
     "cleanup:legacy-collections": "node scripts/cleanup-legacy-collections.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed:taxi-e2e-data": "node scripts/seed-taxi-e2e-data.js"
   },
   "keywords": [],
   "author": "",

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { userService } from '../../services/userService';
+import { getPoolingSeatLabel } from '../../utils/poolingSeats';
 import toast from 'react-hot-toast';
 
 // Asset Imports
@@ -367,7 +368,7 @@ const PoolingSeats = () => {
 
                         {/* Seat Number Tooltip/Badge */}
                         <span className={`absolute -bottom-6 text-[9px] font-black uppercase tracking-tighter transition-colors ${isSelected ? 'text-indigo-600' : 'text-slate-300'}`}>
-                          {item.label || (item.type === 'driver' ? 'DRV' : `S${idx + 1}`)}
+                          {getPoolingSeatLabel(item, idx)}
                         </span>
 
                         {isSelected && (

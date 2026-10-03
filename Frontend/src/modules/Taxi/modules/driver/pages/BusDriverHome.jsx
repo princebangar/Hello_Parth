@@ -560,10 +560,16 @@ const BusDriverHome = () => {
     };
   }, [isCalendarOpen, isRunDetailsOpen]);
 
-  const selectedFare = useMemo(
-    () => selectedSeats.length * Number(busService?.seatPrice || 0),
-    [selectedSeats, busService?.seatPrice],
-  );
+  // Sleeper / window / aisle seats can each have their own price (same rule the server charges).
+  const selectedFare = useMemo(() => {
+    const variantPricing = busService?.variantPricing || {};
+    const defaultPrice = Number(busService?.seatPrice || 0);
+    return selectedSeats.reduce((sum, seat) => {
+      const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
+      const price = Number(variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice);
+      return sum + (Number.isFinite(price) ? price : defaultPrice);
+    }, 0);
+  }, [selectedSeats, busService?.seatPrice, busService?.variantPricing]);
   const totalSeatCount = useMemo(() => countBlueprintSeats(layout?.blueprint), [layout?.blueprint]);
   const occupiedSeatCount = useMemo(
     () => Math.max(0, totalSeatCount - Number(layout?.availableSeats ?? 0)),

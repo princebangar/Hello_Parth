@@ -394,17 +394,7 @@ const PoolingHome = () => {
                 </div>
                 <h3 className="text-lg font-black tracking-tight">Travel with Peace</h3>
              </div>
-             <p className="text-sm font-medium text-slate-400 leading-relaxed mb-6">All drivers and passengers are ID-verified for a secure community experience.</p>
-             <div className="flex items-center gap-4">
-                <div className="flex -space-x-3">
-                   {[1,2,3,4].map(i => (
-                     <div key={i} className="w-8 h-8 rounded-full border-2 border-slate-900 bg-slate-800 overflow-hidden">
-                        <img src={`https://ui-avatars.com/api/?name=U${i}&background=random`} alt="" />
-                     </div>
-                   ))}
-                </div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">10k+ Verified Users</p>
-             </div>
+             <p className="text-sm font-medium text-slate-400 leading-relaxed">All drivers and passengers are ID-verified for a secure community experience.</p>
           </div>
           <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl" />
         </div>

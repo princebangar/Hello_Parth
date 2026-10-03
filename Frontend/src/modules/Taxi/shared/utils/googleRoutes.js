@@ -103,13 +103,36 @@ export const computeDrivingRoute = async ({
   try {
     const directionsService = new window.google.maps.DirectionsService();
     
-    const waypoints = (Array.isArray(intermediates) ? intermediates : [])
-      .map(normalizeIntermediate)
-      .filter(Boolean)
-      .map(wp => ({
-        location: wp.location ? new window.google.maps.LatLng(wp.location.lat, wp.location.lng) : wp.location,
-        stopover: true
-      }));
+    // A stop is usually only a text label ("Sarafa Bazar"). `new LatLng(label.lat, label.lng)` threw for those, the whole
+    // route failed and the fare was priced on the straight line pickup -> drop, ignoring the stop. Text stops are now
+    // geocoded near the trip (bounds bias) and passed as coordinates; if that fails the text itself is passed on.
+    const geocoder = window.google.maps.Geocoder ? new window.google.maps.Geocoder() : null;
+    const tripBounds = new window.google.maps.LatLngBounds();
+    tripBounds.extend(new window.google.maps.LatLng(origin.lat, origin.lng));
+    tripBounds.extend(new window.google.maps.LatLng(destination.lat, destination.lng));
+    const sw = tripBounds.getSouthWest();
+    const ne = tripBounds.getNorthEast();
+    const searchBounds = new window.google.maps.LatLngBounds(
+      { lat: sw.lat() - 0.1, lng: sw.lng() - 0.1 },
+      { lat: ne.lat() + 0.1, lng: ne.lng() + 0.1 },
+    );
+    const resolveWaypointLocation = async (location) => {
+      if (typeof location === 'string') {
+        if (!geocoder) return location;
+        try {
+          const geocoded = await geocoder.geocode({ address: location, bounds: searchBounds, ...(region ? { region: String(region).trim().toLowerCase() } : {}) });
+          return geocoded?.results?.[0]?.geometry?.location || location;
+        } catch {
+          return location;
+        }
+      }
+      const point = normalizePoint(location);
+      return point ? new window.google.maps.LatLng(point.lat, point.lng) : location;
+    };
+    const waypoints = [];
+    for (const wp of (Array.isArray(intermediates) ? intermediates : []).map(normalizeIntermediate).filter(Boolean)) {
+      waypoints.push({ location: await resolveWaypointLocation(wp.location), stopover: true });
+    }
 
     const request = {
       origin: new window.google.maps.LatLng(origin.lat, origin.lng),

@@ -173,6 +173,18 @@ const IncomingRideRequest = ({
   const bidFloorFare = Number(data.raw?.bidding?.bidFloorFare || bidBaseFare);
   const bidMaxFare = Number(data.raw?.bidding?.userMaxBidFare || data.raw?.userMaxBidFare || bidBaseFare);
   const bidStepAmount = Number(data.raw?.bidding?.bidStepAmount || 10);
+  // The big number is what the driver earns (fare + promo paid by the platform - admin commission), not the rider fare.
+  const requestFare = Number(data.raw?.fare || 0);
+  const requestPromoDiscount = Math.max(0, Number(data.raw?.promoDiscount || 0));
+  const requestCommissionType = Number(data.raw?.pricingSnapshot?.admin_commission_type_from_driver ?? 1);
+  const requestCommissionValue = Math.max(0, Number(data.raw?.pricingSnapshot?.admin_commission_from_driver ?? 0));
+  const requestGrossFare = requestFare + requestPromoDiscount;
+  const requestCommission = requestCommissionType === 1
+    ? Math.round(requestGrossFare * requestCommissionValue) / 100
+    : Math.min(requestGrossFare, requestCommissionValue);
+  const estimatedEarning = requestFare > 0 && !isBidding
+    ? Math.max(0, Math.round((requestGrossFare - requestCommission) * 100) / 100)
+    : null;
   const scheduledCountdown = getScheduledRideCountdown(scheduledAt, previewNow);
   const bidOptions = isBidding
     ? Array.from({ length: Math.max(1, Math.floor((bidMaxFare - bidFloorFare) / bidStepAmount) + 1) }, (_, index) => bidFloorFare + (index * bidStepAmount))
@@ -292,9 +304,12 @@ const IncomingRideRequest = ({
               <div className={`flex flex-col items-center justify-center border-x border-slate-100 ${lightBg} p-3 text-center`}>
                 <div className="mb-1 flex items-center gap-1">
                   <Banknote size={14} className={accentText} />
-                  <p className={`text-[9px] font-extrabold uppercase tracking-wider ${accentText}`}>Earnings</p>
+                  <p className={`text-[9px] font-extrabold uppercase tracking-wider ${accentText}`}>{estimatedEarning !== null ? 'You earn' : 'Fare'}</p>
                 </div>
-                <p className={`text-[21px] font-black leading-none ${accentText}`}>{data.fare || 'Rs 0'}</p>
+                <p className={`text-[21px] font-black leading-none ${accentText}`}>{estimatedEarning !== null ? `Rs ${estimatedEarning}` : (data.fare || 'Rs 0')}</p>
+                {estimatedEarning !== null ? (
+                  <p className="mt-1 text-[9px] font-bold text-slate-400">Fare Rs {requestFare}</p>
+                ) : null}
               </div>
 
               <div className="flex flex-col items-center justify-center p-3 text-center">

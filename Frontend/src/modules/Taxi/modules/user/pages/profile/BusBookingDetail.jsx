@@ -58,11 +58,19 @@ const formatDurationCompact = (value = '') => {
 
 const unwrapPayload = (response) => response?.data?.data || response?.data || response || null;
 
+// Window / aisle / sleeper seats can have different prices, so every seat carries its own amount.
+const getSeatAmount = (booking, seatId) => {
+  const seatIds = Array.isArray(booking?.seatIds) ? booking.seatIds.map(String) : [];
+  const seatAmounts = Array.isArray(booking?.seatAmounts) ? booking.seatAmounts : [];
+  const index = seatIds.indexOf(String(seatId));
+  const amount = index >= 0 ? Number(seatAmounts[index]) : NaN;
+  return Number.isFinite(amount) ? amount : Number(booking?.perSeatAmount || 0);
+};
+
 const computeSelectionQuote = (booking, selectedSeatIds) => {
   const seatCount = Number(booking?.seatSummary?.total || 0);
   const selectedCount = selectedSeatIds.length;
-  const perSeatAmount = Number(booking?.perSeatAmount || 0);
-  const subtotal = Math.round(perSeatAmount * selectedCount * 100) / 100;
+  const subtotal = Math.round(selectedSeatIds.reduce((sum, seatId) => sum + getSeatAmount(booking, seatId), 0) * 100) / 100;
   const rule = booking?.cancellation || {};
   let refundAmount = 0;
 
@@ -359,7 +367,7 @@ const BusBookingDetail = () => {
                     <div>
                       <p className="text-sm font-black">{activeSeatLabels[index] || seatId}</p>
                       <p className={`text-[10px] font-bold ${selectedSeatIds.includes(seatId) ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Active Seat • {formatMoney(booking.perSeatAmount, booking.currency)}
+                        Active Seat • {formatMoney(getSeatAmount(booking, seatId), booking.currency)}
                       </p>
                     </div>
                     <input

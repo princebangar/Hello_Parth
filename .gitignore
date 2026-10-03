@@ -4,3 +4,6 @@ temp_interactive_push.bat
 
 # local test-stack helpers (not part of the app)
 .claude-test/
+
+# Local reports / flow docs (md + pdf) - keep on this machine only, never push
+docs/

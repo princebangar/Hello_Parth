@@ -92,7 +92,7 @@ const ADMIN_SECTION_LAYOUT = [
   { title: 'Pricing & Services', labels: ['Price Management'] },
   { title: 'Marketing', labels: ['Broadcast Notifications', 'Promotions Management', 'Referral Management'] },
   { title: 'Finance & Support', labels: ['Wallet Payment', 'Report', 'Support Management'] },
-  { title: 'Masters & Settings', labels: ['Language', 'Business Settings', 'App Settings'] },
+  { title: 'Masters & Settings', labels: ['Language', 'Vehicle Preferences', 'Business Settings', 'App Settings'] },
 ];
 
 const organizeAdminSections = (sections = []) => {
@@ -965,7 +965,7 @@ const AdminLayout = () => {
         title: 'Masters',
         items: [
           { icon: Globe, label: 'Language', path: '/taxi/admin/masters/languages', permission: 'settings.view' },
-          // { icon: Star, label: 'Preferences', path: '/taxi/admin/masters/preferences' },
+          { icon: Star, label: 'Vehicle Preferences', path: '/taxi/admin/masters/preferences', permission: 'settings.view' },
           // { icon: ShieldCheck, label: 'Roles', path: '/taxi/admin/masters/roles' },
         ],
       },

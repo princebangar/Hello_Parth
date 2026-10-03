@@ -5,7 +5,7 @@ import { normalizePoint } from '../../../../utils/geo.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { WalletTransaction } from '../../driver/models/WalletTransaction.js';
-import { applyDriverWalletAdjustment, serializeDriverWallet } from '../../driver/services/walletService.js';
+import { applyDriverWalletAdjustment, serializeDriverWallet, settleCompletedRideWallet } from '../../driver/services/walletService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS } from '../../constants/index.js';
 import {
   acceptRideBidAssignment,
@@ -296,7 +296,77 @@ const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
   return payload;
 };
 
+// Online ride earnings reach the driver only after the rider has really paid (see settleCompletedRideWallet).
+const settleDriverAfterRiderPayment = async (rideId, driverId) => {
+  try {
+    const settlement = await settleCompletedRideWallet({ rideId });
+    if (settlement?.transaction) {
+      emitToDriver(driverId, 'driver:wallet:updated', {
+        wallet: settlement.wallet,
+        transaction: settlement.transaction,
+        notification: {
+          id: `ride-earning-${rideId}`,
+          title: 'Ride earning credited',
+          body: `Rs ${Number(settlement.transaction.amount || 0).toFixed(2)} added to your wallet - the rider paid online.`,
+          sentAt: new Date().toISOString(),
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Driver settlement after rider payment failed:', error);
+  }
+};
+
+// Like Uber / Rapido: an online ride the rider left without paying must be paid before the next booking.
+const UNPAID_RIDE_LOOKBACK_DAYS = 30;
+const findUnpaidOnlineRide = (userId) => Ride.findOne({
+  userId,
+  status: RIDE_STATUS.COMPLETED,
+  paymentMethod: 'online',
+  walletSettledAt: null,
+  'subscriptionUsage.covered': { $ne: true },
+  'driverPaymentCollection.paidAt': null,
+  'driverPaymentCollection.status': { $nin: ['paid', 'captured', 'completed'] },
+  completedAt: { $gte: new Date(Date.now() - UNPAID_RIDE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000) },
+})
+  .sort({ completedAt: -1 })
+  .select('_id fare pickupAddress dropAddress serviceType paymentMethod liveStatus status completedAt driverPaymentCollection')
+  .lean();
+
+export const getMyUnpaidRide = async (req, res) => {
+  const ride = await findUnpaidOnlineRide(req.auth.sub);
+  res.json({ success: true, data: ride ? { rideId: String(ride._id), fare: Number(ride.fare || 0), pickup: ride.pickupAddress || '', drop: ride.dropAddress || '', serviceType: ride.serviceType || 'ride', completedAt: ride.completedAt } : null });
+};
+
+export const assertNoUnpaidOnlineRide = async (userId) => {
+  let unpaidRide = await findUnpaidOnlineRide(userId);
+  if (unpaidRide?.driverPaymentCollection?.provider === 'razorpay' && unpaidRide.driverPaymentCollection.providerId) {
+    // The rider may have paid the driver's QR a moment ago - ask Razorpay before blocking the booking.
+    try {
+      const { settleRideIfCollectionPaid } = await import('../../services/ridePaymentSweepService.js');
+      const fullRide = await Ride.findById(unpaidRide._id);
+      if (fullRide) await settleRideIfCollectionPaid(fullRide);
+      unpaidRide = await findUnpaidOnlineRide(userId);
+    } catch {
+      // keep the block; the payment sweep settles it shortly
+    }
+  }
+  if (unpaidRide) {
+    throw new ApiError(409, `Please pay Rs ${Number(unpaidRide.fare || 0).toFixed(2)} for your previous ride before booking a new one.`, {
+      code: 'PREVIOUS_RIDE_UNPAID',
+      rideId: String(unpaidRide._id),
+      fare: Number(unpaidRide.fare || 0),
+      pickup: unpaidRide.pickupAddress || '',
+      drop: unpaidRide.dropAddress || '',
+      serviceType: unpaidRide.serviceType || 'ride',
+    });
+  }
+
+};
+
 export const createRide = async (req, res) => {
+  await assertNoUnpaidOnlineRide(req.auth.sub);
+
   const { pickup, drop, pickupAddress, dropAddress, stops, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, zone_id, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount } =
     req.body;
 
@@ -634,6 +704,7 @@ export const verifyRazorpayRideCompletion = async (req, res) => {
     });
 
     await session.commitTransaction();
+    await settleDriverAfterRiderPayment(rideId, liveRide.driverId);
 
     if (result.walletResult?.transaction) {
       emitToDriver(liveRide.driverId, 'driver:wallet:updated', {
@@ -724,6 +795,7 @@ export const payRideCompletionWithWallet = async (req, res) => {
     });
 
     await session.commitTransaction();
+    await settleDriverAfterRiderPayment(rideId, ride.driverId);
 
     if (result.walletResult?.transaction) {
       emitToDriver(ride.driverId, 'driver:wallet:updated', {

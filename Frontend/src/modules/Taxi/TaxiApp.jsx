@@ -395,7 +395,7 @@ const MainLayout = ({ children }) => {
   return (
     <div id="taxi-app-root" className="redigo-app user-app-theme min-h-screen" style={{ backgroundColor: 'var(--user-bg)' }}>
       <main
-        className="min-h-screen relative overflow-x-hidden max-w-lg mx-auto shadow-2xl"
+        className="min-h-screen relative overflow-x-clip max-w-lg mx-auto shadow-2xl"
         style={{ backgroundColor: 'var(--user-bg)' }}
       >
         {children}

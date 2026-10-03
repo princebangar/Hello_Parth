@@ -83,7 +83,7 @@ const SharedTaxi = () => {
         seats: seatCapacity,
         vehicle: primaryVehicle?.name || 'Standard Cab',
         driver: primaryVehicle?.driverName || 'Verified Driver',
-        rating: primaryVehicle?.driverRating || '4.8',
+        rating: primaryVehicle?.driverRating || 'New',
       }));
     });
   }, [routesList, selectedDate]);

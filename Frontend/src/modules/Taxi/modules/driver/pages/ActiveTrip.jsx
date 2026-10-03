@@ -507,8 +507,9 @@ const formatDurationLabel = (start, end = Date.now()) => {
     return `${minutes} min`;
 };
 
-const computeCommissionSummary = ({ fare = 0, pricingSnapshot = null, explicitCommissionAmount, explicitDriverEarnings }) => {
-    const normalizedFare = Math.max(0, Number(fare || 0));
+const computeCommissionSummary = ({ fare = 0, promoDiscount = 0, pricingSnapshot = null, explicitCommissionAmount, explicitDriverEarnings }) => {
+    // Promo discounts are paid by the platform: commission and earning are worked out on the fare before the discount.
+    const normalizedFare = Math.max(0, Number(fare || 0)) + Math.max(0, Number(promoDiscount || 0));
     const commissionType = Number(pricingSnapshot?.admin_commission_type_from_driver ?? 1);
     const commissionValue = Math.max(0, Number(pricingSnapshot?.admin_commission_from_driver ?? 0));
     const fallbackCommissionAmount = commissionType === 1
@@ -1463,6 +1464,7 @@ const ActiveTrip = () => {
         : (effectiveState?.paymentMethod || liveRequest?.payment || tripData.payment || 'Pending');
     const commissionSummary = computeCommissionSummary({
         fare: fareAmount,
+        promoDiscount: Number(liveRaw?.promo?.discount_amount ?? effectiveState?.promo?.discount_amount ?? liveRequest?.raw?.promoDiscount ?? 0),
         pricingSnapshot: waitingPricing,
         explicitCommissionAmount: liveRaw?.commissionAmount ?? effectiveState?.commissionAmount,
         explicitDriverEarnings: liveRaw?.driverEarnings ?? effectiveState?.driverEarnings,
@@ -2834,6 +2836,10 @@ const ActiveTrip = () => {
                             {paymentQrError && (
                                 <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-center">
                                     <p className="text-[11px] font-bold text-red-500">{paymentQrError}</p>
+                                    {/* No QR (network / Razorpay issue) must not trap the driver: the rider can still pay in the app. */}
+                                    {selectedPaymentMode === 'online' && driverPaymentStatus === 'pending' && (
+                                        <button onClick={() => { setPaymentQrError(''); setDriverPaymentStatus('pay_later'); }} className="mt-2 text-[10px] font-black uppercase tracking-wide text-red-600 underline">{paymentCollectionLabel === 'receiver' ? 'Receiver' : 'Rider'} will pay in the app</button>
+                                    )}
                                 </div>
                             )}
                             {selectedPaymentMode === 'cash' && driverPaymentStatus === 'success' && (
@@ -2920,26 +2926,37 @@ const ActiveTrip = () => {
                                                 Open payment link
                                             </a>
                                         )}
-                                        <button onClick={() => setDriverPaymentStatus('success')} className="w-full py-3 bg-white/10 text-white rounded-xl text-[10px] font-semibold uppercase tracking-wide border border-white/5">Confirm Received</button>
+                                        <p className="mb-2 text-[10px] font-semibold text-white/60">Payment is detected automatically when the {paymentCollectionLabel} pays this QR.</p>
+                                        <button onClick={() => setDriverPaymentStatus('pay_later')} className="w-full py-3 bg-white/10 text-white rounded-xl text-[10px] font-semibold uppercase tracking-wide border border-white/5">{paymentCollectionLabel === 'receiver' ? 'Receiver' : 'Rider'} will pay in the app</button>
                                     </Motion.div>
                                 );
                             })()}
+                            {driverPaymentStatus === 'pay_later' && selectedPaymentMode !== 'cash' && (
+                                <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-left">
+                                    <p className="text-[11px] font-bold text-amber-800">
+                                        Online payment pending. Your earning of {formatCurrencyAmount(commissionSummary.driverEarnings)} is added to your wallet as soon as the {paymentCollectionLabel} pays in the app.
+                                    </p>
+                                    <button onClick={() => setDriverPaymentStatus(paymentQr?.id ? 'qr_generated' : 'pending')} className="mt-2 text-[10px] font-black uppercase tracking-wide text-amber-700 underline">Back to QR / cash</button>
+                                </div>
+                            )}
                             <Motion.button
                                 whileTap={{ scale: 0.96 }}
-                                disabled={driverPaymentStatus !== 'success' || selectedPaymentMode === 'cash'}
+                                disabled={!['success', 'pay_later'].includes(driverPaymentStatus) || selectedPaymentMode === 'cash'}
                                 onClick={async () => {
                                     const paymentMode = selectedPaymentMode || effectiveState?.paymentMethod || liveRequest?.payment || '';
                                     await completeRideForUserSync(paymentMode);
                                     setPhase('review');
                                 }}
-                                className={`w-full h-15 rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl transition-all ${driverPaymentStatus === 'success' && selectedPaymentMode !== 'cash' ? 'text-white' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
-                                style={driverPaymentStatus === 'success' && selectedPaymentMode !== 'cash' ? { backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` } : undefined}
+                                className={`w-full h-15 rounded-xl flex items-center justify-center gap-3 text-[14px] font-semibold uppercase tracking-wide shadow-xl transition-all ${['success', 'pay_later'].includes(driverPaymentStatus) && selectedPaymentMode !== 'cash' ? 'text-white' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}
+                                style={['success', 'pay_later'].includes(driverPaymentStatus) && selectedPaymentMode !== 'cash' ? { backgroundColor: routeStrokeColor, boxShadow: `0 18px 30px ${routeAccentMuted}` } : undefined}
                             >
                                 {selectedPaymentMode === 'cash'
                                     ? 'Use Cash Received Button'
                                     : driverPaymentStatus === 'success'
                                         ? 'Finalize Earnings'
-                                        : 'Waiting...'} <ChevronRight size={18} strokeWidth={3} />
+                                        : driverPaymentStatus === 'pay_later'
+                                            ? 'Close trip'
+                                            : 'Waiting for payment...'} <ChevronRight size={18} strokeWidth={3} />
                             </Motion.button>
                         </Motion.div>
                     )}

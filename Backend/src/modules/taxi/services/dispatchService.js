@@ -725,6 +725,8 @@ const emitRideRequestToDrivers = async ({
       vehicleIconUrl: ride.vehicleIconUrl || '',
       fare: ride.fare,
       baseFare: Number(ride.baseFare || ride.fare || 0),
+      // promo discount is paid by the platform, the driver earns on fare + discount
+      promoDiscount: Number(ride.promo?.discount_amount || 0),
       bookingMode: ride.bookingMode || 'normal',
       pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
       biddingStatus: ride.biddingStatus || 'none',
