@@ -85,8 +85,8 @@ const ManageDrivers = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
-      <header className="flex items-center gap-4 mb-8 text-slate-900 uppercase">
+    <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-clip">
+      <header className="sticky top-0 z-30 -mx-6 mb-6 flex items-center gap-4 bg-[#f8f9fb] px-6 py-3 text-slate-900 uppercase">
         <button
           onClick={() => navigate(`${routePrefix}/profile`)}
           className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center">
@@ -235,7 +235,8 @@ const ManageDrivers = () => {
         </div>
       </main>
 
-      <div className="fixed bottom-24 right-6">
+      {/* Floats just above the bottom bar (bar = 76px + safe-area padding). */}
+      <div className="fixed right-6 z-[55]" style={{ bottom: 'calc(92px + max(env(safe-area-inset-bottom), 8px))' }}>
         <button
           onClick={() => navigate(`${routePrefix}/add-driver`)}
           className="w-14 h-14 bg-slate-900 text-white rounded-2xl shadow-2xl flex items-center justify-center active:scale-95 transition-transform">

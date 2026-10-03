@@ -45,6 +45,8 @@ const normalizeRow = (row = {}) => ({
   transportType: row.transportType || row.transport_type || row.service_type || row.module || '--',
   tripStatus: String(row.tripStatus || row.trip_status || row.status || '').toUpperCase(),
   paymentOption: String(row.paymentOption || row.payment_option || row.payment_method || 'CASH').toUpperCase(),
+  isScheduled: Boolean(row.isScheduled),
+  scheduledAt: row.scheduledAt || null,
 });
 
 const TripDetailsModal = ({ trip, onClose }) => {
@@ -532,6 +534,16 @@ const Trips = () => {
                           <XCircle size={24} />
                        </div>
                        <p className="text-sm font-bold text-red-600">{error}</p>
+                       {/^network error/i.test(error) ? (
+                         <p className="mt-1 text-xs text-gray-500">The server did not answer. Check that the backend is running.</p>
+                       ) : null}
+                       <button
+                         type="button"
+                         onClick={loadRows}
+                         className="mt-3 px-4 py-1.5 rounded-lg bg-black text-white text-xs font-bold hover:bg-gray-800"
+                       >
+                         Retry
+                       </button>
                     </td>
                   </tr>
                 ) : filteredRows.length > 0 ? (
@@ -548,6 +560,9 @@ const Trips = () => {
                         <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded capitalize tracking-wide ${STATUS_STYLES[row.tripStatus] || 'bg-gray-100 text-gray-600'}`}>
                           {row.tripStatus ? row.tripStatus.toLowerCase() : 'Unknown'}
                         </span>
+                        {row.isScheduled ? (
+                          <span className="block mt-0.5 text-[10px] font-bold text-purple-700 whitespace-nowrap">Scheduled · {formatDate(row.scheduledAt)}</span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded capitalize tracking-wide ${PAYMENT_STYLES[row.paymentOption] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>

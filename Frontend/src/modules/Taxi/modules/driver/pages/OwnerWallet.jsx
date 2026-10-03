@@ -44,7 +44,7 @@ const OwnerWallet = () => {
 
     return (
         <div className="min-h-screen bg-[#F8F9FA] pb-28">
-            <header className="flex items-center justify-between px-5 pt-6 pb-4">
+            <header className="sticky top-0 z-30 flex items-center justify-between bg-[#F8F9FA] px-5 pt-6 pb-4">
                 <button
                     type="button"
                     onClick={() => navigate(-1)}

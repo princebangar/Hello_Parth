@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import RowActionMenu from '../../components/ui/RowActionMenu';
 import {
   AlertCircle,
   ArrowLeft,
@@ -487,32 +488,18 @@ const WithdrawalRequestDetail = () => {
                           </span>
                         </td>
                         <td className="px-8 py-6 text-right">
-                          <div className="relative">
-                            <button
-                              onClick={(event) => toggleMenu(event, request.id)}
-                              disabled={actionLoadingId === request.id}
-                              className="p-2.5 text-gray-300 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm group-hover:shadow-md border border-transparent hover:border-gray-50 disabled:opacity-60"
-                            >
-                              <MoreHorizontal size={18} />
-                            </button>
+                          <RowActionMenu
+                            label="Withdrawal actions"
+                            items={
+                              request.status === 'pending'
+                                ? [
+                                    { key: 'approve', label: 'Approve', icon: <CheckCircle2 size={14} />, disabled: actionLoadingId === request.id, onClick: () => handleAction(request.id, 'approve') },
+                                    { key: 'reject', label: 'Reject', icon: <XCircle size={14} />, danger: true, disabled: actionLoadingId === request.id, onClick: () => handleAction(request.id, 'reject') },
+                                  ]
+                                : [{ key: 'done', label: `Already ${String(request.status || 'processed')}`, disabled: true }]
+                            }
+                          />
 
-                            {activeMenu === request.id && request.status === 'pending' ? (
-                              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                <button
-                                  onClick={() => handleAction(request.id, 'approve')}
-                                  className="w-full text-left px-4 py-2.5 text-[12px] font-black text-emerald-600 hover:bg-emerald-50 flex items-center gap-3 transition-colors uppercase tracking-widest"
-                                >
-                                  <CheckCircle2 size={16} /> Approve
-                                </button>
-                                <button
-                                  onClick={() => handleAction(request.id, 'reject')}
-                                  className="w-full text-left px-4 py-2.5 text-[12px] font-black text-rose-600 hover:bg-rose-50 flex items-center gap-3 transition-colors uppercase tracking-widest"
-                                >
-                                  <XCircle size={16} /> Reject
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
                         </td>
                       </tr>
                     ))

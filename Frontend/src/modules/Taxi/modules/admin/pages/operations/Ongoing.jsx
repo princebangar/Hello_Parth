@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import RowActionMenu from '../../components/ui/RowActionMenu';
 import { Filter, MoreVertical, Search, Loader2, ChevronRight, CheckCircle, MapPin, XCircle, Eye, UserPlus, FileText, User, Truck, CreditCard, X } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
@@ -20,15 +21,18 @@ const PAYMENT_STYLES = {
   WALLET: 'bg-teal-50 text-teal-600 border border-teal-100',
 };
 
+// Same format as the Trips page: "03 Oct 2026, 06:33 pm"
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  const optionsDate = { day: '2-digit', month: 'short', year: 'numeric' };
-  const optionsTime = { hour: '2-digit', minute: '2-digit', hour12: true };
-  const dPart = d.toLocaleDateString('en-GB', optionsDate);
-  const tPart = d.toLocaleTimeString('en-US', optionsTime);
-  return `${dPart} • ${tPart}`;
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 const RequestDetailsModal = ({ request, onClose }) => {
@@ -49,9 +53,14 @@ const RequestDetailsModal = ({ request, onClose }) => {
               <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-1">Request ID</p>
               <p className="text-[14px] font-bold text-gray-900 font-mono">{request.requestId || 'N/A'}</p>
             </div>
-            <span className={`inline-flex items-center px-3 py-1 text-[11px] font-bold rounded-full capitalize tracking-wide ${STATUS_STYLES[request.tripStatus] || 'bg-gray-100 text-gray-600'}`}>
-              {String(request.tripStatus || '').toLowerCase()}
-            </span>
+            <div className="flex flex-col items-end gap-1">
+              <span className={`inline-flex items-center px-3 py-1 text-[11px] font-bold rounded-full capitalize tracking-wide ${STATUS_STYLES[request.tripStatus] || 'bg-gray-100 text-gray-600'}`}>
+                {String(request.tripStatus || '').toLowerCase()}
+              </span>
+              {request.isScheduled ? (
+                <span className="text-[11px] font-bold text-purple-700">Scheduled · {formatDate(request.scheduledAt)}</span>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-y-6 gap-x-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
@@ -99,84 +108,20 @@ const RequestDetailsModal = ({ request, onClose }) => {
   );
 };
 
+// Only the actions that really work are listed (the old Assign driver / Change status / Track / Cancel entries only
+// showed "not implemented"); the three-dots menu is drawn outside the table so it is not clipped.
 const ActionMenu = ({ row, onViewDetails, onDelete }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleNotImplemented = (action) => {
-    toast.error(`Backend API for '${action}' is not implemented yet.`);
-    setIsOpen(false);
-  };
-
   const isCompleted = row.tripStatus === 'COMPLETED';
   const isCancelled = row.tripStatus === 'CANCELLED';
-  const isOngoing = row.tripStatus === 'ON_TRIP' || row.tripStatus === 'ONGOING';
-  const hasDriver = row.driverName && row.driverName !== '--' && row.driverName !== 'N/A';
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button 
-        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-        className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
-      >
-        <MoreVertical size={18} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50">
-          <button 
-            onClick={() => { setIsOpen(false); onViewDetails(); }}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <Eye size={14} /> View Details
-          </button>
-          <button 
-            disabled={isCompleted || isCancelled || isOngoing || hasDriver}
-            onClick={() => handleNotImplemented('Assign Driver')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-700"
-          >
-            <UserPlus size={14} /> Assign Driver
-          </button>
-          <button 
-            onClick={() => handleNotImplemented('Change Status')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <CheckCircle size={14} /> Change Status
-          </button>
-          <button 
-            disabled={!isOngoing}
-            onClick={() => handleNotImplemented('Track Request')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-700"
-          >
-            <MapPin size={14} /> Track Request
-          </button>
-          <div className="h-px bg-gray-100 my-1"></div>
-          <button 
-            disabled={isCompleted || isCancelled}
-            onClick={() => handleNotImplemented('Cancel Request')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <XCircle size={14} /> Cancel Request
-          </button>
-          <button 
-            onClick={() => { setIsOpen(false); onDelete(row); }}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2"
-          >
-            <XCircle size={14} /> Delete Request
-          </button>
-        </div>
-      )}
-    </div>
+    <RowActionMenu
+      label="Request actions"
+      items={[
+        { key: 'view', label: 'View Details', icon: <Eye size={14} />, onClick: onViewDetails },
+        { key: 'cancel', label: isCompleted || isCancelled ? 'Delete Request' : 'Cancel & Remove', icon: <XCircle size={14} />, danger: true, onClick: () => onDelete(row) },
+      ]}
+    />
   );
 };
 
@@ -466,7 +411,7 @@ const Ongoing = () => {
                   rows.map((row) => (
                     <tr key={row.id || row.requestId || Math.random()} className="hover:bg-yellow-50/30 transition-colors group cursor-pointer" onClick={() => setSelectedRequest(row)}>
                       <td className="px-4 py-2 text-[13px] font-bold text-gray-900 font-mono">{row.requestId || '-'}</td>
-                      <td className="px-4 py-2 text-[12px] font-medium text-gray-600">{formatDate(row.date)}</td>
+                      <td className="px-4 py-2 text-[12px] font-medium text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-2 text-[13px] font-bold text-gray-800">{row.userName || '-'}</td>
                       <td className="px-4 py-2 text-[13px] font-medium text-gray-700">{row.driverName || '--'}</td>
                       <td className="px-4 py-2 text-[13px] font-bold text-gray-700 capitalize">{String(row.transportType || '').toLowerCase()}</td>
@@ -474,6 +419,9 @@ const Ongoing = () => {
                         <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded capitalize tracking-wide ${STATUS_STYLES[row.tripStatus] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
                           {row.tripStatus ? String(row.tripStatus).replace('_', ' ').toLowerCase() : 'Unknown'}
                         </span>
+                        {row.isScheduled ? (
+                          <span className="block mt-0.5 text-[10px] font-bold text-purple-700 whitespace-nowrap">Scheduled · {formatDate(row.scheduledAt)}</span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded capitalize tracking-wide ${PAYMENT_STYLES[row.paymentOption] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>

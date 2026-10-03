@@ -34,7 +34,15 @@ const EditProfile = () => {
         handleFileChange: onImageFileChange
     } = useImageUpload({
         folder: 'driver-profiles',
-        onSuccess: (url) => setDriver(prev => ({ ...prev, profileImage: url }))
+        onSuccess: async (url) => {
+            setDriver(prev => ({ ...prev, profileImage: url }));
+            try {
+                await updateDriverProfile({ profileImage: url });
+                toast.success('Profile photo updated');
+            } catch (err) {
+                toast.error(err?.message || 'Photo uploaded but could not be saved. Press Save to try again.');
+            }
+        }
     });
 
     useEffect(() => {
@@ -107,8 +115,8 @@ const EditProfile = () => {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans p-6 pt-10 overflow-hidden">
-            <header className="flex items-center gap-4 mb-8">
+        <div className="min-h-screen bg-slate-50 font-sans p-6 pt-10 overflow-x-clip">
+            <header className="sticky top-0 z-30 -mx-6 mb-6 flex items-center gap-4 bg-slate-50 px-6 py-3">
                 <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center active:scale-95 transition-transform">
                     <ArrowLeft size={18} />
                 </button>
@@ -153,8 +161,7 @@ const EditProfile = () => {
                             <Camera size={16} className="text-slate-900" />
                             <input 
                                 type="file" 
-                                accept="image/*" 
-                                capture="user"
+                                accept="image/*"
                                 className="hidden" 
                                 onChange={onImageFileChange}
                                 disabled={imageUploading}

@@ -25,6 +25,7 @@ const savePickup = (location) => saveLocation({ ...location, updatedAt: Date.now
 const SAVED_PICKUP_MAX_AGE_MS = 10 * 60 * 1000;
 // A city ride longer than this is almost certainly a wrong pick (or belongs to Intercity).
 const MAX_CITY_RIDE_KM = 100;
+const MAX_RIDE_STOPS = 3;
 
 const unwrapResults = (response) => {
   const payload = response?.data?.data || response?.data || response;
@@ -1067,6 +1068,8 @@ const SelectLocation = () => {
 
   // Add a new empty stop
   const addStop = () => {
+    // The ride keeps up to 3 stops (the server stores no more).
+    if (stops.length >= MAX_RIDE_STOPS) return;
     setStops(prev => [...prev, '']);
     setActiveInput(stops.length); // focus the new stop
   };
@@ -1352,7 +1355,7 @@ const SelectLocation = () => {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
+                    className="overflow-hidden -mx-1 px-1 pt-1"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col items-center gap-0.5 shrink-0">
@@ -1439,7 +1442,8 @@ const SelectLocation = () => {
           </button>
           <button
             onClick={addStop}
-            className="flex-1 flex items-center justify-center gap-2 rounded-full py-2.5 shadow-[0_12px_26px_rgba(15,23,42,0.06)] lg:shadow-sm active:scale-95 transition-all text-[13px] font-bold bg-white/75 backdrop-blur-md border border-white/80 lg:bg-white lg:border-slate-200 text-slate-800"
+            disabled={stops.length >= MAX_RIDE_STOPS}
+            className="disabled:opacity-50 flex-1 flex items-center justify-center gap-2 rounded-full py-2.5 shadow-[0_12px_26px_rgba(15,23,42,0.06)] lg:shadow-sm active:scale-95 transition-all text-[13px] font-bold bg-white/75 backdrop-blur-md border border-white/80 lg:bg-white lg:border-slate-200 text-slate-800"
           >
             <div className="w-4 h-4 rounded bg-indigo-500 flex items-center justify-center">
               <Plus size={12} className="text-white" strokeWidth={3} />

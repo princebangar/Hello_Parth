@@ -21,6 +21,7 @@ import {
     verifyDriverVehicleRc,
 } from '../../services/registrationService';
 import { normalizeDriverDocumentTemplates } from '../../utils/documentTemplates';
+import { formatGstNumber, isValidGstNumber, GST_ERROR } from '../../../../shared/utils/inputFormats';
 
 const VEHICLE_NUMBER_PATTERNS = [
     /^[A-Z]{2}\d{1,2}[A-Z]{1,4}\d{4}$/,
@@ -813,6 +814,8 @@ const StepVehicle = () => {
             }
             if (isFieldRequired('taxNumber', true) && !isFilled(formData.taxNumber)) {
                 errors.taxNumber = 'GST/VAT number is required';
+            } else if (isFilled(formData.taxNumber) && !isValidGstNumber(formData.taxNumber)) {
+                errors.taxNumber = GST_ERROR;
             }
         } else {
             if (isFieldRequired('vehicleTypeId', true) && !isFilled(formData.vehicleTypeId)) {
@@ -979,12 +982,12 @@ const StepVehicle = () => {
 
     return (
         <div 
-            className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-hidden"
+            className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-clip"
             style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
         >
             <main className="mx-auto max-w-sm space-y-6">
-                <header className="space-y-6">
-                    <div className="flex items-center justify-between">
+                <header className="contents space-y-6 [&>:last-child]:mb-6">
+                    <div className="sticky top-0 z-30 -mx-5 flex items-center justify-between bg-[#f6efe4]/90 px-5 py-3 backdrop-blur-md">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={handleBackNavigation}
@@ -1160,7 +1163,7 @@ const StepVehicle = () => {
                                         }`}>{taxNumberField.name}</label>
                                         <input 
                                             value={formData.taxNumber}
-                                            onChange={(e) => { clearFieldError('taxNumber'); setFormData(p => ({ ...p, taxNumber: e.target.value.toUpperCase() })); }}
+                                            onChange={(e) => { clearFieldError('taxNumber'); setFormData(p => ({ ...p, taxNumber: formatGstNumber(e.target.value) })); }}
                                             placeholder={taxNumberField.placeholder || 'Tax Identification'}
                                             className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 uppercase"
                                         />

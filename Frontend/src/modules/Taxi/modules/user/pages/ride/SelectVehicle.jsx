@@ -1069,6 +1069,7 @@ const normalizeVehicleType = (type, index) => {
     badge: null,
     badgeColor: 'bg-orange-50 text-orange-500 border-orange-100',
     sublabel: type?.short_description || type?.description || 'Available ride',
+    preferences: Array.isArray(type?.preferences) ? type.preferences : [],
     price: getFallbackVehicleEstimate(type),
     dispatchType,
     supportsBidding: dispatchType === 'bidding' || dispatchType === 'both',
@@ -1095,6 +1096,7 @@ const createHistorySafeVehicle = (vehicle) => {
     badge: vehicle.badge,
     badgeColor: vehicle.badgeColor,
     sublabel: vehicle.sublabel,
+    preferences: Array.isArray(vehicle.preferences) ? vehicle.preferences.map(({ id, name }) => ({ id, name })) : [],
     price: vehicle.price,
     dispatchType: vehicle.dispatchType,
     supportsBidding: vehicle.supportsBidding,
@@ -1823,6 +1825,32 @@ const SelectVehicle = () => {
     };
   }, [resolvedTransportType, serviceLocationId]);
 
+  // A code chosen on the Promo page is applied here once a vehicle (and so a fare) is known.
+  useEffect(() => {
+    if (appliedPromo || !selectedVehicle || !serviceLocationId || !availablePromos) {
+      return;
+    }
+
+    let pendingCode = '';
+    try {
+      pendingCode = String(window.sessionStorage.getItem('helloparth:pendingPromo') || '').trim();
+    } catch {
+      pendingCode = '';
+    }
+    if (!pendingCode) {
+      return;
+    }
+
+    try {
+      window.sessionStorage.removeItem('helloparth:pendingPromo');
+    } catch {
+      /* ignore */
+    }
+    setPromoCodeInput(pendingCode);
+    void applyPromoCode(pendingCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVehicle?.id, selectedVehicle?.price, serviceLocationId]);
+
   useEffect(() => {
     if (!appliedPromo?.promo?.code || !selectedVehicle) {
       return;
@@ -2220,6 +2248,11 @@ const SelectVehicle = () => {
                 </div>
                 <div className="min-w-0 flex-1 space-y-3">
                   <p className="pt-0.5 truncate text-[13px] font-medium text-slate-700">{pickup}</p>
+                  {stops.filter((stop) => String(stop || '').trim()).length > 0 ? (
+                    <p className="truncate text-[12px] font-semibold text-amber-700" title={stops.filter(Boolean).join(' → ')}>
+                      Via {stops.filter((stop) => String(stop || '').trim()).join(' → ')}
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     onClick={openLocationEditor}
@@ -2570,6 +2603,20 @@ const SelectVehicle = () => {
                   </p>
                 </div>
               </div>
+
+              {Array.isArray(previewVehicle.preferences) && previewVehicle.preferences.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Vehicle preferences</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {previewVehicle.preferences.map((pref) => (
+                      <span key={pref.id || pref.name} className="inline-flex items-center gap-1.5 rounded-full border border-slate-100 bg-slate-50 px-3 py-1.5 text-[12px] font-bold text-slate-700">
+                        {pref.icon ? <img src={pref.icon} alt="" className="h-4 w-4 rounded object-contain" draggable={false} /> : null}
+                        {pref.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-4 rounded-[20px] border border-orange-100 bg-orange-50/60 px-4 py-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-500">Trip snapshot</p>

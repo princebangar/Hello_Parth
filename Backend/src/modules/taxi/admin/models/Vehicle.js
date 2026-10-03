@@ -186,7 +186,7 @@ const vehicleSchema = new mongoose.Schema(
     },
     vehicle_preference: {
       type: [ObjectId],
-      ref: 'TaxiPreference',
+      ref: 'TaxiUserPreference',
       default: [],
     },
   },

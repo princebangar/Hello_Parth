@@ -667,14 +667,6 @@ const OwnerVehicleFleet = () => {
                         </div>
                         <div className="space-y-2 text-sm text-slate-600">
                           <p>
-                            Share ride:{" "}
-                            <span className="font-semibold text-slate-900">
-                              {Number(selectedType.is_accept_share_ride || 0) === 1
-                                ? "Enabled"
-                                : "Not enabled"}
-                            </span>
-                          </p>
-                          <p>
                             Status:{" "}
                             <span className="font-semibold text-slate-900">
                               {selectedType.active !== false &&
@@ -867,7 +859,7 @@ const OwnerVehicleFleet = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans pb-44 sm:pb-28">
       {/* Header */}
       <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-slate-200/50 shadow-sm">
         <div className="p-4 sm:p-6">
@@ -1153,7 +1145,7 @@ const OwnerVehicleFleet = () => {
         </AnimatePresence>
       </div>
 
-      <div className="fixed inset-x-0 bottom-[84px] z-20 px-4 sm:hidden">
+      <div className="fixed inset-x-0 z-40 px-4 sm:hidden" style={{ bottom: 'calc(88px + max(env(safe-area-inset-bottom), 8px))' }}>
         <div className="mx-auto max-w-lg">
           <motion.button
             whileHover={{ scale: 1.01 }}

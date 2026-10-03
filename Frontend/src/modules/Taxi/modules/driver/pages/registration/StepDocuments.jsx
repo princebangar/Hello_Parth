@@ -26,7 +26,9 @@ import {
 import {
   flattenDriverDocumentFields,
   getDocumentPreviewUrl,
+  isPastExpiryDate,
   normalizeDriverDocumentTemplates,
+  todayDateInputValue,
 } from '../../utils/documentTemplates';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -818,7 +820,13 @@ const StepDocuments = () => {
     }
   };
 
+  // A document whose expiry date is already over cannot be submitted (optional ones included).
+  const expiredTemplate = documentTemplates.find(
+    (template) => template.has_expiry_date && isPastExpiryDate(documentMeta[template.id]?.expiryDate),
+  );
+
   const isComplete =
+    !expiredTemplate &&
     requiredUploadFields.every((item) => Boolean(docs[item.key]?.uploaded || docs[item.key]?.secureUrl)) &&
     documentTemplates.every((template) => {
       if (!template.is_required) {
@@ -841,7 +849,13 @@ const StepDocuments = () => {
 
   const handleSubmit = async () => {
     if (!isComplete) {
-      setError(uploading ? 'Please wait for the current upload to finish' : 'Please upload every required document image');
+      setError(
+        uploading
+          ? 'Please wait for the current upload to finish'
+          : expiredTemplate
+            ? `${expiredTemplate.name} has expired. Enter a valid (future) expiry date.`
+            : 'Please upload every required document image',
+      );
       return;
     }
 
@@ -931,12 +945,12 @@ const StepDocuments = () => {
 
   return (
     <div 
-        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-hidden"
+        className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-clip"
         style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
     >
       <main className="mx-auto max-w-sm space-y-6">
-        <header className="space-y-5">
-            <div className="flex items-center justify-between">
+        <header className="contents space-y-5 [&>:last-child]:mb-6">
+            <div className="sticky top-0 z-30 -mx-5 flex items-center justify-between bg-[#f6efe4]/90 px-5 py-3 backdrop-blur-md">
                 <button
                     onClick={handleBackNavigation}
                     className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
@@ -1196,10 +1210,14 @@ const StepDocuments = () => {
                                 </label>
                                 <input
                                     type="date"
+                                    min={todayDateInputValue()}
                                     value={documentMeta[template.id]?.expiryDate || ''}
                                     onChange={(event) => handleMetaChange(template.id, 'expiryDate', event.target.value)}
                                     className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0"
                                 />
+                                {isPastExpiryDate(documentMeta[template.id]?.expiryDate) ? (
+                                    <p className="pt-1 text-[11px] font-bold text-rose-600">This date is over. Pick today or a later date.</p>
+                                ) : null}
                             </div>
                         </div>
                       </div>

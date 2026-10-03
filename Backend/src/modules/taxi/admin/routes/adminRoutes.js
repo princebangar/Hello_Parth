@@ -122,6 +122,10 @@ import {
   getSubscriptionPlans,
   getCustomerSubscriptionPlans,
   getSubscriptionSettings,
+  updateDriverSubscriptionPlan,
+  removeDriverSubscriptionPlan,
+  updateCustomerSubscriptionPlan,
+  removeCustomerSubscriptionPlan,
   getUserSubscriptions,
   updateSubscriptionSettings,
   getTodayEarnings,
@@ -204,6 +208,8 @@ import {
 } from '../controllers/poolingController.js';
 import { promotionsRouter } from '../promotions/routes/index.js';
 import { listSafetyAlerts, resolveSafetyAlert } from '../../safety/controllers/safetyController.js';
+import { asyncHandler } from '../../../../utils/asyncHandler.js';
+import { getPendingAdminRequests } from '../../services/adminAlertService.js';
 
 export const adminRouter = Router();
 
@@ -220,6 +226,10 @@ adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory)
 adminRouter.use('/admin', authenticate(['admin']));
 
 
+// Bell 'Requests' tab: registrations, open tickets and re-uploaded documents waiting for the admin.
+adminRouter.get('/admin/pending-requests', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getPendingAdminRequests({ limit: req.query.limit }) });
+}));
 adminRouter.get('/admin/users', getUsers);
 adminRouter.get('/admin/employees', getEmployees);
 adminRouter.post('/admin/employees', createEmployee);
@@ -275,6 +285,10 @@ adminRouter.get('/admin/driver-subscriptions/settings', getSubscriptionSettings)
 adminRouter.post('/admin/driver-subscriptions/settings', updateSubscriptionSettings);
 adminRouter.get('/admin/user-subscriptions/plans/list', getCustomerSubscriptionPlans);
 adminRouter.post('/admin/user-subscriptions/plans/create', createCustomerSubscriptionPlan);
+adminRouter.patch('/admin/driver-subscriptions/plans/:id', updateDriverSubscriptionPlan);
+adminRouter.delete('/admin/driver-subscriptions/plans/:id', removeDriverSubscriptionPlan);
+adminRouter.patch('/admin/user-subscriptions/plans/:id', updateCustomerSubscriptionPlan);
+adminRouter.delete('/admin/user-subscriptions/plans/:id', removeCustomerSubscriptionPlan);
 
 adminRouter.get('/countries', getCountries);
 adminRouter.get('/admin/countries', getCountries);

@@ -36,7 +36,17 @@ const AddDriver = () => {
     const [fleetVehicles, setFleetVehicles] = useState([]);
     const [fleetZones, setFleetZones] = useState([]);
     const [step, setStep] = useState(1); // 1: Details, 2: Documents, 3: Success
-    const [formData, setFormData] = useState({
+    // A half-filled "add driver" form survives a refresh (files cannot be stored, so they are picked again).
+    const DRAFT_KEY = 'helloparth:addDriverDraft';
+    const readDraft = () => {
+        if (driverId) return {};
+        try {
+            return JSON.parse(window.sessionStorage.getItem(DRAFT_KEY) || '{}') || {};
+        } catch {
+            return {};
+        }
+    };
+    const [formData, setFormData] = useState(() => ({
         name: '',
         mobile: '',
         email: '',
@@ -44,9 +54,20 @@ const AddDriver = () => {
         salary: '',
         assignedFleetVehicleId: '',
         zoneId: '',
+        ...readDraft(),
         adhaarFile: null,
         licenseFile: null
-    });
+    }));
+
+    useEffect(() => {
+        if (isEditMode) return;
+        const { adhaarFile, licenseFile, ...textFields } = formData;
+        try {
+            window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(textFields));
+        } catch {
+            /* storage blocked: the form just is not remembered */
+        }
+    }, [formData, isEditMode]);
 
     useEffect(() => {
         if (!isEditMode) return;
@@ -105,7 +126,6 @@ const AddDriver = () => {
     }, [driverId, isEditMode, location.state]);
 
     useEffect(() => {
-        if (!isEditMode) return;
 
         let active = true;
         setLoadingVehicles(true);
@@ -127,10 +147,9 @@ const AddDriver = () => {
         return () => {
             active = false;
         };
-    }, [isEditMode]);
+    }, []);
 
     useEffect(() => {
-        if (!isEditMode) return;
 
         let active = true;
         setLoadingZones(true);
@@ -152,7 +171,7 @@ const AddDriver = () => {
         return () => {
             active = false;
         };
-    }, [isEditMode]);
+    }, []);
 
     const handleFileUpload = (field, e) => {
         const file = e.target.files[0];
@@ -210,6 +229,11 @@ const AddDriver = () => {
                 await createOwnerFleetDriver(payload);
             }
 
+            try {
+                window.sessionStorage.removeItem(DRAFT_KEY);
+            } catch {
+                /* ignore */
+            }
             setStep(3);
 
             setTimeout(() => {
@@ -223,9 +247,9 @@ const AddDriver = () => {
     };
 
     return (
-        <div className="min-h-screen bg-white font-sans p-5 pt-8 select-none overflow-x-hidden pb-32">
-            <header className="mb-6 flex items-center justify-between">
-                <button onClick={() => navigate(-1)} className="w-9 h-9 bg-slate-50 rounded-lg flex items-center justify-center text-slate-900 active:scale-95 transition-transform">
+        <div className="min-h-screen bg-white font-sans p-5 pt-8 select-none overflow-x-clip pb-32">
+            <header className="sticky top-0 z-30 -mx-5 mb-6 flex items-center justify-between bg-white px-5 py-3">
+                <button onClick={() => (step === 2 ? setStep(1) : navigate(-1))} className="w-9 h-9 bg-slate-50 rounded-lg flex items-center justify-center text-slate-900 active:scale-95 transition-transform">
                     <ArrowLeft size={18} strokeWidth={2.5} />
                 </button>
                 <div className="flex gap-1">
@@ -258,66 +282,66 @@ const AddDriver = () => {
                                     <p className="text-[11px] font-bold text-rose-500">{error}</p>
                                 ) : null}
                                 <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Full Name</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Full Name</label>
                                     <input 
                                         value={formData.name}
                                         onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
                                         placeholder="Enter driver's name"
-                                        className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                        className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-300"
                                     />
                                 </div>
 
                                 <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><Phone size={8} /> Mobile Number</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><Phone size={10} /> Mobile Number</label>
                                     <input 
                                         value={formData.mobile}
                                         onChange={(e) => setFormData(p => ({ ...p, mobile: e.target.value.replace(/\D/g, '') }))}
                                         placeholder="10-digit mobile number"
                                         maxLength={10}
-                                        className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                        className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-300"
                                     />
                                 </div>
 
                                 <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><Mail size={8} /> Email Address</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><Mail size={10} /> Email Address</label>
                                     <input 
                                         value={formData.email}
                                         onChange={(e) => setFormData(p => ({ ...p, email: e.target.value }))}
                                         placeholder="driver@example.com"
-                                        className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                        className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-300"
                                     />
                                 </div>
 
                                 <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><MapPin size={8} /> Address</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><MapPin size={10} /> Address</label>
                                     <textarea 
                                         rows={2}
                                         value={formData.address}
                                         onChange={(e) => setFormData(p => ({ ...p, address: e.target.value }))}
                                         placeholder="Full residential address"
-                                        className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 resize-none"
+                                        className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-300 resize-none"
                                     />
                                 </div>
 
                                 <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><IndianRupee size={8} /> Monthly Salary</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 flex items-center gap-1.5"><IndianRupee size={10} /> Monthly Salary</label>
                                     <input
                                         value={formData.salary}
                                         onChange={(e) => setFormData(p => ({ ...p, salary: e.target.value.replace(/[^\d.]/g, '') }))}
                                         placeholder="Enter monthly salary"
                                         inputMode="decimal"
-                                        className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                        className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-300"
                                     />
                                 </div>
 
-                                {isEditMode ? (
+                                {(
                                     <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Assigned Vehicle</label>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Assigned Vehicle</label>
                                         <select
                                             value={formData.assignedFleetVehicleId}
                                             onChange={(e) => setFormData((p) => ({ ...p, assignedFleetVehicleId: e.target.value }))}
                                             disabled={loadingVehicles}
-                                            className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0"
+                                            className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0"
                                         >
                                             <option value="">No vehicle assigned</option>
                                             {availableVehicles.map((vehicle) => {
@@ -339,16 +363,16 @@ const AddDriver = () => {
                                             {loadingVehicles ? 'Loading fleet vehicles...' : 'Only this owner\'s unassigned vehicles are shown here.'}
                                         </p>
                                     </div>
-                                ) : null}
+                                )}
 
-                                {isEditMode ? (
+                                {(
                                     <div className="bg-slate-50 p-3.5 rounded-2xl shadow-sm">
-                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Assigned Zone</label>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Assigned Zone</label>
                                         <select
                                             value={formData.zoneId}
                                             onChange={(e) => setFormData((p) => ({ ...p, zoneId: e.target.value }))}
                                             disabled={loadingZones}
-                                            className="w-full bg-transparent border-none p-0 text-[13px] font-black text-slate-900 focus:outline-none focus:ring-0"
+                                            className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-slate-900 focus:outline-none focus:ring-0"
                                         >
                                             <option value="">No zone assigned</option>
                                             {fleetZones.map((zone) => {
@@ -364,7 +388,7 @@ const AddDriver = () => {
                                             {loadingZones ? 'Loading zones...' : 'Only zones under this owner service location are shown here.'}
                                         </p>
                                     </div>
-                                ) : null}
+                                )}
                             </div>
 
                             <div className="fixed bottom-0 left-0 right-0 p-5 bg-white border-t border-slate-50">
@@ -408,7 +432,7 @@ const AddDriver = () => {
                                 ) : null}
                                 {/* Adhaar Card */}
                                 <div className="space-y-3">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Aadhar Card</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Aadhar Card</label>
                                     <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-6 flex items-center justify-between hover:border-slate-900 transition-colors bg-slate-50/50">
                                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileUpload('adhaarFile', e)} />
                                         <div className="flex items-center gap-3">
@@ -421,7 +445,7 @@ const AddDriver = () => {
 
                                 {/* Driving License */}
                                 <div className="space-y-3">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Driving License</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Driving License</label>
                                     <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-6 flex items-center justify-between hover:border-slate-900 transition-colors bg-slate-50/50">
                                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileUpload('licenseFile', e)} />
                                         <div className="flex items-center gap-3">
@@ -461,7 +485,7 @@ const AddDriver = () => {
                             </div>
 
                             <div className="text-center space-y-3">
-                                <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Pending!</h1>
+                                <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Pending!</h1>
                                 <p className="text-[12px] font-bold text-slate-400 uppercase tracking-[0.2em] leading-relaxed px-10">
                                     {isEditMode ? 'Driver details updated successfully.' : <>Driver details sent to admin. Status will update in <span className="text-slate-900">5 seconds</span>.</>}
                                 </p>

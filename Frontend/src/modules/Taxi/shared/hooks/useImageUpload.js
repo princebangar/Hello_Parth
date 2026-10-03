@@ -43,7 +43,7 @@ export const useImageUpload = (options = {}) => {
       const url = result.secureUrl || result.url;
       setImageUrl(url);
       onSuccess(url);
-      toast.success('Professional branding image uploaded');
+      toast.success('Image uploaded');
     } catch (error) {
       console.error('Upload Hook Error:', error);
       toast.error('Failed to upload image. Please try again.');

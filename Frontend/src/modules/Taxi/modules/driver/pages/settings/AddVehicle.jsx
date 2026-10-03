@@ -22,6 +22,7 @@ import {
   flattenDriverDocumentFields,
   normalizeDriverDocumentTemplates,
 } from "../../utils/documentTemplates";
+import { formatPlateNumber, isValidPlateNumber, PLATE_ERROR } from "../../../../shared/utils/inputFormats";
 
 import CarIcon from "../../../../assets/icons/car.png";
 import BikeIcon from "../../../../assets/icons/bike.png";
@@ -143,14 +144,33 @@ const AddVehicle = () => {
 
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    vehicleTypeId: "",
-    make: "",
-    model: "",
-    number: "",
-    color: "",
-    documents: {},
+  // The typed details survive a refresh (document photos do not - they are picked again).
+  const DRAFT_KEY = "helloparth:addVehicleDraft";
+  const [formData, setFormData] = useState(() => {
+    let draft = {};
+    try {
+      draft = JSON.parse(window.sessionStorage.getItem(DRAFT_KEY) || "{}") || {};
+    } catch {
+      draft = {};
+    }
+    return {
+      vehicleTypeId: draft.vehicleTypeId || "",
+      make: draft.make || "",
+      model: draft.model || "",
+      number: draft.number || "",
+      color: draft.color || "",
+      documents: {},
+    };
   });
+
+  useEffect(() => {
+    const { vehicleTypeId, make, model, number, color } = formData;
+    try {
+      window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ vehicleTypeId, make, model, number, color }));
+    } catch {
+      /* storage blocked: the form just is not remembered */
+    }
+  }, [formData.vehicleTypeId, formData.make, formData.model, formData.number, formData.color]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [documentTemplates, setDocumentTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -196,7 +216,7 @@ const AddVehicle = () => {
     Boolean(formData.vehicleTypeId) &&
     Boolean(formData.make.trim()) &&
     Boolean(formData.model.trim()) &&
-    Boolean(formData.number.trim()) &&
+    isValidPlateNumber(formData.number) &&
     Boolean(formData.color.trim());
 
   const uploadFields = useMemo(
@@ -280,6 +300,11 @@ const AddVehicle = () => {
         documents: uploadedDocuments,
       });
 
+      try {
+        window.sessionStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
       setStep(3);
       setTimeout(() => {
         navigate(`${routePrefix}/vehicle-fleet`);
@@ -415,12 +440,15 @@ const AddVehicle = () => {
                       onChange={(event) =>
                         setFormData((prev) => ({
                           ...prev,
-                          number: event.target.value.toUpperCase(),
+                          number: formatPlateNumber(event.target.value),
                         }))
                       }
                       placeholder="MP09AB1234"
                       className={`${inputClass} uppercase`}
                     />
+                    {formData.number && !isValidPlateNumber(formData.number) ? (
+                      <p className="mt-1 text-[11px] font-bold text-rose-600">{PLATE_ERROR}</p>
+                    ) : null}
                   </div>
 
                   <div>
@@ -515,14 +543,6 @@ const AddVehicle = () => {
                             Service Notes
                           </div>
                           <div className="space-y-2 text-sm text-slate-600">
-                            <p>
-                              Share ride:{" "}
-                              <span className="font-semibold text-slate-900">
-                                {Number(selectedType.is_accept_share_ride || 0) === 1
-                                  ? "Enabled"
-                                  : "Not enabled"}
-                              </span>
-                            </p>
                             <p>
                               Status:{" "}
                               <span className="font-semibold text-slate-900">

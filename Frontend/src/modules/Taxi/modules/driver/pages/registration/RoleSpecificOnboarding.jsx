@@ -277,12 +277,12 @@ const RoleSpecificOnboarding = () => {
 
   return (
     <div
-      className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-36 pt-8 select-none"
+      className="min-h-screen overflow-x-clip bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-36 pt-8 select-none"
       style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
     >
       <main className="mx-auto max-w-sm space-y-6">
-        <header className="space-y-5">
-          <div className="flex items-center justify-between">
+        <header className="contents space-y-5 [&>:last-child]:mb-6">
+          <div className="sticky top-0 z-30 -mx-5 flex items-center justify-between bg-[#f6efe4]/90 px-5 py-3 backdrop-blur-md">
             <button
               type="button"
               onClick={handleBack}

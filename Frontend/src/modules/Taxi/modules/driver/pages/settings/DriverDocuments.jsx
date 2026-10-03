@@ -4,10 +4,13 @@ import { ArrowLeft, BadgeCheck, CalendarDays, Camera, CheckCircle2, Eye, FileTex
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentDriver, getDriverDocumentTemplates, updateDriverDocument, verifyDriverBankDocument, verifyDriverGstinDocument, verifyDriverLicenseDocument, verifyDriverPanDocument, verifyDriverRcDocument } from '../../services/registrationService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
+import useBodyScrollLock from '../../../../shared/hooks/useBodyScrollLock';
 import {
   flattenDriverDocumentFields,
   getDocumentPreviewUrl,
+  isPastExpiryDate,
   normalizeDriverDocumentTemplates,
+  todayDateInputValue,
 } from '../../utils/documentTemplates';
 
 const formatDate = (value) => {
@@ -163,6 +166,7 @@ const DriverDocuments = () => {
     isSubmitting: false,
     isVerifying: false,
   });
+  useBodyScrollLock(Boolean(selectedDoc) || expiryModal.isOpen || metaModal.isOpen);
   const uploadingDocumentKeyRef = useRef('');
   const documentInputRefs = useRef({});
   const autoOpenedDocumentRef = useRef('');
@@ -349,6 +353,11 @@ const DriverDocuments = () => {
       return;
     }
 
+    if (isPastExpiryDate(expiryModal.value)) {
+      setError('Expiry date cannot be in the past.');
+      return;
+    }
+
     const currentDocument = driver?.documents?.[expiryModal.docId] || {};
     const nextExpiryDate = String(expiryModal.value).trim();
 
@@ -472,8 +481,8 @@ const DriverDocuments = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-hidden">
-      <header className="flex items-center gap-4 mb-8">
+    <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32 overflow-x-clip">
+      <header className="sticky top-0 z-30 -mx-6 mb-6 flex items-center gap-4 bg-[#f8f9fb] px-6 py-3">
         <button onClick={() => navigate(`${routePrefix}/profile`)} className="w-9 h-9 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-slate-600 hover:text-slate-900 active:scale-95 transition-all">
           <ArrowLeft size={18} strokeWidth={2.5} />
         </button>
@@ -541,10 +550,14 @@ const DriverDocuments = () => {
                 </span>
                 <input
                   type="date"
+                  min={todayDateInputValue()}
                   value={expiryModal.value}
                   onChange={(event) => setExpiryModal((prev) => ({ ...prev, value: event.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-colors focus:border-emerald-200 focus:bg-white"
                 />
+                {isPastExpiryDate(expiryModal.value) ? (
+                  <p className="mt-2 text-[11px] font-bold text-rose-600">This date is over. Pick today or a later date.</p>
+                ) : null}
               </label>
 
               <div className="flex gap-3">
@@ -553,9 +566,9 @@ const DriverDocuments = () => {
                 </button>
                 <button
                   onClick={handleExpirySave}
-                  disabled={expiryModal.isSubmitting || !expiryModal.value}
+                  disabled={expiryModal.isSubmitting || !expiryModal.value || isPastExpiryDate(expiryModal.value)}
                   className={`flex-1 h-11 rounded-xl text-[12px] font-black uppercase tracking-widest text-white transition-all ${
-                    expiryModal.isSubmitting || !expiryModal.value
+                    expiryModal.isSubmitting || !expiryModal.value || isPastExpiryDate(expiryModal.value)
                       ? 'bg-slate-300'
                       : 'bg-emerald-600 active:scale-95'
                   }`}

@@ -161,7 +161,14 @@ const DriverReferral = () => {
     if (!referralCode) {
       return;
     }
-    const shareText = `${bannerText}\nJoin as a driver with my referral link and code ${referralCode}.\n${referralShareLink}`;
+    // Optional download link for the app (set VITE_DRIVER_APP_URL in Frontend/.env once the store link exists).
+    const appDownloadUrl = String(import.meta.env.VITE_DRIVER_APP_URL || '').trim();
+    const shareText = [
+      bannerText,
+      `Join as a driver with my referral code ${referralCode}.`,
+      `Sign up: ${referralShareLink}`,
+      appDownloadUrl ? `Get the app: ${appDownloadUrl}` : '',
+    ].filter(Boolean).join('\n');
 
     try {
       if (navigator.share) {
@@ -176,20 +183,19 @@ const DriverReferral = () => {
       // Fall through to desktop-friendly sharing options.
     }
 
+    // No share sheet on this device (desktop browser): just copy the message, do not jump to WhatsApp.
     try {
       await navigator.clipboard.writeText(shareText);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      // Ignore clipboard failures and continue to WhatsApp fallback.
+      // Clipboard blocked: nothing else to do.
     }
-
-    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
   };
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] font-sans p-5 pt-8 pb-10">
-      <header className="mb-5 flex items-center gap-3">
+      <header className="sticky top-0 z-30 -mx-5 mb-4 flex items-center gap-3 bg-[#f5f7fb] px-5 py-3">
         <button
           onClick={() => navigate(`${routePrefix}/profile`)}
           className="w-9 h-9 rounded-xl border border-gray-200 bg-white flex items-center justify-center shadow-sm"

@@ -40,6 +40,8 @@ const coordLabel = (location, fallback) => {
   return fallback;
 };
 
+const formatMoney = (value) => Number(value || 0).toFixed(2);
+
 const RideDetail = () => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
@@ -80,7 +82,19 @@ const RideDetail = () => {
     const driver = ride?.driver || ride?.driverId || {};
     const timeSource = ride?.completedAt || ride?.startedAt || ride?.acceptedAt || ride?.createdAt || ride?.updatedAt;
     const fare = Number(ride?.fare || 0);
-    const taxes = Math.max(Math.round(fare * 0.18), 0);
+    // Pickup waiting is added to the fare when the trip starts; it is not part of the taxed trip price.
+    const waitingAmount = Math.max(0, Number(ride?.waitingCharge?.amount || 0));
+    const taxableFare = Math.max(0, fare - waitingAmount);
+    // The fare already includes the tax % of the price the ride was booked with. Older rides did not record that
+    // %, so they show only the total instead of a made-up split.
+    const rawTaxPercent = ride?.pricingSnapshot?.service_tax;
+    const taxPercent = rawTaxPercent === null || rawTaxPercent === undefined || rawTaxPercent === '' ? null : Number(rawTaxPercent);
+    const taxes = Number.isFinite(taxPercent) && taxPercent >= 0
+      ? Math.round((taxableFare - taxableFare / (1 + taxPercent / 100)) * 100) / 100
+      : null;
+    const discount = Math.max(0, Number(ride?.promo?.discount_amount || 0));
+    const tip = Math.max(0, Number(ride?.feedback?.tipAmount || 0));
+    const driverRating = Number(driver.rating || 0);
     const status = String(ride?.status || ride?.liveStatus || 'trip').toLowerCase();
     const rideCode = String(ride?.rideId || ride?._id || ride?.id || id || 'ride');
 
@@ -98,13 +112,18 @@ const RideDetail = () => {
       ) || coordLabel(ride?.dropLocation || ride?.drop, 'Drop location'),
       fare,
       taxes,
-      baseFare: Math.max(fare - taxes, 0),
+      taxPercent,
+      discount,
+      tip,
+      baseFare: taxes === null ? null : Math.max(Math.round((taxableFare - taxes) * 100) / 100, 0),
+      waitingAmount,
+      waitingMinutes: Number(ride?.waitingCharge?.minutes || 0),
       timeSource,
       startTime: ride?.startedAt || ride?.acceptedAt || timeSource,
       endTime: ride?.completedAt || timeSource,
       statusLabel: status.charAt(0).toUpperCase() + status.slice(1),
       driverName: driver.name || 'Captain',
-      rating: driver.rating || '4.9',
+      rating: driverRating > 0 ? driverRating.toFixed(1) : 'New',
       plate: driver.vehicleNumber || 'Assigned',
       vehicle: driver.vehicleType || ride?.vehicleIconType || 'Taxi',
       paymentMethod: String(
@@ -120,7 +139,7 @@ const RideDetail = () => {
   }, [ride]);
 
   const handleShare = async () => {
-    const text = `My ${appName} trip #${details.shortRideCode} - ${details.pickup} to ${details.drop} | Rs ${details.fare}.00`;
+    const text = `My ${appName} trip #${details.shortRideCode} - ${details.pickup} to ${details.drop} | Rs ${formatMoney(details.fare)}`;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -192,6 +211,22 @@ const RideDetail = () => {
           </div>
         )}
 
+        {/* Scheduled ride that has not finished: show when it is and the OTP to give the driver at pickup. */}
+        {ride?.scheduledAt && !['completed', 'cancelled'].includes(String(ride?.status || '').toLowerCase()) && (
+          <div className="rounded-[24px] border border-purple-100 bg-purple-50 p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-widest text-purple-700">Scheduled ride</p>
+            <p className="mt-1 text-[16px] font-black text-gray-900">
+              {formatLongDate(ride.scheduledAt)}, {formatTime(ride.scheduledAt)}
+            </p>
+            {ride?.otp ? (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 border border-purple-100">
+                <span className="text-[12px] font-bold text-gray-500">Ride OTP - tell it to the driver at pickup</span>
+                <span className="text-[20px] font-black tracking-[0.2em] text-gray-900">{ride.otp}</span>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         <div className="h-40 bg-gray-100 rounded-[32px] overflow-hidden relative shadow-sm">
           <img src="/map image.avif" className="w-full h-full object-cover opacity-60" alt="Map View" />
           <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent" />
@@ -231,18 +266,40 @@ const RideDetail = () => {
           </div>
 
           <div className="space-y-3 pt-2">
-            <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
-              <span>Base Fare</span>
-              <span className="text-gray-900">Rs {details.baseFare}.00</span>
-            </div>
-            <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
-              <span>Taxes & Fees</span>
-              <span className="text-gray-900">Rs {details.taxes}.00</span>
-            </div>
+            {details.taxes !== null ? (
+              <>
+                <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
+                  <span>Ride Fare</span>
+                  <span className="text-gray-900">Rs {formatMoney(details.baseFare)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
+                  <span>Taxes & Fees ({details.taxPercent}%)</span>
+                  <span className="text-gray-900">Rs {formatMoney(details.taxes)}</span>
+                </div>
+              </>
+            ) : null}
+            {details.waitingAmount > 0 ? (
+              <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
+                <span>Waiting charge ({details.waitingMinutes} min)</span>
+                <span className="text-gray-900">Rs {formatMoney(details.waitingAmount)}</span>
+              </div>
+            ) : null}
+            {details.discount > 0 ? (
+              <div className="flex justify-between items-center text-[13px] font-bold text-emerald-600">
+                <span>Promo Discount</span>
+                <span>- Rs {formatMoney(details.discount)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between items-center text-[16px] font-black text-gray-900 border-t border-gray-50 pt-3">
-              <span>Total Paid</span>
-              <span>Rs {details.fare}.00</span>
+              <span>{details.taxes === null ? 'Total Fare (incl. taxes)' : 'Total Fare'}</span>
+              <span>Rs {formatMoney(details.fare)}</span>
             </div>
+            {details.tip > 0 ? (
+              <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
+                <span>Tip to driver</span>
+                <span className="text-gray-900">Rs {formatMoney(details.tip)}</span>
+              </div>
+            ) : null}
           </div>
         </div>
 

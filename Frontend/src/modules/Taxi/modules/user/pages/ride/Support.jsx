@@ -41,7 +41,7 @@ const Support = () => {
   ];
 
   return (
-    <div className="min-h-screen max-w-lg mx-auto flex flex-col font-sans relative pb-28 overflow-hidden user-app-theme">
+    <div className="min-h-screen max-w-lg mx-auto flex flex-col font-sans relative pb-[calc(8.5rem+env(safe-area-inset-bottom))] overflow-x-hidden user-app-theme">
       <header className="relative z-20 sticky top-0" style={{ background: 'var(--user-card-bg)', borderBottom: '1px solid var(--user-border)' }}>
         <div className="px-5 py-4 flex items-center gap-3">
           <button onClick={() => navigate(-1)} aria-label="Back" className="p-2 -ml-2 active:scale-95 transition-all rounded-full" style={{ color: 'var(--user-text-primary)' }}>

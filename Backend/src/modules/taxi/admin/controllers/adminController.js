@@ -542,6 +542,18 @@ export const getCustomerSubscriptionPlans = asyncHandler(async (_req, res) =>
 export const createCustomerSubscriptionPlan = asyncHandler(async (req, res) =>
   ok(res, await adminService.createCustomerSubscriptionPlan(req.body)),
 );
+export const updateDriverSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.setSubscriptionPlanActive(req.params.id, 'driver', req.body?.active)),
+);
+export const removeDriverSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.deleteSubscriptionPlan(req.params.id, 'driver')),
+);
+export const updateCustomerSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.setSubscriptionPlanActive(req.params.id, 'user', req.body?.active)),
+);
+export const removeCustomerSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.deleteSubscriptionPlan(req.params.id, 'user')),
+);
 export const getUserSubscriptions = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUserSubscriptionsByUserId(req.params.id)),
 );
@@ -1029,6 +1041,21 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
   const schedule = findBusSchedule(busService, scheduleId);
   if (!isScheduleAvailableOnDate(schedule, travelDate)) {
     throw new ApiError(404, 'Bus schedule not found for the selected date');
+  }
+
+  // A seat cannot be sold on a bus that has already left (travel date + departure time, India time).
+  const departureMatch = toCleanString(schedule?.departureTime).match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (departureMatch) {
+    let hours = Number(departureMatch[1]) % 24;
+    const meridiem = String(departureMatch[3] || '').toLowerCase();
+    if (meridiem === 'pm' && hours < 12) hours += 12;
+    if (meridiem === 'am' && hours === 12) hours = 0;
+    const departureAt = new Date(
+      `${travelDate}T${String(hours).padStart(2, '0')}:${departureMatch[2]}:00+05:30`,
+    );
+    if (!Number.isNaN(departureAt.getTime()) && departureAt.getTime() <= Date.now()) {
+      throw new ApiError(400, 'This bus has already departed. Pick a later date or schedule.');
+    }
   }
 
   const user = await resolveAdminBusBookingUser(req.body?.passenger || {});
