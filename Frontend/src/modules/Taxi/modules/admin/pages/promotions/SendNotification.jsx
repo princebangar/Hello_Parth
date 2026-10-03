@@ -51,9 +51,17 @@ const buildDeliveryMessage = (responseData) => {
     return reason || responseData?.data?.message || 'Notification saved, but push delivery is not configured.';
   }
 
-  const parts = [`Broadcast sent. Delivered to ${Number(delivery.deliveredCount || 0)} of ${Number(delivery.targetCount || 0)} device(s).`];
-  if (Number(delivery.failedCount) > 0) parts.push(`${delivery.failedCount} failed.`);
-  if (Number(delivery.invalidTokenCount) > 0) parts.push(`${delivery.invalidTokenCount} invalid token(s) were cleaned up.`);
+  // Plain-language result: a phone that uninstalled the app or logged out cannot get a push; that is normal
+  // and those old device entries are removed so the next broadcast is cleaner.
+  const delivered = Number(delivery.deliveredCount || 0);
+  const failed = Number(delivery.failedCount || 0);
+  const removed = Number(delivery.invalidTokenCount || 0);
+  const parts = [`Notification sent to ${delivered} device${delivered === 1 ? '' : 's'}.`];
+  if (failed > 0) {
+    parts.push(
+      `${failed} device${failed === 1 ? '' : 's'} could not be reached (app uninstalled, logged out or notifications off)${removed > 0 ? ` and ${removed} old device entr${removed === 1 ? 'y was' : 'ies were'} removed` : ''}.`,
+    );
+  }
   if (reason) parts.push(reason);
   return parts.join(' ');
 };

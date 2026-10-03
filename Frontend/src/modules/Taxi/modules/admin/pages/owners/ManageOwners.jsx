@@ -55,6 +55,8 @@ const ManageOwners = () => {
   const [transportTypes, setTransportTypes] = useState(defaultTransportTypes);
   const [searchTerm, setSearchTerm] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [listPage, setListPage] = useState(1);
   const [formData, setFormData] = useState(initialFormData);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -214,17 +216,23 @@ const ManageOwners = () => {
   };
 
   const filteredOwners = owners.filter((owner) =>
-    owner.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (owner.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     owner.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    owner.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    owner.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    String(owner.mobile || '').includes(searchTerm.trim())) &&
+    (!statusFilter || getOwnerStatus(owner) === statusFilter)
   );
+  const ownerPages = Math.max(1, Math.ceil(filteredOwners.length / itemsPerPage));
+  const currentOwnerPage = Math.min(listPage, ownerPages);
+  const pagedOwners = filteredOwners.slice((currentOwnerPage - 1) * itemsPerPage, currentOwnerPage * itemsPerPage);
 
   const formatMobile = (mobile) => {
     if (!mobile) return '-';
     return mobile.startsWith('+') ? mobile : `+91${mobile}`;
   };
 
-  const visibleStart = filteredOwners.length > 0 ? 1 : 0;
+  const visibleStart = filteredOwners.length > 0 ? (currentOwnerPage - 1) * itemsPerPage + 1 : 0;
+  const visibleEnd = (currentOwnerPage - 1) * itemsPerPage + pagedOwners.length;
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -252,17 +260,11 @@ const ManageOwners = () => {
             <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
               <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <button className="w-10 h-10 bg-teal-500 text-white rounded-lg flex items-center justify-center shadow-sm">
-                    <List size={18} />
-                  </button>
-                  <button className="w-10 h-10 bg-gray-100 text-gray-400 rounded-lg flex items-center justify-center hover:bg-indigo-50 transition-all">
-                    <LayoutGrid size={18} />
-                  </button>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 ml-4">
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
                     <span>Show</span>
                     <select
                       value={itemsPerPage}
-                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      onChange={(e) => { setItemsPerPage(Number(e.target.value)); setListPage(1); }}
                       className="border border-gray-200 rounded px-2 py-1 text-xs bg-white"
                     >
                       <option value={10}>10</option>
@@ -284,9 +286,9 @@ const ManageOwners = () => {
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Search owners..."
+                      placeholder="Search name, company, email, phone"
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => { setSearchTerm(e.target.value); setListPage(1); }}
                       className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-56 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
                     />
                   </div>
@@ -296,22 +298,17 @@ const ManageOwners = () => {
               {/* Filters Panel */}
               {showFilters && (
                 <div className="p-4 border-b border-gray-100 bg-gray-50 flex gap-4 animate-in slide-in-from-top-2">
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Company Name</label>
-                    <input 
-                      type="text" 
-                      placeholder="Filter by company..." 
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none"
-                    />
-                  </div>
-                  <div className="flex-1">
+                  <div className="w-full sm:w-64">
                     <label className="block text-sm font-bold text-gray-700 mb-1">Status</label>
-                    <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => { setStatusFilter(e.target.value); setListPage(1); }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none"
+                    >
                       <option value="">All Statuses</option>
                       <option value="approved">Approved</option>
                       <option value="pending">Pending</option>
+                      <option value="rejected">Rejected</option>
                     </select>
                   </div>
                 </div>
@@ -345,7 +342,7 @@ const ManageOwners = () => {
                         <td colSpan="6" className="px-6 py-16 text-center text-sm text-gray-400">No owners found</td>
                       </tr>
                     ) : (
-                      filteredOwners.map((owner) => (
+                      pagedOwners.map((owner) => (
                         <tr key={owner._id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4 text-sm font-medium text-gray-900">{owner.company_name || owner.name || '-'}</td>
                           <td className="px-4 py-4 text-sm text-gray-500">{owner.email || '-'}</td>
@@ -401,11 +398,19 @@ const ManageOwners = () => {
               {/* Footer */}
               {!isLoading && filteredOwners.length > 0 && (
                 <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
-                  <span>Showing 1 to {filteredOwners.length} of {filteredOwners.length} entries</span>
+                  <span>Showing {visibleStart} to {visibleEnd} of {filteredOwners.length} entries</span>
                   <div className="flex items-center gap-1">
-                    <button className="px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-gray-400" disabled>Prev</button>
-                    <button className="w-7 h-7 rounded bg-yellow-400 text-black text-sm font-bold">1</button>
-                    <button className="px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-gray-400" disabled>Next</button>
+                    <button
+                      onClick={() => setListPage(Math.max(1, currentOwnerPage - 1))}
+                      disabled={currentOwnerPage <= 1}
+                      className="px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-gray-600 disabled:text-gray-300"
+                    >Prev</button>
+                    <span className="w-7 h-7 rounded bg-yellow-400 text-black text-sm font-bold flex items-center justify-center">{currentOwnerPage}</span>
+                    <button
+                      onClick={() => setListPage(Math.min(ownerPages, currentOwnerPage + 1))}
+                      disabled={currentOwnerPage >= ownerPages}
+                      className="px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-gray-600 disabled:text-gray-300"
+                    >Next</button>
                   </div>
                 </div>
               )}

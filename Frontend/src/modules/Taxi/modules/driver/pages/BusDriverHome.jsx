@@ -30,6 +30,7 @@ import {
   getBusDriverSeatLayout,
   updateBusDriverSchedules,
 } from '../services/busDriverService';
+import { formatClockTime } from '../../../shared/utils/clockTime';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const unwrapResults = (response) => response?.data?.results || response?.results || [];
@@ -257,6 +258,10 @@ const BusDriverHome = () => {
   const [deskError, setDeskError] = useState('');
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingFilter, setBookingFilter] = useState('all');
+  // run = the selected bus run only | today = every run today | upcoming = today and all future days
+  const [bookingScope, setBookingScope] = useState('run');
+  const [scopedBookings, setScopedBookings] = useState([]);
+  const [loadingScoped, setLoadingScoped] = useState(false);
   const [scheduleDrafts, setScheduleDrafts] = useState([]);
   const [isSavingSchedules, setIsSavingSchedules] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -354,10 +359,26 @@ const BusDriverHome = () => {
     );
   }, [schedules]);
 
+  // A tab opened from the bottom menu starts at the top of the page.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [activeTab]);
+
+  const activeTabRef = useRef('overview');
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
   useEffect(() => {
     window.history.pushState({ busDriverHome: true }, '', window.location.href);
 
     const handlePopState = () => {
+      // Back from Schedule / Desk / Bookings goes to Home; only back from Home asks about logging out.
+      if (activeTabRef.current !== 'overview') {
+        setActiveTab('overview');
+        window.history.pushState({ busDriverHome: true }, '', window.location.href);
+        return;
+      }
       const loggedOut = confirmLogout();
       if (!loggedOut) {
         window.history.pushState({ busDriverHome: true }, '', window.location.href);
@@ -566,10 +587,39 @@ const BusDriverHome = () => {
     [bookings],
   );
 
+  // The Bookings tab can show the selected run, all of today, or everything upcoming.
+  useEffect(() => {
+    if (activeTab !== 'bookings' || bookingScope === 'run') {
+      return undefined;
+    }
+
+    let active = true;
+    const today = createToday();
+    setLoadingScoped(true);
+    getBusDriverBookings(
+      bookingScope === 'today' ? { date: today, activeOnly: true } : { from: today, activeOnly: true },
+    )
+      .then((response) => {
+        if (active) setScopedBookings(unwrapResults(response));
+      })
+      .catch(() => {
+        if (active) setScopedBookings([]);
+      })
+      .finally(() => {
+        if (active) setLoadingScoped(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab, bookingScope]);
+
+  const listedBookings = bookingScope === 'run' ? bookings : scopedBookings;
+
   const filteredBookings = useMemo(() => {
     const query = bookingSearch.trim().toLowerCase();
 
-    return bookings.filter((booking) => {
+    return listedBookings.filter((booking) => {
       const sourceLabel = booking.bookingSource === 'bus_driver' ? 'manual' : 'user';
       const matchesFilter =
         bookingFilter === 'all'
@@ -597,7 +647,7 @@ const BusDriverHome = () => {
 
       return searchableValues.some((value) => String(value || '').toLowerCase().includes(query));
     });
-  }, [bookingFilter, bookingSearch, bookings]);
+  }, [bookingFilter, bookingSearch, listedBookings]);
 
   const handleToggleSeat = (seat) => {
     setSelectedSeats((current) =>
@@ -668,6 +718,18 @@ const BusDriverHome = () => {
       if (current.length <= 1) return current;
       return current.filter((schedule) => schedule.id !== scheduleId);
     });
+  };
+
+  const selectScheduleForOps = (schedule) => {
+    if (!schedule?.id || !persistedScheduleIds.has(schedule.id)) return;
+    setSelectedScheduleId(schedule.id);
+    const nextDate = getNextTravelDate(schedule);
+    setTravelDate(nextDate);
+    const parsedDate = parseDateKey(nextDate);
+    if (parsedDate) {
+      setCalendarMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
+    }
+    setSelectedSeats([]);
   };
 
   const handleSaveSchedules = async () => {
@@ -809,7 +871,7 @@ const BusDriverHome = () => {
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Today's Bus Details</p>
             <h3 className="mt-2 text-xl font-black text-slate-900">{selectedSchedule?.label || busService.busName || 'Assigned run'}</h3>
             <p className="mt-1 text-sm font-medium text-slate-500">
-              {formatDisplayDate(travelDate)} {selectedSchedule?.departureTime ? `· ${selectedSchedule.departureTime}` : ''}
+              {formatDisplayDate(travelDate)} {selectedSchedule?.departureTime ? `· ${formatClockTime(selectedSchedule.departureTime)}` : ''}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
@@ -890,7 +952,7 @@ const BusDriverHome = () => {
                         {stop?.stopType || 'stop'}
                       </span>
                       <p className="mt-2 text-xs font-semibold text-slate-500">
-                        {stop?.arrivalTime || '--:--'} to {stop?.departureTime || '--:--'}
+                        {formatClockTime(stop?.arrivalTime)} to {formatClockTime(stop?.departureTime)}
                       </p>
                     </div>
                   </div>
@@ -971,7 +1033,7 @@ const BusDriverHome = () => {
             >
               {schedules.map((schedule) => (
                 <option key={schedule.id} value={schedule.id}>
-                  {schedule.label || 'Bus Schedule'} · {schedule.departureTime || '--:--'}
+                  {schedule.label || 'Bus Schedule'} · {formatClockTime(schedule.departureTime)}
                 </option>
               ))}
             </select>
@@ -1015,7 +1077,12 @@ const BusDriverHome = () => {
           return (
             <div
               key={schedule.id}
-              className={`w-full rounded-[28px] border p-4 text-left transition ${
+              onClick={(event) => {
+                // typing in the card's fields must not switch the live schedule
+                if (event.target.closest('input, select, textarea, button, label')) return;
+                selectScheduleForOps(schedule);
+              }}
+              className={`w-full rounded-[28px] border p-4 text-left transition ${isPersisted && !active ? 'cursor-pointer' : ''} ${
                 active ? 'border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
               }`}
             >
@@ -1027,12 +1094,7 @@ const BusDriverHome = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!isPersisted) return;
-                      setSelectedScheduleId(schedule.id);
-                      setTravelDate(getNextTravelDate(schedule));
-                      setSelectedSeats([]);
-                    }}
+                    onClick={() => selectScheduleForOps(schedule)}
                     disabled={!isPersisted}
                     className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
                       active ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-600'
@@ -1247,6 +1309,13 @@ const BusDriverHome = () => {
           </div>
         ) : null}
 
+        {layout?.bus?.cancellationPolicy ? (
+          <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600">Cancellation Policy</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-700">{layout.bus.cancellationPolicy}</p>
+          </div>
+        ) : null}
+
         <button
           type="button"
           disabled={submitting || !selectedSeats.length}
@@ -1269,11 +1338,31 @@ const BusDriverHome = () => {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Bookings</p>
-            <h2 className="mt-2 text-xl font-black text-slate-900">Passenger list for the selected run</h2>
+            <h2 className="mt-2 text-xl font-black text-slate-900">
+              {bookingScope === 'run' ? 'Passenger list for the selected run' : bookingScope === 'today' ? "All of today's bookings" : 'Upcoming bookings'}
+            </h2>
           </div>
           <div className="rounded-full bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            {filteredBookings.length} of {bookings.length}
+            {loadingScoped ? '...' : `${filteredBookings.length} of ${listedBookings.length}`}
           </div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {[
+            { id: 'run', label: 'This run' },
+            { id: 'today', label: 'Today' },
+            { id: 'upcoming', label: 'Upcoming' },
+          ].map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setBookingScope(option.id)}
+              className={`rounded-2xl px-3 py-3 text-[11px] font-black uppercase tracking-[0.12em] transition ${
+                bookingScope === option.id ? 'bg-slate-950 text-white shadow-md' : 'bg-slate-50 text-slate-500'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <button
@@ -1290,7 +1379,7 @@ const BusDriverHome = () => {
           </div>
           <div className="rounded-2xl bg-slate-50 p-3 text-left">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Departure</p>
-            <p className="mt-1 text-sm font-black text-slate-900">{selectedSchedule?.departureTime || '--:--'}</p>
+            <p className="mt-1 text-sm font-black text-slate-900">{formatClockTime(selectedSchedule?.departureTime)}</p>
           </div>
         </div>
 
@@ -1372,7 +1461,7 @@ const BusDriverHome = () => {
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
                   <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><Clock3 size={13} /> Departure</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.routeSnapshot?.departureTime || '--:--'}</p>
+                  <p className="mt-1 text-sm font-black text-slate-900">{formatClockTime(booking.routeSnapshot?.departureTime)}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
                   <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><UserRound size={13} /> Fare</p>
@@ -1418,7 +1507,7 @@ const BusDriverHome = () => {
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Today's Bus Run</p>
                   <h2 className="mt-2 text-2xl font-black">{busService?.busName || 'Assigned Bus'}</h2>
                   <p className="mt-1 text-sm text-white/70">
-                    {formatDisplayDate(travelDate)} · {selectedSchedule?.label || 'Schedule'} · {selectedSchedule?.departureTime || '--:--'}
+                    {formatDisplayDate(travelDate)} · {selectedSchedule?.label || 'Schedule'} · {formatClockTime(selectedSchedule?.departureTime)}
                   </p>
                 </div>
                 <button
@@ -1478,7 +1567,7 @@ const BusDriverHome = () => {
                     </div>
                     <div className="rounded-2xl bg-slate-50 p-4">
                       <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><Clock3 size={14} /> Trip Window</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">{selectedSchedule?.departureTime || '--:--'} to {selectedSchedule?.arrivalTime || '--:--'}</p>
+                      <p className="mt-2 text-sm font-black text-slate-900">{formatClockTime(selectedSchedule?.departureTime)} to {formatClockTime(selectedSchedule?.arrivalTime)}</p>
                       <p className="mt-1 text-sm text-slate-500">{selectedSchedule?.status || 'active'}</p>
                     </div>
                   </div>
@@ -1564,7 +1653,7 @@ const BusDriverHome = () => {
                               {stop?.stopType || 'stop'}
                             </span>
                           </div>
-                          <p className="mt-2 text-xs font-semibold text-slate-500">{stop?.arrivalTime || '--:--'} to {stop?.departureTime || '--:--'}</p>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">{formatClockTime(stop?.arrivalTime)} to {formatClockTime(stop?.departureTime)}</p>
                         </article>
                       );
                     }) : (
@@ -1701,13 +1790,16 @@ const BusDriverHome = () => {
 
                 const isSelected = cell.value === travelDate;
                 const isToday = cell.value === createToday();
+                // A service date that has already passed cannot be picked.
+                const isPast = cell.value < createToday();
 
                 return (
                   <button
                     key={cell.value}
                     type="button"
+                    disabled={isPast}
                     onClick={() => handleTravelDateSelect(cell.value)}
-                    className={`h-11 rounded-2xl text-sm font-black transition ${
+                    className={`h-11 rounded-2xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-30 ${
                       isSelected
                         ? 'bg-slate-950 text-white shadow-md'
                         : isToday
@@ -1787,7 +1879,7 @@ const BusDriverHome = () => {
             </div>
           </section>
         ) : (
-          <div className="flex items-center justify-between px-2">
+          <div className="sticky top-0 z-30 -mx-4 flex items-center justify-between bg-[#f6f7fb]/95 px-6 py-3 backdrop-blur-md">
              <div className="flex items-center gap-3">
                <button
                   type="button"
@@ -1796,7 +1888,9 @@ const BusDriverHome = () => {
                 >
                   <ArrowLeft size={16} />
                 </button>
-                <h2 className="text-lg font-black text-slate-900 capitalize">{activeTab}</h2>
+                <h2 className="text-lg font-black text-slate-900">
+                  {{ schedule: 'Schedule', desk: 'Seat desk', bookings: 'Bookings' }[activeTab] || activeTab}
+                </h2>
              </div>
               <button
                  type="button"

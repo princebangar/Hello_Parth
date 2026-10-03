@@ -38,6 +38,12 @@ const money = (value) => {
     return `${sign}Rs ${Math.abs(amount).toFixed(2)}`;
 };
 
+// Transaction amounts show their direction: +Rs 50.00 money in, -Rs 12.50 money out.
+const signedMoney = (value) => {
+    const amount = Number(value || 0);
+    return `${amount > 0 ? '+' : ''}${money(amount)}`;
+};
+
 const toNumber = (value, fallback = 0) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -763,7 +769,7 @@ const DriverWallet = () => {
     return (
         <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-4 text-slate-950">
             <div className="mx-auto max-w-md">
-                <header className="mb-4 flex items-center justify-between">
+                <header className="sticky top-0 z-30 -mx-4 mb-4 flex items-center justify-between bg-[#f5f1e8] px-4 py-2">
                     <button
                         type="button"
                         onClick={() => navigate(-1)}
@@ -1010,7 +1016,7 @@ const DriverWallet = () => {
                                                 </div>
                                             </div>
                                             <div className="shrink-0 text-right">
-                                                <p className={`text-sm font-black ${isDebit ? 'text-rose-600' : 'text-emerald-700'}`}>{money(tx.amount)}</p>
+                                                <p className={`text-sm font-black ${isDebit ? 'text-rose-600' : 'text-emerald-700'}`}>{signedMoney(tx.amount)}</p>
                                                 <p className="mt-1 text-[10px] font-black uppercase text-slate-400">Bal {money(tx.balanceAfter)}</p>
                                             </div>
                                         </Motion.div>

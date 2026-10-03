@@ -91,6 +91,7 @@ const UserList = () => {
     } catch (err) {
       if (requestId !== latestRequestId.current) return;
       setError(err.message || 'Network error');
+      hasLoadedUsersRef.current = true;
     } finally {
       if (requestId === latestRequestId.current) {
         setIsLoading(false);
@@ -293,8 +294,11 @@ const UserList = () => {
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              className="w-full pl-10 pr-10 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
             />
+            {isRefreshing && (
+              <Loader2 size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-500 animate-spin" />
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <span>Show</span>
@@ -363,12 +367,6 @@ const UserList = () => {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
-        {isRefreshing && (
-          <div className="border-b border-gray-100 px-4 py-2 text-xs font-medium text-indigo-600 flex items-center gap-2">
-            <Loader2 size={13} className="animate-spin" />
-            Updating users...
-          </div>
-        )}
         <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full">
             <thead>

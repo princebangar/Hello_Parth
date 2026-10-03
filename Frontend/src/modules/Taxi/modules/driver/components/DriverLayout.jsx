@@ -8,6 +8,7 @@ import {
     getStoredDriverRole,
 } from '../services/registrationService';
 import DriverRideRequestListener from './DriverRideRequestListener';
+import { useScrollFocusedFieldIntoView } from '../../../shared/hooks/useTypingFocus';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
 const getPortalPrefix = (pathname = '', role = '') => {
@@ -125,6 +126,8 @@ const isPendingAllowedRoute = (pathname = '') =>
     ].includes(pathname);
 
 const DriverLayout = () => {
+    // Forms (registration, KYC, add driver/vehicle, bus desk) keep the field being typed in above the keyboard.
+    useScrollFocusedFieldIntoView();
     const location = useLocation();
     const navigate = useNavigate();
     const [isChecking, setIsChecking] = useState(false);

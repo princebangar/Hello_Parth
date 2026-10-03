@@ -200,12 +200,12 @@ const ReferralDashboard = () => {
           icon={UserCheck} 
         />
         <StatCard 
-          title="Active Referrals" 
+          title="Referred Accounts"  
           value={data?.active_referrals || "0"} 
           icon={Zap} 
         />
         <StatCard 
-          title="Referral Earning" 
+          title="Referral Rewards Paid"  
           value={data?.referral_earning ? `₹ ${data.referral_earning}` : "₹ 0"} 
           icon={IndianRupee} 
         />
@@ -224,7 +224,7 @@ const ReferralDashboard = () => {
                  val2={data?.user_referrals?.normal_user || 0}
                />
             </ChartContainer>
-            <ChartContainer title="User Monthly Referrals">
+            <ChartContainer title={`User Referrals by Month${data?.year ? ` (${data.year})` : ''}`}>
                <LineChartMock 
                  color="#FBBF24" /* yellow-400 */
                  data={data?.user_referrals?.monthly || emptyMonthly} 
@@ -246,7 +246,7 @@ const ReferralDashboard = () => {
                  val2={data?.driver_referrals?.normal_driver || 0}
                />
             </ChartContainer>
-            <ChartContainer title="Driver Monthly Referrals">
+            <ChartContainer title={`Driver Referrals by Month${data?.year ? ` (${data.year})` : ''}`}>
                <LineChartMock 
                  color="#FACC15" /* yellow-400 */
                  data={data?.driver_referrals?.monthly || emptyMonthly} 

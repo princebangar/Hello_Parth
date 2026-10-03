@@ -115,34 +115,7 @@ const OwnerFormPanel = ({
                 />
               </div>
 
-              <div>
-                <label className={adminLabelClass}>
-                  Password <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required={!isEdit}
-                  value={formData.password}
-                  onChange={(event) => setFormData({ ...formData, password: event.target.value })}
-                  placeholder="Enter Password"
-                  className={adminInputClass}
-                />
-              </div>
-
-              <div>
-                <label className={adminLabelClass}>
-                  Confirm Password <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required={!isEdit}
-                  value={formData.password_confirmation}
-                  onChange={(event) => setFormData({ ...formData, password_confirmation: event.target.value })}
-                  placeholder="Enter confirm Password"
-                  className={adminInputClass}
-                />
-              </div>
-
+              {/* No password fields: owners sign in with OTP. */}
               <div>
                 <label className={adminLabelClass}>Select Area</label>
                 <div className="relative">

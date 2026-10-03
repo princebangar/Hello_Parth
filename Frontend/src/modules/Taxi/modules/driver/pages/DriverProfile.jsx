@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
+import useBodyScrollLock from '../../../shared/hooks/useBodyScrollLock';
 import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
@@ -60,7 +61,7 @@ const formatRouteBookingLabel = (coordinates) => {
         return 'Receive requests from your selected area';
     }
 
-    return `Selected area ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
+    return `On - requests near the spot you pinned (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)})`;
 };
 
 const normalizeRouteBookingPreferences = (routeBooking = null) => {
@@ -91,6 +92,8 @@ const DriverProfile = () => {
     const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
     const [isLogoutOpen, setIsLogoutOpen] = useState(false);
     const [legalModal, setLegalModal] = useState(null);
+    // The page behind the policy sheet must not scroll while it is open.
+    useBodyScrollLock(Boolean(legalModal));
     const [driver, setDriver] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -132,19 +135,6 @@ const DriverProfile = () => {
 
     const openLegal = (type) => {
         const contentMap = {
-            driver_app: {
-                title: 'Driver Application',
-                Icon: UserPlus,
-                description: 'Join the Hello Parth fleet as a certified driver.',
-                content: `Hello Parth is always looking for professional, dedicated drivers to join our growing ecosystem. 
-
-Steps to apply:
-1. Ensure you have a valid Commercial Driving License.
-2. Visit the Hello Parth Driver Onboarding center or use the Mobile App.
-3. Submit required documents: Aadhaar, PAN, License, and Police Verification.
-4. Complete the Biometric enrollment process at any authorized Service Center.
-5. Once approved, you can start accepting rides and managing your earnings via the dashboard.`
-            },
             terms: {
                 title: 'Terms and Conditions',
                 Icon: FileText,
@@ -214,7 +204,7 @@ Processing Time: Refunds are typically credited back to the original payment met
     const driverRating = useMemo(() => Number(driver?.rating || 0), [driver?.rating]);
     const routeBookingSubtitle = useMemo(() => {
         if (!routeBookingPreferences.enabled) {
-            return 'Receive requests from your live location';
+            return 'Off - requests come from your live location. Turn on to pin where you are now';
         }
 
         return routeBookingPreferences.label || formatRouteBookingLabel(routeBookingPreferences.coordinates);
@@ -332,16 +322,9 @@ Processing Time: Refunds are typically credited back to the original payment met
                 ...(!isOwner ? [{ id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` }] : []),
             ]
         },
-        ...(!isOwner ? [{
-            title: 'Preferences',
-            items: [
-                { id: 'routeBooking', label: 'My Route Booking', sub: routeBookingSubtitle, icon: <Route size={20} />, type: 'toggle' },
-            ]
-        }] : []),
         {
             title: 'Legal & Support',
             items: [
-                { id: 'driver_app', label: 'Driver Application', icon: <UserPlus size={20} />, action: () => openLegal('driver_app') },
                 { id: 'terms', label: 'Terms & Conditions', icon: <FileText size={20} />, action: () => openLegal('terms') },
                 { id: 'privacy', label: 'Privacy Policy', icon: <Shield size={20} />, action: () => openLegal('privacy') },
                 { id: 'refund', label: 'Refund Policy', icon: <HandCoins size={20} />, action: () => openLegal('refund') },
@@ -374,7 +357,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                         </h2>
                         <div className="flex items-center gap-1.5 text-sky-500">
                             <Star size={14} fill="currentColor" />
-                            <span className="text-[14px] font-bold">{driverRating.toFixed(1)} Rating</span>
+                            <span className="text-[14px] font-bold">{driverRating > 0 ? `${driverRating.toFixed(1)} Rating` : 'New - no ratings yet'}</span>
                         </div>
                     </div>
                     {/* Integrated Profile Image */}
@@ -491,22 +474,22 @@ Processing Time: Refunds are typically credited back to the original payment met
                     </div>
 
                     <div className="space-y-5">
-                        <a href="mailto:customercare@helloparth.in" className="flex items-center gap-4 group">
+                        <a href="mailto:helloparthg@gmail.com" className="flex items-center gap-4 group">
                             <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
                                 <Mail size={18} />
                             </div>
                             <div>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Support</p>
-                                <p className="text-[14px] font-bold text-slate-800">customercare@helloparth.in</p>
+                                <p className="text-[14px] font-bold text-slate-800">helloparthg@gmail.com</p>
                             </div>
                         </a>
 
-                        <a href="tel:" className="flex items-center gap-4 group">
+                        <a href="tel:9193911911" className="flex items-center gap-4 group">
                             <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-sky-500 transition-colors shadow-sm">
                                 <Phone size={18} />
                             </div>
                             <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Call Owner</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Call Support</p>
                                 <p className="text-[14px] font-bold text-slate-800">91-93-911-911</p>
                             </div>
                         </a>

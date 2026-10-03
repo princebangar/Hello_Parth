@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import RowActionMenu from '../../components/ui/RowActionMenu';
+import useBodyScrollLock from '../../../../shared/hooks/useBodyScrollLock';
 
 const PoolingBookings = () => {
   const [bookings, setBookings] = useState([]);
@@ -24,6 +26,8 @@ const PoolingBookings = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [detail, setDetail] = useState(null);
+  useBodyScrollLock(Boolean(detail));
 
   const loadBookings = async (showToast = false) => {
     if (showToast) setIsRefreshing(true);
@@ -257,43 +261,28 @@ const PoolingBookings = () => {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button 
-                          className="inline-flex items-center gap-1 rounded bg-slate-50 border border-slate-200 px-1.5 py-1 text-[10px] font-bold text-slate-600 transition hover:bg-slate-100"
-                          title="View Details"
-                        >
-                          <Eye size={10} /> View
-                        </button>
-                        
-                        {booking.bookingStatus === 'confirmed' && (
-                          <button 
-                            className="inline-flex items-center gap-1 rounded bg-yellow-50 border border-yellow-200 px-1.5 py-1 text-[10px] font-bold text-yellow-700 transition hover:bg-yellow-100"
-                            title="Assign Vehicle/Driver"
-                          >
-                            <Car size={10} /> Assign
-                          </button>
-                        )}
-                        
-                        {['pending', 'confirmed'].includes(booking.bookingStatus) && (
-                          <button 
-                            onClick={() => handleStatusChange(booking._id, 'cancelled')}
-                            className="rounded border border-rose-100 bg-rose-50 p-1 text-rose-500 transition hover:bg-rose-100"
-                            title="Cancel Booking"
-                          >
-                            <XCircle size={12} />
-                          </button>
-                        )}
-                        
-                        {booking.bookingStatus === 'confirmed' && (
-                          <button 
-                            onClick={() => handleStatusChange(booking._id, 'completed')}
-                            className="rounded border border-emerald-100 bg-emerald-50 p-1 text-emerald-600 transition hover:bg-emerald-100"
-                            title="Complete Booking"
-                          >
-                            <CheckCircle2 size={12} />
-                          </button>
-                        )}
-                      </div>
+                      {/* Always visible (it used to appear only on hover) and drawn outside the table. */}
+                      <RowActionMenu
+                        label="Booking actions"
+                        items={[
+                          { key: 'view', label: 'View details', icon: <Eye size={14} />, onClick: () => setDetail(booking) },
+                          {
+                            key: 'complete',
+                            label: 'Mark completed',
+                            icon: <CheckCircle2 size={14} />,
+                            hidden: booking.bookingStatus !== 'confirmed',
+                            onClick: () => handleStatusChange(booking._id, 'completed'),
+                          },
+                          {
+                            key: 'cancel',
+                            label: 'Cancel booking',
+                            icon: <XCircle size={14} />,
+                            danger: true,
+                            hidden: !['pending', 'confirmed'].includes(booking.bookingStatus),
+                            onClick: () => handleStatusChange(booking._id, 'cancelled'),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))
@@ -302,6 +291,42 @@ const PoolingBookings = () => {
           </table>
         </div>
       </div>
+
+      {detail ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={() => setDetail(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pooling booking</p>
+                <h2 className="text-lg font-black text-slate-900">#{detail.bookingId || String(detail._id).slice(-8)}</h2>
+              </div>
+              <button type="button" onClick={() => setDetail(null)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Close">
+                <XCircle size={18} />
+              </button>
+            </div>
+            <dl className="space-y-2 text-sm">
+              {[
+                ['Customer', `${detail.user?.name || 'Unknown'} · ${detail.user?.phone || 'No phone'}`],
+                ['Route', detail.route?.routeName || 'N/A'],
+                ['Pickup', detail.pickupPoint?.name || detail.pickupPoint?.address || '-'],
+                ['Drop', detail.dropPoint?.name || detail.dropPoint?.address || '-'],
+                ['Travel date', detail.travelDate ? new Date(detail.travelDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '-'],
+                ['Seats', String(detail.seatsBooked ?? '-')],
+                ['Vehicle', detail.vehicle?.name ? `${detail.vehicle.name} (${detail.vehicle.vehicleNumber || '-'})` : '-'],
+                ['Driver', detail.vehicle?.driverName ? `${detail.vehicle.driverName} · ${detail.vehicle.driverPhone || ''}` : '-'],
+                ['Fare', `Rs ${detail.fare ?? 0}`],
+                ['Payment', detail.paymentStatus || '-'],
+                ['Status', detail.bookingStatus || '-'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-start gap-3">
+                  <dt className="w-24 shrink-0 text-[11px] font-black uppercase tracking-wider text-slate-400">{label}</dt>
+                  <dd className="min-w-0 break-words font-bold text-slate-800">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -295,7 +295,12 @@ const normalizeTodaySummary = (value = {}) => ({
     activeSeconds: Math.max(0, Math.round(Number(value?.activeSeconds || 0))),
 });
 
-const formatSummaryMoney = (value) => `₹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
+// Paise are shown when the amount has them (₹152.50), whole rupees stay short (₹150).
+const formatSummaryMoney = (value) => {
+    const amount = Math.round(Number(value || 0) * 100) / 100;
+    const hasPaise = Math.abs(amount % 1) > 0;
+    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: hasPaise ? 2 : 0, maximumFractionDigits: 2 })}`;
+};
 
 const formatSummaryDistance = (meters) => {
     const value = Number(meters || 0);
@@ -1302,14 +1307,12 @@ const DriverHome = () => {
             
             // OPTIMIZATION: Use last known coords to speed up the transition
             // instead of waiting for a fresh GPS lock (which can take 2-6 seconds)
-            let coordinates = Array.isArray(routeBookingPreferences.coordinates) && routeBookingPreferences.enabled
-                ? routeBookingPreferences.coordinates
-                : driverCoordsRef.current;
+            let coordinates = driverCoordsRef.current;
             
             if (!coordinates) {
                 // If we really don't have any coords yet, we MUST wait for them once
                 coordinates = await updateDriverLocation({ quiet: true });
-            } else if (!routeBookingPreferences.enabled) {
+            } else {
                 // Refresh location in background for better accuracy without blocking the UI
                 updateDriverLocation({ quiet: true }).catch(() => {});
             }
@@ -1354,11 +1357,7 @@ const DriverHome = () => {
             });
             emitOnlineLocationUpdate(finalCoords, { force: true });
             
-            setStatusMessage(
-                routeBookingPreferences.enabled
-                    ? 'You are online. Matching rides from your selected route area.'
-                    : 'You are online. Waiting for nearby bookings.',
-            );
+            setStatusMessage('You are online. Waiting for nearby bookings.');
             refreshTodaySummary().catch(() => {});
         } catch (error) {
             console.error('[driver-home] goOnline failed', error);
@@ -1372,7 +1371,7 @@ const DriverHome = () => {
         } finally {
             setIsTogglingDuty(false);
         }
-    }, [emitOnlineLocationUpdate, expiredDocumentNames, refreshTodaySummary, routeBookingPreferences.coordinates, routeBookingPreferences.enabled, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
+    }, [emitOnlineLocationUpdate, expiredDocumentNames, refreshTodaySummary, updateDriverLocation, vehicleReapprovalPending, walletAlertState]);
 
     const goOffline = useCallback(async () => {
         setIsTogglingDuty(true);
@@ -2482,7 +2481,11 @@ const DriverHome = () => {
             </div>
 
             {/* --- BOTTOM FLOATING UI --- */}
-            <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto">
+            {/* Sits exactly on top of the bottom bar (68px + 8px top padding + safe-area bottom padding). */}
+            <div
+                className="fixed left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto"
+                style={{ bottom: 'calc(76px + max(env(safe-area-inset-bottom), 8px))' }}
+            >
                 <AnimatePresence>
                     {statusMessage ? (
                         <motion.div

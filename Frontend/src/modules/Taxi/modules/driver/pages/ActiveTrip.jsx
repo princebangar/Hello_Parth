@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import simplify from 'simplify-js';
 import {
@@ -946,6 +947,10 @@ const ActiveTrip = () => {
         effectiveState?.pickupAddress ||
         '',
     ).trim();
+    // Stops the rider added on the way, in order.
+    const rideStops = (Array.isArray(liveRaw?.stops) ? liveRaw.stops : Array.isArray(effectiveState?.stops) ? effectiveState.stops : [])
+        .map((stop) => String((stop && typeof stop === 'object' ? stop.address : stop) || '').trim())
+        .filter(Boolean);
     const dropAddressLabel = String(
         liveRaw?.dropAddress ||
         liveRequest?.drop ||
@@ -1096,6 +1101,10 @@ const ActiveTrip = () => {
         }
     }, [effectiveState?.liveStatus, effectiveState?.status, exitToDriverHome, liveRaw?.liveStatus, liveRaw?.status, liveRequest?.liveStatus, liveRequest?.status, phase]);
 
+    // True once the ride is finished (collecting payment / rating) - from then on "no active ride" is not a cancel.
+    const tripFinishedRef = React.useRef(false);
+    tripFinishedRef.current = ['payment_confirm', 'review', 'complete', 'completed'].includes(String(phase || ''));
+
     useEffect(() => {
         const currentRideId = rideId || routeRideId;
 
@@ -1118,7 +1127,7 @@ const ActiveTrip = () => {
             }
 
             const closeReason = String(payload.reason || '').toLowerCase();
-            if (closeReason === 'accepted-by-another-driver') {
+            if (closeReason === 'accepted-by-another-driver' || tripFinishedRef.current) {
                 return;
             }
 
@@ -1142,6 +1151,9 @@ const ActiveTrip = () => {
 
         const handleRideState = (payload) => {
             if (!payload) {
+                if (tripFinishedRef.current) {
+                    return;
+                }
                 clearStoredTripPhase(currentRideId);
                 clearStoredTripUiState(currentRideId);
                 exitToDriverHome('Ride was cancelled or is no longer active.');
@@ -1818,14 +1830,16 @@ const ActiveTrip = () => {
             return;
         }
 
+        let startedRide = null;
         try {
             if (rideId) {
                 const driverToken = getLocalDriverToken();
-                await api.patch(
+                const startResponse = await api.patch(
                     `/rides/${rideId}/status`,
                     { status: 'started', otp: String(enteredOtp) },
                     withDriverAuthorization(driverToken),
                 );
+                startedRide = unwrapApiPayload(startResponse);
             }
         } catch (startError) {
             setOtpError(
@@ -1845,12 +1859,20 @@ const ActiveTrip = () => {
             : liveRequest?.rideId || liveRequest?._id || liveRequest?.id
                 ? liveRequest?.raw || liveRequest
                 : effectiveState?.request?.raw || effectiveState;
+        // The server adds the pickup waiting charge to the fare at start; show the amount it returned.
+        const serverFare = Number(startedRide?.fare);
+        const waitingAmount = Number(startedRide?.waitingCharge?.amount || 0);
+        if (waitingAmount > 0) {
+            toast.success(`Waiting charge Rs ${waitingAmount} added (${startedRide.waitingCharge.minutes} min)`);
+        }
         const optimisticSnapshot = buildPersistedTripState(rawJobForSnapshot, {
             phase: 'in_trip',
             liveStatus: 'started',
             status: 'ongoing',
             startedAt: startedAtIso,
             arrivedAt: '',
+            ...(Number.isFinite(serverFare) && serverFare > 0 ? { fare: serverFare } : {}),
+            ...(waitingAmount > 0 ? { waitingCharge: startedRide.waitingCharge } : {}),
         });
 
         if (optimisticSnapshot) {
@@ -2425,7 +2447,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-5 pb-8 shadow-2xl border-t border-slate-100 max-h-[88vh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-3">
@@ -2494,7 +2516,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-6 pb-8 shadow-2xl border-t border-slate-100 max-h-[88vh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
                         >
                             <div className="text-center mb-6">
                                 <h3 className="text-xl font-semibold text-slate-900 tracking-tight uppercase leading-none">Security Pin</h3>
@@ -2579,7 +2601,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-5 pb-8 shadow-2xl border-t border-slate-100 max-h-[88vh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
                         >
                                 <div className="mb-5 rounded-[22px] border border-slate-100 bg-slate-50/85 px-4 py-3.5 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
                                 <div className="flex items-start justify-between gap-3">
@@ -2588,6 +2610,11 @@ const ActiveTrip = () => {
                                         <p className="text-[15px] font-semibold text-slate-900 tracking-tight leading-5 break-words">
                                             {tripData.drop}
                                         </p>
+                                        {rideStops.length > 0 ? (
+                                            <p className="mt-1.5 text-[12px] font-bold leading-5 text-amber-700 break-words">
+                                                Stops on the way: {rideStops.map((stop, index) => `${index + 1}. ${stop}`).join('  ')}
+                                            </p>
+                                        ) : null}
                                     </div>
                                     <button
                                         onClick={triggerEmergencySos}
@@ -2662,7 +2689,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-6 pb-8 shadow-2xl border-t border-slate-100 max-h-[88vh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
                         >
                             <div className="text-center mb-6">
                                 <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-lg transition-all duration-500 text-white" style={{ backgroundColor: driverPaymentStatus === 'success' ? routeStrokeColor : '#0f172a' }}>
@@ -2736,6 +2763,12 @@ const ActiveTrip = () => {
                                                     <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Pickup</p>
                                                     <p className="mt-1 text-[13px] font-bold leading-5 text-slate-900 break-words">{tripData.pickup}</p>
                                                 </div>
+                                                {rideStops.map((stop, index) => (
+                                                    <div key={`stop-${index}`}>
+                                                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-600">Stop {index + 1}</p>
+                                                        <p className="mt-1 text-[13px] font-bold leading-5 text-slate-900 break-words">{stop}</p>
+                                                    </div>
+                                                ))}
                                                 <div>
                                                     <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Destination</p>
                                                     <p className="mt-1 text-[13px] font-bold leading-5 text-slate-900 break-words">{tripData.drop}</p>
@@ -2916,7 +2949,7 @@ const ActiveTrip = () => {
                             key="review"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            className="bg-white rounded-t-[2.5rem] p-6 pb-8 shadow-2xl border-t border-slate-50 text-center"
+                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-50 text-center"
                         >
                             <div className="mb-8 space-y-4">
                                 <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto shadow-lg" style={{ backgroundColor: routeStrokeColor }}><User size={24} className="text-white" /></div>

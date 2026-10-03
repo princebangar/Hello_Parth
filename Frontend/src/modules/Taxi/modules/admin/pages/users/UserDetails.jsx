@@ -157,13 +157,12 @@ const UserDetails = () => {
       const walletData = await walletRes.json();
       if (walletData.success) {
         const history = (walletData.data?.results || []).map(w => {
-          // Determine type from transaction_alias or amount sign
-          const isCredit = w.transaction_alias === 'ADMIN_CREDIT' || w.amount > 0;
+          const isCredit = w.type !== 'debit';
           return {
             id: w._id,
-            amount: Math.abs(w.amount), // Use absolute for display but sign for logic
+            amount: Math.abs(Number(w.amount || 0)),
             type: isCredit ? 'credit' : 'debit',
-            remarks: w.remarks || (isCredit ? 'Credit Adjustment' : 'Debit Adjustment'),
+            remarks: w.description || (isCredit ? 'Credit Adjustment' : 'Debit Adjustment'),
             date: w.createdAt ? new Date(w.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A'
           };
         });
@@ -173,12 +172,13 @@ const UserDetails = () => {
         const totalCredit = history.filter(h => h.type === 'credit').reduce((sum, h) => sum + h.amount, 0);
         const totalDebit = history.filter(h => h.type === 'debit').reduce((sum, h) => sum + h.amount, 0);
         
+        // Available balance = the real wallet balance from the server (history alone misses old/food rows)
         setUser(prev => ({
           ...prev,
           wallet: {
             total: totalCredit,
             spend: totalDebit,
-            balance: totalCredit - totalDebit
+            balance: Number(walletData.data?.balance || 0)
           }
         }));
       }
@@ -207,8 +207,8 @@ const UserDetails = () => {
         },
         body: JSON.stringify({
           amount: parseFloat(walletAmount),
-          payment_type: walletType,
-          remarks: `Admin ${walletType} action`
+          operation: walletType,
+          description: `Admin ${walletType} action`
         })
       });
       
@@ -483,7 +483,7 @@ const UserDetails = () => {
             {/* PAYMENT SUMMARY */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {[
-                { label: 'Total Wallet Balance', val: user.wallet.total, icon: WalletIcon, color: 'blue' },
+                { label: 'Total Added', val: user.wallet.total, icon: WalletIcon, color: 'blue' },
                 { label: 'Spend Amount', val: user.wallet.spend, icon: TrendingUp, color: 'rose' },
                 { label: 'Available Balance', val: user.wallet.balance, icon: WalletIcon, color: 'emerald' }
               ].map((s, i) => (

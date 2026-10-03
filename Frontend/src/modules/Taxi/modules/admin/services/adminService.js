@@ -102,6 +102,10 @@ export const adminService = {
   getSubscriptionSettings: () => api.get('/admin/driver-subscriptions/settings'),
   updateSubscriptionSettings: (data) => api.post('/admin/driver-subscriptions/settings', data),
   getUserSubscriptionPlans: () => api.get('/admin/user-subscriptions/plans/list'),
+  setSubscriptionPlanActive: (audience, id, active) =>
+    api.patch(`/admin/${audience === 'user' ? 'user' : 'driver'}-subscriptions/plans/${id}`, { active }),
+  deleteSubscriptionPlan: (audience, id) =>
+    api.delete(`/admin/${audience === 'user' ? 'user' : 'driver'}-subscriptions/plans/${id}`),
   createUserSubscriptionPlan: (planData) => api.post('/admin/user-subscriptions/plans/create', planData),
   getUserSubscriptionsByUserId: (id) => api.get(`/admin/users/${id}/subscriptions`),
   
@@ -241,6 +245,8 @@ export const adminService = {
   updatePoolingBookingStatus: (id, status) => api.patch(`/admin/pooling-bookings/${id}/status`, { status }),
 
   getAdminBusBookings: (params = {}) => api.get('/admin/bus-bookings', { params }),
+  // Registrations, open support tickets and re-uploaded documents waiting for the admin (bell 'Requests' tab).
+  getPendingRequests: () => api.get('/admin/pending-requests'),
   getPendingBusDrivers: () => api.get('/admin/bus-services/pending-drivers'),
   approvePendingBusDriver: (id) => api.patch(`/admin/bus-services/pending-drivers/${id}/approve`),
   rejectPendingBusDriver: (id, rejectionReason = '') =>

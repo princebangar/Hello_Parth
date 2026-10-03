@@ -17,8 +17,6 @@ const initialFormData = {
   name: '',
   mobile: '',
   email: '',
-  password: '',
-  password_confirmation: '',
   gender: '',
   profile_picture: '',
 };
@@ -105,11 +103,6 @@ const FleetDriverCreate = () => {
 
     if (submitting) return;
 
-    if (formData.password !== formData.password_confirmation) {
-      alert('Passwords do not match');
-      return;
-    }
-
     setSubmitting(true);
 
     try {
@@ -118,7 +111,6 @@ const FleetDriverCreate = () => {
         mobile: formData.mobile,
         phone: formData.mobile,
         email: formData.email,
-        password: formData.password,
         gender: formData.gender,
         owner_id: formData.owner_id,
         service_location_id: formData.service_location_id,
@@ -265,34 +257,7 @@ const FleetDriverCreate = () => {
               />
             </div>
 
-            <div>
-              <label className={labelClass}>
-                Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                required
-                type="password"
-                value={formData.password}
-                onChange={(event) => setField('password', event.target.value)}
-                placeholder="Enter Password"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                Confirm Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                required
-                type="password"
-                value={formData.password_confirmation}
-                onChange={(event) => setField('password_confirmation', event.target.value)}
-                placeholder="Confirm Password"
-                className={inputClass}
-              />
-            </div>
-
+            {/* No password fields: fleet drivers sign in with OTP. */}
             <div>
               <label className={labelClass}>
                 Gender <span className="text-red-500">*</span>
@@ -315,6 +280,9 @@ const FleetDriverCreate = () => {
             <label className={labelClass}>Profile</label>
             <label className="flex h-24 cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-gray-300 bg-gray-50 text-xs font-semibold text-slate-400 transition-colors hover:border-yellow-400 hover:text-yellow-500">
               <Upload size={20} className="mb-1" />
+              {formData.profile_picture ? (
+                <img src={formData.profile_picture} alt="Profile preview" className="mb-1 h-10 w-10 rounded-full object-cover" />
+              ) : null}
               <span>{profileName || 'Upload Profile'}</span>
               <input type="file" accept="image/*" onChange={handleProfileChange} className="hidden" />
             </label>

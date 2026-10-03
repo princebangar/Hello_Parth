@@ -29,6 +29,7 @@ import {
   Circle,
   Polygon,
   Autocomplete,
+  MarkerF,
 } from "@react-google-maps/api";
 import { useDrawingGoogleMapsLoader } from "../../utils/googleMaps";
 import { adminService } from "../../services/adminService";
@@ -57,6 +58,9 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
   const [editingId, setEditingId] = useState(id || null);
   const [mapCenter, setMapCenter] = useState({ lat: 21.1458, lng: 79.0882 }); 
   const [autocomplete, setAutocomplete] = useState(null);
+  // Pin for the place found with the map search box.
+  const [searchedPlace, setSearchedPlace] = useState(null);
+  const [searchError, setSearchError] = useState('');
   const [countryBoundaryPaths, setCountryBoundaryPaths] = useState([]);
   const [boundaryLoading, setBoundaryLoading] = useState(false);
   const mapRef = useRef(null);
@@ -270,17 +274,41 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     circleRef.current = null;
   }, []);
 
-  const onPlaceChanged = () => {
-    if (autocomplete !== null) {
-      const place = autocomplete.getPlace();
-      if (place.geometry) {
-        const loc = {
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        };
-        setMapCenter(loc);
-        mapRef.current?.panTo(loc);
+  // Move the map to a found place: fit its area (city/locality) or zoom in on a point, and drop a pin there.
+  const showSearchedLocation = (location, viewport, label = '') => {
+    const loc = { lat: location.lat(), lng: location.lng() };
+    setSearchError('');
+    setMapCenter(loc);
+    setSearchedPlace({ ...loc, label });
+    if (viewport && mapRef.current) {
+      mapRef.current.fitBounds(viewport);
+    } else {
+      mapRef.current?.panTo(loc);
+      mapRef.current?.setZoom(15);
+    }
+  };
+
+  // Pressing Enter without picking a suggestion still finds the typed place.
+  const geocodeTypedPlace = (text) => {
+    const query = String(text || '').trim();
+    if (!query || !window.google?.maps?.Geocoder) return;
+    new window.google.maps.Geocoder().geocode({ address: query, region: 'in' }, (results, status) => {
+      const first = status === 'OK' ? results?.[0] : null;
+      if (!first?.geometry?.location) {
+        setSearchError('Place not found. Pick one of the suggestions.');
+        return;
       }
+      showSearchedLocation(first.geometry.location, first.geometry.viewport, first.formatted_address || query);
+    });
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete === null) return;
+    const place = autocomplete.getPlace();
+    if (place?.geometry?.location) {
+      showSearchedLocation(place.geometry.location, place.geometry.viewport, place.formatted_address || place.name || '');
+    } else if (place?.name) {
+      geocodeTypedPlace(place.name);
     }
   };
 
@@ -790,6 +818,10 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                              >
                                <input
                                  type="text"
+                                 onKeyDown={(event) => {
+                                   // Stop Enter from submitting anything; the place lookup handles it.
+                                   if (event.key === 'Enter') event.preventDefault();
+                                 }}
                                  placeholder="Search for a city or zone"
                                  className="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none placeholder:text-gray-400"
                                />
@@ -803,6 +835,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                              />
                            )}
                         </div>
+                        {searchError ? <p className="mt-1 px-1 text-[11px] font-semibold text-rose-600">{searchError}</p> : null}
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between gap-3 md:justify-end">
@@ -927,6 +960,9 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
                                 options={{ strokeColor: '#f43f5e', fillOpacity: 0.05, fillColor: '#f43f5e', strokeWeight: 1.5, strokeDasharray: '5,5', clickable: false }}
                               />
                            ))}
+                           {searchedPlace ? (
+                             <MarkerF position={{ lat: searchedPlace.lat, lng: searchedPlace.lng }} title={searchedPlace.label || 'Searched place'} />
+                           ) : null}
                          </GoogleMap>
                        </div>
                      ) : (

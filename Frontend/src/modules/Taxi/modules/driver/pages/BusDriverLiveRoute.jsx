@@ -26,6 +26,7 @@ import {
   updateBusDriverLiveLocation,
   updateBusDriverLiveTripStatus,
 } from '../services/busDriverService';
+import { formatClockTime } from '../../../shared/utils/clockTime';
 
 const MAP_CONTAINER_STYLE = {
   width: '100%',
@@ -956,7 +957,7 @@ const BusDriverLiveRoute = () => {
                   {busService.route?.originCity || 'Origin'} to {busService.route?.destinationCity || 'Destination'}
                 </h1>
                 <p className="mt-1 text-sm text-white/70">
-                  {formatDisplayDate(effectiveTravelDate)} {selectedSchedule?.label ? `• ${selectedSchedule.label}` : ''} {selectedSchedule?.departureTime ? `• ${selectedSchedule.departureTime}` : ''}
+                  {formatDisplayDate(effectiveTravelDate)} {selectedSchedule?.label ? `• ${selectedSchedule.label}` : ''} {selectedSchedule?.departureTime ? `• ${formatClockTime(selectedSchedule.departureTime)}` : ''}
                 </p>
               </div>
             </div>
@@ -1214,12 +1215,12 @@ const BusDriverLiveRoute = () => {
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><CalendarDays size={14} /> Schedule</p>
                   <p className="mt-2 text-sm font-black text-slate-900">{selectedSchedule?.label || 'Schedule not set'}</p>
-                  <p className="mt-1 text-sm text-slate-500">{selectedSchedule?.departureTime || '--:--'} to {selectedSchedule?.arrivalTime || '--:--'}</p>
+                  <p className="mt-1 text-sm text-slate-500">{formatClockTime(selectedSchedule?.departureTime)} to {formatClockTime(selectedSchedule?.arrivalTime)}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"><Clock3 size={14} /> Last Update</p>
                   <p className="mt-2 text-sm font-black text-slate-900">
-                    {liveTracking?.lastUpdatedAt ? new Date(liveTracking.lastUpdatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    {liveTracking?.lastUpdatedAt ? new Date(liveTracking.lastUpdatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase() : '--:--'}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">{syncingTrip ? 'Refreshing live trip...' : 'Live sync active'}</p>
                 </div>
@@ -1247,7 +1248,7 @@ const BusDriverLiveRoute = () => {
                         <div className="min-w-0">
                           <p className="text-sm font-black text-slate-900">{stop?.city || 'City not set'}</p>
                           <p className="mt-1 text-sm text-slate-600">{stop?.pointName || 'Point not set'}</p>
-                          <p className="mt-2 text-xs font-semibold text-slate-500">{stop?.arrivalTime || '--:--'} to {stop?.departureTime || '--:--'}</p>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">{formatClockTime(stop?.arrivalTime)} to {formatClockTime(stop?.departureTime)}</p>
                         </div>
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${stopTone}`}>
                           {stop?.stopType || 'stop'}

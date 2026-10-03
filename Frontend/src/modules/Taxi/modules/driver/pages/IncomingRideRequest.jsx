@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Banknote,
@@ -84,13 +84,21 @@ const IncomingRideRequest = ({
   const [timer, setTimer] = useState(requestDurationSeconds);
   const [previewNow, setPreviewNow] = useState(() => Date.now());
   const data = requestData;
+  const onDeclineRef = useRef(onDecline);
+  onDeclineRef.current = onDecline;
+  // One fixed expiry per ride request, so parent re-renders can never restart the countdown.
+  const expiryRef = useRef({ key: '', expiresAt: 0 });
 
   useEffect(() => {
     if (isPreviewMode || !visible || !data?.rideId) {
       return undefined;
     }
 
-    const expiresAt = getRequestExpiryTime(data, requestDurationSeconds);
+    const requestKey = `${data.rideId}|${data.requestExpiresAt || data.raw?.requestExpiresAt || ''}`;
+    if (expiryRef.current.key !== requestKey) {
+      expiryRef.current = { key: requestKey, expiresAt: getRequestExpiryTime(data, requestDurationSeconds) };
+    }
+    const { expiresAt } = expiryRef.current;
     let hasExpired = false;
 
     const syncTimer = () => {
@@ -99,7 +107,7 @@ const IncomingRideRequest = ({
 
       if (!hasExpired && remainingSeconds <= 0) {
         hasExpired = true;
-        onDecline();
+        onDeclineRef.current?.();
       }
     };
 
@@ -109,7 +117,7 @@ const IncomingRideRequest = ({
     return () => {
       clearInterval(interval);
     };
-  }, [visible, onDecline, requestDurationSeconds, data?.rideId, data?.requestExpiresAt, isPreviewMode]);
+  }, [visible, requestDurationSeconds, data?.rideId, data?.requestExpiresAt, isPreviewMode]);
 
   useEffect(() => {
     if (!visible || !isPreviewMode) {
@@ -145,6 +153,9 @@ const IncomingRideRequest = ({
   const accentTextClass = isParcel ? 'text-orange-600' : isIntercity ? 'text-yellow-700' : 'text-blue-600';
   const pickupAddress = data.raw?.pickupAddress || data.pickup || 'Pickup point';
   const dropAddress = data.raw?.dropAddress || data.drop || 'Drop point';
+  const rideStops = (Array.isArray(data.raw?.stops) ? data.raw.stops : Array.isArray(data.stops) ? data.stops : [])
+    .map((stop) => String((stop && typeof stop === 'object' ? stop.address : stop) || '').trim())
+    .filter(Boolean);
   const attemptCount = Number(data.attempt || data.raw?.attempt || 1);
   const maxAttempts = Number(data.maxAttempts || data.raw?.maxAttempts || 1);
   const searchRadiusMeters = Number(data.raw?.radius || data.radius || 0);
@@ -190,13 +201,18 @@ const IncomingRideRequest = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 px-3 pb-4 sm:pb-8 backdrop-blur-[2px]"
+        onClick={(event) => {
+          if (isPreviewMode && event.target === event.currentTarget) {
+            (onClose || onDecline)?.();
+          }
+        }}
       >
         <Motion.div
           initial={{ y: 80, scale: 0.96 }}
           animate={{ y: 0, scale: 1 }}
           exit={{ y: 80, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-          className="relative w-full max-w-[430px] overflow-hidden rounded-[28px] bg-white shadow-[0_30px_90px_rgba(0,0,0,0.22)]"
+          className="relative w-full max-w-[430px] max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-[28px] bg-white shadow-[0_30px_90px_rgba(0,0,0,0.22)]"
         >
           {!isPreviewMode ? (
             <div className="absolute inset-x-0 top-0 h-[3px] bg-slate-100">
@@ -383,6 +399,21 @@ const IncomingRideRequest = ({
                     <p className="mt-1 text-[14px] font-bold leading-snug text-slate-800">{pickupAddress}</p>
                   </div>
                 </div>
+
+                {/* Stops the rider added, in order */}
+                {rideStops.map((stop, index) => (
+                  <div key={`stop-${index}`} className="flex items-start gap-4">
+                    <div className="relative z-10 mt-1 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-amber-100 shadow-sm border border-white">
+                      <span className="text-[9px] font-black text-amber-700">{index + 1}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-flex rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
+                        Stop {index + 1}
+                      </span>
+                      <p className="mt-1 text-[14px] font-bold leading-snug text-slate-800">{stop}</p>
+                    </div>
+                  </div>
+                ))}
 
                 {/* Drop Pin */}
                 <div className="flex items-start gap-4">

@@ -42,6 +42,19 @@ const getParticipantTitle = (alert) =>
     ? alert?.driverName || 'Driver'
     : alert?.riderName || 'Passenger';
 
+const getParticipantPhone = (alert) =>
+  alert?.sourceApp === 'driver' ? alert?.driverPhone || '' : alert?.riderPhone || '';
+
+const ContextItem = ({ label, value, phone }) => (
+  <div className="min-w-0">
+    <p className="text-[9px] font-semibold text-gray-500 mb-0.5">{label}</p>
+    <p className="text-[11px] font-bold text-gray-900 break-words">{value || 'N/A'}</p>
+    {phone ? (
+      <a href={`tel:${phone}`} className="text-[11px] font-semibold text-blue-600 hover:underline">{phone}</a>
+    ) : null}
+  </div>
+);
+
 const getMapCenter = (alert) =>
   Number.isFinite(Number(alert?.location?.lat)) && Number.isFinite(Number(alert?.location?.lng))
     ? { lat: Number(alert.location.lat), lng: Number(alert.location.lng) }
@@ -70,31 +83,31 @@ const IncidentCard = ({ alert, isActive, onClick }) => (
         : 'bg-white border-gray-200 hover:border-yellow-200'
     }`}
   >
-    <div className="flex justify-between items-start mb-2">
-      <div className="flex items-center gap-2">
+    <div className="flex justify-between items-start gap-2 mb-2">
+      <div className="flex items-center gap-2 min-w-0">
         <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-100 text-gray-500'}`}>
           <UserIcon size={16} />
         </div>
-        <div>
-          <div className="text-[13px] font-bold text-gray-900 leading-none mb-1">
+        <div className="min-w-0">
+          <div className="text-[13px] font-bold text-gray-900 leading-tight truncate">
             {getParticipantTitle(alert)}
           </div>
-          <p className="text-[10px] font-medium text-gray-500 leading-none">
-            ID: {alert?.driverId?.slice(-6) || alert?.userId?.slice(-6) || 'Unknown'}
+          <p className="text-[10px] font-medium text-gray-500 leading-tight truncate">
+            {alert?.sourceApp === 'driver' ? 'Driver' : 'Passenger'}{getParticipantPhone(alert) ? ` · ${getParticipantPhone(alert)}` : ''}
           </p>
         </div>
       </div>
-      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-100 text-red-700">
-        Prio-1
+      <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-100 text-red-700">
+        SOS
       </span>
     </div>
 
     <div className="grid grid-cols-2 gap-2 mb-2 text-[11px]">
-      <div className="bg-gray-50/80 p-1.5 rounded-lg border border-gray-100">
+      <div className="bg-gray-50/80 p-1.5 rounded-lg border border-gray-100 overflow-hidden min-w-0">
         <span className="block text-[9px] text-gray-500 font-semibold mb-0.5">Vehicle</span>
-        <span className="font-bold text-gray-800">{alert?.vehicleLabel || 'N/A'}</span>
+        <span className="font-bold text-gray-800 truncate block">{alert?.vehicleLabel || 'N/A'}</span>
       </div>
-      <div className="bg-gray-50/80 p-1.5 rounded-lg border border-gray-100 overflow-hidden">
+      <div className="bg-gray-50/80 p-1.5 rounded-lg border border-gray-100 overflow-hidden min-w-0">
         <span className="block text-[9px] text-gray-500 font-semibold mb-0.5">Passenger</span>
         <span className="font-bold text-gray-800 truncate block">{alert?.riderName || 'None'}</span>
       </div>
@@ -105,98 +118,13 @@ const IncidentCard = ({ alert, isActive, onClick }) => (
         <Clock size={12} className="text-gray-400 shrink-0" /> 
         <span>{formatRelativeTime(alert?.createdAt)}</span>
       </div>
-      <div className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
-        <MapPin size={12} className="text-red-500 shrink-0" />
-        <span className="truncate">{alert?.locationLabel || alert?.pickupAddress || 'Locating...'}</span>
+      <div className="flex items-start gap-1.5 text-[10px] text-gray-600 font-medium min-w-0">
+        <MapPin size={12} className="text-red-500 shrink-0 mt-px" />
+        <span className="line-clamp-2 break-words min-w-0">{alert?.locationLabel || alert?.pickupAddress || 'Location not shared'}</span>
       </div>
     </div>
   </div>
 );
-
-const AdminSosChat = ({ alert }) => {
-  const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-  const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    setMessages([
-      { id: '1', text: 'Distress signal received. Open communication channel established.', sender: 'system', time: new Date() }
-    ]);
-  }, [alert]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSend = () => {
-    // Disabled as per no API requirement. Handled by button disabled state.
-  };
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 flex flex-col h-[320px] shadow-sm">
-      {/* Header */}
-      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-xl">
-        <div>
-          <div className="text-xs font-bold text-gray-900">Live Support Chat</div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-            <span className="text-[10px] font-semibold text-gray-500">{getParticipantTitle(alert)} Online</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-gray-50/30">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex flex-col ${msg.sender === 'admin' ? 'items-end' : msg.sender === 'system' ? 'items-center' : 'items-start'}`}>
-            {msg.sender === 'system' ? (
-              <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{msg.text}</span>
-            ) : (
-              <div className={`max-w-[85%] rounded-xl p-2.5 text-[11px] ${msg.sender === 'admin' ? 'bg-yellow-400 text-black rounded-tr-none' : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none shadow-sm'}`}>
-                <p className="font-medium leading-relaxed">{msg.text}</p>
-                <div className={`flex items-center gap-1 mt-1 text-[9px] font-bold ${msg.sender === 'admin' ? 'text-black/60 justify-end' : 'text-gray-400'}`}>
-                  {msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {msg.sender === 'admin' && <CheckCheck size={10} className="text-black" />}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="p-2 border-t border-gray-100 bg-white flex items-center gap-2 rounded-b-xl">
-        <button disabled className="p-1.5 text-gray-300 rounded-lg cursor-not-allowed">
-          <Paperclip size={16} />
-        </button>
-        <input 
-          type="text" 
-          placeholder="Chat API unavailable..." 
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          disabled
-          className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] outline-none text-gray-500 cursor-not-allowed"
-        />
-        <button disabled className="p-1.5 text-gray-300 rounded-lg cursor-not-allowed">
-          <Mic size={16} />
-        </button>
-        <button 
-          disabled
-          title="Chat API Unavailable"
-          onClick={handleSend} 
-          className="p-1.5 bg-gray-100 text-gray-400 rounded-lg shadow-sm cursor-not-allowed"
-        >
-          <Send size={16} />
-        </button>
-      </div>
-    </div>
-  );
-};
 
 // -------------- MAIN COMPONENT -------------- //
 
@@ -206,7 +134,7 @@ const SafetyCenter = () => {
   const [selectedAlertId, setSelectedAlertId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isResolving, setIsResolving] = useState(false);
-  const [dashboardStats, setDashboardStats] = useState({ resolved: 0, escalated: 0, connectedAgents: 1 });
+  const [dashboardStats, setDashboardStats] = useState({ resolved: 0 });
 
   const selectedAlert = useMemo(
     () => alerts.find((entry) => entry.id === selectedAlertId) || alerts[0] || null,
@@ -306,13 +234,9 @@ const SafetyCenter = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
       {/* Top Dashboard Row */}
-      <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 shadow-sm z-10 shrink-0">
+      <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 grid grid-cols-2 gap-3 shadow-sm z-10 shrink-0">
          <StatCard title="Active SOS" value={alerts.length} icon={<AlertCircle size={16} />} alertMode={true} />
-         <StatCard title="Resolved Today" value={dashboardStats.resolved} icon={<CheckCircle2 size={16} />} />
-         <StatCard title="High Priority" value={alerts.length} icon={<ShieldAlert size={16} />} alertMode={true} />
-         <StatCard title="Escalated" value={dashboardStats.escalated} icon={<History size={16} />} />
-         <StatCard title="Avg Response" value="< 30s" icon={<Activity size={16} />} />
-         <StatCard title="Agents" value={dashboardStats.connectedAgents} icon={<UserIcon size={16} />} />
+         <StatCard title="Closed (all time)" value={dashboardStats.resolved} icon={<CheckCircle2 size={16} />} />
       </div>
 
       {/* Main Content Area */}
@@ -360,7 +284,7 @@ const SafetyCenter = () => {
                
                {/* Header Actions */}
                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
+                  <div className="min-w-0">
                      <div className="text-lg font-bold text-gray-900 mb-1.5">
                         SOS Details
                      </div>
@@ -369,9 +293,9 @@ const SafetyCenter = () => {
                            <Clock size={12} className="text-gray-400" />
                            {formatDateTime(selectedAlert.createdAt)}
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                           <MapPin size={12} className="text-red-500" />
-                           {selectedAlert.locationLabel || selectedAlert.pickupAddress || 'GPS Active'}
+                        <div className="flex items-start gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100 min-w-0 max-w-full">
+                           <MapPin size={12} className="text-red-500 shrink-0 mt-px" />
+                           <span className="break-words min-w-0">{selectedAlert.locationLabel || selectedAlert.pickupAddress || 'Location not shared'}</span>
                         </div>
                      </div>
                   </div>
@@ -443,28 +367,18 @@ const SafetyCenter = () => {
                      {/* Distress Context */}
                      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                         <div className="text-xs font-bold text-gray-900 mb-3 border-b border-gray-100 pb-2">Distress Context</div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                           <div>
-                              <p className="text-[9px] font-semibold text-gray-500 mb-0.5">Driver ID</p>
-                              <p className="text-[11px] font-bold text-gray-900">{selectedAlert?.driverId?.slice(-8) || 'N/A'}</p>
-                           </div>
-                           <div>
-                              <p className="text-[9px] font-semibold text-gray-500 mb-0.5">User ID</p>
-                              <p className="text-[11px] font-bold text-gray-900">{selectedAlert?.userId?.slice(-8) || 'N/A'}</p>
-                           </div>
-                           <div>
-                              <p className="text-[9px] font-semibold text-gray-500 mb-0.5">Ride ID</p>
-                              <p className="text-[11px] font-bold text-gray-900">{selectedAlert?.rideId?.slice(-8) || selectedAlert?.tripCode || 'N/A'}</p>
-                           </div>
-                           <div>
-                              <p className="text-[9px] font-semibold text-gray-500 mb-0.5">Contact</p>
-                              <p className="text-[11px] font-bold text-gray-900">{selectedAlert?.emergencyContact || 'Unavailable'}</p>
-                           </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                           <ContextItem label="Raised by" value={selectedAlert?.sourceApp === 'driver' ? 'Driver' : 'Passenger'} />
+                           <ContextItem label="Trip" value={selectedAlert?.tripCode || (selectedAlert?.rideId ? `#${selectedAlert.rideId.slice(-6).toUpperCase()}` : '')} />
+                           <ContextItem label="Driver" value={selectedAlert?.driverName} phone={selectedAlert?.driverPhone} />
+                           <ContextItem label="Passenger" value={selectedAlert?.riderName} phone={selectedAlert?.riderPhone} />
+                           <ContextItem label="Vehicle" value={selectedAlert?.vehicleLabel} />
+                           <ContextItem label="Pickup" value={selectedAlert?.pickupAddress} />
+                           <ContextItem label="Drop" value={selectedAlert?.dropAddress} />
+                           {selectedAlert?.notes ? <ContextItem label="Notes" value={selectedAlert.notes} /> : null}
                         </div>
                      </div>
 
-                     {/* Live Chat */}
-                     <AdminSosChat alert={selectedAlert} />
                   </div>
                </div>
 

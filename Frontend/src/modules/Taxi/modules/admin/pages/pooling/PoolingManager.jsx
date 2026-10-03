@@ -792,7 +792,7 @@ const PoolingManager = ({ mode: propMode }) => {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-col gap-0.5">
-                            <span className="font-bold text-slate-700">{item.vehicleAssignments?.length || 0} Assigned</span>
+                            <span className="font-bold text-slate-700">{item.activeVehicleCount ?? item.assignedVehicles?.length ?? item.assignedVehicleTypeIds?.length ?? 0} Assigned</span>
                             <span className="text-[9px] font-semibold text-slate-500">
                               {item.schedules?.length || 0} Schedules
                             </span>

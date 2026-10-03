@@ -70,11 +70,6 @@ const OwnerCreate = () => {
   const handleSave = async (event) => {
     event.preventDefault();
 
-    if (formData.password !== formData.password_confirmation) {
-      alert('Passwords do not match');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const response = await adminService.createOwner(formData);

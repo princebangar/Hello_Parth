@@ -257,6 +257,18 @@ const SetPrices = ({ mode }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  // What the admin is typing; the list reloads 350 ms after they stop (not on every key).
+  const [searchInput, setSearchInput] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== searchTerm) {
+        setSearchTerm(searchInput);
+        setPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [paginator, setPaginator] = useState({ current_page: 1, last_page: 1, total: 0, per_page: 10, from: 0, to: 0 });
@@ -559,11 +571,8 @@ const SetPrices = ({ mode }) => {
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                           type="text"
-                          value={searchTerm}
-                          onChange={(event) => {
-                            setSearchTerm(event.target.value);
-                            setPage(1);
-                          }}
+                          value={searchInput}
+                          onChange={(event) => setSearchInput(event.target.value)}
                           placeholder="Search zone, vehicle, location..."
                           className="w-full rounded-md border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none transition-all focus:border-indigo-500"
                         />

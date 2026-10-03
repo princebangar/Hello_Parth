@@ -17,6 +17,17 @@ const SectionHeader = ({ title }) => (
   </div>
 );
 
+// What each value really does (rideService.resolveBidRideRange / createRide).
+const HELP = {
+  bidding_low_percentage: 'Outstation (intercity) bidding only. A driver can offer at most this % BELOW the recommended fare. Example: fare Rs 1000 and 10% -> lowest driver offer Rs 900.',
+  bidding_high_percentage: 'Outstation (intercity) bidding only. A driver can offer at most this % ABOVE the recommended fare. Example: fare Rs 1000 and 20% -> highest driver offer Rs 1200.',
+  bidding_amount_increase_or_decrease: 'Outstation (intercity) bidding only. The amount in rupees a driver\'s offer goes up or down with each tap of - / +.',
+  user_bidding_low_percentage: 'City rides with "Offer your fare". The lowest fare a customer can start with, as % below the recommended fare.',
+  user_bidding_high_percentage: 'City rides with "Offer your fare". The highest fare a customer can raise to, as % above the recommended fare.',
+  user_bidding_amount_increase_or_decrease: 'City rides with "Offer your fare". The amount in rupees the fare goes up with each "Increase fare" tap.',
+  user_fare_increase_wait_minutes: 'City rides with "Offer your fare". If no driver accepts, the customer can raise the fare only after waiting this many minutes.',
+};
+
 const InputField = ({ label, name, value, onChange, placeholder, type = "text", helpLink, prefix, onHelpClick }) => (
   <div className="space-y-1.5 w-full">
     <div className="flex items-center justify-between mb-1">
@@ -24,7 +35,7 @@ const InputField = ({ label, name, value, onChange, placeholder, type = "text", 
          {label} {helpLink && <span className="text-red-500">*</span>}
        </label>
        {helpLink && (
-         <button type="button" onClick={() => onHelpClick(label)} className="text-yellow-600 text-xs font-semibold hover:underline flex items-center gap-1">
+         <button type="button" onClick={() => onHelpClick(label, name)} className="text-yellow-600 text-xs font-semibold hover:underline flex items-center gap-1">
             How it works <Info size={12} />
          </button>
        )}
@@ -41,6 +52,7 @@ const InputField = ({ label, name, value, onChange, placeholder, type = "text", 
          value={value || ''}
          onChange={(e) => onChange(name, e.target.value)}
          placeholder={placeholder}
+         min={type === 'number' ? 0 : undefined}
          className={`flex-1 w-full bg-white border border-gray-200 ${prefix ? 'rounded-r-lg' : 'rounded-lg'} py-2.5 px-4 text-sm text-gray-900 focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all outline-none shadow-sm`}
        />
     </div>
@@ -56,7 +68,7 @@ const PreviewBox = ({ label }) => (
         <div className="w-16 h-1 bg-gray-200 rounded-full mx-auto mb-6"></div>
         
         <div className="mb-4">
-           <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">SUV (Bid)</p>
+           <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">Sample</p>
            <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
               <div className="h-1 bg-gray-100 rounded-full flex-1"></div>
@@ -69,7 +81,7 @@ const PreviewBox = ({ label }) => (
 
         <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-200 mb-4">
            <h4 className="text-xs font-bold text-gray-900 mb-1">Offer your fare</h4>
-           <p className="text-[9px] text-gray-500 mb-3 italic">Recommended fare: $ 150.00</p>
+           <p className="text-[9px] text-gray-500 mb-3 italic">Recommended fare: ₹150</p>
            <div className="flex items-center justify-between gap-1 mb-4">
               <div className="w-8 h-8 rounded-lg bg-gray-200 text-black flex items-center justify-center font-bold text-xs">-10</div>
               <div className="flex-1 bg-white border border-gray-200 rounded-lg flex items-center justify-center font-bold text-black py-1.5 text-sm shadow-sm">150</div>
@@ -108,7 +120,29 @@ const BidRideSettings = () => {
     fetchData();
   }, []);
 
+  const validate = () => {
+    const pct = ['bidding_low_percentage', 'bidding_high_percentage', 'user_bidding_low_percentage', 'user_bidding_high_percentage'];
+    for (const key of pct) {
+      const n = Number(settings[key]);
+      if (settings[key] === '' || settings[key] == null || !Number.isFinite(n) || n < 0 || n > 100) {
+        return 'Percentages must be between 0 and 100';
+      }
+    }
+    for (const key of ['bidding_amount_increase_or_decrease', 'user_bidding_amount_increase_or_decrease']) {
+      const n = Number(settings[key]);
+      if (!Number.isFinite(n) || n <= 0) return 'Step amount must be more than 0';
+    }
+    const wait = Number(settings.user_fare_increase_wait_minutes);
+    if (!Number.isFinite(wait) || wait < 0) return 'Wait time cannot be negative';
+    return '';
+  };
+
   const handleUpdate = async () => {
+    const problem = validate();
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
     try {
       setSaving(true);
       await api.patch('/admin/general-settings/bid-ride', { settings });
@@ -125,14 +159,8 @@ const BidRideSettings = () => {
     setSettings(prev => ({ ...prev, [name]: value }));
   };
 
-  const openInfoModal = (label) => {
-    let content = "This setting configures the bidding parameters for the ride.";
-    if (label.includes("Low Percentage")) content = "Sets the minimum percentage below the recommended fare that can be offered.";
-    if (label.includes("High Percentage")) content = "Sets the maximum percentage above the recommended fare that can be offered.";
-    if (label.includes("Increase Step") || label.includes("Increase or Decrease")) content = "The increment or decrement step amount when adjusting the bid.";
-    if (label.includes("Wait Time")) content = "How long a user must wait before they can increase their offer to find drivers.";
-    
-    setInfoModal({ open: true, title: label, content });
+  const openInfoModal = (label, name) => {
+    setInfoModal({ open: true, title: label, content: HELP[name] || 'Bidding setting.' });
   };
 
   if (loading) {
@@ -163,7 +191,7 @@ const BidRideSettings = () => {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
            <div className="flex-1 flex flex-col justify-between">
               <div>
-                 <SectionHeader title="Driver settings" />
+                 <SectionHeader title="Driver settings (outstation / intercity bidding)" />
                  <div className="p-6 space-y-6">
                     <InputField 
                        label="Driver Bidding Low Percentage (Least Bid Level)" 
@@ -186,11 +214,12 @@ const BidRideSettings = () => {
                        onHelpClick={openInfoModal}
                     />
                     <InputField 
-                       label="Driver Bid Range From Recommended Price" 
-                       name="bidding_amount_increase_or_decrease" 
-                       value={settings.bidding_amount_increase_or_decrease} 
-                       onChange={handleChange} 
-                       type="number" 
+                       label="Driver Bid Step Amount (per - / + tap)"
+                       name="bidding_amount_increase_or_decrease"
+                       value={settings.bidding_amount_increase_or_decrease}
+                       onChange={handleChange}
+                       type="number"
+                       prefix="₹" 
                        helpLink
                        onHelpClick={openInfoModal}
                     />
@@ -203,7 +232,7 @@ const BidRideSettings = () => {
                   className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
                  >
                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                   Update Driver Settings
+                   Save Bid Settings
                  </button>
               </div>
            </div>
@@ -216,7 +245,7 @@ const BidRideSettings = () => {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
            <div className="flex-1 flex flex-col justify-between">
               <div>
-                 <SectionHeader title="User settings" />
+                 <SectionHeader title={'User settings (city rides - "Offer your fare")'} />
                  <div className="p-6 space-y-6">
                     <InputField 
                        label="User Fare Low Percentage (Starting Level)" 
@@ -239,11 +268,12 @@ const BidRideSettings = () => {
                        onHelpClick={openInfoModal}
                     />
                     <InputField 
-                       label="User Fare Increase Step From Recommended Price" 
-                       name="user_bidding_amount_increase_or_decrease" 
-                       value={settings.user_bidding_amount_increase_or_decrease} 
-                       onChange={handleChange} 
-                       type="number" 
+                       label="User Fare Increase Step (per tap)"
+                       name="user_bidding_amount_increase_or_decrease"
+                       value={settings.user_bidding_amount_increase_or_decrease}
+                       onChange={handleChange}
+                       type="number"
+                       prefix="₹" 
                        helpLink
                        onHelpClick={openInfoModal}
                     />
@@ -265,7 +295,7 @@ const BidRideSettings = () => {
                   className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
                  >
                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                   Update User Settings
+                   Save Bid Settings
                  </button>
               </div>
            </div>

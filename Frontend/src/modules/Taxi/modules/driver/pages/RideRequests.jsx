@@ -144,13 +144,14 @@ const normalizeRide = (ride) => {
   const status = formatStatus(ride?.status || ride?.liveStatus);
   const timeSource = getRideTimeSource(ride);
   const passengerName = ride?.user?.name || 'Passenger';
-  const earnings = getDriverEarnings(ride);
+  // A cancelled trip earned nothing (the old fallback showed the full fare).
+  const earnings = status === 'Cancelled' ? 0 : getDriverEarnings(ride);
 
   return {
     id: ride?.rideId || ride?._id || '',
     type,
     title: type === 'parcel' ? 'Delivery job' : 'Ride trip',
-    subtitle: type === 'parcel' ? `Customer: ${passengerName}` : `Rider: ${passengerName}`,
+    subtitle: `Customer: ${passengerName}`,
     dateLabel: formatDateLabel(timeSource),
     shortDate: formatShortDate(timeSource),
     earnings,
@@ -261,8 +262,8 @@ const RideRequests = () => {
   }, [categoryHistory]);
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] font-sans select-none overflow-x-hidden p-5 pb-32">
-      <header className="flex items-center justify-between mb-6 pt-2">
+    <div className="min-h-screen bg-[#f8f9fb] font-sans select-none overflow-x-clip p-5 pb-32">
+      <header className="sticky top-0 z-30 -mx-5 mb-4 flex items-center justify-between bg-[#f8f9fb] px-5 py-3">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -277,9 +278,13 @@ const RideRequests = () => {
         <button
           type="button"
           onClick={() => setIsFilterOpen((value) => !value)}
-          className={`w-10 h-10 bg-white rounded-xl shadow-sm border flex items-center justify-center transition-all ${isFilterOpen || statusFilter !== 'all' ? 'border-slate-900 text-slate-900' : 'border-slate-100 text-slate-400'}`}
+          className={`relative w-10 h-10 bg-white rounded-xl shadow-sm border flex items-center justify-center transition-all ${isFilterOpen || statusFilter !== 'all' ? 'border-slate-900 text-slate-900' : 'border-slate-100 text-slate-400'}`}
+          aria-label={statusFilter !== 'all' ? 'Filter (on)' : 'Filter'}
         >
           <Filter size={16} />
+          {statusFilter !== 'all' ? (
+            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-rose-500 border-2 border-white" />
+          ) : null}
         </button>
       </header>
 
@@ -304,6 +309,17 @@ const RideRequests = () => {
             ))}
           </div>
         </div>
+      ) : null}
+
+      {statusFilter !== 'all' && !isFilterOpen ? (
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className="mb-4 inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white"
+        >
+          Showing: {STATUS_FILTERS.find((filter) => filter.id === statusFilter)?.label || statusFilter}
+          <span className="text-white/60">✕</span>
+        </button>
       ) : null}
 
       <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
@@ -392,6 +408,7 @@ const RideRequests = () => {
                   </div>
                 </div>
                 <div className="text-right">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">You earned</p>
                   <p className="text-base font-black text-slate-900 leading-none">{item.earningsLabel}</p>
                   <div className="flex items-center gap-1 justify-end mt-1">
                     <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full border ${statusBadgeClass(item.status)}`}>
@@ -410,7 +427,7 @@ const RideRequests = () => {
                   </div>
                 </div>
                 <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
-                  <p className="text-slate-400 font-black uppercase tracking-widest">Payment</p>
+                  <p className="text-slate-400 font-black uppercase tracking-widest">Payment type</p>
                   <div className="mt-1 flex items-center gap-1.5 text-slate-700 font-black">
                     <IndianRupee size={12} />
                     <span>{item.paymentMethod}</span>
@@ -442,7 +459,7 @@ const RideRequests = () => {
                 </div>
                 <div className="flex items-center gap-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                   <span className="flex items-center gap-1"><MapPin size={12} /> {item.distanceKm.toFixed(1)} km</span>
-                  <span className="flex items-center gap-1"><CheckCircle2 size={12} /> {item.fareLabel}</span>
+                  <span className="flex items-center gap-1">Fare {item.fareLabel}</span>
                 </div>
               </div>
             </Motion.div>

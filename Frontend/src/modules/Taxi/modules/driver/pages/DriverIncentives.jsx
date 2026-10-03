@@ -174,7 +174,7 @@ const DriverIncentives = () => {
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rating</p>
               <p className="text-base font-bold text-gray-900 flex items-center gap-1">
-                {driverRating.toFixed(1)} <Star size={14} className="text-yellow-500 fill-yellow-500" />
+                {driverRating > 0 ? driverRating.toFixed(1) : 'New'} <Star size={14} className="text-yellow-500 fill-yellow-500" />
               </p>
             </div>
           </div>

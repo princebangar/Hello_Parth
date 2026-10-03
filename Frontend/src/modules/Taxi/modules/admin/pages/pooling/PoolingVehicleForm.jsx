@@ -14,6 +14,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import { formatPlateNumber, isValidPlateNumber, PLATE_ERROR } from '../../../../shared/utils/inputFormats';
 
 const VEHICLE_TYPES = [
   { id: 'bike', label: 'Bike', capacity: 1, grid: [1, 1] },
@@ -191,6 +192,10 @@ const PoolingVehicleForm = ({
       toast.error('Vehicle Name, Model, and Number Plate are required');
       return;
     }
+    if (!isValidPlateNumber(formData.vehicleNumber)) {
+      toast.error(PLATE_ERROR);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -332,8 +337,8 @@ const PoolingVehicleForm = ({
                     required
                     type="text"
                     value={formData.vehicleNumber}
-                    onChange={(e) => setFormData({...formData, vehicleNumber: e.target.value})}
-                    placeholder="e.g. MP09-AB-1234"
+                    onChange={(e) => setFormData({...formData, vehicleNumber: formatPlateNumber(e.target.value)})}
+                    placeholder="e.g. MP09AB1234"
                     className={inputClass}
                     readOnly={isViewMode}
                   />

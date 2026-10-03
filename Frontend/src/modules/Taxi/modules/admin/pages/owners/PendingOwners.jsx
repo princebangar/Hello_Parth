@@ -272,7 +272,7 @@ const PendingOwners = () => {
       <AdminPageHeader module="Owner Management" page="Pending Owners" title="Pending Owners" />
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
           <div>
             <label className={labelClass}>
               Search
@@ -297,39 +297,9 @@ const PendingOwners = () => {
               <option value={200}>200</option>
             </select>
           </div>
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-black bg-yellow-400 rounded-lg hover:bg-yellow-500 transition-colors"
-          >
-            <Filter size={16} /> Filters
-          </button>
         </div>
       </div>
 
-      {showFilters && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 animate-in slide-in-from-top-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Filter by Service Location</label>
-              <input
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
-                placeholder="Enter city or location..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Filter by Transport Type</label>
-              <input
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
-                placeholder="Enter transport type..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
         <div className="overflow-x-auto">

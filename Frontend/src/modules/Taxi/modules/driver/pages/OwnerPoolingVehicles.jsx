@@ -55,7 +55,7 @@ const OwnerPoolingVehicles = () => {
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] px-5 pb-32 pt-8 font-sans">
-      <header className="mb-6 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 -mx-5 mb-6 flex items-center justify-between gap-3 bg-[#f8f9fb] px-5 py-3">
         <div className="flex items-center gap-3">
           <button
             type="button"
