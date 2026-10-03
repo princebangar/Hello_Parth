@@ -147,7 +147,13 @@ async function loadFirebaseWebConfig() {
 
     const visibleClient = await hasVisibleClientForTarget(payload);
 
-    if (!visibleClient) {
+    // Taxi pushes carry a `notification` block, which the Firebase SDK already shows on its own; showing it
+    // again here gave riders/drivers every Taxi push twice. Food pushes keep the existing behaviour.
+    const isTaxiPush =
+      payload?.data?.module === "taxi" || getTargetPathFromPayload(payload).startsWith("/taxi");
+    const sdkAlreadyShowsIt = isTaxiPush && Boolean(payload?.notification?.title || payload?.notification?.body);
+
+    if (!visibleClient && !sdkAlreadyShowsIt) {
       const title = payload?.notification?.title || payload?.data?.title || "New Notification";
       const body = payload?.notification?.body || payload?.data?.body || "";
       const image =

@@ -13,10 +13,9 @@ const normalizeNumber = (value) => {
 
 const getElapsedIstDayMinutes = (value = new Date()) => {
   const istNow = toIstDate(value);
-  return Math.max(0, Math.round(
-    (istNow.getTime() - new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate()).getTime()) /
-      (60 * 1000),
-  ));
+  // istNow's UTC fields hold the IST wall clock, so UTC midnight of that date is IST midnight.
+  const istMidnight = Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate());
+  return Math.max(0, Math.round((istNow.getTime() - istMidnight) / (60 * 1000)));
 };
 
 const mergeSummary = (summary = {}, dateKey) => {
@@ -105,9 +104,11 @@ export const mergeOnlineSessionIntoTracking = (tracking = {}, sessionStart, sess
 
 export const buildDriverTodaySummaryFromDocument = (driver, { now = new Date() } = {}) => {
   const todayKey = toIstDayKey(now);
+  // Only a driver who is online right now has an open session to count; an offline driver's time is already
+  // in dailyActivity (a left-over start time must not keep the Active clock running).
   const liveTracking = mergeOnlineSessionIntoTracking(
     driver?.incentiveTracking || {},
-    driver?.incentiveTracking?.currentOnlineStartedAt,
+    driver?.isOnline === false ? null : driver?.incentiveTracking?.currentOnlineStartedAt,
     now,
   );
   const todayActivity = Array.isArray(liveTracking?.dailyActivity)

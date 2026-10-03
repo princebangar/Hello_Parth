@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import RowActionMenu from '../../components/ui/RowActionMenu';
 import { ChevronRight, Eye, FileSearch, MoreHorizontal, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -170,38 +171,12 @@ const NegativeBalanceDrivers = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="relative inline-flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMenuId((current) => (current === item._id ? null : item._id));
-                          }}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors"
-                          title="Actions"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
- 
-                        {activeMenuId === item._id ? (
-                          <div
-                            className="absolute right-0 top-full mt-2 w-44 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                navigate(`/admin/drivers/${item._id}`);
-                              }}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                            >
-                              <Eye size={16} className="text-indigo-600" />
-                              View
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                      <RowActionMenu
+                        label="Driver actions"
+                        items={[
+                          { key: 'view', label: 'View driver', icon: <Eye size={14} />, onClick: () => navigate(`/admin/drivers/${item._id}`) },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))

@@ -2757,47 +2757,92 @@ export const createUser = async (payload) => {
 };
 
 export const getOwnerDashboardData = async () => {
+  // Drivers here = fleet drivers (drivers that belong to an owner).
+  const fleetDriverFilter = { deletedAt: null, owner_id: { $ne: null } };
+  const fleetDriverIds = await Driver.find(fleetDriverFilter).distinct('_id');
+
+  // "Today" = India calendar day, independent of the server timezone.
+  const IST_OFFSET_MS = 330 * 60 * 1000;
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
+  istNow.setUTCHours(0, 0, 0, 0);
+  const todayStart = new Date(istNow.getTime() - IST_OFFSET_MS);
+
+  const moneyFacet = {
+    $group: {
+      _id: null,
+      total: { $sum: { $ifNull: ['$fare', 0] } },
+      cash: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, { $ifNull: ['$fare', 0] }, 0] } },
+      wallet: { $sum: { $cond: [{ $eq: ['$driverPaymentCollection.provider', 'wallet'] }, { $ifNull: ['$fare', 0] }, 0] } },
+      online: {
+        $sum: {
+          $cond: [
+            { $and: [{ $eq: ['$paymentMethod', 'online'] }, { $ne: ['$driverPaymentCollection.provider', 'wallet'] }] },
+            { $ifNull: ['$fare', 0] },
+            0,
+          ],
+        },
+      },
+      commission: { $sum: { $ifNull: ['$commissionAmount', 0] } },
+      driverEarnings: { $sum: { $ifNull: ['$driverEarnings', 0] } },
+    },
+  };
+
   const [
     totalOwners,
     approvedOwners,
+    totalFleets,
+    approvedFleets,
+    pendingFleets,
     totalDrivers,
     approvedDrivers,
-    todayRides,
+    money,
   ] = await Promise.all([
-    Owner.countDocuments(),
-    Owner.countDocuments({ approve: true }),
-    Driver.countDocuments(),
-    Driver.countDocuments({ approve: true }),
-    Ride.countDocuments({
-      createdAt: {
-        $gte: new Date(new Date().setHours(0, 0, 0, 0)),
-        $lt: new Date(new Date().setHours(23, 59, 59, 999)),
-      },
-    }),
+    Owner.countDocuments({ deletedAt: null }),
+    Owner.countDocuments({ deletedAt: null, approve: true }),
+    FleetVehicle.countDocuments({}),
+    FleetVehicle.countDocuments({ status: 'approved' }),
+    FleetVehicle.countDocuments({ status: 'pending' }),
+    Driver.countDocuments(fleetDriverFilter),
+    Driver.countDocuments({ ...fleetDriverFilter, approve: true }),
+    fleetDriverIds.length
+      ? Ride.aggregate([
+        { $match: { driverId: { $in: fleetDriverIds }, status: 'completed' } },
+        {
+          $facet: {
+            today: [{ $match: { completedAt: { $gte: todayStart } } }, moneyFacet],
+            overall: [moneyFacet],
+          },
+        },
+      ])
+      : [{ today: [], overall: [] }],
   ]);
+
+  const r2 = (n) => Number(Number(n || 0).toFixed(2));
+  const today = money?.[0]?.today?.[0] || {};
+  const overall = money?.[0]?.overall?.[0] || {};
 
   return {
     total_owners: totalOwners,
     approved_owners: approvedOwners,
-    pending_owners: totalOwners - approvedOwners,
+    pending_owners: Math.max(0, totalOwners - approvedOwners),
     total_drivers: totalDrivers,
     approved_drivers: approvedDrivers,
-    pending_drivers: totalDrivers - approvedDrivers,
-    total_fleets: 0, // Placeholder
-    approved_fleets: 0,
-    pending_fleets: 0,
-    today_earnings: 0,
-    today_cash: 0,
-    today_wallet: 0,
-    today_online: 0,
-    admin_commission: 0,
-    driver_earnings: 0,
-    overall_earnings: 0,
-    overall_cash: 0,
-    overall_wallet: 0,
-    overall_online: 0,
-    overall_admin_comm: 0,
-    overall_owner_earnings: 0,
+    pending_drivers: Math.max(0, totalDrivers - approvedDrivers),
+    total_fleets: totalFleets,
+    approved_fleets: approvedFleets,
+    pending_fleets: pendingFleets,
+    today_earnings: r2(today.total),
+    today_cash: r2(today.cash),
+    today_wallet: r2(today.wallet),
+    today_online: r2(today.online),
+    admin_commission: r2(today.commission),
+    driver_earnings: r2(today.driverEarnings),
+    overall_earnings: r2(overall.total),
+    overall_cash: r2(overall.cash),
+    overall_wallet: r2(overall.wallet),
+    overall_online: r2(overall.online),
+    overall_admin_comm: r2(overall.commission),
+    overall_owner_earnings: r2(overall.driverEarnings),
   };
 };
 
@@ -3038,9 +3083,9 @@ export const listUserWalletHistory = async (id) => {
     refundWallet: wallet?.refundWallet || 0,
     results: (wallet?.transactions || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(t => ({
       _id: String(t._id),
-      amount: t.amount,
-      type: t.kind,
-      description: t.title,
+      amount: Math.abs(Number(t.amount || 0)),
+      type: t.kind || (['deduction', 'debit'].includes(t.type) ? 'debit' : 'credit'),
+      description: t.title || t.description || '',
       createdAt: t.createdAt,
     })),
   };
@@ -3052,7 +3097,7 @@ export const adjustUserWallet = async (id, payload = {}) => {
     throw new ApiError(400, 'Amount must be greater than 0');
   }
 
-  const operation = String(payload.operation || 'credit').toLowerCase();
+  const operation = String(payload.operation || payload.payment_type || 'credit').toLowerCase();
   if (!['credit', 'debit'].includes(operation)) {
     throw new ApiError(400, 'Operation must be credit or debit');
   }
@@ -3068,20 +3113,23 @@ export const adjustUserWallet = async (id, payload = {}) => {
   }
 
   const currentBalance = wallet.balance || 0;
+  if (operation === 'debit' && amount > currentBalance) {
+    throw new ApiError(400, `Cannot debit more than the wallet balance (Rs ${Number(currentBalance).toFixed(2)})`);
+  }
   const nextBalance = operation === 'credit' ? currentBalance + amount : currentBalance - amount;
 
   wallet.balance = nextBalance;
   wallet.transactions.push({
     kind: operation,
     amount,
-    title: payload.description || `Admin adjustment (${operation})`,
+    title: payload.description || payload.remarks || `Admin adjustment (${operation})`,
   });
 
   await wallet.save();
   return { balance: Number(nextBalance.toFixed(2)) };
 };
 
-export const listDrivers = async ({ page = 1, limit = 50, status, search, approve, isOnline } = {}, currentAdmin = null) => {
+export const listDrivers = async ({ page = 1, limit = 50, status, search, approve, isOnline, registeredFrom } = {}, currentAdmin = null) => {
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 50;
   const start = (safePage - 1) * safeLimit;
@@ -3102,6 +3150,13 @@ export const listDrivers = async ({ page = 1, limit = 50, status, search, approv
 
   if (isOnline !== undefined) {
     query.isOnline = isOnline === 'true' || isOnline === true || isOnline === 1;
+  }
+
+  if (registeredFrom) {
+    const from = new Date(registeredFrom);
+    if (!Number.isNaN(from.getTime())) {
+      query.createdAt = { $gte: from };
+    }
   }
 
   if (search) {
@@ -3220,10 +3275,11 @@ export const getDriverRatingDetail = async (id) => {
     throw new ApiError(404, 'Driver not found');
   }
 
-  const rides = await Ride.find({ driverId: driver._id })
-    .select('createdAt pickupLocation')
+  const rides = await Ride.find({ driverId: driver._id, 'feedback.rating': { $gte: 1 } })
+    .select('createdAt completedAt pickupAddress pickupLocation feedback userId')
+    .populate('userId', 'name')
     .sort({ createdAt: -1 })
-    .limit(500)
+    .limit(100)
     .lean();
 
   return {
@@ -3238,17 +3294,20 @@ export const getDriverRatingDetail = async (id) => {
       vehicle_make: driver.vehicleMake || '',
       vehicle_model: driver.vehicleModel || '',
       vehicle_number: driver.vehicleNumber || '',
-      image: driver.profile_image || driver.avatar || '',
-      vehicle_image: 'https://img.freepik.com/free-vector/yellow-passenger-transport-taxi-car_1017-4886.jpg',
+      image: driver.profileImage || driver.profile_image || driver.avatar || '',
+      vehicle_image: driver.vehicleImage || '',
     },
     reviews: rides.map((ride) => ({
       _id: ride._id,
       request_id: String(ride._id),
-      date: ride.createdAt,
-      pickup_location: ride.pickupLocation?.coordinates
-        ? `${ride.pickupLocation.coordinates[1]}, ${ride.pickupLocation.coordinates[0]}`
-        : 'N/A',
-      rating: Number(driver.ratingCount || 0) > 0 ? Number(driver.rating || 0) : 0,
+      date: ride.feedback?.submittedAt || ride.completedAt || ride.createdAt,
+      pickup_location: String(ride.pickupAddress || '').trim()
+        || (ride.pickupLocation?.coordinates
+          ? `${ride.pickupLocation.coordinates[1]}, ${ride.pickupLocation.coordinates[0]}`
+          : 'N/A'),
+      rating: Number(ride.feedback?.rating || 0),
+      comment: String(ride.feedback?.comment || '').trim(),
+      customer_name: ride.userId?.name || '',
     })),
   };
 };
@@ -3871,7 +3930,8 @@ export const permanentlyDeleteDeletedDriver = async (id) => {
 export const createDriver = async (payload = {}, currentAdmin = null) => {
   const name = String(payload.name || '').trim();
   const phone = String(payload.phone || payload.mobile || '').replace(/\D/g, '');
-  const password = String(payload.password || '').trim();
+  // Drivers sign in with OTP; the admin form no longer asks for a password, so store an unusable random one.
+  const password = String(payload.password || '').trim() || randomBytes(16).toString('hex');
   const passwordConfirmation = String(
     payload.password_confirmation || payload.passwordConfirmation || '',
   ).trim();
@@ -4305,27 +4365,69 @@ export const updateReferralSettings = async (type, payload) => {
 };
 
 export const getReferralDashboard = async () => {
-  const [totalDrivers, totalUsers] = await Promise.all([
-    Driver.countDocuments(),
-    User.countDocuments(),
+  const TZ = 'Asia/Kolkata';
+  const year = Number(new Intl.DateTimeFormat('en-IN', { timeZone: TZ, year: 'numeric' }).format(new Date()));
+  // Jan 1 00:00 IST of this year, and of next year
+  const yearStart = new Date(Date.UTC(year, 0, 1) - 330 * 60 * 1000);
+  const yearEnd = new Date(Date.UTC(year + 1, 0, 1) - 330 * 60 * 1000);
+
+  const monthly = (Model) => Model.aggregate([
+    { $match: { referredBy: { $ne: null }, createdAt: { $gte: yearStart, $lt: yearEnd } } },
+    { $group: { _id: { $month: { date: '$createdAt', timezone: TZ } }, count: { $sum: 1 } } },
+  ]);
+  const toMonths = (rows = []) => {
+    const out = Array(12).fill(0);
+    rows.forEach((row) => {
+      if (row?._id >= 1 && row._id <= 12) out[row._id - 1] = row.count;
+    });
+    return out;
+  };
+
+  const [
+    totalDrivers,
+    totalUsers,
+    referredDrivers,
+    referredUsers,
+    userMonthly,
+    driverMonthly,
+    userRewards,
+    driverRewards,
+  ] = await Promise.all([
+    Driver.countDocuments({ deletedAt: null }),
+    User.countDocuments({}),
+    Driver.countDocuments({ deletedAt: null, referredBy: { $ne: null } }),
+    User.countDocuments({ referredBy: { $ne: null } }),
+    monthly(User),
+    monthly(Driver),
+    UserWallet.aggregate([
+      { $unwind: '$transactions' },
+      { $match: { 'transactions.referenceKey': /^user-referral:/ } },
+      { $group: { _id: null, total: { $sum: '$transactions.amount' } } },
+    ]),
+    WalletTransaction.aggregate([
+      { $match: { 'metadata.source': 'driver_referral' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
   ]);
 
-  // Mocking some parts for the dashboard view
+  const rewardTotal = Number(userRewards?.[0]?.total || 0) + Number(driverRewards?.[0]?.total || 0);
+
   return {
+    year,
     total_drivers: totalDrivers,
     total_users: totalUsers,
-    active_referrals: 0,
-    referral_earning: 0,
+    active_referrals: referredUsers + referredDrivers,
+    referral_earning: Number(rewardTotal.toFixed(2)),
     user_referrals: {
-      normal_user: totalUsers,
-      referral_user: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      normal_user: Math.max(0, totalUsers - referredUsers),
+      referral_user: referredUsers,
+      monthly: toMonths(userMonthly),
     },
     driver_referrals: {
-      normal_driver: totalDrivers,
-      referral_driver: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    }
+      normal_driver: Math.max(0, totalDrivers - referredDrivers),
+      referral_driver: referredDrivers,
+      monthly: toMonths(driverMonthly),
+    },
   };
 };
 
@@ -4348,8 +4450,34 @@ export const createSubscriptionPlan = async (payload) => {
   return plan.toObject();
 };
 
-export const listCustomerSubscriptionPlans = async () =>
-  SubscriptionPlan.find({ audience: 'user' }).sort({ createdAt: -1 }).populate('vehicle_type_id').lean();
+// Each plan carries how many passes were sold and the money collected (wallet + admin-granted passes are counted
+// separately so the revenue is what customers actually paid).
+export const listCustomerSubscriptionPlans = async () => {
+  const [plans, sales] = await Promise.all([
+    SubscriptionPlan.find({ audience: 'user' }).sort({ createdAt: -1 }).populate('vehicle_type_id').lean(),
+    UserSubscription.aggregate([
+      { $match: { status: { $ne: 'cancelled' } } },
+      {
+        $group: {
+          _id: '$planId',
+          sold: { $sum: 1 },
+          revenue: { $sum: { $cond: [{ $eq: ['$purchaseSource', 'wallet'] }, '$amount', 0] } },
+          running: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+        },
+      },
+    ]),
+  ]);
+  const salesByPlan = new Map(sales.map((row) => [String(row._id), row]));
+  return plans.map((plan) => {
+    const row = salesByPlan.get(String(plan._id)) || {};
+    return {
+      ...plan,
+      sold_count: Number(row.sold || 0),
+      running_count: Number(row.running || 0),
+      revenue: Math.round(Number(row.revenue || 0) * 100) / 100,
+    };
+  });
+};
 
 export const createCustomerSubscriptionPlan = async (payload = {}) => {
   if (!String(payload?.name || '').trim()) {
@@ -4373,6 +4501,44 @@ export const createCustomerSubscriptionPlan = async (payload = {}) => {
     active: payload.active !== undefined ? Boolean(payload.active) : true,
   });
   return plan.toObject();
+};
+
+const findPlanForAudience = async (planId, audience) => {
+  if (!mongoose.Types.ObjectId.isValid(String(planId || ''))) {
+    throw new ApiError(400, 'Invalid subscription plan id');
+  }
+  const plan = await SubscriptionPlan.findOne({ _id: planId, audience });
+  if (!plan) {
+    throw new ApiError(404, 'Subscription plan not found');
+  }
+  return plan;
+};
+
+// Show/hide a plan for new purchases. People who already bought it keep their pass until it expires.
+export const setSubscriptionPlanActive = async (planId, audience, active) => {
+  const plan = await findPlanForAudience(planId, audience);
+  plan.active = Boolean(active);
+  await plan.save();
+  return plan.toObject();
+};
+
+export const deleteSubscriptionPlan = async (planId, audience) => {
+  const plan = await findPlanForAudience(planId, audience);
+  if (audience === 'user') {
+    const runningPasses = await UserSubscription.countDocuments({
+      planId: plan._id,
+      status: 'active',
+      expiresAt: { $gt: new Date() },
+    });
+    if (runningPasses > 0) {
+      throw new ApiError(
+        409,
+        `${runningPasses} customer(s) still have this plan running. Mark it inactive instead; delete it after they expire.`,
+      );
+    }
+  }
+  await SubscriptionPlan.deleteOne({ _id: plan._id });
+  return { id: String(plan._id), deleted: true };
 };
 
 export const listUserSubscriptionsByUserId = async (userId) => {
@@ -4538,6 +4704,10 @@ const toAdminRideRow = (ride) => {
   const status = String(ride.status || '').toLowerCase();
   const liveStatus = String(ride.liveStatus || '').toLowerCase();
 
+  const scheduledTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : NaN;
+  const isScheduled = Number.isFinite(scheduledTime);
+  const notStartedYet = ![RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.ARRIVED, RIDE_LIVE_STATUS.STARTED].includes(liveStatus);
+
   let tripStatus = 'UPCOMING';
   if (status === RIDE_STATUS.COMPLETED) {
     tripStatus = 'COMPLETED';
@@ -4545,9 +4715,15 @@ const toAdminRideRow = (ride) => {
     tripStatus = 'CANCELLED';
   } else if (status === RIDE_STATUS.ONGOING || liveStatus === RIDE_LIVE_STATUS.STARTED) {
     tripStatus = 'ONGOING';
+  } else if (isScheduled && scheduledTime > Date.now() && notStartedYet) {
+    tripStatus = 'UPCOMING';
   } else if (status === RIDE_STATUS.ACCEPTED || liveStatus === RIDE_LIVE_STATUS.ACCEPTED || liveStatus === RIDE_LIVE_STATUS.ARRIVING) {
     tripStatus = 'ACCEPTED';
   }
+
+  const paymentOption = ride.driverPaymentCollection?.provider === 'wallet'
+    ? 'WALLET'
+    : String(ride.paymentMethod || 'cash').toUpperCase();
 
   return {
     id: String(ride._id),
@@ -4557,12 +4733,14 @@ const toAdminRideRow = (ride) => {
     driverName: ride.driverId?.name || 'Unassigned',
     transportType: ride.driverId?.vehicleType || ride.vehicleIconType || 'Taxi',
     tripStatus,
+    isScheduled,
+    scheduledAt: isScheduled ? ride.scheduledAt : null,
     rideStatus: ride.status,
     liveStatus: ride.liveStatus,
-    paymentOption: 'CASH',
+    paymentOption,
     fare: Number(ride.fare || 0),
-    pickupLabel: formatRidePointLabel(ride.pickupLocation, 'Pickup'),
-    dropLabel: formatRidePointLabel(ride.dropLocation, 'Drop'),
+    pickupLabel: String(ride.pickupAddress || '').trim() || formatRidePointLabel(ride.pickupLocation, 'Pickup'),
+    dropLabel: String(ride.dropAddress || '').trim() || formatRidePointLabel(ride.dropLocation, 'Drop'),
     pickupLocation: ride.pickupLocation,
     dropLocation: ride.dropLocation,
     lastDriverLocation: ride.lastDriverLocation || null,
@@ -4908,15 +5086,33 @@ const clampAdminRideListPageSize = (value, fallback = 10) => {
   return Math.min(parsed, 100);
 };
 
+// A ride booked for later that has not started yet (driver may already have accepted it).
+const futureScheduledClause = () => ({
+  scheduledAt: { $gt: new Date() },
+  status: { $in: [RIDE_STATUS.SEARCHING, RIDE_STATUS.ACCEPTED] },
+  liveStatus: { $nin: [RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.ARRIVED, RIDE_LIVE_STATUS.STARTED] },
+});
+const notFutureScheduledClause = () => ({
+  $or: [{ scheduledAt: null }, { scheduledAt: { $lte: new Date() } }],
+});
+const upcomingRideFilter = () => ({
+  $or: [{ status: RIDE_STATUS.SEARCHING }, futureScheduledClause()],
+});
+
 const buildRideStatusFilter = (tab = 'all', variant = 'ride_requests') => {
   const normalizedTab = String(tab || 'all').trim().toLowerCase();
 
   if (variant === 'ongoing_rides') {
     if (normalizedTab === 'accepted') {
       return {
-        $or: [
-          { status: RIDE_STATUS.ACCEPTED },
-          { liveStatus: { $in: [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING] } },
+        $and: [
+          {
+            $or: [
+              { status: RIDE_STATUS.ACCEPTED },
+              { liveStatus: { $in: [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING] } },
+            ],
+          },
+          notFutureScheduledClause(),
         ],
       };
     }
@@ -4931,9 +5127,7 @@ const buildRideStatusFilter = (tab = 'all', variant = 'ride_requests') => {
     }
 
     if (normalizedTab === 'upcoming') {
-      return {
-        status: RIDE_STATUS.SEARCHING,
-      };
+      return upcomingRideFilter();
     }
 
     return {};
@@ -4948,14 +5142,19 @@ const buildRideStatusFilter = (tab = 'all', variant = 'ride_requests') => {
   }
 
   if (normalizedTab === 'upcoming') {
-    return { status: RIDE_STATUS.SEARCHING };
+    return upcomingRideFilter();
   }
 
   if (normalizedTab === 'on trip' || normalizedTab === 'on_trip' || normalizedTab === 'ongoing') {
     return {
-      $or: [
-        { status: { $in: [RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING] } },
-        { liveStatus: { $in: [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED] } },
+      $and: [
+        {
+          $or: [
+            { status: { $in: [RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING] } },
+            { liveStatus: { $in: [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING, RIDE_LIVE_STATUS.STARTED] } },
+          ],
+        },
+        { $or: [notFutureScheduledClause(), { status: RIDE_STATUS.ONGOING }] },
       ],
     };
   }
@@ -5050,7 +5249,8 @@ const listAdminRides = async ({
   });
 
   if (searchClauses.length > 0) {
-    mongoFilter.$or = searchClauses;
+    // $and so the search does not replace the tab's own $or
+    mongoFilter.$and = [...(mongoFilter.$and || []), { $or: searchClauses }];
   }
 
   const [total, rides] = await Promise.all([
@@ -5273,9 +5473,17 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active vehicle_preference')
     .sort({ createdAt: -1 })
     .lean();
+
+  // vehicle_preference holds UserPreference ids (the schema ref name is stale, so no populate)
+  const preferenceIds = [...new Set(items.flatMap((item) => (Array.isArray(item.vehicle_preference) ? item.vehicle_preference : [])).map(String))]
+    .filter((value) => mongoose.Types.ObjectId.isValid(value));
+  const preferenceDocs = preferenceIds.length
+    ? await UserPreference.find({ _id: { $in: preferenceIds }, active: { $ne: 0 } }).select('name icon').lean()
+    : [];
+  const preferenceById = new Map(preferenceDocs.map((doc) => [String(doc._id), { id: String(doc._id), name: doc.name || '', icon: doc.icon || '' }]));
 
   const results = items.map((item) => ({
     id: String(item._id),
@@ -5296,6 +5504,9 @@ export const listPublicVehicleCatalog = async () => {
     map_icon: item.map_icon || item.icon || item.image || '',
     status: item.status ?? 1,
     active: item.active !== false && Number(item.status ?? 1) !== 0,
+    preferences: (Array.isArray(item.vehicle_preference) ? item.vehicle_preference : [])
+      .map((value) => preferenceById.get(String(value)))
+      .filter((pref) => pref && pref.name),
   }));
 
   const payload = {
@@ -6155,10 +6366,24 @@ export const approveOwnerSignupFromDriver = async (driverId) => {
     (await Owner.findOne({ legacy_id: String(driver._id) }).lean()) ||
     (await Owner.findOne({ $or: [{ email }, { mobile }] }).lean());
 
+  const signupDocuments = driver.documents && typeof driver.documents === 'object' && Object.keys(driver.documents).length
+    ? driver.documents
+    : null;
+
   if (existingOwner) {
+    const hasOwnerDocuments = Boolean(existingOwner.user_snapshot?.documents && Object.keys(existingOwner.user_snapshot.documents).length);
     await Owner.updateOne(
       { _id: existingOwner._id },
-      { $set: { approve: true, status: 'approved', active: true } },
+      {
+        $set: {
+          approve: true,
+          status: 'approved',
+          active: true,
+          ...(signupDocuments && !hasOwnerDocuments
+            ? { user_snapshot: { ...(existingOwner.user_snapshot || {}), documents: signupDocuments } }
+            : {}),
+        },
+      },
     );
 
     await Driver.updateOne(
@@ -6211,6 +6436,7 @@ export const approveOwnerSignupFromDriver = async (driverId) => {
     user_snapshot: {
       driver_id: String(driver._id),
       source: 'driver_onboarding_owner',
+      ...(signupDocuments ? { documents: signupDocuments } : {}),
     },
   });
 
@@ -6248,6 +6474,17 @@ export const getOwnerById = async (id, currentAdmin = null) => {
     assertAdminPermission(currentAdmin, 'owners.view', 'owners');
     assertServiceLocationAccess(currentAdmin, owner.service_location_id?._id || owner.service_location_id);
   }
+
+  // Owners created from a partner-app sign-up before documents were copied: show the sign-up record's documents.
+  const snapshotDocs = owner.user_snapshot?.documents;
+  const signupDriverId = String(owner.user_snapshot?.driver_id || '');
+  if ((!snapshotDocs || !Object.keys(snapshotDocs).length) && mongoose.isValidObjectId(signupDriverId)) {
+    const signupRecord = await Driver.findById(signupDriverId).select('documents').lean();
+    if (signupRecord?.documents && Object.keys(signupRecord.documents).length) {
+      owner.user_snapshot = { ...(owner.user_snapshot || {}), documents: signupRecord.documents };
+    }
+  }
+
   return serializeOwner(owner);
 };
 
@@ -6264,12 +6501,14 @@ export const createOwner = async (payload) => {
   if (!payload.email?.trim()) {
     throw new ApiError(400, 'Email is required');
   }
-  if (!payload.password || String(payload.password).length < 6) {
+  // Owners sign in with OTP; a password is only checked when the admin still sends one.
+  if (payload.password && String(payload.password).length < 6) {
     throw new ApiError(400, 'Password must be at least 6 characters');
   }
-  if (payload.password !== payload.password_confirmation) {
+  if (payload.password && payload.password !== payload.password_confirmation) {
     throw new ApiError(400, 'Passwords do not match');
   }
+  const ownerPassword = payload.password ? String(payload.password) : randomBytes(16).toString('hex');
 
   const normalizedEmail = String(payload.email).trim().toLowerCase();
   const normalizedMobile = String(payload.mobile).trim();
@@ -6292,7 +6531,7 @@ export const createOwner = async (payload) => {
     name: String(payload.name).trim(),
     mobile: normalizedMobile,
     email: normalizedEmail,
-    password: await hashPassword(String(payload.password)),
+    password: await hashPassword(ownerPassword),
     service_location_id: serviceLocationId,
     legacy_service_location_id:
       payload.legacy_service_location_id || (serviceLocationId ? '' : payload.service_location_id || ''),
@@ -8755,9 +8994,10 @@ export const buildFinanceReport = async (query = {}) => {
 
   const items = await Ride.find(rideFilter)
     .sort({ createdAt: -1 })
-    .select('driverId userId fare status paymentMethod createdAt transport_type commissionAmount driverEarnings')
+    .select('driverId userId vehicleTypeId fare status paymentMethod createdAt transport_type commissionAmount driverEarnings')
     .populate('driverId', 'name phone registerFor vehicleType')
     .populate('userId', 'name phone')
+    .populate('vehicleTypeId', 'name')
     .lean();
 
   const normalizedTransportType = String(transport_type || '').trim().toLowerCase();
@@ -8774,7 +9014,9 @@ export const buildFinanceReport = async (query = {}) => {
         )
           .trim()
           .toLowerCase();
-      const resolvedVehicleType = String(item.driverId?.vehicleType || '').trim().toLowerCase();
+      // The vehicle type the ride was booked with (the admin filter lists these names); a driver's own
+      // vehicle type string was used before and matched nothing, giving an empty report.
+      const resolvedVehicleType = String(item.vehicleTypeId?.name || item.driverId?.vehicleType || '').trim().toLowerCase();
       const fare = Number(item.fare || 0);
       const commission =
         item.commissionAmount !== undefined && item.commissionAmount !== null

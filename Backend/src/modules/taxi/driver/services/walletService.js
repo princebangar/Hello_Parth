@@ -347,7 +347,12 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     ride.paymentMethod = paymentMethod;
     ride.commissionAmount = commissionAmount;
     ride.driverEarnings = driverEarnings;
+    // Keep the rest of the snapshot (tax %, waiting charge, owner commission, payment methods) — only the
+    // driver commission is resolved here.
+    const previousSnapshot =
+      typeof ride.pricingSnapshot?.toObject === 'function' ? ride.pricingSnapshot.toObject() : ride.pricingSnapshot || {};
     ride.pricingSnapshot = {
+      ...previousSnapshot,
       setPriceId: ride.pricingSnapshot?.setPriceId || commissionConfig.setPriceId || null,
       admin_commission_type_from_driver: Number(commissionConfig.type ?? ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
       admin_commission_from_driver: Number(commissionConfig.value ?? ride.pricingSnapshot?.admin_commission_from_driver ?? 0),

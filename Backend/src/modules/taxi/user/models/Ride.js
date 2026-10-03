@@ -230,6 +230,16 @@ const rideSchema = new mongoose.Schema(
         required: true,
       },
     },
+    // Extra stops the rider added between pickup and drop (addresses, in order).
+    stops: {
+      type: [
+        {
+          _id: false,
+          address: { type: String, default: '', trim: true, maxlength: 300 },
+        },
+      ],
+      default: [],
+    },
     dropAddress: {
       type: String,
       default: '',
@@ -487,6 +497,12 @@ const rideSchema = new mongoose.Schema(
         default: 0,
         min: 0,
       },
+      // Tax % included in the fare (shown as "Taxes & Fees" on the trip receipt). null = not recorded (old rides).
+      service_tax: {
+        type: Number,
+        default: null,
+        min: 0,
+      },
       allowed_payment_methods: {
         type: [String],
         default: ['cash', 'online'],
@@ -593,6 +609,17 @@ const rideSchema = new mongoose.Schema(
       default: null,
     },
     completedAt: {
+      type: Date,
+      default: null,
+    },
+    // pickup waiting charged when the trip started (already included in fare)
+    waitingCharge: {
+      minutes: { type: Number, default: 0, min: 0 },
+      ratePerMinute: { type: Number, default: 0, min: 0 },
+      amount: { type: Number, default: 0, min: 0 },
+    },
+    // set when the "starts in 15 minutes" push was sent to the driver of a scheduled ride
+    driverReminderSentAt: {
       type: Date,
       default: null,
     },

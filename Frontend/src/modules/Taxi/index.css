@@ -1070,8 +1070,8 @@ html, body, #root {
 .user-home,
 .user-home-page {
   min-height: 100vh !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  overflow-x: clip !important;
 }
 
 /* Home layout styling */
@@ -1079,8 +1079,8 @@ html, body, #root {
   position: relative !important;
   min-height: 100vh !important;
   width: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  overflow-x: clip !important;
   background: var(--user-bg) !important;
   box-sizing: border-box !important;
 }
@@ -1125,13 +1125,19 @@ html, body, #root {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
-  overflow-x: hidden !important;
+  overflow-x: clip !important;
 }
 
+/* The app bar above is the sticky header now; the search bar scrolls with the sheet. */
 .user-search-bar {
-  position: sticky !important;
-  top: 10px !important;
-  z-index: 50 !important;
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+.user-home-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
 }
 
 /* All Services Modal Overlay */
@@ -1427,4 +1433,36 @@ body.splash-active {
   .all-services-sheet {
     max-width: 100% !important;
   }
+}
+
+/* Google Places suggestions are appended to <body>; keep them above sticky headers, sheets and modals. */
+.pac-container {
+  z-index: 10000 !important;
+}
+
+/* Partner Terms / Privacy / Support pages (shared CMS page): keep admin-written content inside the screen width. */
+.driver-cms-fit {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+.driver-cms-fit .prose,
+.driver-cms-fit p,
+.driver-cms-fit li,
+.driver-cms-fit a,
+.driver-cms-fit span {
+  overflow-wrap: anywhere;
+}
+.driver-cms-fit img,
+.driver-cms-fit video,
+.driver-cms-fit iframe {
+  max-width: 100%;
+  height: auto;
+}
+.driver-cms-fit table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.driver-cms-fit pre {
+  white-space: pre-wrap;
 }

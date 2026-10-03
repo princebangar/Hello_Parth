@@ -241,7 +241,7 @@ const PaymentMethods = () => {
                         onChange={(e) =>
                           handleFieldChange(field.id, 'type', e.target.value)
                         }
-                        className={`${inputClass} pr-8`}
+                        className={`${inputClass} pr-8 appearance-none`}
                       >
                         <option value="text">Text</option>
                         <option value="number">Number</option>
@@ -250,7 +250,7 @@ const PaymentMethods = () => {
                       </select>
                       <ChevronDown
                         size={14}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
                       />
                     </div>
                   </div>

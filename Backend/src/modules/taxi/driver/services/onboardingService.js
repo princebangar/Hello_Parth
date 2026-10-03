@@ -36,8 +36,17 @@ import {
 import { WalletTransaction } from '../models/WalletTransaction.js';
 import { BusDriver } from '../models/BusDriver.js';
 import { applyDriverWalletAdjustment } from './walletService.js';
+import { alertTaxiAdmins } from '../../services/adminAlertService.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
+
+// Expiry dates are plain YYYY-MM-DD values; compare against today in India time.
+export const isPastDocumentExpiry = (value) => {
+  const date = String(value || '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  return date < today;
+};
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -1355,6 +1364,11 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     }
   }
 
+  const expiredDocument = Object.values(normalizedDocuments || {}).find((item) => isPastDocumentExpiry(item?.expiryDate));
+  if (expiredDocument) {
+    throw new ApiError(400, 'A document expiry date is in the past. Upload a valid (not expired) document.');
+  }
+
   if (missingDocuments.length > 0) {
     throw new ApiError(400, `Missing required documents: ${missingDocuments.join(', ')}`);
   }
@@ -1440,6 +1454,14 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
     session.completedAt = submittedAt;
     await session.save();
     await DriverRegistrationSession.deleteOne({ _id: session._id });
+
+    alertTaxiAdmins({
+      type: 'owner_registration',
+      title: 'New fleet owner registration',
+      body: `${owner.owner_name || owner.name || owner.company_name || 'An owner'} is waiting for approval`,
+      link: '/taxi/admin/owners/pending',
+      id: String(owner._id),
+    });
 
     return {
       message: 'Owner registration completed successfully',
@@ -1546,6 +1568,14 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   session.completedAt = submittedAt;
   await session.save();
   await DriverRegistrationSession.deleteOne({ _id: session._id });
+
+  alertTaxiAdmins({
+    type: 'driver_registration',
+    title: 'New driver registration',
+    body: `${driver.name || 'A driver'}${driver.phone ? ` (${driver.phone})` : ''} is waiting for approval`,
+    link: `/taxi/admin/drivers/${driver._id}`,
+    id: String(driver._id),
+  });
 
   return {
     message: 'Driver registration completed successfully',

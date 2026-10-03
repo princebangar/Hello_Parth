@@ -1,4 +1,5 @@
 import { ApiError } from '../../../../utils/ApiError.js';
+import { alertTaxiAdmins } from '../../services/adminAlertService.js';
 import { Admin } from '../../admin/models/Admin.js';
 import { Owner } from '../../admin/models/Owner.js';
 import { Driver } from '../../driver/models/Driver.js';
@@ -211,6 +212,14 @@ export const createSupportTicket = async (req, res) => {
       },
     ],
     lastMessageAt: new Date(),
+  });
+
+  alertTaxiAdmins({
+    type: 'support_ticket',
+    title: `New support ticket from ${requester.requesterName} (${requesterRole})`,
+    body: nextTitle,
+    link: '/taxi/admin/support/tickets',
+    id: String(ticket._id),
   });
 
   res.status(201).json({

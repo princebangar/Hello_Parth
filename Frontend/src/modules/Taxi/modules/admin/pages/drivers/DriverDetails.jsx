@@ -1069,13 +1069,16 @@ const DriverDetails = () => {
                         <div>
                           <h5 className="text-sm font-semibold text-gray-900 mb-4">Document details</h5>
                           <div className="space-y-3">
-                            <div className="flex justify-between items-start text-sm border-b border-gray-50 pb-2">
-                              <span className="text-gray-500 font-medium">Identify number</span>
-                              <span className="font-semibold text-gray-900">{doc.identify_number || '-'}</span>
-                            </div>
+                            {/* Document number only for documents that have one (Aadhaar, DL, PAN…), not for photos. */}
+                            {doc.identify_number ? (
+                              <div className="flex justify-between items-start gap-3 text-sm border-b border-gray-50 pb-2">
+                                <span className="text-gray-500 font-medium">Document number</span>
+                                <span className="font-semibold text-gray-900 break-all text-right">{doc.identify_number}</span>
+                              </div>
+                            ) : null}
                             <div className="flex justify-between items-start text-sm border-b border-gray-50 pb-2">
                               <span className="text-gray-500 font-medium">Expiry date</span>
-                              <span className="font-semibold text-gray-900">{doc.expiry_date || '-'}</span>
+                              <span className="font-semibold text-gray-900">{doc.expiry_date || 'N/A'}</span>
                             </div>
                             {doc.isReuploaded && (
                               <div className="mt-2 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block">

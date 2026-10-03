@@ -56,6 +56,24 @@ const fieldClassName =
 
 const labelClassName = 'mb-1 block text-[10px] font-bold text-slate-500';
 
+// Route distance/duration are stored as plain numbers ("193", "9.25"); show them with units so the
+// overview cards stay readable instead of bare numbers running into each other.
+const formatRouteDistance = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return 'N/A';
+  return /^\d+(\.\d+)?$/.test(text) ? `${Number(text).toLocaleString('en-IN')} km` : text;
+};
+
+const formatRouteDuration = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return 'N/A';
+  if (!/^\d+(\.\d+)?$/.test(text)) return text;
+  const totalMinutes = Math.round(Number(text) * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+};
+
 const statusTone = {
   active: 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-sm',
   draft: 'bg-amber-100 text-amber-800 border-amber-300 shadow-sm',
@@ -1642,11 +1660,11 @@ const BusServiceManager = ({
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-white px-4 py-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Distance</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.route?.distanceKm || 'N/A'}</p>
+                    <p className="mt-1 break-words text-sm font-black text-slate-900">{formatRouteDistance(detailBus.route?.distanceKm)}</p>
                   </div>
                   <div className="rounded-2xl bg-white px-4 py-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Duration</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{detailBus.route?.durationHours || 'N/A'}</p>
+                    <p className="mt-1 break-words text-sm font-black text-slate-900">{formatRouteDuration(detailBus.route?.durationHours)}</p>
                   </div>
                   <div className="rounded-2xl bg-white px-4 py-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Stops</p>
@@ -2853,7 +2871,7 @@ const BusServiceManager = ({
           </>
           ) : null}
 
-          <section className="mt-6 rounded-3xl border border-slate-100 bg-white p-5">
+          <section className="sticky bottom-0 z-20 mt-6 rounded-3xl border border-slate-100 bg-white/95 p-5 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-4">
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">

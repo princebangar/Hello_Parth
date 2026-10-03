@@ -31,6 +31,7 @@ import {
 } from "../services/authService.js";
 import { cancelScheduledRideByDriver, emitToDriver } from "../../services/dispatchService.js";
 import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
+import { alertTaxiAdmins } from "../../services/adminAlertService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
 import {
@@ -81,6 +82,7 @@ import {
   verifyDriverVehicleRc,
   startDriverOnboarding,
   verifyDriverOtp,
+  isPastDocumentExpiry,
 } from "../services/onboardingService.js";
 import {
   buildDriverTodaySummaryFromDocument,
@@ -2016,9 +2018,11 @@ export const goOnline = async (req, res) => {
     await ensureDriverWalletCanAcceptRide(existingDriver);
   }
   await clearDriverActiveRideIfStale(existingDriver);
+  // A start time left over from a session that ended without "go offline" (app killed, stale sweep) is not
+  // active time; only an already-online driver has a real session to close here.
   const trackingBeforeOnline = mergeOnlineSessionIntoTracking(
     existingDriver.incentiveTracking || {},
-    existingDriver.incentiveTracking?.currentOnlineStartedAt,
+    existingDriver.isOnline ? existingDriver.incentiveTracking?.currentOnlineStartedAt : null,
     new Date(),
   );
   const nextTodaySummary = buildDriverTodaySummaryFromDocument(existingDriver);
@@ -3284,6 +3288,10 @@ export const updateCurrentDriverDocument = async (req, res) => {
     throw new ApiError(400, "Uploaded document image URL is required");
   }
 
+  if (isPastDocumentExpiry(document.expiryDate || document.expiry_date)) {
+    throw new ApiError(400, "Expiry date is in the past. Upload a document that is still valid.");
+  }
+
   const existingStatus = String(
     existingDocument.status ||
     existingDocument.verificationStatus ||
@@ -3353,9 +3361,11 @@ export const updateCurrentDriverDocument = async (req, res) => {
     expiryDate: String(document.expiryDate || document.expiry_date || existingDocument.expiryDate || existingDocument.expiry_date || "").trim(),
     expiry_date: String(document.expiryDate || document.expiry_date || existingDocument.expiryDate || existingDocument.expiry_date || "").trim(),
     expiresAt: String(document.expiryDate || document.expiry_date || existingDocument.expiryDate || existingDocument.expiry_date || "").trim(),
-    status: document.status ? String(document.status).trim() : "pending",
-    verificationStatus: document.verificationStatus ? String(document.verificationStatus).trim() : "pending",
-    reviewStatus: document.reviewStatus ? String(document.reviewStatus).trim() : "pending",
+    // Any change made by the driver goes back to the admin for review; the client can never set its own approval.
+    status: "pending",
+    verificationStatus: "pending",
+    reviewStatus: "pending",
+    approvalStatus: "pending",
     comment: document.comment !== undefined ? String(document.comment || "").trim() : "",
     remarks: document.remarks !== undefined ? String(document.remarks || "").trim() : "",
     reason: document.reason !== undefined ? String(document.reason || "").trim() : "",
@@ -3372,6 +3382,16 @@ export const updateCurrentDriverDocument = async (req, res) => {
 
   driver.markModified("documents");
   await driver.save();
+
+  if (driver.approve) {
+    alertTaxiAdmins({
+      type: "document_reverification",
+      title: `${driver.name || "A driver"} updated a document`,
+      body: `${updatedDocument.label || updatedDocument.name || documentKey} is waiting for verification`,
+      link: `/taxi/admin/drivers/${driver._id}`,
+      id: String(driver._id),
+    });
+  }
 
   res.json({
     success: true,
@@ -3601,6 +3621,7 @@ export const getBusDriverSeatLayout = async (req, res) => {
         toCity: busService.route?.destinationCity || "",
         departureTime: schedule?.departureTime || "",
         arrivalTime: schedule?.arrivalTime || "",
+        cancellationPolicy: busService.cancellationPolicy || "",
       },
     },
   });
@@ -3625,8 +3646,13 @@ export const listBusDriverBookings = async (req, res) => {
   const scheduleId = toCleanString(req.query?.scheduleId);
   const status = toCleanString(req.query?.status);
 
+  // "from" lists every booking on or after that date (the Upcoming view); "date" is one day.
+  const fromDate = toCleanString(req.query?.from);
+
   if (travelDate) {
     query.travelDate = normalizeBusTravelDate(travelDate);
+  } else if (fromDate) {
+    query.travelDate = { $gte: normalizeBusTravelDate(fromDate) };
   }
 
   if (scheduleId) {
@@ -3635,9 +3661,11 @@ export const listBusDriverBookings = async (req, res) => {
 
   if (status) {
     query.status = status;
+  } else if (String(req.query?.activeOnly || '') === '1') {
+    query.status = { $nin: ['failed', 'expired', 'cancelled'] };
   }
 
-  const items = await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).lean();
+  const items = await BusBooking.find(query).sort({ travelDate: 1, createdAt: -1 }).limit(500).lean();
 
   res.json({
     success: true,
@@ -7698,7 +7726,7 @@ export const claimDriverIncentiveReward = async (req, res) => {
       ...(driver.incentiveTracking || {}),
       ...mergeOnlineSessionIntoTracking(
         driver.incentiveTracking || {},
-        driver.incentiveTracking?.currentOnlineStartedAt,
+        driver.isOnline ? driver.incentiveTracking?.currentOnlineStartedAt : null,
         new Date(),
       ),
     },
@@ -7741,6 +7769,7 @@ export const claimDriverIncentiveReward = async (req, res) => {
     },
   ]);
 
+  const previousTracking = driver.incentiveTracking?.toObject ? driver.incentiveTracking.toObject() : { ...(driver.incentiveTracking || {}) };
   driver.incentiveTracking = {
     ...(liveDriver.incentiveTracking || {}),
     dailyActivity: pruneDailyActivity(liveDriver.incentiveTracking?.dailyActivity),
@@ -7750,18 +7779,26 @@ export const claimDriverIncentiveReward = async (req, res) => {
 
   const rewardAmount = Number(targetReward.payout_amount ?? targetReward.reward_amount ?? 0);
 
-  const walletResult = await applyDriverWalletAdjustment({
-    driverId: driver._id,
-    amount: rewardAmount,
-    type: "adjustment",
-    description: `Incentive reward credited for ${targetReward.name || targetReward.label || "milestone"}`,
-    metadata: {
-      category: "driver_incentive",
-      rewardType: normalizedRewardType,
-      rewardKey: normalizedRewardType === "milestone" ? String(targetReward.id) : String(targetReward.key),
-      periodKey: targetReward.periodKey,
-    },
-  });
+  // The reward is marked claimed first (so a double tap cannot pay twice); if the wallet credit then fails the
+  // claim is undone, otherwise the driver would lose a reward he never received.
+  let walletResult;
+  try {
+    walletResult = await applyDriverWalletAdjustment({
+      driverId: driver._id,
+      amount: rewardAmount,
+      type: "adjustment",
+      description: `Incentive reward credited for ${targetReward.name || targetReward.label || "milestone"}`,
+      metadata: {
+        category: "driver_incentive",
+        rewardType: normalizedRewardType,
+        rewardKey: normalizedRewardType === "milestone" ? String(targetReward.id) : String(targetReward.key),
+        periodKey: targetReward.periodKey,
+      },
+    });
+  } catch (creditError) {
+    await Driver.updateOne({ _id: driver._id }, { $set: { incentiveTracking: previousTracking } });
+    throw creditError;
+  }
 
   res.json({
     success: true,

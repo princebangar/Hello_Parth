@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import RowActionMenu from '../../components/ui/RowActionMenu';
 import { ChevronDown, Filter, LoaderCircle, MoreVertical, Search, CheckCircle, Clock, XCircle, MapPin, Truck, ChevronRight, X, FileText, UserPlus, Eye, Download, User, CreditCard } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
@@ -22,15 +23,18 @@ const PAYMENT_STYLES = {
   COD: 'bg-orange-50 text-orange-600 border border-orange-100',
 };
 
+// Same format as the Trips page: "03 Oct 2026, 06:33 pm"
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  const optionsDate = { day: '2-digit', month: 'short', year: 'numeric' };
-  const optionsTime = { hour: '2-digit', minute: '2-digit', hour12: true };
-  const dPart = d.toLocaleDateString('en-GB', optionsDate);
-  const tPart = d.toLocaleTimeString('en-US', optionsTime);
-  return `${dPart} • ${tPart}`;
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 const handlePrintInvoice = (delivery) => {
@@ -166,114 +170,16 @@ const DeliveryDetailsDrawer = ({ delivery, onClose }) => {
   );
 };
 
-const ActionMenu = ({ row, onViewDetails, onPrintInvoice }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleNotImplemented = (action) => {
-    toast.error(`Backend API for '${action}' is not implemented yet.`);
-    setIsOpen(false);
-  };
-
-  const isCompleted = row.tripStatus === 'COMPLETED';
-  const isCancelled = row.tripStatus === 'CANCELLED';
-  const isOngoing = row.tripStatus === 'ON_TRIP' || row.tripStatus === 'ONGOING';
-  const hasDriver = row.driverName && row.driverName !== '--' && row.driverName !== 'N/A';
-
-  return (
-    <div className="relative" ref={menuRef}>
-      <button 
-        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-        className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
-        aria-label="Actions"
-        aria-expanded={isOpen}
-      >
-        <MoreVertical size={18} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50">
-          <button 
-            onClick={() => { setIsOpen(false); onViewDetails(); }}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <Eye size={14} /> View Details
-          </button>
-          <button 
-            disabled={isCompleted || isCancelled || isOngoing || hasDriver}
-            onClick={() => handleNotImplemented('Assign Driver')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-700"
-          >
-            <UserPlus size={14} /> Assign Driver
-          </button>
-          <button 
-            onClick={() => handleNotImplemented('Change Status')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <CheckCircle size={14} /> Change Status
-          </button>
-          <button 
-            disabled={!isOngoing}
-            onClick={() => handleNotImplemented('Track Delivery')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-700"
-          >
-            <MapPin size={14} /> Track Delivery
-          </button>
-          <div className="h-px bg-gray-100 my-1"></div>
-          <button 
-            onClick={() => handleNotImplemented('Customer Details')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <User size={14} /> Customer Details
-          </button>
-          <button 
-            onClick={() => handleNotImplemented('Driver Details')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <Truck size={14} /> Driver Details
-          </button>
-          <button 
-            onClick={() => handleNotImplemented('Payment Details')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <CreditCard size={14} /> Payment Details
-          </button>
-          <div className="h-px bg-gray-100 my-1"></div>
-          <button 
-            onClick={() => { setIsOpen(false); onPrintInvoice(); }}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <FileText size={14} /> Print Invoice
-          </button>
-          <button 
-            onClick={() => { setIsOpen(false); onPrintInvoice(); }}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-yellow-50 hover:text-yellow-900 flex items-center gap-2"
-          >
-            <Download size={14} /> Download Invoice
-          </button>
-          <div className="h-px bg-gray-100 my-1"></div>
-          <button 
-            disabled={isCompleted || isCancelled}
-            onClick={() => handleNotImplemented('Cancel Delivery')}
-            className="w-full text-left px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <XCircle size={14} /> Cancel Delivery
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
+// Only working actions are listed; the menu is drawn outside the table so it is not clipped.
+const ActionMenu = ({ row, onViewDetails, onPrintInvoice }) => (
+  <RowActionMenu
+    label="Delivery actions"
+    items={[
+      { key: 'view', label: 'View Details', icon: <Eye size={14} />, onClick: onViewDetails },
+      { key: 'print', label: 'Print Invoice', icon: <FileText size={14} />, onClick: onPrintInvoice },
+    ]}
+  />
+);
 
 const StatCard = ({ title, value, icon: Icon, colorClass }) => (
   <div className="bg-white rounded-xl border border-gray-100 p-3 shadow-sm flex items-center gap-3 transition-transform hover:-translate-y-0.5 duration-200">
@@ -614,7 +520,7 @@ const Deliveries = () => {
                   rows.map((row) => (
                     <tr key={row.id || row.requestId || Math.random()} className="hover:bg-yellow-50/30 transition-colors group cursor-pointer" onClick={() => setSelectedDelivery(row)}>
                       <td className="px-4 py-2 text-[13px] font-bold text-gray-900 font-mono">{row.requestId || '-'}</td>
-                      <td className="px-4 py-2 text-[12px] font-medium text-gray-600">{formatDate(row.date)}</td>
+                      <td className="px-4 py-2 text-[12px] font-medium text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-2 text-[13px] font-bold text-gray-800">{row.userName || '-'}</td>
                       <td className="px-4 py-2 text-[13px] font-medium text-gray-700">{row.driverName || '--'}</td>
                       <td className="px-4 py-2 text-[13px] font-bold text-gray-700 capitalize">{String(row.transportType || '').toLowerCase()}</td>

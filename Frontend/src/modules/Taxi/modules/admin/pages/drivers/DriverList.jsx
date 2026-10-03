@@ -32,7 +32,7 @@ const DriverList = ({ mode = 'approved' }) => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({ dateRange: '', vehicleType: '' });
+  const [filters, setFilters] = useState({ dateRange: '', online: '' });
   const [passwordModal, setPasswordModal] = useState({ isOpen: false, driverId: null, password: '', isSubmitting: false });
   const [drivers, setDrivers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,12 +41,25 @@ const DriverList = ({ mode = 'approved' }) => {
   const [paginator, setPaginator] = useState(null);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const fetchDrivers = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm } = {}) => {
+  // Start of today / this week (Mon) / this month, local time.
+  const registeredFromFor = (range) => {
+    if (!range) return '';
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (range === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    if (range === 'month') d.setDate(1);
+    return d.toISOString();
+  };
+
+  const fetchDrivers = async ({ nextPage = page, nextLimit = itemsPerPage, nextSearch = searchTerm, nextFilters = filters } = {}) => {
     setIsLoading(true);
     setError('');
     try {
+      const registeredFrom = registeredFromFor(nextFilters.dateRange);
       const responseData = await adminService.getDrivers(nextPage, nextLimit, {
         ...(mode === 'active' ? { isOnline: true } : { approve: true }),
+        ...(mode !== 'active' && nextFilters.online ? { isOnline: nextFilters.online === 'online' } : {}),
+        ...(registeredFrom ? { registeredFrom } : {}),
         search: String(nextSearch || '').trim(),
       });
       const driversList = responseData.data?.results || [];
@@ -99,6 +112,16 @@ const DriverList = ({ mode = 'approved' }) => {
   useEffect(() => {
     fetchDrivers({ nextPage: page, nextLimit: itemsPerPage, nextSearch: searchTerm });
   }, [page]);
+
+  const isFirstFilterRun = React.useRef(true);
+  useEffect(() => {
+    if (isFirstFilterRun.current) {
+      isFirstFilterRun.current = false;
+      return;
+    }
+    setPage(1);
+    fetchDrivers({ nextPage: 1, nextLimit: itemsPerPage, nextSearch: searchTerm, nextFilters: filters });
+  }, [filters.dateRange, filters.online]);
 
   const closeMenu = () => {
     setActiveMenu(null);
@@ -276,7 +299,7 @@ const DriverList = ({ mode = 'approved' }) => {
         {showFilters && (
           <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Date Range</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Registered</label>
               <select 
                 value={filters.dateRange}
                 onChange={(e) => setFilters({...filters, dateRange: e.target.value})}
@@ -288,19 +311,20 @@ const DriverList = ({ mode = 'approved' }) => {
                 <option value="month">This Month</option>
               </select>
             </div>
+            {mode !== 'active' && (
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Vehicle Type</label>
-              <select 
-                value={filters.vehicleType}
-                onChange={(e) => setFilters({...filters, vehicleType: e.target.value})}
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Online status</label>
+              <select
+                value={filters.online}
+                onChange={(e) => setFilters({...filters, online: e.target.value})}
                 className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
               >
-                <option value="">All Types</option>
-                <option value="sedan">Sedan</option>
-                <option value="suv">SUV</option>
-                <option value="hatchback">Hatchback</option>
+                <option value="">All</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
               </select>
             </div>
+            )}
           </div>
         )}
       </div>
@@ -371,6 +395,12 @@ const DriverList = ({ mode = 'approved' }) => {
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200 capitalize">
                         {driver.status}
                       </span>
+                      {mode !== 'active' ? (
+                        <span className={`mt-0.5 flex items-center justify-center gap-1 text-[10px] font-semibold ${driver.isOnline ? 'text-green-700' : 'text-gray-400'}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${driver.isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                          {driver.isOnline ? 'Online' : 'Offline'}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-0.5">
@@ -451,15 +481,7 @@ const DriverList = ({ mode = 'approved' }) => {
             >
               <Edit2 size={15} className="text-yellow-600" /> Edit Details
             </button>
-            <button
-              onClick={() => {
-                closeMenu();
-                setPasswordModal({ isOpen: true, driverId: activeMenu, password: '', isSubmitting: false });
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium"
-            >
-              <Key size={15} className="text-blue-600" /> Reset Password
-            </button>
+            {/* No password reset: driver login is OTP only. */}
             <button
               onClick={() => {
                 closeMenu();

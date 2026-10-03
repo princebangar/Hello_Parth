@@ -4,6 +4,24 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { countTotalSeats, getAdminBuses } from '../../services/busService';
 
+// Route distance/duration are stored as plain numbers ("193", "9.25"); show them with units so the
+// overview cards stay readable instead of bare numbers running into each other.
+const formatRouteDistance = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return 'N/A';
+  return /^\d+(\.\d+)?$/.test(text) ? `${Number(text).toLocaleString('en-IN')} km` : text;
+};
+
+const formatRouteDuration = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return 'N/A';
+  if (!/^\d+(\.\d+)?$/.test(text)) return text;
+  const totalMinutes = Math.round(Number(text) * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+};
+
 const statusTone = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   draft: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -151,11 +169,11 @@ const BusServiceDetails = () => {
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Distance</p>
-                <p className="mt-2 text-base font-black text-slate-900">{bus.route?.distanceKm || 'N/A'}</p>
+                <p className="mt-2 break-words text-base font-black text-slate-900">{formatRouteDistance(bus.route?.distanceKm)}</p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Duration</p>
-                <p className="mt-2 text-base font-black text-slate-900">{bus.route?.durationHours || 'N/A'}</p>
+                <p className="mt-2 break-words text-base font-black text-slate-900">{formatRouteDuration(bus.route?.durationHours)}</p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Stops</p>
@@ -198,11 +216,11 @@ const BusServiceDetails = () => {
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
                   <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Distance</p>
-                    <p className="mt-2 text-base font-black text-slate-900">{bus.returnRoute?.distanceKm || 'N/A'}</p>
+                    <p className="mt-2 break-words text-base font-black text-slate-900">{formatRouteDistance(bus.returnRoute?.distanceKm)}</p>
                   </div>
                   <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Duration</p>
-                    <p className="mt-2 text-base font-black text-slate-900">{bus.returnRoute?.durationHours || 'N/A'}</p>
+                    <p className="mt-2 break-words text-base font-black text-slate-900">{formatRouteDuration(bus.returnRoute?.durationHours)}</p>
                   </div>
                   <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Stops</p>

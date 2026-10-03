@@ -38,7 +38,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleMap, MarkerF } from '@react-google-maps/api';
+import { GoogleMap } from '@react-google-maps/api';
 import { adminService } from '../../services/adminService';
 import { BACKEND_LABEL } from '../../../../shared/api/runtimeConfig';
 import { GOOGLE_MAPS_API_KEY, HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useBaseGoogleMapsLoader } from '../../utils/googleMaps';
@@ -56,7 +56,7 @@ const MainDashboard = () => {
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
   // Timeframe filter state
-  const [timeframe, setTimeframe] = useState('Today'); // Today, Week, Month, Year
+  const [timeframe, setTimeframe] = useState('Today'); // Today or All time
 
   // Interactive Chart states
   const [hoveredRevenueIndex, setHoveredRevenueIndex] = useState(null);
@@ -280,7 +280,7 @@ const MainDashboard = () => {
                   <div className="h-1.5 w-1.5 rounded-full bg-[#FFC400]" />
                 </div>
                 <div className="flex gap-1">
-                  {['Today', 'Week', 'Month', 'Year'].map((tab) => (
+                  {['Today', 'All time'].map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setTimeframe(tab)}
@@ -291,7 +291,9 @@ const MainDashboard = () => {
                   ))}
                 </div>
               </div>
-              <p className="text-[11px] text-[#64748B]">Platform commission vs overall driver disbursements.</p>
+              <p className="text-[11px] text-[#64748B]">
+                {timeframe === 'Today' ? 'Completed trips today' : 'All completed trips'} · chart shows the last 4 months.
+              </p>
             </div>
 
             <div className="grid grid-cols-3 gap-2 my-3">
@@ -547,7 +549,7 @@ const MainDashboard = () => {
             <MapPin size={14} className="text-[#FFC400]" />
             <span>Operational Demand Distribution</span>
           </h3>
-          <p className="text-[11px] text-[#64748B] mb-4">Live fleet positions and demand distribution maps.</p>
+          <p className="text-[11px] text-[#64748B] mb-4">Service area overview. Live driver positions are on God&apos;s Eye and the Heat Map.</p>
 
           <div className="w-full h-80 rounded-xl overflow-hidden border border-[#E5E7EB] bg-slate-50 flex items-center justify-center relative shadow-sm">
             {isLoaded ? (
@@ -573,8 +575,6 @@ const MainDashboard = () => {
                   ]
                 }}
               >
-                {/* Central operational coordinate */}
-                <MarkerF position={INDIA_CENTER} />
               </GoogleMap>
             ) : (
               <div className="text-center text-xs text-[#64748B] flex flex-col items-center gap-2">

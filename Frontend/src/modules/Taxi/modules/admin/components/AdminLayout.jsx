@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition, Suspense } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition, Suspense } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   FOOD_ADMIN_HOME,
@@ -674,6 +674,9 @@ const AdminLayout = () => {
   const [bookingsFeed, setBookingsFeed] = useState([]);
   const [chatNotifications, setChatNotifications] = useState([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  // Things waiting for the admin (driver/owner sign-ups, open tickets, re-uploaded documents). They leave the
+  // list once handled, so they are not dismissable like the activity feeds.
+  const [pendingRequests, setPendingRequests] = useState({ results: [], total: 0 });
   const [rideRequestPage, setRideRequestPage] = useState(1);
   const [bookingPage, setBookingPage] = useState(1);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -717,7 +720,7 @@ const AdminLayout = () => {
 
     // Wait for sibling chunks so the first Food ↔ Taxi switch has no blank flash.
     // Global lives in the Food admin shell, so it needs the same chunk warm-up.
-    if (path === FOOD_ADMIN_HOME || path === GLOBAL_ADMIN_HOME) {
+    if (path.startsWith(FOOD_ADMIN_HOME) || path.startsWith(GLOBAL_ADMIN_HOME)) {
       Promise.resolve(prefetchFoodAdmin()).finally(go);
       return;
     }
@@ -1183,19 +1186,37 @@ const AdminLayout = () => {
       ? rideRequestFeed.paginator
       : notificationTab === 'bookings'
         ? pagedBookings.paginator
-        : { current_page: 1, last_page: 1, total: chatNotifications.length };
+        : notificationTab === 'requests'
+          ? { current_page: 1, last_page: 1, total: pendingRequests.results.length }
+          : { current_page: 1, last_page: 1, total: chatNotifications.length };
 
   const totalNotificationItems =
     Math.max(0, Number(rideRequestFeed?.paginator?.total || 0) - dismissedRideRequestSet.size) +
     visibleBookingsFeed.length +
-    visibleChatNotifications.length;
+    visibleChatNotifications.length +
+    Number(pendingRequests.total || 0);
 
   const currentNotificationCount =
     notificationTab === 'ride_requests'
       ? visibleRideRequestResults.length
       : notificationTab === 'bookings'
         ? pagedBookings.results.length
-        : visibleChatNotifications.length;
+        : notificationTab === 'requests'
+          ? 0
+          : visibleChatNotifications.length;
+
+  const loadPendingRequests = useCallback(async () => {
+    try {
+      const response = await adminService.getPendingRequests();
+      const data = response?.data || response || {};
+      setPendingRequests({
+        results: Array.isArray(data.results) ? data.results : [],
+        total: Number(data.total || 0),
+      });
+    } catch (error) {
+      console.error('Failed to load admin pending requests:', error);
+    }
+  }, []);
 
   const setMode = (nextMode) => {
     localStorage.setItem(MODE_STORAGE_KEY, nextMode);
@@ -1323,6 +1344,11 @@ const AdminLayout = () => {
           return;
         }
 
+        if (notificationTab === 'requests') {
+          await loadPendingRequests();
+          return;
+        }
+
         // The bell only needs the latest bookings, so ask for one page of 50 instead of the whole table. It is
         // paged in the browser (5 per page), so flipping pages does not need another request.
         const response = await adminService.getOwnerBookings({ page: 1, limit: 50 });
@@ -1354,7 +1380,14 @@ const AdminLayout = () => {
     return () => {
       isMounted = false;
     };
-  }, [isNotificationsOpen, notificationTab, rideRequestPage]);
+  }, [isNotificationsOpen, notificationTab, rideRequestPage, loadPendingRequests]);
+
+  // The bell dot must show pending sign-ups/tickets even before the panel is opened.
+  useEffect(() => {
+    if (mode !== ADMIN_MODE) return undefined;
+    const timer = setTimeout(loadPendingRequests, 1500);
+    return () => clearTimeout(timer);
+  }, [mode, loadPendingRequests]);
 
   useEffect(() => {
     if (!isSearchOpen) return undefined;
@@ -1390,6 +1423,16 @@ const AdminLayout = () => {
     socketService.on('new_driver_registration', (data) => {
       console.log('New driver registration:', data);
     });
+
+    const handleAdminRequest = (payload = {}) => {
+      toast(`${payload.title || 'New request'}${payload.body ? ` — ${payload.body}` : ''}`, {
+        duration: 6000,
+        className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-amber-50 bg-white',
+      });
+      loadPendingRequests();
+    };
+
+    socketService.on('admin:request', handleAdminRequest);
 
     const handleSupportChatNotification = (payload = {}) => {
       const senderRole = String(payload.senderRole || payload.sender?.role || '').toLowerCase();
@@ -1447,8 +1490,9 @@ const AdminLayout = () => {
       socketService.off('new_sos');
       socketService.off('new_driver_registration');
       socketService.off('chat:message', handleSupportChatNotification);
+      socketService.off('admin:request', handleAdminRequest);
     };
-  }, [isAdminChatRoute, navigate]);
+  }, [isAdminChatRoute, navigate, loadPendingRequests]);
 
   const handleLogout = () => {
     socketService.disconnect();
@@ -1699,7 +1743,7 @@ const AdminLayout = () => {
                       <div>
                         <p className="text-sm font-extrabold text-slate-900">Notifications</p>
                         <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                          Latest bookings, ride requests, and support chats
+                          Ride requests, bookings, chats and approvals
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1718,20 +1762,20 @@ const AdminLayout = () => {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-1">
+                    <div className="mt-4 grid grid-cols-4 gap-1 rounded-2xl bg-slate-50 p-1">
                       <button
                         type="button"
                         onClick={() => {
                           setNotificationTab('ride_requests');
                           setRideRequestPage(1);
                         }}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        className={`rounded-xl px-2 py-2 text-xs font-bold transition-all ${
                           notificationTab === 'ride_requests'
                             ? 'bg-white text-slate-900 shadow-sm'
                             : 'text-slate-500 hover:text-slate-900'
                         }`}
                       >
-                        Ride Requests
+                        Rides
                       </button>
                       <button
                         type="button"
@@ -1739,7 +1783,7 @@ const AdminLayout = () => {
                           setNotificationTab('bookings');
                           setBookingPage(1);
                         }}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        className={`rounded-xl px-2 py-2 text-xs font-bold transition-all ${
                           notificationTab === 'bookings'
                             ? 'bg-white text-slate-900 shadow-sm'
                             : 'text-slate-500 hover:text-slate-900'
@@ -1752,13 +1796,29 @@ const AdminLayout = () => {
                         onClick={() => {
                           setNotificationTab('chats');
                         }}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        className={`rounded-xl px-2 py-2 text-xs font-bold transition-all ${
                           notificationTab === 'chats'
                             ? 'bg-white text-slate-900 shadow-sm'
                             : 'text-slate-500 hover:text-slate-900'
                         }`}
                       >
                         Chats
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotificationTab('requests');
+                        }}
+                        className={`relative rounded-xl px-2 py-2 text-xs font-bold transition-all ${
+                          notificationTab === 'requests'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Requests
+                        {pendingRequests.total > 0 ? (
+                          <span className="absolute -right-0.5 -top-0.5 inline-flex h-2 w-2 rounded-full bg-rose-500" />
+                        ) : null}
                       </button>
                     </div>
                   </div>
@@ -1886,6 +1946,46 @@ const AdminLayout = () => {
                           </button>
                         ))}
                       </div>
+                    ) : notificationTab === 'requests' ? pendingRequests.results.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
+                        <p className="text-sm font-bold text-slate-900">Nothing waiting for you</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          New driver/owner sign-ups, support tickets and re-uploaded documents will show up here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {pendingRequests.results.map((item) => (
+                          <button
+                            key={`${item.type}:${item.id}`}
+                            type="button"
+                            onClick={() => {
+                              if (item.link) navigate(item.link);
+                              setIsNotificationsOpen(false);
+                            }}
+                            className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-slate-900">{item.title}</p>
+                                <p className="mt-1 truncate text-xs font-semibold text-slate-500">{item.body}</p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                {item.type === 'support_ticket'
+                                  ? 'Ticket'
+                                  : item.type === 'document_reverification'
+                                    ? 'Document'
+                                    : item.type === 'owner_registration'
+                                      ? 'Owner'
+                                      : 'Driver'}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-end text-[11px] font-semibold text-slate-400">
+                              <span>{formatRelativeAdminTime(item.createdAt)}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     ) : visibleChatNotifications.length === 0 ? (
                       <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center">
                         <p className="text-sm font-bold text-slate-900">No new chats found</p>
@@ -2006,6 +2106,21 @@ const AdminLayout = () => {
                   isUserMenuOpen ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
                 }`}
               >
+                {/* One admin profile page serves the whole panel; it lives in the Food/Global shell. */}
+                {showGlobalTab || showFoodTab ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setIsUserMenuOpen(false);
+                      switchAdminModule(showGlobalTab ? `${GLOBAL_ADMIN_HOME}/profile` : '/admin/food/profile');
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-slate-700 transition-all hover:bg-slate-50"
+                  >
+                    <Users size={16} />
+                    <span className="text-[12px] font-bold">My Profile</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={(event) => {

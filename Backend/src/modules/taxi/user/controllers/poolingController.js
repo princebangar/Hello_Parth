@@ -310,7 +310,33 @@ export const searchPoolingRoutes = asyncHandler(async (req, res) => {
   if (to) conditions.push({ destinationLabel: { $regex: escapeRegex(to), $options: 'i' } });
   if (conditions.length > 0) filter.$and = conditions;
 
-  const routes = await PoolingRoute.find(filter).populate('assignedVehicleTypeIds');
+  const travelDate = toCleanString(req.query?.date);
+  const hasTravelDate = /^\d{4}-\d{2}-\d{2}$/.test(travelDate);
+  const todayInIndia = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  if (hasTravelDate && travelDate < todayInIndia) {
+    throw new ApiError(400, 'Travel date cannot be in the past');
+  }
+
+  let routes = await PoolingRoute.find(filter).populate('assignedVehicleTypeIds');
+
+  // Only routes with a departure that runs on the chosen weekday (a schedule with no days runs every day).
+  if (hasTravelDate) {
+    const weekday = new Date(`${travelDate}T12:00:00${IST_OFFSET}`)
+      .toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' })
+      .toLowerCase();
+    routes = routes.filter((route) => {
+      const active = (Array.isArray(route.schedules) ? route.schedules : []).filter(
+        (schedule) => String(schedule?.status || 'active') === 'active',
+      );
+      if (active.length === 0) return true;
+      return active.some((schedule) => {
+        const days = (Array.isArray(schedule?.activeDays) ? schedule.activeDays : [])
+          .map((day) => toCleanString(day).slice(0, 3).toLowerCase())
+          .filter(Boolean);
+        return days.length === 0 || days.includes(weekday);
+      });
+    });
+  }
 
   return ok(res, routes.map(withPrimaryVehicleDriver), 'Routes fetched successfully');
 });

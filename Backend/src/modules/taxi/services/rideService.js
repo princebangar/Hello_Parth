@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { sendPushNotificationToEntities } from './pushNotificationService.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { getOrLoadCachedValue } from '../../../utils/cache.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
@@ -925,12 +926,21 @@ const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, 
   }
 };
 
+// Up to 3 rider stops, stored as addresses in the order they were added.
+const normalizeRideStops = (stops) =>
+  (Array.isArray(stops) ? stops : [])
+    .map((stop) => String((stop && typeof stop === 'object' ? stop.address : stop) || '').trim().slice(0, 300))
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((address) => ({ address }));
+
 export const createRideRecord = async ({
   userId,
   pickupCoords,
   dropCoords,
   pickupAddress,
   dropAddress,
+  stops,
   fare,
   estimatedDistanceMeters,
   estimatedDurationMinutes,
@@ -1096,6 +1106,7 @@ export const createRideRecord = async ({
     waiting_charge: Number(pricingRule?.waiting_charge ?? 0),
     free_waiting_before: Number(pricingRule?.free_waiting_before ?? 0),
     free_waiting_after: Number(pricingRule?.free_waiting_after ?? 0),
+    service_tax: Math.max(0, Number(pricingRule?.service_tax ?? (normalizedServiceType === 'parcel' ? primaryVehicle?.service_tax : 0) ?? 0)) || 0,
     allowed_payment_methods: allowedPaymentMethods,
     resolvedAt: pricingRule ? new Date() : null,
   };
@@ -1168,6 +1179,7 @@ export const createRideRecord = async ({
       pickupAddress: normalizeAddress(pickupAddress),
       dropLocation: toPoint(dropCoords, 'drop'),
       dropAddress: normalizeAddress(dropAddress),
+      stops: normalizeRideStops(stops),
       fare: effectiveStartingFare,
       baseFare: safeFare,
       bookingMode: effectiveBookingMode,
@@ -1223,6 +1235,7 @@ export const createRideRecord = async ({
             pickupAddress: normalizeAddress(pickupAddress),
             dropLocation: toPoint(dropCoords, 'drop'),
             dropAddress: normalizeAddress(dropAddress),
+            stops: normalizeRideStops(stops),
             fare: effectiveStartingFare,
             baseFare: safeFare,
             bookingMode: effectiveBookingMode,
@@ -1322,6 +1335,9 @@ export const serializeRideRealtime = (ride) => ({
   status: ride.status,
   liveStatus: ride.liveStatus,
   fare: ride.fare,
+  waitingCharge: Number(ride.waitingCharge?.amount || 0) > 0
+    ? { minutes: Number(ride.waitingCharge.minutes || 0), ratePerMinute: Number(ride.waitingCharge.ratePerMinute || 0), amount: Number(ride.waitingCharge.amount || 0) }
+    : null,
   baseFare: Number(ride.baseFare || ride.fare || 0),
   bookingMode: ride.bookingMode || 'normal',
   pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
@@ -1389,6 +1405,7 @@ export const serializeRideRealtime = (ride) => ({
         waiting_charge: Number(ride.pricingSnapshot.waiting_charge ?? 0),
         free_waiting_before: Number(ride.pricingSnapshot.free_waiting_before ?? 0),
         free_waiting_after: Number(ride.pricingSnapshot.free_waiting_after ?? 0),
+        service_tax: ride.pricingSnapshot.service_tax ?? null,
         allowed_payment_methods: normalizeAllowedRidePaymentMethods(ride.pricingSnapshot.allowed_payment_methods),
         resolvedAt: ride.pricingSnapshot.resolvedAt || null,
       }
@@ -1399,6 +1416,7 @@ export const serializeRideRealtime = (ride) => ({
   pickupAddress: ride.pickupAddress || '',
   dropLocation: ride.dropLocation,
   dropAddress: ride.dropAddress || '',
+  stops: Array.isArray(ride.stops) ? ride.stops.map((stop) => ({ address: stop?.address || '' })) : [],
   scheduledAt: ride.scheduledAt || null,
   acceptedAt: ride.acceptedAt,
   arrivedAt: ride.arrivedAt,
@@ -1538,6 +1556,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'parcel',
       'intercity',
       'pricingSnapshot',
+      'waitingCharge',
       'commissionAmount',
       'driverEarnings',
       'vehicleIconType',
@@ -1546,6 +1565,8 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'pickupAddress',
       'dropLocation',
       'dropAddress',
+      'stops',
+      'promo',
       'scheduledAt',
       'acceptedAt',
       'arrivedAt',
@@ -1585,6 +1606,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     status: ride.status,
     liveStatus: ride.liveStatus,
     fare: ride.fare,
+    waitingCharge: Number(ride.waitingCharge?.amount || 0) > 0 ? ride.waitingCharge : null,
     baseFare: Number(ride.baseFare || ride.fare || 0),
     bookingMode: ride.bookingMode || 'normal',
     biddingStatus: ride.biddingStatus || 'none',
@@ -1609,6 +1631,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     pickupAddress: ride.pickupAddress || '',
     dropLocation: ride.dropLocation,
     dropAddress: ride.dropAddress || '',
+    stops: Array.isArray(ride.stops) ? ride.stops.map((stop) => ({ address: stop?.address || '' })) : [],
     scheduledAt: ride.scheduledAt || null,
     acceptedAt: ride.acceptedAt,
     arrivedAt: ride.arrivedAt,
@@ -1738,6 +1761,27 @@ const rideStatusConfig = {
   },
 };
 
+// Pickup waiting: minutes from "arrived" to trip start (rounded up) minus the free minutes, x the per-minute rate of
+// the ride's price rule - the same numbers the driver app shows while waiting. Added to the fare once, at start.
+const applyPickupWaitingCharge = (ride, startedAt) => {
+  const rate = Math.max(0, Number(ride?.pricingSnapshot?.waiting_charge || 0));
+  const arrivedAtMs = ride?.arrivedAt ? new Date(ride.arrivedAt).getTime() : NaN;
+  if (!rate || !Number.isFinite(arrivedAtMs) || ride?.subscriptionUsage?.covered) {
+    return;
+  }
+
+  const waitedSeconds = Math.max(0, Math.floor((startedAt.getTime() - arrivedAtMs) / 1000));
+  const freeMinutes = Math.max(0, Number(ride?.pricingSnapshot?.free_waiting_before || 0));
+  const billableMinutes = Math.max(0, Math.ceil(waitedSeconds / 60) - freeMinutes);
+  if (!billableMinutes) {
+    return;
+  }
+
+  const amount = Math.round(billableMinutes * rate * 100) / 100;
+  ride.fare = Math.round((Number(ride.fare || 0) + amount) * 100) / 100;
+  ride.waitingCharge = { minutes: billableMinutes, ratePerMinute: rate, amount };
+};
+
 export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod, otp }) => {
   const config = rideStatusConfig[nextStatus];
 
@@ -1779,6 +1823,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
   if (nextStatus === RIDE_LIVE_STATUS.STARTED && !ride.startedAt) {
     ride.startedAt = new Date();
+    applyPickupWaitingCharge(ride, ride.startedAt);
   }
 
   if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim()) {
@@ -1853,6 +1898,22 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
   await ride.save();
 
   const latestMessage = ride.messages[ride.messages.length - 1];
+
+  // Push the message to the other side, so a rider/driver whose app is in the background still sees it.
+  const recipientIsUser = role === 'driver';
+  const recipientId = String((recipientIsUser ? ride.userId : ride.driverId) || '');
+  if (recipientId) {
+    sendPushNotificationToEntities({
+      ...(recipientIsUser ? { userIds: [recipientId] } : { driverIds: [recipientId] }),
+      title: recipientIsUser ? 'New message from your driver' : 'New message from your rider',
+      body: trimmedMessage.length > 120 ? `${trimmedMessage.slice(0, 117)}...` : trimmedMessage,
+      data: {
+        type: 'ride_chat',
+        rideId: String(ride._id),
+        targetUrl: recipientIsUser ? '/taxi/user/ride/tracking' : '/taxi/driver/active-trip',
+      },
+    }).catch(() => {});
+  }
 
   return {
     id: String(latestMessage._id),

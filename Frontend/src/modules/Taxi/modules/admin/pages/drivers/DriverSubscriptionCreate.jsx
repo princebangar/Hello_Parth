@@ -122,6 +122,7 @@ const DriverSubscriptionCreate = () => {
                   How It Works *
                 </label>
                 <textarea 
+                  id="subscription-how-it-works"
                   value={formData.how_it_works}
                   onChange={(e) => setFormData({...formData, how_it_works: e.target.value})}
                   placeholder="Describe how this subscription works..."
@@ -245,7 +246,16 @@ const DriverSubscriptionCreate = () => {
               Cancel
             </button>
             <div className="pt-4 border-t border-gray-100">
-              <button className="flex items-center gap-2 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors">
+              {/* Takes the admin to the "How It Works" text that explains the plan. */}
+              <button
+                type="button"
+                onClick={() => {
+                  const field = document.getElementById('subscription-how-it-works');
+                  field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  field?.focus();
+                }}
+                className="flex items-center gap-2 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+              >
                 <Info size={14} /> How It Works
               </button>
             </div>

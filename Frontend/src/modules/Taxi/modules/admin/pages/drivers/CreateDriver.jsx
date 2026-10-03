@@ -504,14 +504,6 @@ const CreateDriver = () => {
       return 'Please select gender';
     }
 
-    if (!formData.password || formData.password.length < 6) {
-      return 'Password must be at least 6 characters';
-    }
-
-    if (formData.password !== formData.password_confirmation) {
-      return 'Password and confirm password must match';
-    }
-
     if (!formData.service_location_id) {
       return 'Please select area';
     }
@@ -766,26 +758,7 @@ const CreateDriver = () => {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="mb-2 block text-[11px] font-black uppercase tracking-widest text-slate-400">Password</label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(event) => setField('password', event.target.value)}
-                  placeholder="Minimum 6 characters"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-[11px] font-black uppercase tracking-widest text-slate-400">Confirm Password</label>
-                <input
-                  type="password"
-                  value={formData.password_confirmation}
-                  onChange={(event) => setField('password_confirmation', event.target.value)}
-                  placeholder="Re-enter password"
-                  className={inputClass}
-                />
-              </div>
+              {/* No password: drivers sign in with OTP. */}
             </div>
 
             <div className="mt-5 max-w-md">

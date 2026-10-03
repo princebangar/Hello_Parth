@@ -27,8 +27,6 @@ const ACTION_MENU_MAX_HEIGHT = 300;
 const PendingDrivers = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({ dateRange: '', vehicleType: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [pendingDrivers, setPendingDrivers] = useState([]);
   const [error, setError] = useState('');
@@ -242,7 +240,7 @@ const PendingDrivers = () => {
              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
              <input
                className="w-full sm:w-[280px] pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400"
-               placeholder="Search by name, phone, or location"
+               placeholder="Search by name or phone"
                value={searchTerm}
                onChange={(e) => setSearchTerm(e.target.value)}
              />
@@ -261,46 +259,9 @@ const PendingDrivers = () => {
                 <option value={50}>50</option>
               </select>
             </div>
-            <button 
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-colors ml-auto sm:ml-0"
-            >
-              <Filter size={14} /> Filters
-            </button>
           </div>
         </div>
         
-        {/* Filters Panel */}
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Date Range</label>
-              <select 
-                value={filters.dateRange}
-                onChange={(e) => setFilters({...filters, dateRange: e.target.value})}
-                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
-              >
-                <option value="">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Vehicle Type</label>
-              <select 
-                value={filters.vehicleType}
-                onChange={(e) => setFilters({...filters, vehicleType: e.target.value})}
-                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs text-gray-700 bg-gray-50 outline-none focus:border-yellow-400 focus:bg-white"
-              >
-                <option value="">All Types</option>
-                <option value="sedan">Sedan</option>
-                <option value="suv">SUV</option>
-                <option value="hatchback">Hatchback</option>
-              </select>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-visible">
@@ -458,15 +419,7 @@ const PendingDrivers = () => {
             <button onClick={() => handleAction('edit', activeMenu)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium">
               <Edit2 size={15} className="text-yellow-600" /> Edit Details
             </button>
-            <button
-              onClick={() => {
-                closeMenu();
-                setPasswordModal({ isOpen: true, driverId: activeMenu, password: '', isSubmitting: false });
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium"
-            >
-              <Key size={15} className="text-blue-600" /> Reset Password
-            </button>
+            {/* No password reset: driver login is OTP only. */}
             <button onClick={() => handleAction('view', activeMenu)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors text-sm font-medium">
               <Eye size={15} className="text-gray-500" /> View Profile
             </button>

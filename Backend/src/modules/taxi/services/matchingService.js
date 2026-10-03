@@ -169,15 +169,8 @@ const getDistanceBetweenMeters = (origin, target) => {
   return Math.round(2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+// Always the driver's live GPS (the old "route booking" pinned point is no longer used).
 const getDriverMatchCoordinates = (driver = {}) => {
-  const anchorCoordinates = Array.isArray(driver?.routeBooking?.anchorLocation?.coordinates)
-    ? driver.routeBooking.anchorLocation.coordinates
-    : [];
-
-  if (driver?.routeBooking?.enabled && anchorCoordinates.length === 2) {
-    return normalizePoint(anchorCoordinates, 'driver.routeBooking.anchorLocation.coordinates');
-  }
-
   if (Array.isArray(driver?.location?.coordinates) && driver.location.coordinates.length === 2) {
     return normalizePoint(driver.location.coordinates, 'driver.location.coordinates');
   }
@@ -256,17 +249,8 @@ const buildGeoNearFilter = (field, coordinates, maxDistance) => ({
   },
 });
 
-const getDispatchAnchorCoordinates = (driver = {}) => {
-  const routeCoordinates = Array.isArray(driver?.routeBooking?.anchorLocation?.coordinates)
-    ? driver.routeBooking.anchorLocation.coordinates
-    : [];
-
-  if (driver?.routeBooking?.enabled && routeCoordinates.length === 2) {
-    return routeCoordinates;
-  }
-
-  return Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : [];
-};
+const getDispatchAnchorCoordinates = (driver = {}) =>
+  (Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : []);
 
 const sortDriversByDispatchAnchorDistance = (drivers = [], pickupCoords) =>
   [...drivers]
@@ -300,33 +284,17 @@ const findDriversForZone = async ({
     vehicleTypeKeys,
   });
   const selectedFields =
-    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking';
+    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide';
 
-  const [liveLocationDrivers, routeBookingDrivers] = await Promise.all([
-    Driver.find({
-      ...commonFilters,
-      'routeBooking.enabled': { $ne: true },
-      ...(strictZoneOnly ? {} : buildGeoNearFilter('location', coordinates, effectiveMaxDistance)),
-    })
-      .limit(limit)
-      .select(selectedFields),
-    Driver.find({
-      ...commonFilters,
-      'routeBooking.enabled': true,
-      'routeBooking.anchorLocation': { $ne: null },
-      'routeBooking.anchorLocation.coordinates.1': { $exists: true },
-      ...(strictZoneOnly ? {} : buildGeoNearFilter('routeBooking.anchorLocation', coordinates, effectiveMaxDistance)),
-    })
-      .limit(limit)
-      .select(selectedFields),
-  ]);
+  // Matching is by live GPS only (the app sends the driver's location every ~10 s while online).
+  const liveLocationDrivers = await Driver.find({
+    ...commonFilters,
+    ...(strictZoneOnly ? {} : buildGeoNearFilter('location', coordinates, effectiveMaxDistance)),
+  })
+    .limit(limit)
+    .select(selectedFields);
 
-  return sortDriversByDispatchAnchorDistance(
-    [...liveLocationDrivers, ...routeBookingDrivers].filter(
-      (driver, index, items) => items.findIndex((item) => String(item._id) === String(driver._id)) === index,
-    ),
-    coordinates,
-  ).slice(0, limit);
+  return sortDriversByDispatchAnchorDistance(liveLocationDrivers, coordinates).slice(0, limit);
 };
 
 export const matchDrivers = async (pickupCoords, options = {}) => {

@@ -10,8 +10,11 @@ import {
   MoreVertical,
   List,
   LayoutGrid,
-  Loader2
+  Loader2,
+  Trash2,
+  Power
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
@@ -40,6 +43,60 @@ const DriverSubscriptions = () => {
   const [filters, setFilters] = useState({ status: '', type: '' });
   const [plans, setPlans] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [menu, setMenu] = useState(null); // { plan, top, left }
+
+  useEffect(() => {
+    if (!menu) return undefined;
+    const close = () => setMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [menu]);
+
+  const togglePlan = async (plan) => {
+    try {
+      await adminService.setSubscriptionPlanActive('driver', plan._id, !plan.active);
+      setPlans((current) => current.map((item) => (item._id === plan._id ? { ...item, active: !plan.active } : item)));
+      toast.success(plan.active ? 'Plan marked inactive' : 'Plan marked active');
+    } catch (err) {
+      toast.error(err.message || 'Could not update the plan');
+    }
+  };
+
+  const removePlan = async (plan) => {
+    if (!window.confirm(`Delete the plan "${plan.name}"?`)) return;
+    try {
+      await adminService.deleteSubscriptionPlan('driver', plan._id);
+      setPlans((current) => current.filter((item) => item._id !== plan._id));
+      toast.success('Plan deleted');
+    } catch (err) {
+      toast.error(err.message || 'Could not delete the plan');
+    }
+  };
+
+  const exportPlans = () => {
+    const rows = [['Name', 'Transport type', 'Vehicle type', 'Amount', 'Duration (days)', 'Status']];
+    plans.forEach((plan) => {
+      rows.push([
+        plan.name || '',
+        plan.transport_type || '',
+        plan.vehicle_type_id?.name || '',
+        Number(plan.amount || 0),
+        Number(plan.duration || 0),
+        plan.active ? 'Active' : 'Inactive',
+      ]);
+    });
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'driver-subscription-plans.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleToggle = async (mode) => {
     try {
@@ -97,7 +154,12 @@ const DriverSubscriptions = () => {
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-xl text-gray-900 font-bold">Subscription</h1>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <button
+              type="button"
+              onClick={exportPlans}
+              disabled={plans.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
               <Download size={15} /> Export List
             </button>
           </div>
@@ -248,7 +310,15 @@ const DriverSubscriptions = () => {
                        </span>
                     </td>
                     <td className="px-4 py-4 text-center">
-                       <button className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                       <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setMenu((current) => (current?.plan?._id === item._id ? null : { plan: item, top: rect.bottom + 4, left: rect.right - 176 }));
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
                           <MoreVertical size={16} />
                        </button>
                     </td>
@@ -273,6 +343,31 @@ const DriverSubscriptions = () => {
       </div>
       )}
 
+      {menu
+        ? createPortal(
+            <div
+              className="fixed z-[200] w-44 rounded-xl border border-gray-100 bg-white p-1.5 shadow-xl"
+              style={{ top: menu.top, left: Math.max(8, menu.left) }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => { const plan = menu.plan; setMenu(null); togglePlan(plan); }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Power size={14} /> {menu.plan.active ? 'Mark inactive' : 'Mark active'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { const plan = menu.plan; setMenu(null); removePlan(plan); }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 size={14} /> Delete
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 };
