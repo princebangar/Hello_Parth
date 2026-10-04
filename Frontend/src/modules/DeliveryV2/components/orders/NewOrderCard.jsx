@@ -64,7 +64,6 @@ export default function NewOrderCard({
   const earnings =
     order.earnings ||
     order.riderEarning ||
-    order.pricing?.total ||
     0;
   const displayId = order?.orderId || order?.displayOrderId || order?._id;
   const restaurantName =

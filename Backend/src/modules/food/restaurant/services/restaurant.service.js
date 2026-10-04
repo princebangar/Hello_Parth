@@ -6,6 +6,7 @@ import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodTopRestaurant } from '../../admin/models/topRestaurant.model.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
 import { FoodDiningRestaurant } from '../../dining/models/diningRestaurant.model.js';
+import { FoodDiningCategory } from '../../dining/models/diningCategory.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { getFoodDisplayPrice } from '../../admin/services/foodVariant.service.js';
 import { FoodOrder } from '../../orders/models/order.model.js';
@@ -55,6 +56,28 @@ export const findRestaurantByPhone = async (phone) => {
             return pA - pB;
         })[0] || null
     );
+};
+
+// One phone number belongs to ONE restaurant: the owner phone and the primary contact number of every other restaurant are
+// taken (a restaurant may use the same number for both of its own fields).
+export const assertRestaurantPhonesAvailable = async ({ ownerPhone, primaryContactNumber, excludeId = null } = {}) => {
+    for (const [label, value] of [['owner phone number', ownerPhone], ['primary contact number', primaryContactNumber]]) {
+        const { last10 } = normalizePhone(value);
+        if (!last10) continue;
+        const suffixPattern = new RegExp(`${last10.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+        const query = {
+            status: { $ne: 'deleted' },
+            $or: [
+                { ownerPhoneLast10: last10 },
+                { ownerPhone: { $regex: suffixPattern } },
+                { ownerPhoneDigits: { $regex: suffixPattern } },
+                { primaryContactNumber: { $regex: suffixPattern } },
+            ],
+        };
+        if (excludeId && mongoose.Types.ObjectId.isValid(String(excludeId))) query._id = { $ne: new mongoose.Types.ObjectId(String(excludeId)) };
+        const other = await FoodRestaurant.findOne(query).select('_id').lean();
+        if (other) throw new ValidationError(`The ${label} ${last10} is already used by another restaurant`);
+    }
 };
 
 async function upsertRestaurantFcmToken(restaurantId, fcmToken, platform = 'web') {
@@ -238,7 +261,9 @@ const toRestaurantProfile = (doc) => {
         diningSettings: {
             isEnabled: doc.diningSettings?.isEnabled !== false,
             maxGuests: Math.max(1, parseInt(doc.diningSettings?.maxGuests, 10) || 6),
-            diningType: String(doc.diningSettings?.diningType || 'family-dining').trim() || 'family-dining'
+            diningType: (Array.isArray(doc.diningSettings?.diningType) ? doc.diningSettings.diningType : String(doc.diningSettings?.diningType || '').split(','))
+                .map((s) => String(s).trim())
+                .filter(Boolean)
         },
         takeawaySettings: {
             isEnabled: doc.takeawaySettings?.isEnabled === true
@@ -392,6 +417,8 @@ export const registerRestaurant = async (payload, files) => {
         throw new ValidationError('Restaurant name is required to register a restaurant');
     }
 
+    await assertRestaurantPhonesAvailable({ ownerPhone, primaryContactNumber });
+
     const images = {};
 
     if (files?.profileImage?.[0]) {
@@ -419,14 +446,6 @@ export const registerRestaurant = async (payload, files) => {
     const normalizedClosingTime = normalizeRestaurantTime(closingTime);
     const openingMinutes = timeToMinutes(normalizedOpeningTime);
     const closingMinutes = timeToMinutes(normalizedClosingTime);
-    if (openingMinutes !== null && closingMinutes !== null) {
-        if (openingMinutes === closingMinutes) {
-            throw new ValidationError('Opening time and closing time cannot be same');
-        }
-        if (closingMinutes < openingMinutes) {
-            throw new ValidationError('Closing time cannot be less than opening time');
-        }
-    }
     const estimatedDeliveryTimeText = String(estimatedDeliveryTime || '').trim();
     const estimatedDeliveryTimeMinutes = parseEstimatedDeliveryMinutes(estimatedDeliveryTimeText);
 
@@ -706,9 +725,11 @@ export const updateCurrentRestaurantDiningSettings = async (restaurantId, body =
         1,
         parseInt(body.maxGuests ?? currentDiningSettings.maxGuests ?? 6, 10) || 6
     );
-    const diningType =
-        String(body.diningType ?? currentDiningSettings.diningType ?? 'family-dining').trim() ||
-        'family-dining';
+    // no made-up default category ("family-dining" did not exist as an admin dining category)
+    const diningTypeRaw = body.diningType ?? currentDiningSettings.diningType ?? [];
+    const diningType = (Array.isArray(diningTypeRaw) ? diningTypeRaw : String(diningTypeRaw).split(','))
+        .map((s) => String(s).trim())
+        .filter(Boolean);
 
     const isEnabled = parseBoolean(body.isEnabled, currentDiningSettings.isEnabled);
     
@@ -922,6 +943,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
             '';
 
         if (digits !== currentOwnerPhoneDigits) {
+            await assertRestaurantPhonesAvailable({ ownerPhone: digits, excludeId: currentRestaurant._id });
             update.ownerPhone = digits;
             update.ownerPhoneDigits = digits;
             update.ownerPhoneLast10 = last10 || undefined;
@@ -938,6 +960,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
                 : '';
 
         if (normalizedPrimaryContact !== currentPrimaryContact) {
+            await assertRestaurantPhonesAvailable({ primaryContactNumber: normalizedPrimaryContact, excludeId: currentRestaurant._id });
             update.primaryContactNumber = normalizedPrimaryContact;
         }
     }
@@ -1078,14 +1101,6 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
 
     const openingMinutes = body.openingTime !== undefined ? timeToMinutes(update.openingTime) : null;
     const closingMinutes = body.closingTime !== undefined ? timeToMinutes(update.closingTime) : null;
-    if (openingMinutes !== null && closingMinutes !== null) {
-        if (openingMinutes === closingMinutes) {
-            throw new ValidationError('Opening time and closing time cannot be same');
-        }
-        if (closingMinutes < openingMinutes) {
-            throw new ValidationError('Closing time cannot be less than opening time');
-        }
-    }
 
     if (body.menuImages !== undefined) {
         if (!Array.isArray(body.menuImages)) {
@@ -1789,8 +1804,20 @@ export const getApprovedRestaurantByIdOrSlug = async (idOrSlug, userId = null, c
 
     const timingsDoc = await FoodRestaurantOutletTimings.findOne({ restaurantId: doc._id }).lean();
 
+    // dining categories the restaurant chose (admin-approved), shown on the dining page
+    let diningCategories = [];
+    try {
+        const diningDoc = await FoodDiningRestaurant.findOne({ restaurantId: doc._id, isEnabled: true }).select('categoryIds').lean();
+        if (diningDoc?.categoryIds?.length) {
+            diningCategories = await FoodDiningCategory.find({ _id: { $in: diningDoc.categoryIds } }).select('name slug').lean();
+        }
+    } catch {
+        diningCategories = [];
+    }
+
     const result = {
         ...doc,
+        diningCategories,
         rating: normalizeRatingValue(doc.rating),
         totalRatings: normalizeTotalRatingsValue(doc.totalRatings),
         hasOrderedBefore,
@@ -1821,6 +1848,26 @@ export const getApprovedRestaurantByIdOrSlug = async (idOrSlug, userId = null, c
             logger.warn(
                 `Driving distance for restaurant ${doc._id} failed: ${err?.message || err}`,
             );
+        }
+        // Same fallback as the restaurant list (air distance) so the page header always matches the Home card
+        if (!result.distanceMode) {
+            // exactly the list's $geoNear distance (rounded to 2 decimals), so both show the same km
+            let km = null;
+            try {
+                const [g] = await FoodRestaurant.aggregate([
+                    { $geoNear: { near: { type: 'Point', coordinates: [userLng, userLat] }, distanceField: 'distanceMeters', spherical: true, key: 'location', query: { _id: doc._id } } },
+                    { $project: { km: { $round: [{ $divide: ['$distanceMeters', 1000] }, 2] } } },
+                ]);
+                km = Number(g?.km);
+            } catch {
+                const { haversineKm } = await import('../../orders/services/order.helpers.js');
+                km = Math.round(haversineKm(userLat, userLng, restaurantPoint.lat, restaurantPoint.lng) * 100) / 100;
+            }
+            if (Number.isFinite(km) && km > 0) {
+                result.distanceInKm = km;
+                result.distance = formatRestaurantDistanceLabel(km);
+                result.distanceMode = 'air';
+            }
         }
     }
 

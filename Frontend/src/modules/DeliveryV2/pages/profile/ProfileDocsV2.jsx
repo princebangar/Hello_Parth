@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useCloseOnBack from '@/modules/DeliveryV2/hooks/useCloseOnBack';
 import { ArrowLeft, Eye, Edit2, Loader2, Camera, X, Plus, FileText, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { deliveryAPI } from '@food/api';
@@ -17,6 +18,7 @@ export const ProfileDocsV2 = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showViewer, setShowViewer] = useState(null); // { title: string, url: string }
   const [uploadField, setUploadField] = useState(null)
+  useCloseOnBack(Boolean(showViewer), () => setShowViewer(null))
   const fileInputRef = useRef(null);
 
   useEffect(() => {

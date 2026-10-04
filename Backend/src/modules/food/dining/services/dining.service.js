@@ -65,7 +65,7 @@ async function syncRestaurantDiningSettings(restaurantId, diningDoc) {
                 diningSettings: {
                     isEnabled: Boolean(diningDoc?.isEnabled),
                     maxGuests: Math.max(1, Number(diningDoc?.maxGuests) || 6),
-                    diningType: Array.isArray(diningDoc?.diningType) ? diningDoc.diningType : (primaryCategory?.slug ? [primaryCategory.slug] : ['family-dining'])
+                    diningType: Array.isArray(diningDoc?.diningType) ? diningDoc.diningType : (primaryCategory?.slug ? [primaryCategory.slug] : [])
                 }
             }
         },
@@ -464,6 +464,18 @@ export async function listDiningRestaurantsPublic(query = {}) {
 
 // ==================== DINING SETTINGS REQUESTS ====================
 
+// What a customer sees about a dining place: the restaurant gives it with its dining request (asked before approval).
+export const DINING_FACILITIES = [
+    'Indoor seating', 'Outdoor seating', 'Air conditioned', 'Family friendly', 'Private dining', 'Parking',
+    'Wheelchair accessible', 'Wi-Fi', 'Live music', 'Smoking area', 'Serves alcohol', 'Card payment'
+];
+
+const cleanList = (value, max = 20) =>
+    [...new Set((Array.isArray(value) ? value : String(value || '').split(','))
+        .map((v) => String(v).trim())
+        .filter(Boolean))]
+        .slice(0, max);
+
 export async function createDiningRequest(restaurantId, settings = {}) {
     if (!mongoose.Types.ObjectId.isValid(restaurantId)) {
         throw new ValidationError('Invalid restaurant ID');
@@ -488,18 +500,63 @@ export async function createDiningRequest(restaurantId, settings = {}) {
         diningType = [...new Set(diningType)]
     }
 
-    if (diningType.length === 0) diningType = ['family-dining']
+    // Only categories the admin really created count. A restaurant used to send "family-dining" (an old built-in
+    // default) even though no such category exists, and the admin saw it on every request.
+    const activeCategories = diningType.length
+        ? await FoodDiningCategory.find({ slug: { $in: diningType }, isActive: { $ne: false } }).select('slug').lean()
+        : [];
+    const activeSlugs = new Set(activeCategories.map((c) => c.slug));
+    diningType = diningType.filter((slug) => activeSlugs.has(slug));
+    if (Boolean(settings.isEnabled) && diningType.length === 0) {
+        throw new ValidationError('Please choose at least one dining category');
+    }
+
+    const cuisines = cleanList(settings.cuisines, 15).map((c) => c.slice(0, 40));
+    const facilities = cleanList(settings.facilities, DINING_FACILITIES.length).filter((f) => DINING_FACILITIES.includes(f));
+    const costForTwoValue = Number(settings.costForTwo);
+    const costForTwo = Number.isFinite(costForTwoValue) && costForTwoValue > 0 ? Math.round(costForTwoValue) : null;
+    if (Boolean(settings.isEnabled)) {
+        if (cuisines.length === 0) throw new ValidationError('Please add the cuisines you serve');
+        if (!costForTwo) throw new ValidationError('Please add the average price for two people');
+    }
 
     const created = await FoodDiningRequest.create({
         restaurantId,
         requestedSettings: {
             isEnabled: Boolean(settings.isEnabled),
             maxGuests: parseInt(settings.maxGuests, 10) >= 0 ? parseInt(settings.maxGuests, 10) : 6,
-            diningType: diningType
+            diningType: diningType,
+            cuisines,
+            costForTwo,
+            facilities
         }
     });
 
+    try {
+        const restaurant = await FoodRestaurant.findById(restaurantId).select('restaurantName').lean();
+        const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+        void notifyAdminsSafely({
+            title: 'New dining request 🍽️',
+            body: `"${restaurant?.restaurantName || 'A restaurant'}" asked to update its dining settings. Review it in Dining Category Requests.`,
+            data: { type: 'dining_request', id: String(created._id), restaurantId: String(restaurantId), link: '/admin/food/dining-requests' }
+        });
+    } catch (e) {
+        console.error('Failed to notify admins of dining request:', e?.message || e);
+    }
+
     return created.toObject();
+}
+
+// Tell the restaurant the admin's decision (push + inbox).
+async function notifyRestaurantAboutDiningRequest(restaurantId, approved, reason = '') {
+    try {
+        const { notifyRestaurantSafely } = await import('../../admin/services/admin.service.js');
+        await notifyRestaurantSafely(restaurantId, approved
+            ? { title: 'Dining request approved ✅', body: 'Your dining settings are approved and live for customers.', link: '/food/restaurant/reservations', type: 'dining_request' }
+            : { title: 'Dining request rejected', body: reason ? `Your dining settings were not approved: ${reason}` : 'Your dining settings were not approved. Please update them and send again.', link: '/food/restaurant/reservations', type: 'dining_request' });
+    } catch (e) {
+        console.error('Failed to notify restaurant about dining request:', e?.message || e);
+    }
 }
 
 export async function getPendingDiningRequest(restaurantId) {
@@ -511,6 +568,11 @@ export async function getPendingDiningRequest(restaurantId) {
 }
 
 export async function listAllPendingDiningRequests() {
+    const categories = await FoodDiningCategory.find({}).select('name slug').lean();
+    const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]));
+    const toNames = (raw) => [...new Set((Array.isArray(raw) ? raw : String(raw || '').split(',')).map((s) => String(s).trim()).filter(Boolean))]
+        .filter((slug) => nameBySlug.has(slug))
+        .map((slug) => ({ slug, name: nameBySlug.get(slug) }));
     return await FoodDiningRequest.find({ status: 'pending' })
         .populate({
             path: 'restaurantId',
@@ -526,7 +588,8 @@ export async function listAllPendingDiningRequests() {
                 profileImage: doc.restaurantId.profileImage ? { url: doc.restaurantId.profileImage } : null,
                 address: doc.restaurantId.location?.formattedAddress || ''
             } : null,
-            restaurantId: doc.restaurantId?._id
+            restaurantId: doc.restaurantId?._id,
+            requestedCategories: toNames(doc.requestedSettings?.diningType)
         })));
 }
 
@@ -549,11 +612,13 @@ export async function approveDiningRequest(requestId) {
     }
     finalDiningType = [...new Set(finalDiningType)];
 
-    // Find the Category IDs based on slugs
+    // Find the Category IDs based on slugs (in the order the restaurant chose them); unknown slugs are dropped
     const selectedCategories = await FoodDiningCategory.find({
         slug: { $in: finalDiningType }
-    }).select('_id').lean();
-    const categoryIds = selectedCategories.map(c => c._id);
+    }).select('_id slug').lean();
+    const idBySlug = new Map(selectedCategories.map((c) => [c.slug, c._id]));
+    finalDiningType = finalDiningType.filter((slug) => idBySlug.has(slug));
+    const categoryIds = finalDiningType.map((slug) => idBySlug.get(slug));
 
     // Apply changes to FoodDiningRestaurant
     await FoodDiningRestaurant.findOneAndUpdate(
@@ -569,23 +634,26 @@ export async function approveDiningRequest(requestId) {
         { upsert: true }
     );
 
-    // Apply changes to FoodRestaurant
-    await FoodRestaurant.findByIdAndUpdate(
-        restaurantId,
-        {
-            $set: {
-                diningSettings: {
-                    isEnabled: request.requestedSettings.isEnabled,
-                    maxGuests: request.requestedSettings.maxGuests,
-                    diningType: finalDiningType
-                }
-            }
+    // Apply changes to FoodRestaurant (+ the dining details the restaurant gave with the request)
+    const requested = request.requestedSettings || {};
+    const restaurantSet = {
+        diningSettings: {
+            isEnabled: requested.isEnabled,
+            maxGuests: requested.maxGuests,
+            diningType: finalDiningType,
+            facilities: Array.isArray(requested.facilities) ? requested.facilities : []
         }
-    );
+    };
+    if (Array.isArray(requested.cuisines) && requested.cuisines.length > 0) restaurantSet.cuisines = requested.cuisines;
+    if (Number(requested.costForTwo) > 0) restaurantSet.costForTwo = Number(requested.costForTwo);
+    await FoodRestaurant.findByIdAndUpdate(restaurantId, { $set: restaurantSet });
 
     request.status = 'approved';
     await request.save();
 
+    // the restaurant page / lists are cached for minutes: drop them so customers see the new dining details at once
+    void import('../../../../middleware/cache.js').then((m) => m.invalidateFoodBrowseCaches()).catch(() => {});
+    void notifyRestaurantAboutDiningRequest(restaurantId, true);
     return request.toObject();
 }
 
@@ -603,5 +671,6 @@ export async function rejectDiningRequest(requestId, reason = '') {
     request.rejectionReason = String(reason || '').trim() || null;
     await request.save();
 
+    void notifyRestaurantAboutDiningRequest(request.restaurantId, false, request.rejectionReason || '');
     return request.toObject();
 }

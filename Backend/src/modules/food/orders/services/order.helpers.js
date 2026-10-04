@@ -436,6 +436,9 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     deliveryFee: order?.pricing?.deliveryFee || 0,
     deliveryFleet: order?.deliveryFleet,
     dispatch: order?.dispatch,
+    // Prep time the restaurant picked on accept + when it accepted: the restaurant's own ETA countdown needs both.
+    preparationTime: Number(order?.preparationTime || 0) || 0,
+    acceptedAt: order?.acceptedAt || null,
     createdAt: order?.createdAt,
     updatedAt: order?.updatedAt,
   };

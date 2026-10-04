@@ -9,9 +9,18 @@ import { isPolicyPath } from "../utils/policyPaths"
 // panel simply fills in.
 const isAdminPath = (pathname = "") => /^\/(taxi\/)?admin(\/|$)/.test(pathname)
 
+// The partner apps (restaurant, delivery partner, taxi captain / owner / bus / pooling driver) are separate apps: while
+// one of their screens loads they showed the CUSTOMER home skeleton (Food) or the customer Taxi page skeleton right after
+// their splash. They get a plain white page instead - the same as the static index.html shell paints for them.
+const isPartnerPath = (pathname = "") => /^\/(food\/(restaurant|delivery)|taxi\/(driver|owner))(\/|$)/.test(pathname)
+
 // Every Taxi screen except its home (which has its own phone-shaped skeleton) gets a Taxi-shaped placeholder instead
 // of Food's restaurant list.
 const isTaxiScreen = (pathname = "") => pathname.startsWith("/taxi/") && pathname.replace(/\/+$/, "") !== "/taxi/user"
+
+function PartnerRouteFallback() {
+  return <div className="min-h-screen w-full bg-white" role="status" aria-label="Loading" />
+}
 
 function AdminRouteFallback() {
   return (
@@ -32,6 +41,7 @@ export default function AppRouteFallback() {
   const { pathname } = useLocation()
   if (isAdminPath(pathname)) return <AdminRouteFallback />
   if (isPolicyPath(pathname)) return <PolicyPageLoader />
+  if (isPartnerPath(pathname)) return <PartnerRouteFallback />
   if (isTaxiScreen(pathname)) return <TaxiPageSkeleton variant={taxiSkeletonVariant(pathname)} />
   return <AppShellSkeleton />
 }

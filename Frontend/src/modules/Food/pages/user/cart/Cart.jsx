@@ -26,6 +26,7 @@ import { filterPublicOffers, mapPublicOfferToCartCoupon } from "@food/utils/offe
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
 import NumberSkeleton from "@/shared/components/NumberSkeleton"
 import { recallLastKnown, rememberLastKnown } from "@/shared/utils/lastKnown"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const zoopSound = "/assets/media/zomato_sms.mp3"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
@@ -2357,15 +2358,8 @@ export default function Cart() {
 
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        const backendUrl = API_BASE_URL.replace('/api', '');
-        errorMessage = `Network Error: Cannot connect to backend server.\n\n` +
-          `Expected backend URL: ${backendUrl}\n\n` +
-          `Please check:\n` +
-          `1. Backend server is running\n` +
-          `2. Backend is accessible at ${backendUrl}\n` +
-          `3. Check browser console (F12) for more details\n\n` +
-          `If backend is not running, start it with:\n` +
-          `cd helloparth/backend && npm start`
+        // customers get plain wording, not developer instructions about the backend
+        errorMessage = networkErrorMessage()
 
         debugError("?? Network Error Details:", {
           code: error.code,
@@ -2719,8 +2713,12 @@ export default function Cart() {
                                   return;
                                 }
 
-                                addToCart({
-                                  id: addon.id,
+                                // the add-on is its own kind of cart line; say so, and show the server's answer
+                                // (before, a refusal was ignored, so the "+" looked dead)
+                                Promise.resolve(addToCart({
+                                  id: addon.id || addon._id,
+                                  itemId: addon.id || addon._id,
+                                  itemType: "addon",
                                   name: addon.name,
                                   price: addon.price,
                                   image: addon.image || (addon.images && addon.images[0]) || "",
@@ -2728,6 +2726,8 @@ export default function Cart() {
                                   isVeg: true,
                                   restaurant: cartRestaurantName,
                                   restaurantId: cartRestaurantId
+                                })).then((result) => {
+                                  if (result && result.ok === false) toast.error(result.error || "Could not add this add-on")
                                 });
                               }}
                                className="absolute bottom-1 md:bottom-2 right-1 md:right-2 w-6 h-6 md:w-7 md:h-7 bg-white border border-[#DC2626] rounded flex items-center justify-center shadow-sm hover:bg-[#DC262605] dark:hover:bg-[#DC262610] transition-colors"

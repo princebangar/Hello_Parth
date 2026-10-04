@@ -33,6 +33,7 @@ export default function AcceptedOrderCard({ order, focused = false, onSelect }) 
     order?.restaurantId?.restaurantName ||
     order?.restaurantId?.name ||
     'Restaurant';
+  const earning = Number(order?.riderEarning ?? order?.earnings ?? order?.deliveryEarning ?? 0) || 0;
 
   return (
     <button
@@ -57,6 +58,7 @@ export default function AcceptedOrderCard({ order, focused = false, onSelect }) 
             <p className="text-[11px] font-semibold !text-[#15498b] mt-0.5">
               {phaseLabel(order, session)}
             </p>
+            <p className="text-[11px] font-bold text-emerald-600 mt-0.5">Earning ₹{earning.toFixed(2)}</p>
           </div>
         </div>
         <ChevronRight

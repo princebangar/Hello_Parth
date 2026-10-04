@@ -64,21 +64,19 @@ export const createInboxNotifications = async ({ notifications = [] } = {}) => {
             payload.broadcastId = new mongoose.Types.ObjectId(String(item.broadcastId));
         }
 
+        // Only a broadcast is de-duplicated (one copy per owner). Every other message is a new event: the old
+        // "same title + same text -> update the old row" upsert swallowed repeats (2nd "Dining request approved",
+        // the same table request again), which stayed read and buried under older messages.
+        if (!payload.broadcastId) {
+            return { insertOne: { document: { ...payload, dismissedAt: null, isRead: false, readAt: null } } };
+        }
         return {
             updateOne: {
-                filter: payload.broadcastId
-                    ? {
-                        broadcastId: payload.broadcastId,
-                        ownerType: payload.ownerType,
-                        ownerId: payload.ownerId
-                    }
-                    : {
-                        ownerType: payload.ownerType,
-                        ownerId: payload.ownerId,
-                        title: payload.title,
-                        message: payload.message,
-                        source: payload.source
-                    },
+                filter: {
+                    broadcastId: payload.broadcastId,
+                    ownerType: payload.ownerType,
+                    ownerId: payload.ownerId
+                },
                 update: {
                     $set: {
                         ...payload,

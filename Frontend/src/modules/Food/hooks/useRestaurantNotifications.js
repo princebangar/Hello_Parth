@@ -314,6 +314,26 @@ const playGlobalNotificationSound = async (orderData = {}) => {
 // mutes it, or the popup closes (each of those calls stopGlobalAlertLoop).
 // There used to be a 2-minute cap, persisted per order in localStorage, so an
 // order opened late popped up silently.
+// Table (dining) requests ring like orders do, until the restaurant opens or dismisses the popup.
+let globalDiningLoopTimer = null;
+const stopDiningAlertLoop = () => {
+  if (globalDiningLoopTimer) {
+    clearInterval(globalDiningLoopTimer);
+    globalDiningLoopTimer = null;
+  }
+};
+const startDiningAlertLoop = (bookingData) => {
+  stopDiningAlertLoop();
+  if (!globalIsMuted) playGlobalNotificationSound(bookingData);
+  globalDiningLoopTimer = setInterval(() => {
+    if (!globalNewReservation) {
+      stopDiningAlertLoop();
+      return;
+    }
+    if (!globalIsMuted) playGlobalNotificationSound(globalNewReservation);
+  }, 4500);
+};
+
 const startGlobalAlertLoop = (orderData) => {
   stopGlobalAlertLoop();
 
@@ -662,9 +682,7 @@ export const useRestaurantNotifications = () => {
 
     globalSocket.on('new_dining_booking', (bookingData) => {
       updateGlobalState({ newReservation: bookingData });
-      if (!globalIsMuted) {
-        playGlobalNotificationSound(bookingData);
-      }
+      startDiningAlertLoop(bookingData);
     });
 
     globalSocket.on('play_notification_sound', (data) => {
@@ -1038,6 +1056,8 @@ export const useRestaurantNotifications = () => {
   }, []);
 
   const clearNewReservation = useCallback(() => {
+    stopDiningAlertLoop();
+    stopWebViewNativeNotification();
     updateGlobalState({ newReservation: null });
   }, []);
 

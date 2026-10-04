@@ -211,6 +211,12 @@
   color: var(--dv-text) !important;
 }
 
+.delivery-v2-theme input[aria-invalid="true"][aria-invalid] {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
 .delivery-v2-theme input:focus,
 .delivery-v2-theme textarea:focus,
 .delivery-v2-theme select:focus {

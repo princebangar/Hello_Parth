@@ -156,6 +156,19 @@ export default function Dining({ isTabActive = true }) {
   const [activeFilterTab, setActiveFilterTab] = useState('sort')
   const [sortBy, setSortBy] = useState(null)
   const [selectedCuisine, setSelectedCuisine] = useState(null)
+
+  // The page behind a bottom sheet must not scroll while the sheet is open.
+  useEffect(() => {
+    if (!isFilterOpen) return undefined
+    const { overflow } = document.body.style
+    const htmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = "hidden"
+    document.documentElement.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = overflow
+      document.documentElement.style.overflow = htmlOverflow
+    }
+  }, [isFilterOpen])
   const filterSectionRefs = useRef({})
   const rightContentRef = useRef(null)
   const { location } = useLocationHook()
@@ -534,6 +547,20 @@ export default function Dining({ isTabActive = true }) {
 
     return filtered
   }, [nearbyPopularRestaurants, activeFilters, selectedCuisine, sortBy, heroSearch, vegMode, vegModeOption])
+
+  // Cuisine filter options come from the cuisines the listed restaurants really chose (they are asked for them
+  // before dining approval) - not from a fixed list that no restaurant was ever asked about.
+  const availableCuisines = useMemo(() => {
+    const set = new Set()
+    for (const r of nearbyPopularRestaurants || []) {
+      String(r.cuisine || "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter((c) => c && c.toLowerCase() !== "multi-cuisine")
+        .forEach((c) => set.add(c))
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [nearbyPopularRestaurants])
 
   const diningSearchQuery = heroSearch.trim()
   const isDiningSearching = diningSearchQuery.length > 0
@@ -1725,10 +1752,10 @@ export default function Dining({ isTabActive = true }) {
                   <div className="space-y-4 mb-8">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cuisine</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      {(vegMode
-                        ? ['Continental', 'Italian', 'Asian', 'Indian', 'Chinese', 'American', 'Cafe']
-                        : ['Continental', 'Italian', 'Asian', 'Indian', 'Chinese', 'American', 'Seafood', 'Cafe']
-                      ).map((cuisine) => (
+                      {availableCuisines.length === 0 && (
+                        <p className="col-span-2 text-sm text-gray-500 dark:text-gray-400">No cuisines to filter by yet.</p>
+                      )}
+                      {availableCuisines.map((cuisine) => (
                         <button
                           key={cuisine}
                           onClick={() => setSelectedCuisine(selectedCuisine === cuisine ? null : cuisine)}

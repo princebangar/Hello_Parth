@@ -110,10 +110,6 @@ const getMealPeriod = (slot) => {
   return "dinner"
 }
 
-const getOfferLabel = (slot) => {
-  const period = getMealPeriod(slot)
-  return period === "lunch" ? "Lunch" : "Carnival"
-}
 
 export default function TableBooking() {
   const { slug } = useParams()
@@ -216,6 +212,31 @@ export default function TableBooking() {
 
   const maxCapacity = restaurant?.diningSettings?.maxGuests || 10
   const remainingSeats = Math.max(0, maxCapacity - occupiedSeats)
+
+  // "07:00 PM", "7:00 pm" and "19:00" are the same slot
+  const slotKey = (v) => {
+    const m = String(v || '').trim().match(/^(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?$/i)
+    if (!m) return String(v || '').trim().toLowerCase()
+    let h = Number(m[1]) % 12
+    if (!m[3]) h = Number(m[1])
+    else if (/^p/i.test(m[3])) h += 12
+    return `${String(h).padStart(2, '0')}:${m[2]}`
+  }
+  // Seats are counted per slot (this date + this time), same rule the server enforces when the table is booked.
+  const seatsLeftInSlot = (slot) => {
+    const THIRTY_MINUTES = 30 * 60 * 1000
+    const now = Date.now()
+    const day = selectedDate.toDateString()
+    const taken = currentBookings
+      .filter((b) => {
+        if (slotKey(b.timeSlot) !== slotKey(slot)) return false
+        if (new Date(b.date).toDateString() !== day) return false
+        if (["approved", "accepted", "confirmed", "checked-in"].includes(b.status)) return true
+        return b.status === "pending" && now - new Date(b.createdAt || b.date).getTime() < THIRTY_MINUTES
+      })
+      .reduce((sum, b) => sum + (Number(b.guests) || 0), 0)
+    return Math.max(0, maxCapacity - taken)
+  }
 
   const dates = useMemo(() => buildDates(7), [])
   const selectedDayTiming = useMemo(() => {
@@ -440,19 +461,26 @@ export default function TableBooking() {
             ) : (
               filteredSlots.map((slot) => {
                 const active = selectedSlot === slot
+                const seatsLeft = seatsLeftInSlot(slot)
+                const full = seatsLeft <= 0
+                const tooFew = !full && seatsLeft < selectedGuests
+                const blocked = full || tooFew
                 return (
                   <button
                     key={slot}
+                    disabled={blocked}
                     onClick={() => setSelectedSlot(slot)}
                     className={`rounded-[16px] border px-3 py-4 text-center transition-colors ${
-                      active
-                        ? "border-[#ef8f98] bg-[#fffaf9] dark:bg-[#2a1519]"
-                        : "border-[#ececf2] dark:border-white/10 bg-white dark:bg-[#242424]"
+                      blocked
+                        ? "cursor-not-allowed border-[#ececf2] dark:border-white/10 bg-[#f1f2f6] dark:bg-[#1c1c1c] opacity-60"
+                        : active
+                          ? "border-[#ef8f98] bg-[#fffaf9] dark:bg-[#2a1519]"
+                          : "border-[#ececf2] dark:border-white/10 bg-white dark:bg-[#242424]"
                     }`}
                   >
                     <span className="block text-sm font-medium text-[#334155] dark:text-gray-200">{slot}</span>
-                    <span className="mt-1 block text-xs font-medium text-[#2d5ea8] dark:text-blue-400">
-                      {getOfferLabel(slot)}
+                    <span className={`mt-1 block text-xs font-medium ${full ? "text-red-500" : seatsLeft <= 3 ? "text-amber-600" : "text-[#2d5ea8] dark:text-blue-400"}`}>
+                      {full ? "Full" : `${seatsLeft} seat${seatsLeft === 1 ? "" : "s"} left`}
                     </span>
                   </button>
                 )

@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 
 const defaultFormData = {
   name: "",
@@ -153,9 +154,9 @@ export default function Category() {
       } else if (error?.response?.status === 403) {
         toast.error("Access denied. You do not have permission.")
       } else if (error?.response?.status === 404) {
-        toast.error("Categories endpoint not found. Please check backend server.")
+        toast.error("Could not load categories. Please try again.")
       } else if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") {
-        toast.error("Cannot connect to server. Please check if backend is running on " + API_BASE_URL.replace("/api", ""))
+        toast.error(networkErrorMessage())
       } else {
         toast.error(error?.response?.data?.message || "Failed to load categories")
       }
@@ -380,7 +381,7 @@ export default function Category() {
       fetchCategories({ silent: true })
     } catch (error) {
       if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") {
-        toast.error("Cannot connect to server. Please check if backend is running on " + API_BASE_URL.replace("/api", ""))
+        toast.error(networkErrorMessage())
       } else {
         toast.error(error?.response?.data?.message || "Failed to save category")
       }

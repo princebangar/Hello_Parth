@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { CheckCircle, XCircle, Clock, UtensilsCrossed, Loader2, AlertCircle, CheckCircle2, ChevronRight, User, MapPin } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { Button } from "@food/components/ui/button"
@@ -8,6 +9,7 @@ import { toast } from "sonner"
 const debugError = (...args) => {}
 
 export default function DiningRequests() {
+    const navigate = useNavigate()
     const [requests, setRequests] = useState([])
     const [loading, setLoading] = useState(true)
     const [processingId, setProcessingId] = useState(null)
@@ -45,6 +47,7 @@ export default function DiningRequests() {
             const response = await adminAPI.approveDiningRequest(requestId)
             if (response.data.success) {
                 toast.success("Request approved successfully")
+                window.dispatchEvent(new CustomEvent("refresh-sidebar-badges"))
                 setRequests(requests.filter(r => r._id !== requestId))
             }
         } catch (err) {
@@ -63,6 +66,7 @@ export default function DiningRequests() {
             const response = await adminAPI.rejectDiningRequest(requestId, reason)
             if (response.data.success) {
                 toast.success("Request rejected")
+                window.dispatchEvent(new CustomEvent("refresh-sidebar-badges"))
                 setRequests(requests.filter(r => r._id !== requestId))
             }
         } catch (err) {
@@ -155,13 +159,10 @@ export default function DiningRequests() {
                                         <div className="space-y-1">
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Requested Category</p>
                                             <p className="font-semibold text-slate-900">
-                                                {(() => {
-                                                    const raw = request.requestedSettings?.diningType
-                                                    if (!raw) return "Not specified"
-                                                    // Handle array or string by converting to string and splitting everything
-                                                    const allSlugs = String(raw).split(",").map(s => s.trim())
-                                                    return [...new Set(allSlugs)].filter(Boolean).join(", ")
-                                                })()}
+                                                {/* names of the admin's own dining categories (no built-in "family dining") */}
+                                                {Array.isArray(request.requestedCategories) && request.requestedCategories.length > 0
+                                                    ? request.requestedCategories.map((c) => c.name).join(", ")
+                                                    : "Not specified"}
                                             </p>
                                         </div>
                                         <div className="space-y-1">
@@ -175,8 +176,17 @@ export default function DiningRequests() {
                                             Requested on: {new Date(request.createdAt).toLocaleString()}
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <Button 
-                                                variant="outline" 
+                                            {request.restaurantId && (
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => navigate(`/admin/food/restaurants?restaurantId=${request.restaurantId}`)}
+                                                    className="border-slate-200 font-semibold"
+                                                >
+                                                    View restaurant
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant="outline"
                                                 onClick={() => handleReject(request._id)}
                                                 disabled={processingId === request._id}
                                                 className="border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all font-semibold"

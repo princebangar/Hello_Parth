@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -161,7 +162,7 @@ export default function DeliveryBoyCommission() {
       
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        const errorMessage = `Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`
+        const errorMessage = networkErrorMessage()
         toast.error(errorMessage)
         debugError('?? Backend connection issue. Check:')
         debugError('   1. Is backend server running? (npm start in backend folder)')
@@ -344,7 +345,7 @@ export default function DeliveryBoyCommission() {
       
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        const errorMessage = `Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`
+        const errorMessage = networkErrorMessage()
         toast.error(errorMessage)
         debugError('?? Backend connection issue. Check:')
         debugError('   1. Is backend server running? (npm start in backend folder)')

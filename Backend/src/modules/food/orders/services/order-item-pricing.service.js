@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { FoodItem } from '../../admin/models/food.model.js';
+import { FoodAddon } from '../../restaurant/models/foodAddon.model.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import {
   applyOtherPriceToFood,
@@ -14,8 +15,41 @@ import {
  * Admin markup lives in price (selling) + basePrice + markupAmount — not otherPrice.
  */
 export async function enforceMinimumFoodItemPrices(items = [], restaurantId = null) {
-  const foodItems = Array.isArray(items) ? items : [];
-  if (!foodItems.length) return foodItems;
+  const allItems = Array.isArray(items) ? items : [];
+  if (!allItems.length) return allItems;
+
+  // Add-on lines ("Complete your meal with") are priced from the approved add-on, not from a dish.
+  const addonLines = allItems.filter((item) => String(item?.itemType || '').toLowerCase() === 'addon');
+  if (addonLines.length) {
+    const addonIds = [...new Set(addonLines.map((i) => String(i.itemId || '')).filter((id) => mongoose.isValidObjectId(id)))];
+    const addonDocs = addonIds.length ? await FoodAddon.find({ _id: { $in: addonIds }, isDeleted: { $ne: true } }).lean() : [];
+    const addonMap = new Map(addonDocs.map((d) => [String(d._id), d]));
+    for (const item of addonLines) {
+      const label = item.name || 'This add-on';
+      const addon = addonMap.get(String(item.itemId || ''));
+      const payload = addon?.published || addon?.draft;
+      if (!addon || !payload) throw new ValidationError(`"${label}" is no longer available. Please refresh your cart.`);
+      if (addon.approvalStatus !== 'approved' || addon.isAvailable === false) {
+        throw new ValidationError(`"${label}" is currently unavailable. Please refresh your cart.`);
+      }
+      if (restaurantId && String(addon.restaurantId) !== String(restaurantId)) {
+        throw new ValidationError(`"${label}" does not belong to the selected restaurant.`);
+      }
+      const price = Math.max(0, Number(payload.price) || 0);
+      item.name = payload.name || item.name;
+      item.price = price;
+      item.basePrice = price;
+      item.variantPrice = price;
+      item.otherPrice = 0;
+      item.markupAmount = 0;
+      item.pricingScope = null;
+      item.isVeg = true;
+      if (!item.image) item.image = payload.image || (Array.isArray(payload.images) ? payload.images[0] : '') || '';
+    }
+  }
+
+  const foodItems = allItems.filter((item) => String(item?.itemType || '').toLowerCase() !== 'addon');
+  if (!foodItems.length) return allItems;
 
   const validIds = [
     ...new Set(
@@ -177,7 +211,7 @@ export async function enforceMinimumFoodItemPrices(items = [], restaurantId = nu
     }
   }
 
-  return foodItems;
+  return allItems;
 }
 
 /**

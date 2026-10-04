@@ -108,6 +108,12 @@ const restaurantSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // average bill for two people (dining listing / details)
+    costForTwo: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
     openingTime: {
       type: String,
     },
@@ -233,7 +239,8 @@ const restaurantSchema = new mongoose.Schema(
     diningSettings: {
       isEnabled: { type: Boolean, default: false },
       maxGuests: { type: Number, default: 6 },
-      diningType: { type: [String], default: ["family-dining"] },
+      diningType: { type: [String], default: [] },
+      facilities: { type: [String], default: [] },
     },
     takeawaySettings: {
       isEnabled: { type: Boolean, default: false },

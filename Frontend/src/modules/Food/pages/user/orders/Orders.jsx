@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { buildShareUrl, restaurantSharePath } from '@/shared/utils/shareLinks'
 import { Link, useNavigate } from "react-router-dom"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { ArrowLeft, Search, MoreVertical, ChevronRight, Star, RotateCcw, AlertCircle, Loader2, Clock, X, Share2, MessageCircle, Send, Copy, Mail, MessagesSquare, Link2 } from "lucide-react"
@@ -162,9 +163,12 @@ export default function Orders() {
       return [...firstPageOrders, ...remainingOrders]
     }
 
+    let firstLoad = true
     const fetchOrders = async () => {
+      const silent = !firstLoad
+      firstLoad = false
       try {
-        setLoading(true)
+        if (!silent) setLoading(true)
         const ordersData = await fetchAllOrders()
 
         if (ordersData.length > 0) {
@@ -273,10 +277,13 @@ export default function Orders() {
             }))
           })
 
-          setOrders(transformedOrders)
+          // Background refresh: keep the same list object when nothing changed so the page does not re-render/flicker
+          setOrders((prev) =>
+            JSON.stringify(prev) === JSON.stringify(transformedOrders) ? prev : transformedOrders
+          )
         } else {
           debugLog('?? No orders data in response')
-          setOrders([])
+          if (!silent) setOrders([])
         }
       } catch (error) {
         debugError('Error fetching user orders:', error)
@@ -286,10 +293,12 @@ export default function Orders() {
         } else if (error?.response?.data?.message) {
           errorMessage = error.response.data.message
         }
-        toast.error(errorMessage)
-        setOrders([])
+        if (!silent) {
+          toast.error(errorMessage)
+          setOrders([])
+        }
       } finally {
-        setLoading(false)
+        if (!silent) setLoading(false)
       }
     }
 
@@ -298,6 +307,7 @@ export default function Orders() {
     // Poll for order updates every 20 seconds to detect delivered orders
     // This ensures rating popup shows quickly when order is delivered
     const pollInterval = setInterval(() => {
+      if (document.visibilityState === "hidden") return
       fetchOrders()
     }, 20000) // Poll every 20 seconds
 
@@ -390,7 +400,7 @@ export default function Orders() {
       await navigator.share(payload)
       return true
     } catch (error) {
-      if (error?.name === "AbortError") return true
+      if (error?.name === "AbortError") return "cancelled"
       return false
     }
   }
@@ -470,10 +480,12 @@ export default function Orders() {
     const location =
       order.restaurantLocation ||
       `${order.address?.city || ""}, ${order.address?.state || ""}`.trim()
-    const restaurantPath = order.restaurantSlug || order.restaurantId
+    // Readable link: stored slug, else the name as a slug (the restaurant page resolves both), else the id
+    const nameSlug = String(order.restaurant || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    const restaurantPath = order.restaurantSlug || (order.restaurant && order.restaurant !== "Restaurant" ? nameSlug : "") || order.restaurantId
     const shareUrl = restaurantPath
-      ? `${window.location.origin}/food/user/restaurants/${restaurantPath}`
-      : `${window.location.origin}/food/user/orders/${order.id}`
+      ? buildShareUrl(restaurantSharePath(restaurantPath))
+      : buildShareUrl(`/food/user/orders/${order.id}`)
 
     const shareText = `Check out ${order.restaurant} on ${companyName}.
 Location: ${location || "Location not available"}
@@ -487,6 +499,7 @@ Order again from this restaurant in the ${companyName} app.`
 
     try {
       const shared = await tryNativeShare(payload)
+      if (shared === "cancelled") return
       if (shared) {
         toast.success("Restaurant shared successfully")
         return
@@ -922,9 +935,9 @@ Order again from this restaurant in the ${companyName} app.`
                   </div>
 
                   {/* Row 2: Secondary Metadata / Ratings and Actions */}
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-1">
                     {/* Left: Ratings or Countdowns or Cancellation Details */}
-                    <div className="flex-1 min-w-0 pr-4">
+                    <div className="min-w-0 max-w-full">
                       {isRestaurantCancelled ? (
                         <div className="flex flex-col gap-0.5">
                           {order.cancellationReason && (
@@ -937,7 +950,7 @@ Order again from this restaurant in the ${companyName} app.`
                       ) : paymentFailed ? (
                         <span className="text-xs text-red-500 font-medium">Please try ordering again</span>
                       ) : isDelivered && order.restaurantRating && (!order.deliveryPartnerId || order.deliveryPartnerRating) ? (
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
                           <span>Your rating:</span>
                           <div className="flex bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold items-center gap-0.5 h-4.5">
                             <span className="opacity-90">Food</span>
@@ -973,7 +986,7 @@ Order again from this restaurant in the ${companyName} app.`
                     </div>
 
                     {/* Right: View Details & Reorder buttons */}
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
                       <Link to={(isDelivered || isCancelled) ? `/user/orders/${order.id}/details` : `/user/orders/${order.id}`}>
                         <span className="text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-[#DC2626] dark:hover:text-[#DC2626] transition-colors cursor-pointer flex items-center gap-0.5">
                           View Details <ChevronRight className="w-3.5 h-3.5" />

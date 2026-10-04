@@ -134,6 +134,7 @@ const transformOrderForList = (order) => {
     photoUrl: order.items?.[0]?.image || null,
     photoAlt: order.items?.[0]?.name || "Order",
     paymentMethod: order.paymentMethod || order.payment?.method || null,
+    payableTotal: Number(order.pricing?.customerTotal ?? order.pricing?.total ?? order.total ?? 0) || 0,
     deliveryPartnerId: order.deliveryPartnerId || null,
     dispatchStatus: order.dispatch?.status || null,
     preparingTimestamp: order.tracking?.preparing?.timestamp
@@ -141,7 +142,7 @@ const transformOrderForList = (order) => {
       : (order.acceptedAt
         ? new Date(order.acceptedAt)
         : new Date(order.createdAt || Date.now())),
-    initialETA: order.preparationTime || order.estimatedDeliveryTime || 30,
+    initialETA: Number(order.preparationTime) > 0 ? Number(order.preparationTime) : null,
     // For active orders: sort by creation time (newest first within same status)
     // For terminal orders: sort by the most recent event (cancelledAt/deliveredAt/updatedAt)
     sortTimestamp: isTerminal
@@ -197,6 +198,7 @@ function CompletedOrders({ onSelectOrder, refreshToken = 0 }) {
             photoAlt: order.items?.[0]?.name || "Order",
             amount: order.pricing?.total || order.total || 0,
             paymentMethod: order.paymentMethod || order.payment?.method || null,
+            payableTotal: Number(order.pricing?.customerTotal ?? order.pricing?.total ?? order.total ?? 0) || 0,
           }));
 
           transformedOrders.sort((a, b) => {
@@ -410,6 +412,7 @@ function CancelledOrders({ onSelectOrder, refreshToken = 0 }) {
             photoAlt: order.items?.[0]?.name || "Order",
             amount: order.pricing?.total || order.total || 0,
             paymentMethod: order.paymentMethod || order.payment?.method || null,
+            payableTotal: Number(order.pricing?.customerTotal ?? order.pricing?.total ?? order.total ?? 0) || 0,
             restaurantNote: order.restaurantNote || null,
           }));
 
@@ -965,7 +968,7 @@ function AllOrders({ onSelectOrder, onCancel, onVerifyTakeaway, refreshToken = 0
             const normalizedStatus = String(order.status || "").toLowerCase();
             let etaDisplay = order.eta;
 
-            if (normalizedStatus === "preparing" && order.preparingTimestamp) {
+            if (normalizedStatus === "preparing" && order.preparingTimestamp && order.initialETA > 0) {
               const elapsedMs = currentTime - order.preparingTimestamp;
               const remainingMs = order.initialETA * 60000 - elapsedMs;
               const remainingMinutes = Math.ceil(remainingMs / 60000);
@@ -1115,7 +1118,7 @@ function TakeawayOrders({ onSelectOrder, onCancel, onVerifyTakeaway, refreshToke
           {orders.map((order) => {
             const normalizedStatus = String(order.status || '').toLowerCase();
             let etaDisplay = order.eta;
-            if (normalizedStatus === 'preparing' && order.preparingTimestamp) {
+            if (normalizedStatus === 'preparing' && order.preparingTimestamp && order.initialETA > 0) {
               const elapsedMs = currentTime - order.preparingTimestamp;
               const remainingMs = order.initialETA * 60000 - elapsedMs;
               const remainingMinutes = Math.ceil(remainingMs / 60000);
@@ -3473,7 +3476,11 @@ function OrdersMainInner() {
                         </span>
                         <span
                           className={`text-sm font-semibold ${isCod ? "text-amber-600" : "text-green-600"}`}>
-                          {isCod ? "Cash on Delivery" : "Paid"}
+                          {isCod
+                            ? String((popupOrder || newOrder)?.orderType || "").toLowerCase() === "takeaway"
+                              ? `Cash at pickup · collect ₹${getCustomerFacingOrderTotal(popupOrder || newOrder)}`
+                              : "Cash on Delivery"
+                            : "Paid"}
                         </span>
                       </div>
                     );
@@ -3864,6 +3871,22 @@ function OrdersMainInner() {
                 </div>
               </div>
 
+              {/* Amount: cash must be collected before handing the food over */}
+              {Number(verifyingOrder.payableTotal) > 0 && (
+                <div className="px-5 pt-4">
+                  {["cash", "cod"].includes(String(verifyingOrder.paymentMethod || "").toLowerCase().trim()) ? (
+                    <div className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Collect cash from customer</p>
+                      <p className="text-3xl font-black text-amber-800 mt-0.5">₹{Number(verifyingOrder.payableTotal).toFixed(2)}</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-2 text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Paid online · ₹{Number(verifyingOrder.payableTotal).toFixed(2)}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* OTP Section */}
               <div className="px-5 pt-5 pb-2">
                 <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 text-center">
@@ -4090,6 +4113,7 @@ const OrderCard = memo(function OrderCard({
   eta,
   itemsSummary,
   paymentMethod,
+  payableTotal = 0,
   photoUrl,
   photoAlt,
   deliveryPartnerId,
@@ -4223,6 +4247,16 @@ const OrderCard = memo(function OrderCard({
               ))}
           </div>
 
+          {/* Takeaway + cash: restaurant collects the whole bill at the counter */}
+          {normalizedType === "takeaway" &&
+            ["cash", "cod"].includes(String(paymentMethod || "").toLowerCase().trim()) &&
+            payableTotal > 0 &&
+            !normalizedStatus.includes("cancel") && (
+              <div className="mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-black text-amber-700">
+                Collect cash: ₹{payableTotal.toFixed(2)}
+              </div>
+            )}
+
           {/* Time Placed */}
           <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tight mb-1">
             {timePlaced}
@@ -4296,7 +4330,7 @@ const OrderCard = memo(function OrderCard({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onVerifyTakeaway({ orderId, mongoId, customerName, photoUrl, photoAlt, type, itemsSummary });
+                          onVerifyTakeaway({ orderId, mongoId, customerName, photoUrl, photoAlt, type, itemsSummary, paymentMethod, payableTotal });
                         }}
                         className="px-3 py-1.5 rounded-lg text-[9px] font-black text-white shadow-sm transition-transform active:scale-95 hover:brightness-110"
                         style={{ backgroundColor: brandColor }}>
@@ -4348,7 +4382,7 @@ function PreparingOrders({
           );
 
           const transformedOrders = preparingOrders.map((order) => {
-            const initialETA = order.preparationTime || order.estimatedDeliveryTime || 30; // in minutes
+            const initialETA = Number(order.preparationTime) > 0 ? Number(order.preparationTime) : null; // minutes picked on accept
             const preparingTimestamp = order.tracking?.preparing?.timestamp
               ? new Date(order.tracking.preparing.timestamp)
               : (order.acceptedAt
@@ -4385,6 +4419,7 @@ function PreparingOrders({
               dispatchStatus: order.dispatch?.status || null,
               paymentMethod:
                 order.paymentMethod || order.payment?.method || null,
+              payableTotal: Number(order.pricing?.customerTotal ?? order.pricing?.total ?? order.total ?? 0) || 0,
               restaurantNote: order.restaurantNote || null,
             };
           });
@@ -4458,6 +4493,9 @@ function PreparingOrders({
         if (markedReadyOrdersRef.current.has(orderKey)) {
           continue;
         }
+
+        // No prep time chosen (old order): nothing to count down or auto-complete
+        if (!(order.initialETA > 0)) continue;
 
         // Calculate remaining ETA
         const elapsedMs = now - order.preparingTimestamp;
@@ -4598,7 +4636,7 @@ function PreparingOrders({
           {orders.map((order) => {
             // Format ETA display
             let etaDisplay = "";
-            {
+            if (order.initialETA > 0) {
               const elapsedMs = currentTime - order.preparingTimestamp;
               const remainingMs = order.initialETA * 60000 - elapsedMs;
               const remainingMinutes = Math.ceil(remainingMs / 60000);
@@ -4624,6 +4662,7 @@ function PreparingOrders({
                 photoUrl={order.photoUrl}
                 photoAlt={order.photoAlt}
                 paymentMethod={order.paymentMethod}
+                payableTotal={order.payableTotal}
                 deliveryPartnerId={order.deliveryPartnerId}
                 dispatchStatus={order.dispatchStatus}
                 onSelect={onSelectOrder}
@@ -4688,6 +4727,7 @@ function ReadyOrders({ onSelectOrder, onVerifyTakeaway, refreshToken = 0 }) {
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || "Order",
             paymentMethod: order.paymentMethod || order.payment?.method || null,
+            payableTotal: Number(order.pricing?.customerTotal ?? order.pricing?.total ?? order.total ?? 0) || 0,
             deliveryPartnerId: order.deliveryPartnerId || null,
             dispatchStatus: order.dispatch?.status || null,
             restaurantNote: order.restaurantNote || null,
@@ -4812,6 +4852,7 @@ const OutForDeliveryOrders = ({ onSelectOrder, refreshToken = 0 }) => {
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || "Order",
             paymentMethod: order.paymentMethod || order.payment?.method || null,
+            payableTotal: Number(order.pricing?.customerTotal ?? order.pricing?.total ?? order.total ?? 0) || 0,
             deliveryPartnerId: order.deliveryPartnerId || null,
             dispatchStatus: order.dispatch?.status || null,
             restaurantNote: order.restaurantNote || null,

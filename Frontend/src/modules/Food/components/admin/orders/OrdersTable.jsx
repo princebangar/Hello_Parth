@@ -213,7 +213,7 @@ export default function OrdersTable({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full max-w-full">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1800px]">
+        <table className="w-full min-w-[1800px] [&_th]:!text-center [&_td]:!text-center [&_td_.flex]:!justify-center [&_td_.flex-col]:!items-center [&_td_*]:!text-center">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               {visibleColumns.si && (

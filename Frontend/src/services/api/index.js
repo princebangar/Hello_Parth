@@ -2889,8 +2889,8 @@ export const diningAPI = {
   getRestaurants: (params = {}) =>
     apiClient.get("/food/dining/restaurants/public", { params }),
   getHeroBanners: () => apiClient.get("/food/hero-banners/dining/public"),
-  getRestaurantBySlug: (slug) =>
-    apiClient.get(`/food/restaurant/restaurants/${String(slug)}`),
+  getRestaurantBySlug: (slug, config = {}) =>
+    apiClient.get(`/food/restaurant/restaurants/${String(slug)}`, { ...config }),
   getOfferBanners: () => Promise.resolve({ data: { success: true, data: [] } }),
   getStories: () => Promise.resolve({ data: { success: true, data: [] } }),
   getBankOffers: () => Promise.resolve({ data: { success: true, data: [] } }),

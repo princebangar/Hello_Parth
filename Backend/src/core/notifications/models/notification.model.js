@@ -72,6 +72,32 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ ownerType: 1, ownerId: 1, createdAt: -1 });
 notificationSchema.index({ ownerType: 1, ownerId: 1, isRead: 1, dismissedAt: 1 });
-notificationSchema.index({ broadcastId: 1, ownerType: 1, ownerId: 1 }, { unique: true, sparse: true });
+// One copy of a broadcast per owner. Only broadcast rows take part: the old index was "unique + sparse", but a compound
+// sparse index still includes every row that has ownerType/ownerId, so the 2nd non-broadcast message to the same
+// restaurant / rider (broadcastId null) failed with a duplicate-key error and was silently lost (dining / category
+// approval notices, etc.).
+const BROADCAST_INDEX = 'broadcastId_ownerType_ownerId_unique';
+notificationSchema.index(
+    { broadcastId: 1, ownerType: 1, ownerId: 1 },
+    { name: BROADCAST_INDEX, unique: true, partialFilterExpression: { broadcastId: { $type: 'objectId' } } }
+);
 
 export const FoodNotification = mongoose.model('FoodNotification', notificationSchema);
+
+// Run once after connecting: replace the old broken unique index with the partial one.
+export async function fixNotificationIndexes() {
+    try {
+        const coll = FoodNotification.collection;
+        const indexes = await coll.indexes().catch(() => []);
+        const old = indexes.find((i) => i.name === 'broadcastId_1_ownerType_1_ownerId_1' && !i.partialFilterExpression);
+        if (old) await coll.dropIndex(old.name);
+        if (!indexes.some((i) => i.name === BROADCAST_INDEX) || old) {
+            await coll.createIndex(
+                { broadcastId: 1, ownerType: 1, ownerId: 1 },
+                { name: BROADCAST_INDEX, unique: true, partialFilterExpression: { broadcastId: { $type: 'objectId' } } }
+            );
+        }
+    } catch (error) {
+        console.error('[notifications] index fix failed:', error?.message || error);
+    }
+}

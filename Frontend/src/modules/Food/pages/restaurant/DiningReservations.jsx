@@ -7,6 +7,7 @@ import { diningAPI, restaurantAPI } from "@food/api"
 import Loader from "@food/components/Loader"
 import { Badge } from "@food/components/ui/badge"
 import { toast } from "sonner"
+import { DINING_CUISINES, DINING_FACILITIES } from "@food/constants/dining"
 const debugError = (...args) => {}
 
 const getRestaurantFromResponse = (response) =>
@@ -96,6 +97,10 @@ export default function DiningReservations() {
     const [diningSettingsMessage, setDiningSettingsMessage] = useState("")
     const [diningSettingsError, setDiningSettingsError] = useState("")
     const [diningType, setDiningType] = useState([])
+    // dining details shown to customers - asked before the dining listing is approved
+    const [diningCuisines, setDiningCuisines] = useState([])
+    const [costForTwo, setCostForTwo] = useState("")
+    const [diningFacilities, setDiningFacilities] = useState([])
     const [availableCategories, setAvailableCategories] = useState([])
     const [pendingRequest, setPendingRequest] = useState(null)
     const [fetchingRequest, setFetchingRequest] = useState(true)
@@ -112,6 +117,9 @@ export default function DiningReservations() {
         
         const rawDiningType = restaurantData?.diningSettings?.diningType
         setDiningType(Array.isArray(rawDiningType) ? rawDiningType : (rawDiningType ? [rawDiningType].filter(Boolean) : []))
+        setDiningCuisines(Array.isArray(restaurantData?.cuisines) ? restaurantData.cuisines : [])
+        setCostForTwo(restaurantData?.costForTwo ? String(restaurantData.costForTwo) : "")
+        setDiningFacilities(Array.isArray(restaurantData?.diningSettings?.facilities) ? restaurantData.diningSettings.facilities : [])
     }
 
     useEffect(() => {
@@ -306,13 +314,30 @@ export default function DiningReservations() {
     const handleSaveDiningSettings = async () => {
         if (!restaurant || savingDiningSettings || pendingRequest) return
 
-        if (!diningType || diningType.length === 0) {
+        // only the admin's real dining categories count (old data carried a built-in "family-dining" that no admin
+        // category matches - it was sent invisibly with every request)
+        const knownSlugs = new Set((availableCategories || []).map((cat) => cat.slug))
+        const chosenTypes = [...new Set((Array.isArray(diningType) ? diningType : [diningType]).filter((slug) => knownSlugs.has(slug)))]
+        if (chosenTypes.length === 0) {
             setDiningSettingsError("Please select at least one dining category")
             toast.error("Dining category is required")
             return
         }
 
         const nextMaxGuests = parseInt(maxGuestsLimit, 10) || 0
+        const nextCostForTwo = parseInt(costForTwo, 10) || 0
+
+        if (diningEnabled && diningCuisines.length === 0) {
+            setDiningSettingsError("Please choose the cuisines you serve")
+            toast.error("Cuisines are required")
+            return
+        }
+
+        if (diningEnabled && nextCostForTwo <= 0) {
+            setDiningSettingsError("Please add the average price for two people")
+            toast.error("Price for two is required")
+            return
+        }
 
         if (diningEnabled && nextMaxGuests <= 0) {
             setDiningSettingsError("Guest limit must be at least 1 when dining is enabled")
@@ -323,7 +348,10 @@ export default function DiningReservations() {
         const nextDiningSettings = {
             isEnabled: Boolean(diningEnabled),
             maxGuests: nextMaxGuests,
-            diningType: Array.isArray(diningType) ? [...new Set(diningType)] : [diningType],
+            diningType: chosenTypes,
+            cuisines: diningCuisines,
+            costForTwo: nextCostForTwo || null,
+            facilities: diningFacilities,
         }
 
         setDiningSettingsError("")
@@ -798,6 +826,63 @@ export default function DiningReservations() {
                                         No categories available. Please contact support.
                                     </div>
                                 )}
+                            </div>
+                        </div>
+
+                        {/* Dining details shown to customers (asked before approval) */}
+                        <div className="mt-8 border-t border-slate-100 pt-6 space-y-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-900 mb-1">Cuisines you serve *</label>
+                                <p className="text-xs text-slate-500 font-medium mb-3">Shown on your dining page and used in the customer cuisine filter</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {DINING_CUISINES.map((cuisine) => {
+                                        const on = diningCuisines.includes(cuisine)
+                                        return (
+                                            <button
+                                                key={cuisine}
+                                                type="button"
+                                                disabled={!!pendingRequest}
+                                                onClick={() => setDiningCuisines(on ? diningCuisines.filter((c) => c !== cuisine) : [...diningCuisines, cuisine])}
+                                                className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${on ? "border-primary bg-primary/10 text-primary" : "border-slate-200 bg-white text-slate-600"} ${pendingRequest ? "cursor-not-allowed opacity-80" : ""}`}
+                                            >
+                                                {cuisine}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-900 mb-1">Average price for two (₹) *</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    inputMode="numeric"
+                                    value={costForTwo}
+                                    disabled={!!pendingRequest}
+                                    onChange={(e) => setCostForTwo(e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
+                                    placeholder="e.g. 800"
+                                    className="w-48 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-900 mb-1">Facilities</label>
+                                <p className="text-xs text-slate-500 font-medium mb-3">Pick what your place offers</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {DINING_FACILITIES.map((facility) => {
+                                        const on = diningFacilities.includes(facility)
+                                        return (
+                                            <button
+                                                key={facility}
+                                                type="button"
+                                                disabled={!!pendingRequest}
+                                                onClick={() => setDiningFacilities(on ? diningFacilities.filter((f) => f !== facility) : [...diningFacilities, facility])}
+                                                className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${on ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-600"} ${pendingRequest ? "cursor-not-allowed opacity-80" : ""}`}
+                                            >
+                                                {facility}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
                             </div>
                         </div>
 

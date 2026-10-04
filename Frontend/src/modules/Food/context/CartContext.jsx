@@ -517,6 +517,8 @@ export function CartProvider({ children }) {
       try {
         const response = await foodCartAPI.addItem({
           itemId: item.itemId || item.productId || item.foodId || item.id,
+          // "Complete your meal with" add-ons are not dishes: the server prices them from the approved add-on
+          ...(item.itemType === "addon" ? { itemType: "addon" } : {}),
           variantId: item.variantId || "",
           quantity: Number(item.quantity) || 1,
         })

@@ -7,6 +7,7 @@ import { exportJoinRequestsToExcel, exportJoinRequestsToPDF } from "@food/compon
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -92,7 +93,7 @@ export default function JoinRequest() {
       let errorMessage = "Failed to fetch join requests. Please try again."
       
       if (err.code === 'ERR_NETWORK') {
-        errorMessage = "Network error. Please check if backend server is running."
+        errorMessage = networkErrorMessage()
       } else if (err.response?.status === 401) {
         errorMessage = "Unauthorized. Please login again."
       } else if (err.response?.status === 403) {

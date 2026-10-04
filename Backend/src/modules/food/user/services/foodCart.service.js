@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { FoodCart } from '../models/foodCart.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
+import { FoodAddon } from '../../restaurant/models/foodAddon.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import {
@@ -21,6 +22,78 @@ const normalizeVariantId = (value) => String(value || '').trim();
 
 const lineKey = (itemId, variantId = '') =>
   `${String(itemId)}::${normalizeVariantId(variantId)}`;
+
+// ---- add-on lines ("Complete your meal with") ----
+const isAddonLine = (line) => String(line?.itemType || '').toLowerCase() === 'addon';
+
+const addonPayload = (addon) => addon?.published || addon?.draft || null;
+
+async function loadAddonDoc(addonId) {
+  if (!addonId || !mongoose.Types.ObjectId.isValid(String(addonId))) {
+    throw new ValidationError('Add-on is required');
+  }
+  const addon = await FoodAddon.findOne({ _id: addonId, isDeleted: { $ne: true } }).lean();
+  if (!addon) throw new NotFoundError('Add-on not found');
+  return addon;
+}
+
+function assertAddonSellable(addon) {
+  const payload = addonPayload(addon);
+  if (!payload || addon.approvalStatus !== 'approved' || addon.isAvailable === false) {
+    throw new ValidationError('This add-on is currently unavailable');
+  }
+  return payload;
+}
+
+async function addAddonLine(userId, body = {}) {
+  const addQty = Math.min(MAX_QTY, Math.max(1, Number(body.quantity) || 1));
+  const addon = await loadAddonDoc(body.itemId || body.addonId || body.productId);
+  const payload = assertAddonSellable(addon);
+  const restaurant = await assertRestaurantAccepting(addon.restaurantId);
+
+  const cart = await getOrCreateCart(userId);
+  if (cart.restaurantId && String(cart.restaurantId) !== String(addon.restaurantId)) {
+    const existingName = (await FoodRestaurant.findById(cart.restaurantId).select('restaurantName').lean())?.restaurantName;
+    throw new ValidationError(
+      `Cart already contains items from "${existingName || 'another restaurant'}". Please clear cart or complete order first.`,
+      'RESTAURANT_MISMATCH'
+    );
+  }
+
+  const price = Math.max(0, Number(payload.price) || 0);
+  const existing = (cart.items || []).find((line) => isAddonLine(line) && String(line.itemId) === String(addon._id));
+  let saved;
+  if (existing) {
+    saved = await FoodCart.findOneAndUpdate(
+      { _id: cart._id, 'items._id': existing._id },
+      { $set: { 'items.$.quantity': Math.min(MAX_QTY, Number(existing.quantity || 0) + addQty), restaurantId: addon.restaurantId } },
+      { new: true }
+    );
+  } else {
+    saved = await FoodCart.findOneAndUpdate(
+      { _id: cart._id },
+      {
+        $set: { restaurantId: addon.restaurantId },
+        $push: {
+          items: {
+            itemId: addon._id,
+            itemType: 'addon',
+            variantId: '',
+            quantity: addQty,
+            basePrice: price,
+            otherPrice: 0,
+            sellingPrice: price,
+            markupAmount: 0,
+            pricingCapturedAt: new Date(),
+          },
+        },
+      },
+      { new: true }
+    );
+  }
+  const result = await hydrateFoodCart(saved || cart);
+  return { ...result, restaurantName: restaurant.restaurantName || result.restaurantName };
+}
 
 async function getOrCreateCart(userId) {
   const uid = toObjectId(userId);
@@ -175,9 +248,15 @@ export async function hydrateFoodCart(cartDoc) {
     };
   }
 
-  const itemIds = [...new Set(rawItems.map((i) => String(i.itemId)).filter(Boolean))]
+  const itemIds = [...new Set(rawItems.filter((i) => !isAddonLine(i)).map((i) => String(i.itemId)).filter(Boolean))]
     .filter((id) => mongoose.Types.ObjectId.isValid(id))
     .map((id) => new mongoose.Types.ObjectId(id));
+
+  const addonIds = [...new Set(rawItems.filter(isAddonLine).map((i) => String(i.itemId)).filter(Boolean))]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const addonDocs = addonIds.length ? await FoodAddon.find({ _id: { $in: addonIds }, isDeleted: { $ne: true } }).lean() : [];
+  const addonMap = new Map(addonDocs.map((d) => [String(d._id), d]));
 
   const docs = itemIds.length
     ? await FoodItem.find({ _id: { $in: itemIds } })
@@ -204,8 +283,79 @@ export async function hydrateFoodCart(cartDoc) {
   });
 
   for (const line of rawItems) {
-    const doc = docMap.get(String(line.itemId));
     const lineId = String(line._id);
+
+    if (isAddonLine(line)) {
+      const addon = addonMap.get(String(line.itemId));
+      const payload = addonPayload(addon);
+      if (!addon || !payload || addon.approvalStatus !== 'approved' || addon.isAvailable === false) {
+        removedUnavailable.push({ id: lineId, itemId: String(line.itemId), reason: 'unavailable' });
+        continue;
+      }
+      if (cartDoc.restaurantId && String(addon.restaurantId) !== String(cartDoc.restaurantId)) {
+        removedUnavailable.push({ id: lineId, itemId: String(line.itemId), reason: 'restaurant_mismatch' });
+        continue;
+      }
+      const addonQty = Math.min(MAX_QTY, Math.max(1, Number(line.quantity) || 1));
+      const addonPrice = Math.max(0, Number(payload.price) || 0);
+      if (Math.abs((Number(line.sellingPrice) || 0) - addonPrice) > 0.001) pricingDirty = true;
+      keep.push({
+        _id: line._id,
+        itemId: line.itemId,
+        itemType: 'addon',
+        variantId: '',
+        quantity: addonQty,
+        basePrice: addonPrice,
+        otherPrice: 0,
+        sellingPrice: addonPrice,
+        markupAmount: 0,
+        appliedPricingType: null,
+        appliedPricingValue: null,
+        pricingScope: null,
+        pricingRule: null,
+        pricingCapturedAt: line.pricingCapturedAt || new Date(),
+      });
+      const addonImage = (typeof payload.image === 'string' && payload.image) || (Array.isArray(payload.images) && payload.images[0]) || '';
+      hydrated.push({
+        id: lineId,
+        lineItemId: lineId,
+        itemId: String(addon._id),
+        productId: String(addon._id),
+        itemType: 'addon',
+        variantId: '',
+        variantName: '',
+        variantPrice: addonPrice,
+        name: payload.name,
+        quantity: addonQty,
+        price: addonPrice,
+        basePrice: addonPrice,
+        otherPrice: 0,
+        markupAmount: 0,
+        appliedPricingType: null,
+        appliedPricingValue: null,
+        pricingScope: null,
+        pricingRule: null,
+        image: addonImage,
+        imageUrl: addonImage,
+        isVeg: true,
+        foodType: 'Veg',
+        orderType: 'food',
+        type: 'food',
+        restaurantId: String(addon.restaurantId),
+        restaurant: restaurant?.restaurantName || '',
+        sourceId: String(addon.restaurantId),
+        sourceName: restaurant?.restaurantName || '',
+        categoryId: '',
+        categoryName: 'Add-on',
+        addons: [],
+        notes: '',
+        lineTotal: addonPrice * addonQty,
+        available: true,
+      });
+      continue;
+    }
+
+    const doc = docMap.get(String(line.itemId));
     if (!doc || doc.approvalStatus !== 'approved' || doc.isAvailable === false) {
       removedUnavailable.push({
         id: lineId,
@@ -386,6 +536,9 @@ export async function getFoodCart(userId) {
 }
 
 export async function addFoodCartItem(userId, body = {}) {
+  if (String(body.itemType || '').toLowerCase() === 'addon') {
+    return addAddonLine(userId, body);
+  }
   const itemId = body.itemId || body.productId || body.foodId;
   const variantId = normalizeVariantId(body.variantId);
   const addQty = Math.min(MAX_QTY, Math.max(1, Number(body.quantity) || 1));
@@ -520,10 +673,16 @@ export async function updateFoodCartItem(userId, lineId, body = {}) {
   }
 
   const line = cart.items[idx];
-  const itemDoc = await loadItemDoc(line.itemId);
-  assertItemSellable(itemDoc);
-  await assertRestaurantAccepting(itemDoc.restaurantId);
-  resolveVariant(itemDoc, line.variantId);
+  if (isAddonLine(line)) {
+    const addon = await loadAddonDoc(line.itemId);
+    assertAddonSellable(addon);
+    await assertRestaurantAccepting(addon.restaurantId);
+  } else {
+    const itemDoc = await loadItemDoc(line.itemId);
+    assertItemSellable(itemDoc);
+    await assertRestaurantAccepting(itemDoc.restaurantId);
+    resolveVariant(itemDoc, line.variantId);
+  }
 
   cart.items[idx].quantity = Math.min(MAX_QTY, Math.floor(quantity));
   await cart.save();
@@ -598,6 +757,7 @@ export async function buildOrderItemsFromFoodCart(userId) {
     );
     return {
     itemId: line.itemId,
+    itemType: line.itemType === 'addon' ? 'addon' : 'food',
     name: line.name,
     type: 'food',
     sourceId: line.sourceId || line.restaurantId,

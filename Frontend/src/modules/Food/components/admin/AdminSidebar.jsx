@@ -294,6 +294,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
 
     // Path-based (sub-menu items & direct links)
     if (p.includes("food-approval")) return badges.foodApprovals ?? 0
+    if (p.includes("dining-requests")) return badges.diningRequests ?? 0
     if (p.includes("restaurants/joining-request")) return badges.restaurants ?? 0
     if (p.includes("restaurants/complaints")) return badges.restaurantComplaints ?? 0
     if (p.includes("orders/pending")) return badges.orders ?? 0

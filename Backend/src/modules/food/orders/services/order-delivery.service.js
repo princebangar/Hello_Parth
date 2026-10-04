@@ -1301,7 +1301,6 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
       note: `Rider finalized payment as ${finalPayMethod}. Order is now delivered.`,
     });
   } catch (txErr) {
-    import('fs').then(fs => fs.appendFileSync('c:\\Users\\princeb\\.gemini\\antigravity-ide\\brain\\6e556dc8-03b6-43c7-8fad-7c0a061a566e\\scratch\\txErr.log', txErr.stack + '\\n'));
     logger.error(`Failed to update transaction status for order ${order._id}:`, txErr);
   }
 

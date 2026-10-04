@@ -2164,7 +2164,7 @@ export default function OrderTracking() {
                 transition={{ delay: 2.0 }}
                 className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800"
               >
-                <div className="flex items-center justify-center gap-2 text-[#DC2626] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/food/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}>
+                <div className="flex items-center justify-center gap-2 text-[#DC2626] dark:text-orange-400 font-medium cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate('/food/user/profile/delivery-safety', { state: { returnTo: location.pathname } })}>
                   <Shield className="w-4 h-4" />
                   <span className="text-sm">Learn about delivery partner safety</span>
                 </div>
@@ -2583,7 +2583,7 @@ export default function OrderTracking() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
             whileTap={{ scale: 0.99 }}
-            onClick={() => navigate('/food/user/profile/report-safety-emergency', { state: { returnTo: location.pathname } })}
+            onClick={() => navigate('/food/user/profile/delivery-safety', { state: { returnTo: location.pathname } })}
           >
             <Shield className="w-6 h-6 text-gray-600 dark:text-gray-400" />
             <span className="flex-1 text-left font-medium text-gray-900 dark:text-gray-100">

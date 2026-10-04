@@ -1183,10 +1183,17 @@ export default function Inventory() {
   }
 
   // Handle swipe gestures
+  // A swipe that starts on the filter chips (or anything marked data-no-page-swipe) scrolls THAT row; it must not also
+  // flip the whole page to the other tab (All items <-> Add-ons).
+  const gestureIgnored = useRef(false)
+  const startsOnNoSwipeArea = (target) => Boolean(target?.closest?.("[data-no-page-swipe]"))
+
   const handleTouchStart = (e) => {
     const target = e.target
     // Don't handle swipe if starting on topbar
     if (tabBarRef.current?.contains(target)) return
+    gestureIgnored.current = startsOnNoSwipeArea(target)
+    if (gestureIgnored.current) return
 
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -1195,6 +1202,7 @@ export default function Inventory() {
   }
 
   const handleTouchMove = (e) => {
+    if (gestureIgnored.current) return
     if (!isSwiping.current) {
       const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current)
       const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current)
@@ -1211,6 +1219,10 @@ export default function Inventory() {
   }
 
   const handleTouchEnd = () => {
+    if (gestureIgnored.current) {
+      gestureIgnored.current = false
+      return
+    }
     if (!isSwiping.current) {
       touchStartX.current = 0
       touchEndX.current = 0
@@ -1370,10 +1382,15 @@ export default function Inventory() {
     }
   }, [restaurantProfile?.pureVegRestaurant, selectedFilter])
 
+  // A dish is live for customers only once admin approved it AND it is in stock. Dishes under review or rejected are
+  // neither "in stock" nor "out of stock" - they are not on the menu at all yet.
+  const isItemApproved = (item) => String(item?.approvalStatus || "approved").toLowerCase() === "approved"
+  const isItemLive = (item) => isItemApproved(item) && Boolean(item?.inStock)
+
   const filterMenuItems = (items = [], filterValue = "all") => {
     if (filterValue === "all") return items
-    if (filterValue === "in-stock") return items.filter((item) => item.inStock)
-    if (filterValue === "out-of-stock") return items.filter((item) => !item.inStock)
+    if (filterValue === "in-stock") return items.filter(isItemLive)
+    if (filterValue === "out-of-stock") return items.filter((item) => isItemApproved(item) && !item.inStock)
     if (filterValue === "recommended") return items.filter((item) => item.isRecommended)
     if (filterValue === "veg") return items.filter((item) => item.isVeg)
     if (filterValue === "non-veg") return items.filter((item) => !item.isVeg)
@@ -1482,9 +1499,14 @@ export default function Inventory() {
 
   const hasActiveTools = searchQuery.trim().length > 0 || selectedFilter !== "all"
 
-  // Calculate out of stock count for a category
-  const getOutOfStockCount = (category) => {
-    return category.items.filter(item => !item.inStock).length
+  // Category summary: how many dishes are paused, waiting for admin review or rejected
+  const getCategoryStockSummary = (category) => {
+    const items = category?.items || []
+    const status = (item) => String(item?.approvalStatus || "approved").toLowerCase()
+    const paused = items.filter((item) => status(item) === "approved" && !item.inStock).length
+    const underReview = items.filter((item) => status(item) === "pending").length
+    const rejected = items.filter((item) => status(item) === "rejected").length
+    return { paused, underReview, rejected, allLive: items.length > 0 && paused + underReview + rejected === 0 }
   }
 
   // Handle filter apply
@@ -1886,6 +1908,7 @@ export default function Inventory() {
           const target = e.target
           // Don't handle swipe if starting on topbar
           if (tabBarRef.current?.contains(target)) return
+          if (startsOnNoSwipeArea(target)) return
 
           mouseStartX.current = e.clientX
           mouseEndX.current = e.clientX
@@ -2012,7 +2035,7 @@ export default function Inventory() {
               )}
             </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+            <div data-no-page-swipe className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
               {activeFilterOptions.map((option) => {
                 const count = activeTab === "add-ons"
                   ? (addonFilterCounts[option.value] || 0)
@@ -2232,6 +2255,8 @@ export default function Inventory() {
           {listToRender.map((category, index) => {
             const isExpanded = expandedCategories.includes(category.id)
             const categoryItems = category.items || []
+            // summary always over the whole category, not just the dishes left after a search / filter
+            const stockSummary = getCategoryStockSummary(categories.find((c) => c.id === category.id) || category)
 
             return (
               <motion.div
@@ -2273,29 +2298,46 @@ export default function Inventory() {
                             {category.items?.length || category.itemCount || 0} items
                           </span>
                           <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
-                            category.inStock
+                            stockSummary.allLive
                               ? "bg-green-50 text-green-700 border border-green-100"
                               : "bg-amber-50 text-amber-700 border border-amber-100"
                           }`}>
-                            {category.inStock ? "Healthy" : "Needs attention"}
+                            {stockSummary.allLive ? "Healthy" : "Needs attention"}
                           </span>
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-wrap items-center gap-3 mt-4">
-                        {category.inStock ? (
+                        {stockSummary.allLive ? (
                           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50/50 rounded-xl border border-green-100/50">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                             <p className="text-[10px] font-bold text-green-700">All items live</p>
                           </div>
-                        ) : (
+                        ) : null}
+                        {stockSummary.paused > 0 ? (
                           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50/50 rounded-xl border border-rose-100/50">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             <p className="text-[10px] font-bold text-rose-700">
-                              {getOutOfStockCount(category)} Items paused
+                              {stockSummary.paused} {stockSummary.paused === 1 ? "Item" : "Items"} paused
                             </p>
                           </div>
-                        )}
+                        ) : null}
+                        {stockSummary.underReview > 0 ? (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50/50 rounded-xl border border-amber-100/50">
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <p className="text-[10px] font-bold text-amber-700">
+                              {stockSummary.underReview} under review
+                            </p>
+                          </div>
+                        ) : null}
+                        {stockSummary.rejected > 0 ? (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50/50 rounded-xl border border-red-100/50">
+                            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <p className="text-[10px] font-bold text-red-700">
+                              {stockSummary.rejected} rejected
+                            </p>
+                          </div>
+                        ) : null}
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
                           <p className="text-[10px] font-bold text-blue-700">
                             {(categoryItems.filter((item) => item.isRecommended).length)} Recommended

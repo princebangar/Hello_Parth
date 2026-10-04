@@ -53,6 +53,8 @@ const OtpModal = ({ order, onVerified, onClose }) => {
   const [otp, setOtp] = useState(['', '', '', '']);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
+  // a wrong code is shown right under the boxes (a toast alone was easy to miss behind this sheet)
+  const [otpError, setOtpError] = useState('');
   const inputRefs = [useRef(), useRef(), useRef(), useRef()];
 
   useEffect(() => {
@@ -70,6 +72,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 
   const handleOtpChange = (index, value) => {
     if (value && !/^\d+$/.test(value)) return;
+    if (otpError) setOtpError('');
     const newOtp = [...otp];
     newOtp[index] = value.substring(value.length - 1);
     setOtp(newOtp);
@@ -84,6 +87,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
     const otpString = otp.join('');
     if (otpString.length < 4) return;
     setIsVerifyingOtp(true);
+    setOtpError('');
     try {
       const res = await deliveryAPI.verifyDropOtp(orderId, otpString);
       if (res?.data?.success) {
@@ -92,6 +96,8 @@ const OtpModal = ({ order, onVerified, onClose }) => {
         setTimeout(() => onVerified(otpString), 600);
       }
     } catch (err) {
+      const apiMessage = err?.response?.data?.message || err?.message || '';
+      setOtpError(/otp|code|invalid|incorrect|wrong/i.test(apiMessage) && apiMessage ? apiMessage : 'Wrong code. Ask the customer for the 4-digit delivery code and try again.');
       showUserFacingApiError(err, 'Invalid OTP entered');
       throw err;
     } finally {
@@ -134,11 +140,16 @@ const OtpModal = ({ order, onVerified, onClose }) => {
               value={digit}
               onChange={(e) => handleOtpChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className={`w-12 sm:w-14 h-16 sm:h-18 bg-gray-50 border-2 rounded-2xl text-center text-2xl sm:text-3xl font-bold transition-all ${isOtpVerified ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 focus:border-green-600 text-gray-700'
+              className={`w-12 sm:w-14 h-16 sm:h-18 bg-gray-50 border-2 rounded-2xl text-center text-2xl sm:text-3xl font-bold transition-all ${isOtpVerified ? 'border-green-500 bg-green-50 text-green-700' : otpError ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 focus:border-green-600 text-gray-700'
                 }`}
+              // the delivery theme forces input colours with !important; aria-invalid has its own rule there
+              aria-invalid={Boolean(otpError) && !isOtpVerified}
             />
           ))}
         </div>
+        {otpError && (
+          <p role="alert" className="-mt-3 mb-5 text-center text-sm font-semibold text-red-600">{otpError}</p>
+        )}
 
         <ActionSlider
           key="action-otp"

@@ -24,9 +24,9 @@ import { Button } from "@food/components/ui/button"
 import { toast } from "sonner"
 
 const formatAddress = (restaurant) =>
-  restaurant?.location?.addressLine1 ||
   restaurant?.location?.formattedAddress ||
   restaurant?.location?.address ||
+  restaurant?.location?.addressLine1 ||
   [restaurant?.location?.area || restaurant?.area, restaurant?.location?.city || restaurant?.city]
     .filter(Boolean)
     .join(", ")
@@ -46,19 +46,12 @@ const buildImageList = (restaurant) => {
     .filter((value, index, list) => list.indexOf(value) === index)
 }
 
+// Facilities are what the restaurant ticked when it asked for dining approval - nothing is invented here.
 const buildFacilities = (restaurant) => {
-  const facilities = []
-
-  if (restaurant?.diningSettings?.tableBookingEnabled !== false) facilities.push("Dinner")
-  if (restaurant?.isAcceptingOrders !== false) facilities.push("Lunch")
-  if (restaurant?.diningSettings?.homeDeliveryAvailable || restaurant?.homeDeliveryAvailable) facilities.push("Home delivery")
-  if (restaurant?.diningSettings?.takeawayAvailable || restaurant?.takeawayAvailable) facilities.push("Takeaway available")
-  if (restaurant?.diningSettings?.vegOnly || restaurant?.vegOnly) facilities.push("Vegetarian only")
-  if (restaurant?.diningSettings?.lessNoisy || restaurant?.ambience === "quiet") facilities.push("Less noisy")
-
-  return facilities.length > 0
-    ? facilities
-    : ["Dinner", "Lunch", "Home delivery", "Takeaway available", "Vegetarian only", "Less noisy"]
+  const facilities = Array.isArray(restaurant?.diningSettings?.facilities) ? [...restaurant.diningSettings.facilities] : []
+  if (restaurant?.takeawaySettings?.isEnabled && !facilities.includes("Takeaway available")) facilities.push("Takeaway available")
+  if (restaurant?.pureVegRestaurant === true && !facilities.includes("Vegetarian only")) facilities.push("Vegetarian only")
+  return facilities
 }
 
 const buildFeaturedSections = (menuSections, vegMode = false) =>
@@ -303,8 +296,10 @@ export default function DiningRestaurantDetails() {
   const cuisines =
     Array.isArray(restaurant?.cuisines) && restaurant.cuisines.length > 0
       ? restaurant.cuisines.join(", ")
-      : "Asian, Italian, Continental, Chinese, North Indian, Desserts, Beverages, Coffee"
-  const costForTwo = restaurant?.costForTwo ? `${"\u20B9"}${restaurant.costForTwo} for two` : `${"\u20B9"}1900 for two`
+      : ""
+  const costForTwo = restaurant?.costForTwo ? `${"\u20B9"}${restaurant.costForTwo} for two` : ""
+  // #71: the dining categories this restaurant chose (cafe, bar, ...)
+  const diningCategoryNames = Array.isArray(restaurant?.diningCategories) ? restaurant.diningCategories.map((c) => c.name).filter(Boolean) : []
   const facilities = buildFacilities(restaurant)
   const rating = Number(restaurant?.rating || restaurant?.avgRating || 0).toFixed(1)
   const reviewCount = restaurant?.totalRatings || restaurant?.reviewCount || restaurant?.reviewsCount || 0
@@ -461,11 +456,20 @@ export default function DiningRestaurantDetails() {
               <div className="min-w-0 flex-1">
                 <h1 className="text-[36px] font-black leading-none tracking-[-0.03em]">{restaurantName}</h1>
                 <p className="mt-2 max-w-[94%] text-[14px] leading-5 text-white/92">{address}</p>
-                <p className="mt-2 text-[14px] text-white/90">
-                  {costForTwo}
-                  <span className="mx-1.5 text-white/65">•</span>
-                  {cuisines}
-                </p>
+                {(costForTwo || cuisines) && (
+                  <p className="mt-2 text-[14px] text-white/90">
+                    {costForTwo}
+                    {costForTwo && cuisines && <span className="mx-1.5 text-white/65">•</span>}
+                    {cuisines}
+                  </p>
+                )}
+                {diningCategoryNames.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {diningCategoryNames.map((name) => (
+                      <span key={name} className="rounded-full bg-white/20 px-2.5 py-0.5 text-[12px] font-semibold backdrop-blur-sm">{name}</span>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-black/28 px-2.5 py-1 text-[13px] font-medium backdrop-blur-sm">
                   {isOpenNow ? (
                     <CheckCircle2 className="h-4 w-4 text-[#48d597]" />
@@ -546,10 +550,9 @@ export default function DiningRestaurantDetails() {
           <div className="flex items-end justify-between gap-3">
             <div>
               <h2 className="text-[28px] font-black leading-none text-[#23180f] dark:text-slate-100">Menu</h2>
-              <p className="mt-2 text-[13px] text-[#e19135] dark:text-orange-400">Last updated a month ago</p>
             </div>
             <div className="rounded-full bg-[#fff3e6] dark:bg-orange-950/30 px-3 py-1 text-xs font-semibold text-[#e58a2c] dark:text-orange-300">
-              {featuredSections.length || 2} dishes
+              {featuredSections.length} {featuredSections.length === 1 ? "dish" : "dishes"}
             </div>
           </div>
 
@@ -603,15 +606,19 @@ export default function DiningRestaurantDetails() {
           <h2 className="text-[28px] font-black leading-none text-[#23180f] dark:text-slate-100">About the restaurant</h2>
           <div className="mt-4 rounded-[18px] border border-[#ececf4] dark:border-slate-800 bg-[#fafbff] dark:bg-slate-900 p-4 transition-colors">
             <div className="space-y-4 text-[14px] text-[#5f6474] dark:text-slate-400">
-              <div className="flex items-start gap-3">
-                <IndianRupee className="mt-0.5 h-4 w-4 shrink-0 text-[#f0b500]" />
-                <p>{costForTwo}</p>
-              </div>
+              {costForTwo && (
+                <div className="flex items-start gap-3">
+                  <IndianRupee className="mt-0.5 h-4 w-4 shrink-0 text-[#f0b500]" />
+                  <p>{costForTwo}</p>
+                </div>
+              )}
 
-              <div className="flex items-start gap-3">
-                <div className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-[#8a8f9d]" />
-                <p>{cuisines}</p>
-              </div>
+              {cuisines && (
+                <div className="flex items-start gap-3">
+                  <div className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-[#8a8f9d]" />
+                  <p>{cuisines}</p>
+                </div>
+              )}
 
               <div className="flex items-start gap-3">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626]" />
@@ -619,6 +626,7 @@ export default function DiningRestaurantDetails() {
               </div>
             </div>
 
+            {diningCategoryNames.length > 0 && (
             <div className="mt-5 border-t border-[#e8e8ef] dark:border-slate-800 pt-4">
               <h3 className="text-[20px] font-semibold text-[#23180f] dark:text-slate-100">Featured In</h3>
               <div className="mt-3 overflow-hidden rounded-[16px] bg-white dark:bg-slate-800 shadow-sm">
@@ -630,11 +638,13 @@ export default function DiningRestaurantDetails() {
                   )}
                 </div>
                 <div className="-mt-14 bg-[linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,0.72))] p-3 pt-10 text-sm font-medium text-white">
-                  Pan-Asian Restaurants
+                  {diningCategoryNames.join(" • ")}
                 </div>
               </div>
             </div>
+            )}
 
+            {facilities.length > 0 && (
             <div className="mt-5 border-t border-[#e8e8ef] dark:border-slate-800 pt-4">
               <h3 className="text-[20px] font-semibold text-[#23180f] dark:text-slate-100">Facilities</h3>
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
@@ -646,6 +656,7 @@ export default function DiningRestaurantDetails() {
                 ))}
               </div>
             </div>
+            )}
           </div>
         </section>
       </div>

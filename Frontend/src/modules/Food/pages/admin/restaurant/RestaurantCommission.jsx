@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -88,7 +89,7 @@ export default function RestaurantCommission() {
     } catch (error) {
       debugError('Error fetching bootstrap:', error)
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        toast.error(`Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`)
+        toast.error(networkErrorMessage())
       } else {
         toast.error(error.response?.data?.message || 'Failed to fetch commissions')
       }
@@ -123,7 +124,7 @@ export default function RestaurantCommission() {
       
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        toast.error(`Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`)
+        toast.error(networkErrorMessage())
         debugError('?? Backend connection issue. Check:')
         debugError('   1. Is backend server running? (npm start in backend folder)')
         debugError(`   2. Is backend running on ${API_BASE_URL.replace('/api', '')}?`)

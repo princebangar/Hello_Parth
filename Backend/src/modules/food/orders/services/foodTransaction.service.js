@@ -3,8 +3,11 @@ import { FoodRestaurantCommission } from '../../admin/models/restaurantCommissio
 import mongoose from 'mongoose';
 
 const RESTAURANT_COMMISSION_CACHE_MS = 60 * 1000;
-/** Platform fallback when a restaurant has no commission rule configured */
-export const DEFAULT_RESTAURANT_COMMISSION_PERCENT = 18.1;
+/**
+ * No hidden default: a restaurant is charged commission only when the admin has set a rule for it
+ * (Restaurant Commission page). A silent fallback percent made dashboard/finance commission differ from what admin configured.
+ */
+export const DEFAULT_RESTAURANT_COMMISSION_PERCENT = 0;
 let restaurantCommissionRulesCache = null;
 let restaurantCommissionRulesLoadedAt = 0;
 

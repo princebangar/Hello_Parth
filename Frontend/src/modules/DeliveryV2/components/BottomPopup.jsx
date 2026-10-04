@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, ChevronDown } from "lucide-react"
+import useCloseOnBack from "@/modules/DeliveryV2/hooks/useCloseOnBack"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -35,7 +36,8 @@ export default function BottomPopup({
   collapsedContent = null, // Content to show when collapsed (e.g., Reached pickup button)
   showBackdrop = true, // Show backdrop overlay
   backdropBlocksInteraction = true, // Whether backdrop blocks pointer events
-  closeOnHandleClick = false // Close instead of collapse when handle is clicked
+  closeOnHandleClick = false, // Close instead of collapse when handle is clicked
+  closeOnBack = false // Device/browser Back closes only this sheet
 }) {
   const popupRef = useRef(null)
   const handleRef = useRef(null)
@@ -75,7 +77,7 @@ export default function BottomPopup({
     const isHandle = handleRef.current?.contains(target)
 
     // If clicking on handle, don't start swipe - handle will toggle collapse
-    if (isHandle) {
+    if (isHandle && !closeOnHandleClick) {
       return
     }
 
@@ -152,7 +154,7 @@ export default function BottomPopup({
     const isHandle = handleRef.current?.contains(target)
 
     // If clicking on handle, don't start swipe - handle will toggle collapse
-    if (isHandle) {
+    if (isHandle && !closeOnHandleClick) {
       e.stopPropagation()
       return
     }
@@ -246,6 +248,8 @@ export default function BottomPopup({
     }
   }
 
+  useCloseOnBack(closeOnBack && isOpen, handleClose)
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -317,19 +321,20 @@ export default function BottomPopup({
                   }
                 }}
                 onTouchStart={(e) => {
-                  // Store touch start for click detection
-                  e.stopPropagation()
+                  // A closing handle lets the touch reach the sheet so a swipe-down closes the whole sheet
+                  if (!closeOnHandleClick) e.stopPropagation()
                 }}
                 onTouchEnd={(e) => {
                   // Handle touch end for mobile collapse toggle
+                  if (closeOnHandleClick) return
                   debugLog('?? Handle touched, current collapsed:', isCollapsed)
                   e.stopPropagation()
                   e.preventDefault()
                   handleCollapseToggle(e)
                 }}
                 onMouseDown={(e) => {
-                  // Prevent drag when clicking handle
-                  e.stopPropagation()
+                  // A closing handle lets the press reach the sheet so dragging down closes the whole sheet
+                  if (!closeOnHandleClick) e.stopPropagation()
                 }}
                 style={{
                   touchAction: 'manipulation',
@@ -339,9 +344,11 @@ export default function BottomPopup({
                   background: 'transparent'
                 }}
               >
-                <ChevronDown
-                  className="w-6 h-6 text-gray-400 mb-1 pointer-events-none"
-                />
+                {!closeOnHandleClick && (
+                  <ChevronDown
+                    className="w-6 h-6 text-gray-400 mb-1 pointer-events-none"
+                  />
+                )}
                 <div
                   className="w-12 h-1.5 bg-gray-300 rounded-full pointer-events-none"
                 />

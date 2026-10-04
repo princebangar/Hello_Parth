@@ -85,6 +85,7 @@ export const HistoryV2 = () => {
 
   // Fetch Logic
   useEffect(() => {
+    let cancelled = false;
     const fetchTrips = async () => {
       setLoading(true);
       try {
@@ -98,16 +99,24 @@ export const HistoryV2 = () => {
         };
         
         const response = await deliveryAPI.getTripHistory(params);
+        if (cancelled) return;
         if (response.data?.success) {
           setTrips(response.data.data.trips || []);
+        } else {
+          setTrips([]);
         }
       } catch (error) {
+        if (cancelled) return;
+        setTrips([]);
         toast.error("Failed to load history");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchTrips();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDate, activeTab, selectedTripType]);
 
   // Bonus Logic
@@ -126,6 +135,19 @@ export const HistoryV2 = () => {
   }, [showBonusModal]);
 
   const formatDateDisplay = (date) => {
+    if (activeTab === 'monthly') {
+      const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const now = new Date();
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear() ? `This month: ${label}` : label;
+    }
+    if (activeTab === 'weekly') {
+      const start = new Date(date);
+      start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      const f = (d) => d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+      return `${f(start)} - ${f(end)}`;
+    }
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -137,12 +159,33 @@ export const HistoryV2 = () => {
   };
 
   const recentDates = useMemo(() => {
+    if (activeTab === 'monthly') {
+      return [...Array(12)].map((_, i) => {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() - i);
+        return d;
+      });
+    }
+    if (activeTab === 'weekly') {
+      return [...Array(12)].map((_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - i * 7);
+        return d;
+      });
+    }
     return [...Array(30)].map((_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - i);
       return d;
     });
-  }, []);
+  }, [activeTab]);
+
+  const isSameSelection = (a, b) => {
+    if (activeTab === 'monthly') return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+    if (activeTab === 'weekly') return formatDateDisplay(a) === formatDateDisplay(b);
+    return a.toDateString() === b.toDateString();
+  };
 
   const metrics = useMemo(() => {
      return trips.reduce((acc, trip) => {
@@ -207,7 +250,7 @@ export const HistoryV2 = () => {
           {['daily', 'weekly', 'monthly'].map((tab) => (
              <button
                key={tab}
-               onClick={() => setActiveTab(tab)}
+               onClick={() => { if (tab !== activeTab) { setActiveTab(tab); setSelectedDate(new Date()); setShowDatePicker(false); } }}
                className={`py-4 text-base font-medium capitalize relative ${activeTab === tab ? 'text-[#10B981]' : 'text-gray-400'}`}
              >
                 {tab}
@@ -242,7 +285,7 @@ export const HistoryV2 = () => {
                    <button 
                       key={idx} 
                       onClick={() => { setSelectedDate(date); setShowDatePicker(false); }}
-                      className={`w-full text-left p-4 rounded-xl text-sm font-medium ${date.toDateString() === selectedDate.toDateString() ? 'bg-green-50 text-[#10B981] font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
+                      className={`w-full text-left p-4 rounded-xl text-sm font-medium ${isSameSelection(date, selectedDate) ? 'bg-green-50 text-[#10B981] font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
                    >
                       {formatDateDisplay(date)}
                    </button>

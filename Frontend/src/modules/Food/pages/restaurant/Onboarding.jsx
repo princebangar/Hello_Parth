@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from "@food/components/ui/select"
 import { restaurantAPI, zoneAPI, uploadAPI, api } from "@food/api"
+import { getZonesArea, rankLocationResults } from "@food/utils/zoneGeometry"
+import { RESTAURANT_CUISINES, MAX_RESTAURANT_CUISINES } from "@food/constants/dining"
 import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
@@ -1343,15 +1345,11 @@ export default function RestaurantOnboarding() {
     if (!step2.closingTime?.trim()) {
       errors.push("Closing time is required")
     }
+    if (!Array.isArray(step2.cuisines) || step2.cuisines.length === 0) {
+      errors.push("Please select at least one cuisine")
+    }
     const openingMinutes = timeStringToMinutes(step2.openingTime)
     const closingMinutes = timeStringToMinutes(step2.closingTime)
-    if (openingMinutes !== null && closingMinutes !== null) {
-      if (openingMinutes === closingMinutes) {
-        errors.push("Opening time and closing time cannot be same")
-      } else if (closingMinutes < openingMinutes) {
-        errors.push("Closing time cannot be less than opening time")
-      }
-    }
     if (!step2.openDays || step2.openDays.length === 0) {
       errors.push("Please select at least one open day")
     }
@@ -2252,7 +2250,8 @@ export default function RestaurantOnboarding() {
           lng: Number(r.lon),
           addr: r.address || {},
         }))
-        setLocationSuggestions(mapped)
+        // one entry per place, nearest to the service zones first (same list rules as the admin form)
+        setLocationSuggestions(rankLocationResults(mapped, getZonesArea(zones)?.center || null, 6))
       } catch (e) {
         debugError("Nominatim search failed:", e)
       } finally {
@@ -2261,7 +2260,7 @@ export default function RestaurantOnboarding() {
     }, 400)
 
     return () => clearTimeout(t)
-  }, [locationSearchValue, step])
+  }, [locationSearchValue, step, zones])
 
   // Click outside to close location search suggestions dropdown
   useEffect(() => {
@@ -2515,6 +2514,34 @@ export default function RestaurantOnboarding() {
 
       {/* Operational details */}
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-5">
+        {/* Cuisines - customers search and filter by these, dining pages show them */}
+        <div>
+          <Label className="text-xs text-gray-700">Cuisines you serve (up to {MAX_RESTAURANT_CUISINES})*</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {RESTAURANT_CUISINES.map((cuisine) => {
+              const active = (step2.cuisines || []).includes(cuisine)
+              return (
+                <button
+                  key={cuisine}
+                  type="button"
+                  onClick={() => {
+                    setStep2((prev) => {
+                      const list = Array.isArray(prev.cuisines) ? prev.cuisines : []
+                      if (list.includes(cuisine)) return { ...prev, cuisines: list.filter((c) => c !== cuisine) }
+                      if (list.length >= MAX_RESTAURANT_CUISINES) return prev
+                      return { ...prev, cuisines: [...list, cuisine] }
+                    })
+                  }}
+                  className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${active ? "bg-black text-white border-black" : "bg-gray-100 text-gray-800 border-transparent"}`}
+                >
+                  {cuisine}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1">{(step2.cuisines || []).length} of {MAX_RESTAURANT_CUISINES} selected</p>
+        </div>
+
         {/* Timings with popover time selectors */}
         <div className="space-y-3">
           <Label className="text-xs text-gray-700">Outlet timings</Label>
@@ -2526,16 +2553,6 @@ export default function RestaurantOnboarding() {
                 const nextOpening = normalizeTimeValue(val) || ""
                 const openingMinutes = timeStringToMinutes(nextOpening)
                 const closingMinutes = timeStringToMinutes(step2.closingTime)
-                if (openingMinutes !== null && closingMinutes !== null) {
-                  if (openingMinutes === closingMinutes) {
-                    setError("Opening time and closing time cannot be same")
-                    return
-                  }
-                  if (closingMinutes < openingMinutes) {
-                    setError("Closing time cannot be less than opening time")
-                    return
-                  }
-                }
                 setStep2((prev) => ({ ...prev, openingTime: nextOpening }))
               }}
             />
@@ -2546,16 +2563,6 @@ export default function RestaurantOnboarding() {
                 const nextClosing = normalizeTimeValue(val) || ""
                 const openingMinutes = timeStringToMinutes(step2.openingTime)
                 const closingMinutes = timeStringToMinutes(nextClosing)
-                if (openingMinutes !== null && closingMinutes !== null) {
-                  if (openingMinutes === closingMinutes) {
-                    setError("Opening time and closing time cannot be same")
-                    return
-                  }
-                  if (closingMinutes < openingMinutes) {
-                    setError("Closing time cannot be less than opening time")
-                    return
-                  }
-                }
                 setStep2((prev) => ({ ...prev, closingTime: nextClosing }))
               }}
             />

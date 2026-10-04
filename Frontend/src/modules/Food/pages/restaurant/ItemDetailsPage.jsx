@@ -26,6 +26,7 @@ import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils"
 import { getFoodVariants } from "@food/utils/foodVariants"
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -903,7 +904,7 @@ export default function ItemDetailsPage() {
     } catch (error) {
       debugError('Error saving menu:', error)
       if (error.code === 'ERR_NETWORK') {
-        toast.error('Network error. Please check if backend server is running and try again.')
+        toast.error(networkErrorMessage())
       } else {
         toast.error(error.response?.data?.message || error.message || "Failed to save item. Please try again.")
       }

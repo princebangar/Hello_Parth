@@ -814,7 +814,7 @@ export async function listOrdersUser(userId, query) {
     FoodOrder.find(filter)
       .populate(
         "restaurantId",
-        "restaurantName profileImage area city location rating totalRatings",
+        "restaurantName slug profileImage area city location rating totalRatings",
       )
       .populate("dispatch.deliveryPartnerId", "name phone rating totalRatings")
       .sort({ createdAt: -1 })
@@ -843,7 +843,7 @@ export async function getOrderById(
   const order = await FoodOrder.findOne(identity)
     .populate(
       "restaurantId",
-      "restaurantName ownerPhone profileImage area city location rating totalRatings primaryContactNumber",
+      "restaurantName slug ownerPhone profileImage area city location rating totalRatings primaryContactNumber",
     )
     .populate("dispatch.deliveryPartnerId", "name fullName phone phoneNumber rating totalRatings profileImage avatar")
     .populate("userId", "name fullName phone email")
@@ -1456,10 +1456,10 @@ export async function updateOrderStatusRestaurant(
   if (orderStatus === "confirmed") {
     if (isTakeawayOrder) {
       title = "Order Accepted — Get Ready to Pick Up";
-      body = `Great news! ${restaurantNameStr} has accepted your takeaway order #${orderDisplayId}. Your food will be ready for pickup in approximately 20–30 minutes. We'll notify you the moment it's ready.`;
+      body = `Great news! ${restaurantNameStr} has accepted your takeaway order #${orderDisplayId}. ${order.preparationTime > 0 ? `Your food will be ready for pickup in about ${order.preparationTime} minutes.` : "We will notify you the moment your food is ready for pickup."}`;
     } else {
       title = "Order Accepted!";
-      body = `${restaurantNameStr} has accepted your order #${orderDisplayId} and is starting to prepare it. Estimated delivery time: 30–45 minutes.`;
+      body = `${restaurantNameStr} has accepted your order #${orderDisplayId} and is starting to prepare it.${order.preparationTime > 0 ? ` Preparation time: about ${order.preparationTime} minutes.` : ""}`;
     }
   } else if (orderStatus === "preparing") {
     if (isTakeawayOrder) {

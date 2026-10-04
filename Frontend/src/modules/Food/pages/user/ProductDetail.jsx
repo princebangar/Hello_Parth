@@ -510,7 +510,7 @@ export default function ProductDetail() {
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                           <Calendar className="h-3 w-3" />
                           <span>{new Date(order.createdAt).toLocaleDateString()}</span>
-                          <span>�</span>
+                          <span>•</span>
                           <span>{order.status}</span>
                         </div>
                       </div>
@@ -528,7 +528,7 @@ export default function ProductDetail() {
                 <div>
                   <h2 className="text-xl font-bold">Reviews</h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'} � Average rating: {averageRating}
+                    {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'} • Average rating: {averageRating}
                   </p>
                 </div>
                 {!showReviewForm && (
@@ -628,12 +628,12 @@ export default function ProductDetail() {
                                     {renderStars(review.rating, "h-3 w-3")}
                                     <span className="ml-1 font-medium">{review.rating}</span>
                                   </div>
-                                  <span>�</span>
+                                  <span>•</span>
                                   <div className="flex items-center gap-1">
                                     <Calendar className="h-3 w-3" />
                                     {review.date}
                                   </div>
-                                  <span>�</span>
+                                  <span>•</span>
                                   <span>{review.orderType}</span>
                                 </div>
                               </div>
@@ -725,7 +725,7 @@ export default function ProductDetail() {
                                             Verified
                                           </Badge>
                                         )}
-                                        <span className="text-xs text-muted-foreground">�</span>
+                                        <span className="text-xs text-muted-foreground">•</span>
                                         <span className="text-xs text-muted-foreground">{reply.date}</span>
                                       </div>
                                       <p className="text-sm text-muted-foreground leading-relaxed">{reply.comment}</p>

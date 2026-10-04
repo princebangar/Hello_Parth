@@ -7,6 +7,7 @@ import {
   Bike, Car, Image as ImageIcon
 } from "lucide-react"
 import BottomPopup from "@delivery/components/BottomPopup"
+import useCloseOnBack from "@/modules/DeliveryV2/hooks/useCloseOnBack"
 import { toast } from "sonner"
 import { showUserFacingApiError } from "@/shared/utils/apiError"
 import { openCamera, openGallery, isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils"
@@ -34,6 +35,7 @@ export const ProfileDetailsV2 = () => {
   const [vehicleInput, setVehicleInput] = useState({ number: "", brand: "", type: "" })
   const [selectedDocument, setSelectedDocument] = useState(null)
   const [showDocumentModal, setShowDocumentModal] = useState(false)
+  useCloseOnBack(showDocumentModal, () => setShowDocumentModal(false))
   const [showBankDetailsPopup, setShowBankDetailsPopup] = useState(false)
   const [walletBalance, setWalletBalance] = useState(null)
   const [bankDetails, setBankDetails] = useState({
@@ -739,7 +741,7 @@ export const ProfileDetailsV2 = () => {
       </BottomPopup>
 
       {/* Vehicle Popup */}
-      <BottomPopup isOpen={showVehiclePopup} onClose={() => setShowVehiclePopup(false)} title="Vehicle Info" closeOnHandleClick={true} showCloseButton={false}>
+      <BottomPopup isOpen={showVehiclePopup} onClose={() => setShowVehiclePopup(false)} title="Vehicle Info" closeOnHandleClick={true} closeOnBack={true} showCloseButton={false}>
          <div className="space-y-4 pb-10">
             <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col gap-4">
                 {/* Type Selection */}
@@ -848,6 +850,7 @@ export const ProfileDetailsV2 = () => {
         title="Bank & Payments"
         maxHeight="85vh"
         closeOnHandleClick={true}
+        closeOnBack={true}
         showCloseButton={false}
       >
         <div className="space-y-5 pb-10">

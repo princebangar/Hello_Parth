@@ -1337,16 +1337,6 @@ export default function EditOwner() {
                           const nextOpening = timeToString(newValue)
                           const closingMinutes = timeStringToMinutes(formData.closingTime)
                           const openingMinutes = timeStringToMinutes(nextOpening)
-                          if (openingMinutes !== null && closingMinutes !== null) {
-                            if (openingMinutes === closingMinutes) {
-                              toast.error("Opening time and closing time cannot be same")
-                              return
-                            }
-                            if (closingMinutes < openingMinutes) {
-                              toast.error("Closing time cannot be less than opening time")
-                              return
-                            }
-                          }
                           handleInputChange("openingTime", nextOpening)
                         }}
                         slotProps={{
@@ -1387,16 +1377,6 @@ export default function EditOwner() {
                           const nextClosing = timeToString(newValue)
                           const openingMinutes = timeStringToMinutes(formData.openingTime)
                           const closingMinutes = timeStringToMinutes(nextClosing)
-                          if (openingMinutes !== null && closingMinutes !== null) {
-                            if (openingMinutes === closingMinutes) {
-                              toast.error("Opening time and closing time cannot be same")
-                              return
-                            }
-                            if (closingMinutes < openingMinutes) {
-                              toast.error("Closing time cannot be less than opening time")
-                              return
-                            }
-                          }
                           handleInputChange("closingTime", nextClosing)
                         }}
                         slotProps={{

@@ -1,5 +1,8 @@
 import AppRoutes from './routes'
 import ThemeSync from './ThemeSync'
+import StatusBarSync from './StatusBarSync'
+import ConnectionStatus from './ConnectionStatus'
+import MaintenanceGate from './MaintenanceGate'
 import UserSessionSync from './UserSessionSync'
 import LocationPrompt from '../modules/Food/components/user/LocationPrompt'
 import { syncSharedLocationStoresOnBoot } from '../shared/utils/sharedUserLocation'
@@ -13,6 +16,9 @@ function App() {
   return (
     <>
       <ThemeSync />
+      <StatusBarSync />
+      <ConnectionStatus />
+      <MaintenanceGate />
       <UserSessionSync />
       <AppRoutes />
       <LocationPrompt />

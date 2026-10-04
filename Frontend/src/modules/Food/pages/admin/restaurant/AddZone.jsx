@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { MapPin, ArrowLeft, Save, X, Hand, Shapes, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -667,7 +668,7 @@ export default function AddZone() {
       
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error' || !error.response) {
         // Network error - backend not running or CORS issue
-        errorMessage = "Cannot connect to server. Please make sure the backend server is running."
+        errorMessage = networkErrorMessage()
         debugError("Network error: Backend server might not be running")
       } else if (error.response) {
         // API error with response

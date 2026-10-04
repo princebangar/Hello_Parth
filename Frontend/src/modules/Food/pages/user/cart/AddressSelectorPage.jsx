@@ -724,6 +724,9 @@ export default function AddressSelectorPage() {
     setKeywordAddressSuggestions([])
     setEditingAddressId(null)
     setShowAddressForm(false)
+    // Opened straight into the form from the cart's Home / Work / Other chip: the person never saw the
+    // address list, so Back from the form goes back to where they came from (the cart).
+    if (routerLocation.state?.addLabel) handleBack()
   }
 
   const scrollFieldIntoView = useCallback((fieldName) => {

@@ -7,6 +7,7 @@ import AnimatedPage from "@food/components/user/AnimatedPage"
 import { useLocationSelector } from "@food/components/user/UserLayout"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { useLocation as useLocationHook } from "@food/hooks/useLocation"
+import { useZone } from "@food/hooks/useZone"
 import { useProfile } from "@food/context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
 import { diningAPI } from "@food/api"
@@ -55,6 +56,9 @@ export default function DiningCategory() {
   const goBack = useAppBackNavigation()
   const { openLocationSelector } = useLocationSelector()
   const { location } = useLocationHook()
+  // the dining list is per delivery zone: without zoneId the server returns nothing, which is why every category page
+  // said "No restaurants are linked to this dining category yet" even when restaurants had picked that category
+  const { zoneId, loading: zoneLoading } = useZone(location)
   const { addFavorite, removeFavorite, isFavorite, vegMode, vegModeOption } = useProfile()
 
   const [restaurants, setRestaurants] = useState([])
@@ -63,13 +67,18 @@ export default function DiningCategory() {
 
   useEffect(() => {
     const fetchRestaurants = async () => {
+      if (zoneLoading) return
+      if (!zoneId) {
+        setRestaurants([])
+        setIsLoading(false)
+        return
+      }
       try {
         setIsLoading(true)
-        const response = await diningAPI.getRestaurants(
-          category
-            ? (location?.city ? { category, city: location.city } : { category })
-            : (location?.city ? { city: location.city } : {})
-        )
+        const params = { zoneId }
+        if (category) params.category = category
+        if (location?.city) params.city = location.city
+        const response = await diningAPI.getRestaurants(params)
 
         if (response?.data?.success) {
           const mapped = (Array.isArray(response.data.data) ? response.data.data : []).map((restaurant) => {
@@ -116,7 +125,7 @@ export default function DiningCategory() {
     }
 
     fetchRestaurants()
-  }, [category, location?.city])
+  }, [category, location?.city, zoneId, zoneLoading])
 
   const cityName = location?.city || "Select location"
   const heading = useMemo(() => formatCategoryHeading(category), [category])

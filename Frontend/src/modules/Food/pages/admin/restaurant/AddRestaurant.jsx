@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { useNavigate } from "react-router-dom"
 import { Building2, Info, Tag, Upload, Calendar, FileText, MapPin, CheckCircle2, X, Image as ImageIcon, Clock, Loader2 } from "lucide-react"
@@ -10,6 +10,8 @@ import { adminAPI, uploadAPI, zoneAPI } from "@food/api"
 import { toast } from "sonner"
 import { Switch } from "@food/components/ui/switch"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
+import { findZoneForPoint, getZoneLabel, getZonesArea, rankLocationResults } from "@food/utils/zoneGeometry"
+import { RESTAURANT_CUISINES, MAX_RESTAURANT_CUISINES } from "@food/constants/dining"
 import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
@@ -19,15 +21,8 @@ const debugWarn = (...args) => { console.warn(...args) }
 const debugError = (...args) => { console.error(...args) }
 
 
-const cuisinesOptions = [
-  "North Indian",
-  "South Indian",
-  "Chinese",
-  "Pizza",
-  "Burgers",
-  "Bakery",
-  "Cafe",
-]
+// same list as the restaurant onboarding
+const cuisinesOptions = RESTAURANT_CUISINES
 
 const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const PHONE_REGEX = /^\d{10}$/
@@ -291,7 +286,7 @@ export default function AddRestaurant() {
     { key: "en", label: "English(EN)" },
     { key: "bn", label: "Bengali - ?????(BN)" },
     { key: "ar", label: "Arabic - ??????? (AR)" },
-    { key: "es", label: "Spanish - espa�ol(ES)" },
+    { key: "es", label: "Spanish - español(ES)" },
   ]
 
   const mainContentRef = useRef(null)
@@ -458,6 +453,10 @@ export default function AddRestaurant() {
   useEffect(() => {
     const contentEl = mainContentRef.current
     if (contentEl?.scrollTo) contentEl.scrollTo({ top: 0, behavior: "auto" })
+    // the element that actually scrolls is an ancestor (the admin layout's main area) - reset every scrollable parent
+    for (let el = contentEl?.parentElement; el && el !== document.body; el = el.parentElement) {
+      if (el.scrollTop > 0) el.scrollTop = 0
+    }
     if (typeof window !== "undefined" && window.scrollTo) window.scrollTo({ top: 0, behavior: "auto" })
     if (typeof document !== "undefined") {
       if (document.documentElement) document.documentElement.scrollTop = 0
@@ -493,7 +492,7 @@ export default function AddRestaurant() {
     if (step1.ownerPhone?.trim() && !PHONE_REGEX.test(step1.ownerPhone.trim())) errors.push("Owner phone number must be 10 digits")
     if (!step1.primaryContactNumber?.trim()) errors.push("Primary contact number is required")
     if (step1.primaryContactNumber?.trim() && !PHONE_REGEX.test(step1.primaryContactNumber.trim())) errors.push("Primary contact number must be 10 digits")
-    if (!step1.zoneId?.trim()) errors.push("Service zone is required")
+    if (!step1.zoneId?.trim()) errors.push("Service zone is required - pick a location inside a service zone")
     if (!step1.location?.area?.trim()) errors.push("Area/Sector/Locality is required")
     if (!step1.location?.city?.trim()) errors.push("City is required")
     return errors
@@ -509,13 +508,6 @@ export default function AddRestaurant() {
     if (!step2.closingTime?.trim()) errors.push("Closing time is required")
     const openingMinutes = timeStringToMinutes(step2.openingTime)
     const closingMinutes = timeStringToMinutes(step2.closingTime)
-    if (openingMinutes !== null && closingMinutes !== null) {
-      if (openingMinutes === closingMinutes) {
-        errors.push("Opening time and closing time cannot be same")
-      } else if (closingMinutes < openingMinutes) {
-        errors.push("Closing time cannot be less than opening time")
-      }
-    }
     if (!step2.openDays || step2.openDays.length === 0) errors.push("Please select at least one open day")
     return errors
   }
@@ -700,11 +692,39 @@ export default function AddRestaurant() {
   const locationSearchInputRef = useRef(null)
   const placesAutocompleteRef = useRef(null)
   const mapsScriptLoadedRef = useRef(false)
+  // Text of the suggestion just picked: setting the box to it used to search again and reopen the list, so the same
+  // place had to be chosen again and again.
+  const pickedLocationTextRef = useRef("")
 
   // Manual search states for fallback
   const [locationSearchValue, setLocationSearchValue] = useState("")
   const [locationSuggestions, setLocationSuggestions] = useState([])
   const [isSearchingLocation, setIsSearchingLocation] = useState(false)
+
+  const hasLocationPoint =
+    String(step1.location?.latitude ?? "") !== "" &&
+    String(step1.location?.longitude ?? "") !== "" &&
+    Number.isFinite(Number(step1.location?.latitude)) &&
+    Number.isFinite(Number(step1.location?.longitude))
+  const detectedZone = useMemo(
+    () => (hasLocationPoint ? findZoneForPoint(step1.location.latitude, step1.location.longitude, zones) : null),
+    [hasLocationPoint, step1.location?.latitude, step1.location?.longitude, zones],
+  )
+  const isLocationOutsideZones = hasLocationPoint && zones.length > 0 && !detectedZone
+  const zonesArea = useMemo(() => getZonesArea(zones), [zones])
+  useEffect(() => {
+    if (!hasLocationPoint || zones.length === 0) return
+    const nextZoneId = detectedZone ? String(detectedZone._id || detectedZone.id || "") : ""
+    setStep1((prev) => (String(prev.zoneId || "") === nextZoneId ? prev : { ...prev, zoneId: nextZoneId }))
+  }, [detectedZone, hasLocationPoint, zones.length])
+
+  // search results lean towards where the service zones are (a bias, not a limit)
+  useEffect(() => {
+    const autocomplete = placesAutocompleteRef.current
+    const maps = window.google?.maps
+    if (!autocomplete || !maps || !zonesArea) return
+    autocomplete.setBounds(new maps.LatLngBounds({ lat: zonesArea.south, lng: zonesArea.west }, { lat: zonesArea.north, lng: zonesArea.east }))
+  }, [zonesArea, step])
 
   useEffect(() => {
     if (step !== 1) return
@@ -861,6 +881,8 @@ export default function AddRestaurant() {
             },
           }))
           
+          pickedLocationTextRef.current = parsed.formattedAddress || ""
+          setLocationSuggestions([])
           setLocationSearchValue(parsed.formattedAddress)
           inputElement.blur()
         })
@@ -907,16 +929,19 @@ export default function AddRestaurant() {
   useEffect(() => {
     if (step !== 1) return
     const q = String(locationSearchValue || "").trim()
-    if (q.length < 3) {
+    // box was just filled with a picked suggestion - do not search for it again
+    if (q.length < 3 || q === String(pickedLocationTextRef.current || "").trim()) {
       setLocationSuggestions([])
       setIsSearchingLocation(false)
       return
     }
+    pickedLocationTextRef.current = ""
 
     const t = setTimeout(async () => {
       try {
         setIsSearchingLocation(true)
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=4&q=${encodeURIComponent(q)}&countrycodes=in`
+        const view = zonesArea ? `&viewbox=${zonesArea.west - 0.3},${zonesArea.north + 0.3},${zonesArea.east + 0.3},${zonesArea.south - 0.3}` : ""
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=15&q=${encodeURIComponent(q)}&countrycodes=in${view}`
         const res = await fetch(url, { headers: { Accept: "application/json" } })
         const json = await res.json()
         const mapped = (Array.isArray(json) ? json : []).map(r => ({
@@ -926,7 +951,7 @@ export default function AddRestaurant() {
           lng: Number(r.lon),
           addr: r.address || {},
         }))
-        setLocationSuggestions(mapped)
+        setLocationSuggestions(rankLocationResults(mapped, zonesArea?.center || null, 6))
       } catch (e) {
         debugError("Nominatim search failed:", e)
       } finally {
@@ -935,7 +960,7 @@ export default function AddRestaurant() {
     }, 400)
 
     return () => clearTimeout(t)
-  }, [locationSearchValue, step])
+  }, [locationSearchValue, step, zonesArea])
 
 
   // Render functions for each step
@@ -1068,6 +1093,7 @@ export default function AddRestaurant() {
                         longitude: lng,
                       },
                     }))
+                    pickedLocationTextRef.current = display
                     setLocationSearchValue(display)
                     setLocationSuggestions([])
                   }}
@@ -1085,26 +1111,23 @@ export default function AddRestaurant() {
         </div>
         <div>
           <Label className="text-xs text-gray-700">Service zone*</Label>
-          <select
-            value={step1.zoneId || ""}
-            onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
-            className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
-            disabled={zonesLoading}
+          <div
+            className={`mt-1 w-full min-h-9 rounded-md border px-3 py-2 text-sm ${
+              isLocationOutsideZones
+                ? "border-red-300 bg-red-50 text-red-700"
+                : detectedZone
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-input bg-gray-50 text-gray-500"
+            }`}
           >
-            <option value="">{zonesLoading ? "Loading zones..." : "Select a zone"}</option>
-            {zones.map((z) => {
-              const id = String(z?._id || z?.id || "")
-              const label = z?.name || z?.zoneName || z?.serviceLocation || id
-              return (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              )
-            })}
-          </select>
-          <p className="text-[11px] text-gray-500 mt-1">
-            Choose the service zone where your restaurant will be available.
-          </p>
+            {zonesLoading
+              ? "Loading zones..."
+              : isLocationOutsideZones
+                ? "This location is outside our service zones. Please pick the restaurant's exact location."
+                : detectedZone
+                  ? getZoneLabel(detectedZone)
+                  : "Select the location above - the zone is filled automatically."}
+          </div>
         </div>
         <div>
           <Label className="text-xs text-gray-700">Primary contact number*</Label>
@@ -1246,7 +1269,7 @@ export default function AddRestaurant() {
 
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-5">
         <div>
-          <Label className="text-xs text-gray-700">Select cuisines (up to 3)*</Label>
+          <Label className="text-xs text-gray-700">Select cuisines (up to {MAX_RESTAURANT_CUISINES})*</Label>
           <div className="mt-2 flex flex-wrap gap-2">
             {cuisinesOptions.map((cuisine) => {
               const active = step2.cuisines.includes(cuisine)
@@ -1258,7 +1281,7 @@ export default function AddRestaurant() {
                     setStep2((prev) => {
                       const exists = prev.cuisines.includes(cuisine)
                       if (exists) return { ...prev, cuisines: prev.cuisines.filter((c) => c !== cuisine) }
-                      if (prev.cuisines.length >= 3) return prev
+                      if (prev.cuisines.length >= MAX_RESTAURANT_CUISINES) return prev
                       return { ...prev, cuisines: [...prev.cuisines, cuisine] }
                     })
                   }}
@@ -1291,16 +1314,6 @@ export default function AddRestaurant() {
                     const nextOpening = timeToString(newValue)
                     const closingMinutes = timeStringToMinutes(step2.closingTime)
                     const openingMinutes = timeStringToMinutes(nextOpening)
-                    if (openingMinutes !== null && closingMinutes !== null) {
-                      if (openingMinutes === closingMinutes) {
-                        toast.error("Opening time and closing time cannot be same")
-                        return
-                      }
-                      if (closingMinutes < openingMinutes) {
-                        toast.error("Closing time cannot be less than opening time")
-                        return
-                      }
-                    }
                     setStep2({ ...step2, openingTime: nextOpening })
                   }}
                   slotProps={{
@@ -1341,16 +1354,6 @@ export default function AddRestaurant() {
                     const nextClosing = timeToString(newValue)
                     const openingMinutes = timeStringToMinutes(step2.openingTime)
                     const closingMinutes = timeStringToMinutes(nextClosing)
-                    if (openingMinutes !== null && closingMinutes !== null) {
-                      if (openingMinutes === closingMinutes) {
-                        toast.error("Opening time and closing time cannot be same")
-                        return
-                      }
-                      if (closingMinutes < openingMinutes) {
-                        toast.error("Closing time cannot be less than opening time")
-                        return
-                      }
-                    }
                     setStep2({ ...step2, closingTime: nextClosing })
                   }}
                   slotProps={{

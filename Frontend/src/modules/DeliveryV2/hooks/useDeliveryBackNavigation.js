@@ -34,8 +34,6 @@ const resolveDeliveryBackPath = ({ pathname, state }) => {
 
   if (
     normalizedPath === "/profile/details" ||
-    normalizedPath === "/profile/bank" ||
-    normalizedPath === "/profile/documents" ||
     normalizedPath === "/profile/reviews" ||
     normalizedPath === "/profile/terms" ||
     normalizedPath === "/profile/privacy" ||
@@ -43,6 +41,11 @@ const resolveDeliveryBackPath = ({ pathname, state }) => {
     normalizedPath === "/help/tickets"
   ) {
     return explicitBackPath || "/food/delivery/profile"
+  }
+
+  // Bank / documents screens are opened from the edit-profile page, so Back returns there
+  if (normalizedPath === "/profile/bank" || normalizedPath === "/profile/documents") {
+    return explicitBackPath || "/food/delivery/profile/details"
   }
 
   if (

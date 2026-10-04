@@ -29,6 +29,8 @@ export const connectDB = async () => {
             family: 4, // Prefer IPv4 where local resolvers have IPv6/SRV issues.
         });
         logger.info(`MongoDB connected: ${conn.connection.host}`);
+        // one-time repair of the inbox-notification unique index (see notification.model.js)
+        void import('../core/notifications/models/notification.model.js').then((m) => m.fixNotificationIndexes()).catch(() => {});
     } catch (error) {
         logger.error(`MongoDB connection error: ${error.message}`);
         process.exit(1);

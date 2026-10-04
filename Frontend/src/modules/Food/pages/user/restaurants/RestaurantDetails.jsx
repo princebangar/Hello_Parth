@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Component, useMemo } from "react"
+import { buildShareUrl, restaurantSharePath } from '@/shared/utils/shareLinks'
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useParams, useNavigate, useSearchParams, useLocation as useRouterLocation } from "react-router-dom"
@@ -65,6 +66,7 @@ import { RestaurantDetailSkeleton } from "@food/components/ui/loading-skeletons"
 import OptimizedImage from "@food/components/OptimizedImage"
 import { isVegMenuItem } from "@food/utils/vegMode"
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
+import { networkErrorMessage, NO_INTERNET_MESSAGE, SERVER_UNREACHABLE_MESSAGE } from "@/shared/utils/networkError"
 
 const fssaiLogo = "/assets/images/fssai.png?v=3"
 
@@ -152,8 +154,17 @@ function RestaurantDetailsContent() {
     )
   }, [vegMode])
   const { location: userLocation } = useLocation() // Get user's current location
-  // MUST match cart: prefer saved delivery address coordinates for distance.
+  // Same point the Home cards use (the location chosen in the header); saved address only as fallback.
   const distanceOrigin = useMemo(() => {
+    if (
+      Number.isFinite(Number(userLocation?.latitude)) &&
+      Number.isFinite(Number(userLocation?.longitude))
+    ) {
+      return {
+        latitude: Number(userLocation.latitude),
+        longitude: Number(userLocation.longitude),
+      }
+    }
     const saved = getDefaultAddress?.() || null
     const coords = saved?.location?.coordinates
     if (Array.isArray(coords) && coords.length >= 2) {
@@ -586,7 +597,12 @@ function RestaurantDetailsContent() {
         // Try dining API only for slug deep-links (skip when we already have ObjectId from nav state)
         if (!seededMongoId && !isMongoObjectId(slug)) {
           try {
-            response = await diningAPI.getRestaurantBySlug(slug)
+            // same lat/lng as the restaurant API below, otherwise this answer has no distance for the header
+            const slugLocationParams =
+              Number.isFinite(Number(distanceOrigin?.latitude)) && Number.isFinite(Number(distanceOrigin?.longitude))
+                ? { lat: Number(distanceOrigin.latitude), lng: Number(distanceOrigin.longitude) }
+                : {}
+            response = await diningAPI.getRestaurantBySlug(slug, { params: slugLocationParams })
             if (response?.data?.success && response?.data?.data) {
               apiRestaurant = response.data.data
               debugLog('? Found restaurant in dining API:', apiRestaurant)
@@ -907,7 +923,7 @@ function RestaurantDetailsContent() {
             rating: actualRestaurant?.rating || apiRestaurant?.rating || actualRestaurant?.averageRating || apiRestaurant?.averageRating || 0,
             reviews: actualRestaurant?.totalRatings || apiRestaurant?.totalRatings || actualRestaurant?.reviewCount || apiRestaurant?.reviewCount || actualRestaurant?.reviews?.length || apiRestaurant?.reviews?.length || 0,
             deliveryTime: actualRestaurant?.estimatedDeliveryTime || apiRestaurant?.estimatedDeliveryTime || actualRestaurant?.deliveryTime || apiRestaurant?.deliveryTime || actualRestaurant?.avgDeliveryTime || apiRestaurant?.avgDeliveryTime || "25-30 mins",
-            distance: calculatedDistance || actualRestaurant?.distance || apiRestaurant?.distance || actualRestaurant?.distanceFromUser || apiRestaurant?.distanceFromUser || "1.2 km",
+            distance: calculatedDistance || actualRestaurant?.distance || apiRestaurant?.distance || actualRestaurant?.distanceFromUser || apiRestaurant?.distanceFromUser || "",
             distanceInKm: Number.isFinite(apiDistanceInKm) ? apiDistanceInKm : (actualRestaurant?.distanceInKm ?? apiRestaurant?.distanceInKm ?? null),
             distanceMode: actualRestaurant?.distanceMode || apiRestaurant?.distanceMode || null,
             distanceOriginKey:
@@ -1260,7 +1276,7 @@ function RestaurantDetailsContent() {
           // The axios interceptor will show a toast notification
           debugError('Network error fetching restaurant (backend may not be running):', error)
           if (!fetchedRestaurantRef.current) {
-            setRestaurantError('Backend server is not connected. Please make sure the backend is running.')
+            setRestaurantError(networkErrorMessage())
             setRestaurant(null)
           }
         } else if (is404Error) {
@@ -1709,7 +1725,7 @@ function RestaurantDetailsContent() {
     const restaurantName = restaurant?.name || "this restaurant"
 
     // Create share URL
-    const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}`
+    const shareUrl = buildShareUrl(restaurantSharePath(restaurantSlug))
     const shareText = `Check out ${restaurantName} on ${companyName}! ${shareUrl}`
 
     const payload = {
@@ -1725,6 +1741,10 @@ function RestaurantDetailsContent() {
     }
 
     const shared = await tryNativeShare(payload)
+    if (shared === "cancelled") {
+      setShowMenuOptionsSheet(false)
+      return
+    }
     if (shared) {
       toast.success("Restaurant shared successfully")
       setShowMenuOptionsSheet(false)
@@ -1743,7 +1763,7 @@ function RestaurantDetailsContent() {
     const restaurantSlug = restaurant?.slug || slug || ""
 
     // Create share URL
-    const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}?dish=${dishId}`
+    const shareUrl = buildShareUrl(restaurantSharePath(restaurantSlug, dishId))
     const shareText = `Check out ${item.name} from ${restaurant?.name || "this restaurant"}! ${shareUrl}`
 
     const payload = {
@@ -1758,6 +1778,7 @@ function RestaurantDetailsContent() {
     }
 
     const shared = await tryNativeShare(payload)
+    if (shared === "cancelled") return
     if (shared) {
       toast.success("Dish shared successfully")
       return
@@ -1809,7 +1830,7 @@ function RestaurantDetailsContent() {
       await navigator.share(payload)
       return true
     } catch (error) {
-      if (error?.name === "AbortError") return true
+      if (error?.name === "AbortError") return "cancelled"
       return false
     }
   }
@@ -2260,7 +2281,7 @@ function RestaurantDetailsContent() {
 
   // Show error state if restaurant not found or network error
   if (restaurantError && !restaurant) {
-    const isNetworkError = restaurantError.includes('Backend server is not connected')
+    const isNetworkError = restaurantError === NO_INTERNET_MESSAGE || restaurantError === SERVER_UNREACHABLE_MESSAGE
     const isNotFoundError = restaurantError === 'Restaurant not found'
 
     return (
@@ -2273,11 +2294,6 @@ function RestaurantDetailsContent() {
                 {isNetworkError ? 'Connection Error' : isNotFoundError ? 'Restaurant not found' : 'Error'}
               </h2>
               <p className="text-sm text-gray-600 mb-4 max-w-md">{restaurantError}</p>
-              {isNetworkError && (
-                <p className="text-xs text-gray-500 mb-4">
-                  Make sure the backend server is running at {API_BASE_URL.replace('/api', '')}
-                </p>
-              )}
               <Button onClick={goBack} variant="outline">
                 Go Back
               </Button>
@@ -2604,7 +2620,7 @@ function RestaurantDetailsContent() {
                 >
                   <MapPin className="h-4 w-4" />
                   <span className="truncate">
-                    {restaurant?.distance || "1.2 km"} | {restaurant?.location || "Location"}
+                    {[restaurant?.distance, restaurant?.location || "Location"].filter(Boolean).join(" | ")}
                   </span>
                   <ChevronDown className="h-4 w-4 text-gray-500" />
                 </button>
@@ -3811,7 +3827,7 @@ function RestaurantDetailsContent() {
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <MapPin className="h-3.5 w-3.5" />
-                                  <span>{outlet?.distance || "1.2 km"}</span>
+                                  <span>{outlet?.distance || "--"}</span>
                                 </div>
                               </div>
                               <div className="flex flex-col items-end gap-0.5">
@@ -3934,7 +3950,7 @@ function RestaurantDetailsContent() {
                           )}
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          {getDishFavorites().length} dishes � {getFavorites().length} restaurant
+                          {getDishFavorites().length} dishes • {getFavorites().length} restaurant
                         </p>
                       </div>
                     </button>

@@ -7,6 +7,7 @@ import { exportDeliverymenToExcel, exportDeliverymenToPDF } from "@food/componen
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
+import { networkErrorMessage } from "@/shared/utils/networkError"
 const debugError = () => {}
 
 
@@ -129,7 +130,7 @@ export default function DeliverymanList() {
       let errorMessage = "Failed to fetch delivery partners. Please try again."
       
       if (err.code === 'ERR_NETWORK') {
-        errorMessage = "Network error. Please check if backend server is running."
+        errorMessage = networkErrorMessage()
       } else if (err.response?.status === 401) {
         errorMessage = "Unauthorized. Please login again."
       } else if (err.response?.status === 403) {

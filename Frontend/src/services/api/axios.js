@@ -170,6 +170,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (err) => {
     const original = err?.config;
+    // server is in maintenance: tell the maintenance gate right away (it also polls the flag)
+    if (err?.response?.data?.code === "MAINTENANCE_MODE") {
+      try { window.dispatchEvent(new CustomEvent("maintenanceModeChanged", { detail: { enabled: true } })) } catch { /* ignore */ }
+    }
     if (err?.response?.status === 429) {
       return Promise.reject(err);
     }

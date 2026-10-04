@@ -42,6 +42,31 @@ function getFixedCurrentCycleWindow(now = new Date()) {
     };
 }
 
+/**
+ * One place for the restaurant's per-order money, always from the order's own pricing:
+ *  - itemTotal  = food value of the order (no delivery / platform fee / tax, no markup)
+ *  - commission = admin commission stored on the order
+ *  - payout     = itemTotal + packaging - commission (what the restaurant really earns)
+ */
+function restaurantAmounts(order, tx) {
+    const pricing = order?.pricing || {};
+    const itemTotal = Math.max(
+        0,
+        Number(pricing.baseSubtotal ?? (Number(pricing.subtotal ?? 0) - Number(pricing.markupTotal ?? 0))) || 0
+    );
+    const packaging = Math.max(0, Number(pricing.packagingFee ?? 0) || 0);
+    const stored = Number(pricing.restaurantCommission);
+    const commission = Math.max(
+        0,
+        (Number.isFinite(stored) && stored > 0 ? stored : Number(tx?.amounts?.restaurantCommission ?? 0)) || 0
+    );
+    const hasPricing = itemTotal > 0 || packaging > 0;
+    const payout = hasPricing
+        ? Math.max(0, itemTotal + packaging - commission)
+        : Math.max(0, Number(tx?.amounts?.restaurantShare ?? 0) || 0);
+    return { itemTotal, commission, payout };
+}
+
 function parseISODateParam(v) {
     if (!v) return null;
     const s = String(v).trim();
@@ -95,22 +120,16 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         const order = tx.orderId || {};
         const items = Array.isArray(order.items) ? order.items : [];
         const foodNames = items.map((it) => it?.name).filter(Boolean).join(', ');
-        const orderTotalExclTax = Math.max(
-            0,
-            Number(
-              order?.pricing?.baseSubtotal ??
-                (Number(order?.pricing?.subtotal ?? 0) - Number(order?.pricing?.markupTotal ?? 0))
-            ) || 0
-        );
+        const amt = restaurantAmounts(order, tx);
         return {
             orderId: order?.order_id || tx.orderReadableId,
             createdAt: tx.createdAt,
             items,
             foodNames,
-            orderTotal: orderTotalExclTax,
-            totalAmount: tx.amounts?.totalCustomerPaid || 0,
-            payout: tx.amounts?.restaurantShare || 0,
-            commission: tx.amounts?.restaurantCommission || 0,
+            orderTotal: amt.itemTotal,
+            totalAmount: amt.itemTotal,
+            payout: amt.payout,
+            commission: amt.commission,
             paymentMethod: tx.paymentMethod || order?.payment?.method,
             orderStatus: order?.orderStatus || order?.deliveryState?.currentPhase || order?.deliveryState?.status,
             status: tx.status
@@ -127,12 +146,12 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         restaurantId: rid,
         status: { $in: ['captured', 'authorized'] },
         'settlement.isRestaurantSettled': { $ne: true }
-    }).populate({ path: 'orderId', select: 'orderStatus' }).lean();
+    }).populate({ path: 'orderId', select: 'orderStatus pricing' }).lean();
 
     const globalEstimatedPayout = allUnsettledTransactions
         .filter((tx) => tx.orderId && ['delivered', 'completed'].includes(tx.orderId.orderStatus))
         .reduce(
-            (sum, tx) => sum + (Number(tx.amounts?.restaurantShare) || 0),
+            (sum, tx) => sum + restaurantAmounts(tx.orderId, tx).payout,
             0
         );
 
@@ -170,7 +189,7 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
     const invoiceSummary = {
         count: currentCycleOrders.length,
         subtotal: currentCycleOrders.reduce((sum, o) => sum + (Number(o.orderTotal) || 0), 0),
-        taxes: currentCycleOrders.reduce((sum, o) => sum + Math.max(0, (Number(o.totalAmount) || 0) - (Number(o.orderTotal) || 0)), 0),
+        taxes: 0,
         gross: currentCycleOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
     };
 
@@ -195,20 +214,17 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             const order = tx.orderId || {};
             const items = Array.isArray(order.items) ? order.items : [];
             const foodNames = items.map((it) => it?.name).filter(Boolean).join(', ');
-            const orderTotalExclTax = Math.max(
-                0,
-                Number(order?.pricing?.total ?? 0) - Number(order?.pricing?.tax ?? 0) || 0
-            );
+            const amt = restaurantAmounts(order, tx);
 
             return {
                 orderId: order?.order_id || tx.orderReadableId,
                 createdAt: tx.createdAt,
                 items,
                 foodNames,
-                orderTotal: orderTotalExclTax,
-                totalAmount: tx.amounts?.totalCustomerPaid || 0,
-                payout: tx.amounts?.restaurantShare || 0,
-                commission: tx.amounts?.restaurantCommission || 0,
+                orderTotal: amt.itemTotal,
+                totalAmount: amt.itemTotal,
+                payout: amt.payout,
+                commission: amt.commission,
                 paymentMethod: tx.paymentMethod || order?.payment?.method,
                 orderStatus: order?.orderStatus || order?.deliveryState?.currentPhase || order?.deliveryState?.status,
                 status: tx.status

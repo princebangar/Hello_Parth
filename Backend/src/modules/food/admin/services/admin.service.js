@@ -25,6 +25,7 @@ import { FoodDeliveryEmergencyHelp } from '../models/deliveryEmergencyHelp.model
 import { FoodReferralSettings } from '../models/referralSettings.model.js';
 import { FoodReferralLog } from '../models/referralLog.model.js';
 import { FoodSafetyEmergencyReport } from '../models/safetyEmergencyReport.model.js';
+import { FoodDiningRequest } from '../../dining/models/diningRequest.model.js';
 import { FoodAddon } from '../../restaurant/models/foodAddon.model.js';
 import { FoodSupportTicket } from '../../user/models/supportTicket.model.js';
 import { FoodRestaurantSupportTicket } from '../../restaurant/models/supportTicket.model.js';
@@ -123,17 +124,9 @@ const timeToMinutes = (value) => {
     return h * 60 + m;
 };
 
-const validateOpeningClosingTimes = (openingTime, closingTime) => {
-    const open = timeToMinutes(openingTime);
-    const close = timeToMinutes(closingTime);
-    if (open === null || close === null) return;
-    if (open === close) {
-        throw new ValidationError('Opening time and closing time cannot be same');
-    }
-    if (close < open) {
-        throw new ValidationError('Closing time cannot be less than opening time');
-    }
-};
+// Any opening / closing pair is valid: a closing time earlier than the opening time means the outlet closes after
+// midnight, and the same time means open all day (restaurantAvailability handles both). Nothing to reject here.
+const validateOpeningClosingTimes = () => {};
 
 export async function getRestaurantComplaints(query = {}) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 500);
@@ -3136,6 +3129,18 @@ export async function updateRestaurantById(id, body = {}) {
 
     if (body.ownerName !== undefined) doc.ownerName = toStr(body.ownerName);
     if (body.ownerEmail !== undefined) doc.ownerEmail = toStr(body.ownerEmail).toLowerCase();
+    if (body.ownerPhone !== undefined || body.primaryContactNumber !== undefined) {
+        const { assertRestaurantPhonesAvailable } = await import('../../restaurant/services/restaurant.service.js');
+        const nextOwner = body.ownerPhone !== undefined ? toStr(body.ownerPhone) : '';
+        const nextPrimary = body.primaryContactNumber !== undefined ? toStr(body.primaryContactNumber) : '';
+        // only a number that really changes is checked, so saving other fields never trips over old data
+        const sameDigits = (a, b) => String(a || '').replace(/\D/g, '').slice(-10) === String(b || '').replace(/\D/g, '').slice(-10);
+        await assertRestaurantPhonesAvailable({
+            ownerPhone: nextOwner && !sameDigits(nextOwner, doc.ownerPhone) ? nextOwner : '',
+            primaryContactNumber: nextPrimary && !sameDigits(nextPrimary, doc.primaryContactNumber) ? nextPrimary : '',
+            excludeId: doc._id,
+        });
+    }
     if (body.ownerPhone !== undefined) doc.ownerPhone = toStr(body.ownerPhone);
     if (body.primaryContactNumber !== undefined) doc.primaryContactNumber = toStr(body.primaryContactNumber);
 
@@ -4166,7 +4171,7 @@ export async function createRestaurantByAdmin(body) {
             ? {
                 isEnabled: Boolean(body.diningSettings.isEnabled),
                 maxGuests: Math.max(1, parseInt(body.diningSettings.maxGuests, 10) || 6),
-                diningType: toStr(body.diningSettings.diningType) || 'family-dining'
+                diningType: String(toStr(body.diningSettings.diningType) || '').split(',').map((s) => s.trim()).filter(Boolean)
             }
             : undefined,
         status: 'approved',
@@ -4207,6 +4212,18 @@ export async function createRestaurantByAdmin(body) {
     }
     if (!doc.ownerPhone && !doc.primaryContactNumber) {
         throw new ValidationError('Owner phone or primary contact number is required');
+    }
+
+    {
+        const { assertRestaurantPhonesAvailable } = await import('../../restaurant/services/restaurant.service.js');
+        await assertRestaurantPhonesAvailable({ ownerPhone: doc.ownerPhone, primaryContactNumber: doc.primaryContactNumber });
+    }
+    if (latitude !== null && longitude !== null) {
+        // the zone follows the pinned location; a pin outside every service zone is refused
+        const { detectZoneIdForPoint } = await import('../../utils/zoneGeo.js');
+        const detectedZoneId = await detectZoneIdForPoint(latitude, longitude);
+        if (!detectedZoneId) throw new ValidationError('This location is outside our service zones');
+        doc.zoneId = detectedZoneId;
     }
 
     const restaurant = await FoodRestaurant.create(doc);
@@ -6053,7 +6070,8 @@ export async function getDeliveryWithdrawals(query = {}) {
         id: w._id,
         deliveryName: w.deliveryPartnerId?.name || 'N/A',
         deliveryPhone: w.deliveryPartnerId?.phone || 'N/A',
-        deliveryIdString: w.deliveryPartnerId?.profilePartnerId || 'N/A',
+        // profilePartnerId is only filled for some partners; never show N/A - fall back to a short id from the record id
+        deliveryIdString: w.deliveryPartnerId?.profilePartnerId || (w.deliveryPartnerId?._id ? 'DEL' + String(w.deliveryPartnerId._id).slice(-6).toUpperCase() : 'N/A'),
         status: w.status.charAt(0).toUpperCase() + w.status.slice(1)
     }));
 
@@ -6526,6 +6544,7 @@ async function computeSidebarBadges() {
             pendingEmergencyHelp,
             pendingRestaurantComplaints,
             pendingCashConfirmations,
+            pendingDiningRequests,
         ] = await Promise.all([
             FoodRestaurant.countDocuments({ status: 'pending' }),
             FoodDeliveryPartner.countDocuments({ status: 'pending' }),
@@ -6548,6 +6567,7 @@ async function computeSidebarBadges() {
             FoodDeliveryEmergencyHelp.countDocuments({ status: 'pending' }),
             FoodSupportTicket.countDocuments({ type: 'order', status: 'pending' }),
             countPendingCashConfirmations(),
+            FoodDiningRequest.countDocuments({ status: 'pending' }),
         ]);
 
         return {
@@ -6565,7 +6585,8 @@ async function computeSidebarBadges() {
             earningAddons: pendingEarningAddons,
             safetyReports: pendingSafetyReports,
             emergencyHelp: pendingEmergencyHelp,
-            restaurantComplaints: pendingRestaurantComplaints
+            restaurantComplaints: pendingRestaurantComplaints,
+            diningRequests: pendingDiningRequests
         };
     } catch (error) {
         console.error('Error fetching sidebar badges:', error);
