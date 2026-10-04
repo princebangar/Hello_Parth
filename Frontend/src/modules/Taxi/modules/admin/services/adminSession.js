@@ -52,7 +52,7 @@ export const normalizeAdminProfile = (profile = {}) => {
 
   return {
     ...source,
-    adminLevel: adminLevel || (adminType === 'subadmin' ? 'subadmin' : 'taxi_superadmin'),
+    adminLevel: adminLevel || (adminType === 'subadmin' ? 'subadmin' : ''),
     module: source.module || null,
     parentAdminId: source.parentAdminId ? String(source.parentAdminId) : null,
     admin_type: adminType,
