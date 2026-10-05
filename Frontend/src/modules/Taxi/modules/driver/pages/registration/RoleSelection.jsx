@@ -100,7 +100,7 @@ const RoleSelection = () => {
       eyebrow="Step 1 of 4"
       title="Choose your role"
       subtitle={`This number is new. Pick the profile we should create for +91 ${phone}.`}
-      onBack={() => navigate(`${routePrefix}/login`, { replace: true })}
+      onBack={() => navigate(`${routePrefix}/login`, { replace: true, state: { phone: session.phone } })}
       backLabel="Change number"
     >
       <div className="space-y-6">

@@ -75,7 +75,7 @@ const PhoneRegistration = () => {
     vehicleTypeId: storedSession.vehicleTypeId || '',
   });
 
-  const [phone, setPhone] = useState(() => String(location.state?.phone || storedSession.phone || '').replace(/\D/g, '').slice(-10));
+  const [phone, setPhone] = useState(() => String(location.state?.phone || '').replace(/\D/g, '').slice(-10));
   const [role, setRole] = useState(() => {
     if (isOwnerPortal) {
       return 'owner';
@@ -304,7 +304,7 @@ const PhoneRegistration = () => {
               id="partner-phone"
               type="tel"
               inputMode="numeric"
-              autoComplete="tel-national"
+              autoComplete="off"
               maxLength={10}
               value={phone}
               onChange={(event) => {

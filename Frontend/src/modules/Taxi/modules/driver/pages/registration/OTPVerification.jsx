@@ -444,7 +444,7 @@ const OTPVerification = () => {
             subtitle={showRoleSelector
                 ? 'This number has more than one partner profile. Pick the one you want to open.'
                 : `We sent a ${OTP_LENGTH}-digit code to +91 ${phone}.`}
-            onBack={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath)}
+            onBack={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath, { state: { phone } })}
             backLabel={showRoleSelector ? 'Back to code' : 'Change number'}
         >
             {!showRoleSelector ? (
