@@ -31,6 +31,13 @@ export const GLOBAL_SECTIONS = [
     hint: 'Terms, Privacy and Support content shown on User/Restaurant/Delivery/Captain login screens',
   },
   {
+    key: 'referrals',
+    label: 'Referral Management',
+    path: `${GLOBAL_ADMIN_HOME}/referrals`,
+    actions: ['view', 'edit'],
+    hint: 'Referral dashboard, user / driver referral amounts and referral message translations for Food and Taxi',
+  },
+  {
     key: 'customization',
     label: 'Customization Settings',
     path: `${GLOBAL_ADMIN_HOME}/customization`,

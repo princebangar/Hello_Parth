@@ -209,10 +209,6 @@ const AdminDriverAudit = lazy(() => import('./modules/admin/pages/drivers/Driver
 const AdminPaymentMethods = lazy(() => import('./modules/admin/pages/drivers/PaymentMethods'));
 const AdminDriverCreate = lazy(() => import('./modules/admin/pages/drivers/CreateDriver'));
 const AdminDriverEdit = lazy(() => import('./modules/admin/pages/drivers/EditDriver'));
-const AdminReferralDashboard = lazy(() => import('./modules/admin/pages/referrals/ReferralDashboard'));
-const AdminUserReferralSettings = lazy(() => import('./modules/admin/pages/referrals/UserReferralSettings'));
-const AdminDriverReferralSettings = lazy(() => import('./modules/admin/pages/referrals/DriverReferralSettings'));
-const AdminReferralTranslation = lazy(() => import('./modules/admin/pages/referrals/ReferralTranslation'));
 
 const AdminPromoCodes = lazy(() => import('./modules/admin/pages/promotions/PromoCodes'));
 const AdminSendNotification = lazy(() => import('./modules/admin/pages/promotions/SendNotification'));
@@ -1272,22 +1268,8 @@ function TaxiApp() {
                   path="drivers/audit/:id"
                   element={<AdminDriverAudit />}
                 />
-                <Route
-                  path="referrals/dashboard"
-                  element={<AdminReferralDashboard />}
-                />
-                <Route
-                  path="referrals/user-settings"
-                  element={<AdminUserReferralSettings />}
-                />
-                <Route
-                  path="referrals/driver-settings"
-                  element={<AdminDriverReferralSettings />}
-                />
-                <Route
-                  path="referrals/translation"
-                  element={<AdminReferralTranslation />}
-                />
+                {/* Referral Management moved to the Global admin */}
+                <Route path="referrals/*" element={<Navigate to="/admin/global/referrals/dashboard" replace />} />
                 {/* Promotions Management */}
                 <Route
                   path="promotions/promo-codes"
@@ -1376,22 +1358,6 @@ function TaxiApp() {
                 <Route
                   path="owners/bookings"
                   element={<AdminOwnerBookings />}
-                />
-                <Route
-                  path="referrals/config"
-                  element={
-                    <div className="flex items-center justify-center min-h-[500px] text-gray-400 font-bold uppercase tracking-widest">
-                      Referral Configuration - Under Setup
-                    </div>
-                  }
-                />
-                <Route
-                  path="referrals/active"
-                  element={
-                    <div className="flex items-center justify-center min-h-[500px] text-gray-400 font-bold uppercase tracking-widest">
-                      Active Referrals Logs - Under Setup
-                    </div>
-                  }
                 />
                 <Route path="geo/heatmap" element={<AdminGeoFencing />} />
                 <Route path="geo/gods-eye" element={<AdminGodsEye />} />

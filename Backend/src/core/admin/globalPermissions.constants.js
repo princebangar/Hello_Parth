@@ -10,6 +10,7 @@ export const GLOBAL_PERMISSION_SECTIONS = [
   { key: 'customers', label: 'Customers', path: '/admin/global/customers' },
   { key: 'landing', label: 'Landing Page', path: '/admin/global/landing' },
   { key: 'pagesSocialMedia', label: 'Pages & Social Media', path: '/admin/global/pages-social-media' },
+  { key: 'referrals', label: 'Referral Management', path: '/admin/global/referrals' },
   { key: 'customization', label: 'Customization Settings', path: '/admin/global/customization' },
 ];
 

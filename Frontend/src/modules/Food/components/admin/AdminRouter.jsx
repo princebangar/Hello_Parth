@@ -18,6 +18,10 @@ const GlobalTerms = lazy(() => import("@/modules/Global/pages/pages-social-media
 const GlobalPrivacy = lazy(() => import("@/modules/Global/pages/pages-social-media/GlobalPrivacy"));
 const GlobalSupport = lazy(() => import("@/modules/Global/pages/pages-social-media/GlobalSupport"));
 const GlobalCustomizationSettings = lazy(() => import("@/modules/Global/pages/GlobalCustomizationSettings"));
+const GlobalReferralDashboard = lazy(() => import("@/modules/Global/pages/referrals/GlobalReferralPages").then((m) => ({ default: m.GlobalReferralDashboard })));
+const GlobalUserReferralSettings = lazy(() => import("@/modules/Global/pages/referrals/GlobalReferralPages").then((m) => ({ default: m.GlobalUserReferralSettings })));
+const GlobalDriverReferralSettings = lazy(() => import("@/modules/Global/pages/referrals/GlobalReferralPages").then((m) => ({ default: m.GlobalDriverReferralSettings })));
+const GlobalReferralTranslation = lazy(() => import("@/modules/Global/pages/referrals/GlobalReferralPages").then((m) => ({ default: m.GlobalReferralTranslation })));
 const PointOfSale = lazy(() => import("@food/pages/admin/PointOfSale"));
 const AdminProfile = lazy(() => import("@food/pages/admin/AdminProfile"));
 const AdminSettings = lazy(() => import("@food/pages/admin/AdminSettings"));
@@ -172,6 +176,11 @@ export default function AdminRouter() {
           <Route path="pages-social-media/terms" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalTerms /></GlobalSectionRoute>} />
           <Route path="pages-social-media/privacy" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalPrivacy /></GlobalSectionRoute>} />
           <Route path="pages-social-media/support" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalSupport /></GlobalSectionRoute>} />
+          <Route path="referrals" element={<Navigate to="/admin/global/referrals/dashboard" replace />} />
+          <Route path="referrals/dashboard" element={<GlobalSectionRoute section="referrals"><GlobalReferralDashboard /></GlobalSectionRoute>} />
+          <Route path="referrals/user-settings" element={<GlobalSectionRoute section="referrals"><GlobalUserReferralSettings /></GlobalSectionRoute>} />
+          <Route path="referrals/driver-settings" element={<GlobalSectionRoute section="referrals"><GlobalDriverReferralSettings /></GlobalSectionRoute>} />
+          <Route path="referrals/translation" element={<GlobalSectionRoute section="referrals"><GlobalReferralTranslation /></GlobalSectionRoute>} />
           <Route path="customization" element={<GlobalSectionRoute section="customization"><GlobalCustomizationSettings /></GlobalSectionRoute>} />
           <Route path="sub-admins" element={<GlobalSectionRoute platformOnly><GlobalSubAdmins /></GlobalSectionRoute>} />
           <Route path="sub-admins/:id/access" element={<GlobalSectionRoute platformOnly><GlobalSubAdminAccess /></GlobalSectionRoute>} />

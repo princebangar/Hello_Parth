@@ -1,4 +1,4 @@
-import { FileText, LayoutDashboard, Link2, Lock, Headset, SlidersHorizontal, User, UserCog, Users } from "lucide-react"
+import { BarChart3, FileText, Gift, Languages, LayoutDashboard, Link2, Lock, Headset, SlidersHorizontal, User, UserCog, UserPlus, Users } from "lucide-react"
 import { GLOBAL_ADMIN_HOME } from "@/shared/utils/activeModule.js"
 import { hasGlobalSection, isPlatformAdmin } from "@/shared/utils/adminAccess.js"
 
@@ -32,6 +32,15 @@ export const GLOBAL_MENU = [
       { label: "Terms & Conditions", path: `${GLOBAL_ADMIN_HOME}/pages-social-media/terms`, icon: FileText, section: "pagesSocialMedia" },
       { label: "Privacy Policy", path: `${GLOBAL_ADMIN_HOME}/pages-social-media/privacy`, icon: Lock, section: "pagesSocialMedia" },
       { label: "Support", path: `${GLOBAL_ADMIN_HOME}/pages-social-media/support`, icon: Headset, section: "pagesSocialMedia" },
+    ],
+  },
+  {
+    label: "Referral Management",
+    items: [
+      { label: "Referral Dashboard", path: `${GLOBAL_ADMIN_HOME}/referrals/dashboard`, icon: BarChart3, section: "referrals" },
+      { label: "User Referral Settings", path: `${GLOBAL_ADMIN_HOME}/referrals/user-settings`, icon: Gift, section: "referrals" },
+      { label: "Driver Referral Settings", path: `${GLOBAL_ADMIN_HOME}/referrals/driver-settings`, icon: UserPlus, section: "referrals" },
+      { label: "Referral Translation", path: `${GLOBAL_ADMIN_HOME}/referrals/translation`, icon: Languages, section: "referrals" },
     ],
   },
   {

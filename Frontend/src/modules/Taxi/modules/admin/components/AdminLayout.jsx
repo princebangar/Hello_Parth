@@ -90,7 +90,7 @@ const ADMIN_SECTION_LAYOUT = [
   { title: 'Operations', labels: ['Trip Requests', 'Ongoing Requests', 'Delivery Requests', 'Cancellation Analytics', 'Geofencing', 'Bus Service', 'Car Pooling'] },
   { title: 'People', labels: ['Customer Management', 'Driver Management', 'Owner Management'] },
   { title: 'Pricing & Services', labels: ['Price Management'] },
-  { title: 'Marketing', labels: ['Broadcast Notifications', 'Promotions Management', 'Referral Management'] },
+  { title: 'Marketing', labels: ['Broadcast Notifications', 'Promotions Management'] },
   { title: 'Finance & Support', labels: ['Wallet Payment', 'Report', 'Support Management'] },
   { title: 'Masters & Settings', labels: ['Language', 'Vehicle Preferences', 'Business Settings', 'App Settings'] },
 ];
@@ -957,16 +957,6 @@ const AdminLayout = () => {
               { label: 'Driver Needed Documents', path: '/taxi/admin/drivers/documents', permission: 'drivers.view' },
               { label: 'Driver Bulk Upload', path: '/taxi/admin/drivers/bulk-upload', permission: 'drivers.view' },
               { label: 'Payment Methods', path: '/taxi/admin/drivers/payment-methods', permission: 'wallet.view' },
-            ],
-          },
-          {
-            icon: Share2,
-            label: 'Referral Management',
-            subItems: [
-              { label: 'Referral Dashboard', path: '/taxi/admin/referrals/dashboard', permission: 'referrals.view' },
-              { label: 'User Referral Settings', path: '/taxi/admin/referrals/user-settings', permission: 'referrals.view' },
-              { label: 'Driver Referral Settings', path: '/taxi/admin/referrals/driver-settings', permission: 'referrals.view' },
-              { label: 'Referral Translation', path: '/taxi/admin/referrals/translation', permission: 'referrals.view' },
             ],
           },
           { icon: Briefcase, label: 'Owner Management', path: '/taxi/admin/owners/dashboard', permission: 'owners.view' },
