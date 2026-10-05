@@ -143,14 +143,15 @@ export function prefetchTaxiAdmin() {
 
 /**
  * Warm the Food user app: its shell AND the user router behind it (the router is a second lazy chunk, so warming
- * only the shell still left the Food skeleton up while the router downloaded).
+ * only the shell still left the Food skeleton up while the router downloaded). { zone: false } skips the zone look-up
+ * (the login screen: no location / zone calls before the person is in the app).
  */
-export function prefetchFoodUser() {
+export function prefetchFoodUser({ zone = true } = {}) {
   return Promise.all([
     FoodApp.preload(),
     FoodUserRouter.preload(),
   ])
-    .then(() => warmFoodZone())
+    .then(() => (zone ? warmFoodZone() : undefined))
     .catch(() => {})
 }
 
@@ -229,7 +230,7 @@ export function prefetchConsumerAppsWhenIdle() {
   if (typeof window === 'undefined' || dataSaverOn()) return () => {}
 
   const run = () => {
-    prefetchTaxiUser().then(() => prefetchFoodUser())
+    prefetchTaxiUser().then(() => prefetchFoodUser({ zone: false }))
   }
 
   if (typeof window.requestIdleCallback === 'function') {

@@ -92,6 +92,12 @@ const AppRoutes = () => {
     }
   }, [location.pathname, location.search, navigate])
 
+  // index.html paints a static login screen (#boot-login) on /login; the React login removes it once mounted. Any
+  // other route (e.g. a redirect away from /login before it mounted) must not leave it covering the page.
+  useEffect(() => {
+    if (!/^\/login(\/|$)/.test(location.pathname)) document.getElementById('boot-login')?.remove()
+  }, [location.pathname])
+
   // Warm sibling modules on idle so Food ↔ Taxi (user + admin) switches stay smooth.
   useEffect(() => {
     const path = location.pathname || ''

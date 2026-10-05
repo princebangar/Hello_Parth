@@ -3,8 +3,9 @@ import { API_ENDPOINTS } from "@food/api/config"
 // Terms / Privacy / Support screens (customer, restaurant, delivery partner, Taxi captain). Their text is static,
 // so:
 //   - the last copy is kept per page (memory + localStorage): reopening shows it at once and refreshes quietly;
-//   - the login screens fetch it, and download the page code, in the background while the person types their
-//     number, so tapping TERMS / PRIVACY / SUPPORT opens the page without waiting.
+//   - the login screens download the page code in the background while the person types their number; the
+//     customer login fetches the text only when a link is touched (warmPolicyPage on pointer-down), the partner
+//     logins fetch it in the background too.
 
 // ---------------------------------------------------------------- page text cache
 
@@ -126,18 +127,32 @@ const shouldSaveData = () => {
   }
 }
 
+/** Customer Terms / Privacy / Support text endpoints, for warming one page when its link is touched. */
+export const USER_POLICY_ENDPOINTS = {
+  terms: ADMIN.TERMS_PUBLIC,
+  privacy: ADMIN.PRIVACY_PUBLIC,
+  support: ADMIN.SUPPORT_USER_PUBLIC,
+}
+
+/** Starts loading one page's text (e.g. on pointer-down of its link), so it is usually there by the time it opens. */
+export const warmPolicyPage = (endpoint) => {
+  if (!readPolicyPage(endpoint)) fetchPolicyPage(endpoint)
+}
+
 /**
- * Warms one login screen's three policy pages (text + page code) once the browser is idle. Returns a cleanup
- * function for useEffect. Kinds: "user" | "restaurant" | "delivery" | "driver".
+ * Warms one login screen's three policy pages once the browser is idle: the page code, and the text unless
+ * { text: false }. Returns a cleanup function for useEffect. Kinds: "user" | "restaurant" | "delivery" | "driver".
  */
-export const prefetchPolicyContentWhenIdle = (kind) => {
+export const prefetchPolicyContentWhenIdle = (kind, { text = true } = {}) => {
   const plan = POLICY_WARMUP[kind]
   if (!plan || typeof window === "undefined" || shouldSaveData()) return () => {}
 
   const run = () => {
-    plan.endpoints.forEach((endpoint) => {
-      fetchPolicyPage(endpoint)
-    })
+    if (text) {
+      plan.endpoints.forEach((endpoint) => {
+        fetchPolicyPage(endpoint)
+      })
+    }
     plan.chunks.forEach((load) => {
       load().catch(() => {})
     })

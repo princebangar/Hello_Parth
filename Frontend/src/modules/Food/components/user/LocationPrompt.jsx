@@ -10,7 +10,9 @@ const isConsumerAppPath = (pathname = "") => {
   // Restaurant / delivery partner panels (not the customer's /food/user/restaurants/... pages).
   if (/^\/(food\/)?(restaurant|delivery)(\/|$)/.test(path)) return false
   if (path.includes("/taxi/driver") || path.includes("/taxi/owner")) return false
-  if (path.startsWith("/login")) return true
+  // The login screen asks for nothing but the number: location is taken once the person is in the app (guest or
+  // signed in), so the login page makes no GPS / geocode / zone calls of its own.
+  if (path.startsWith("/login")) return false
   if (path.startsWith("/food/user") || path === "/food" || path.startsWith("/food/")) return true
   if (path.startsWith("/taxi/user") || path === "/taxi" || path.startsWith("/taxi/")) return true
   // "/" is the public marketing landing page for guests — it has no location-based content of its own.
@@ -30,6 +32,27 @@ const queryGeoPermission = async () => {
 // "Select Location Manually" navigates to the address page — don't pop the
 // prompt straight back up there.
 let skipNextPrompt = false
+
+// True while the first location of this visit is still on its way: the prompt is deciding / open, or the GPS fix
+// it started is running. Food's layout keeps its loading skeleton meanwhile instead of drawing Home and then swapping
+// to the out-of-zone screen. Starts true only when nothing is stored yet.
+let locationPending = typeof window !== "undefined" && !hasValidStoredUserLocation()
+const pendingListeners = new Set()
+const setLocationPending = (value) => {
+  if (locationPending === value) return
+  locationPending = value
+  pendingListeners.forEach((listener) => listener(value))
+}
+
+export function useLocationPromptPending() {
+  const [pending, setPending] = useState(locationPending)
+  useEffect(() => {
+    pendingListeners.add(setPending)
+    setPending(locationPending)
+    return () => pendingListeners.delete(setPending)
+  }, [])
+  return pending
+}
 
 export default function LocationPrompt() {
   const navigate = useNavigate()
@@ -51,6 +74,7 @@ export default function LocationPrompt() {
     const maybeShow = async () => {
       if (skipNextPrompt) {
         skipNextPrompt = false
+        setLocationPending(false)
         return
       }
 
@@ -60,20 +84,26 @@ export default function LocationPrompt() {
 
       if (permissionState === "granted") {
         if (!hasValidStoredUserLocation()) {
+          setLocationPending(true)
           try {
             await requestLocation()
             markLocationAllowed()
           } catch {}
         }
+        setLocationPending(false)
         return
       }
 
       // No Permissions API (older WebViews): all we can go by is having a location.
-      if (permissionState === "unknown" && (permissionGranted || hasValidStoredUserLocation())) return
+      if (permissionState === "unknown" && (permissionGranted || hasValidStoredUserLocation())) {
+        setLocationPending(false)
+        return
+      }
 
       // Location access is mandatory: keep asking on every screen (including
       // the header's location picker) until it is granted — also when a
       // location was picked by hand earlier.
+      setLocationPending(!hasValidStoredUserLocation())
       setShowPrompt(true)
       document.body.style.overflow = "hidden"
       if (cardRef.current) {
@@ -105,6 +135,7 @@ export default function LocationPrompt() {
       const granted = state === "granted" || (state === "unknown" && hasValidStoredUserLocation())
       if (granted) {
         setShowPrompt(false)
+        setLocationPending(false)
         document.body.style.overflow = ""
       }
     })
@@ -119,6 +150,7 @@ export default function LocationPrompt() {
       await requestLocation()
       markLocationAllowed()
       setShowPrompt(false)
+      setLocationPending(false)
       document.body.style.overflow = ""
     } catch {
       // Keep prompt open so user can try again or pick manually.
@@ -131,6 +163,7 @@ export default function LocationPrompt() {
   const handleSelectManually = () => {
     skipNextPrompt = true
     setShowPrompt(false)
+    setLocationPending(false)
     document.body.style.overflow = ""
     const path = String(routeLocation.pathname || "")
     if (path.startsWith("/taxi")) {
@@ -142,6 +175,7 @@ export default function LocationPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false)
+    setLocationPending(false)
     document.body.style.overflow = ""
   }
 

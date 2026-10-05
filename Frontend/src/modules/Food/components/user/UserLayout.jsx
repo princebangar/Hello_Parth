@@ -18,6 +18,7 @@ import { useLocation as useGeoLocation } from "../../hooks/useLocation"
 import { useZone } from "../../hooks/useZone"
 import { useCartZoneGuard } from "../../hooks/useCartZoneGuard"
 import OutOfZoneScreen from "./OutOfZoneScreen"
+import { useLocationPromptPending } from "./LocationPrompt"
 import { isModuleAuthenticated } from "../../utils/auth"
 import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
 import { markFirstScreenShown } from "@/shared/utils/firstScreen"
@@ -186,7 +187,8 @@ function UserLayoutContent() {
   const location = useLocation()
   const { location: activeLocation, loading: isGeoLoading } = useGeoLocation()
   const { loading: isProfileLoading } = useProfile()
-  const { isOutOfService, loading: isZoneLoading, zoneStatus, zoneId } = useZone(activeLocation)
+  const { isOutOfService, loading: isZoneLoading, zoneStatus, zoneId, error: zoneError } = useZone(activeLocation)
+  const isLocationPending = useLocationPromptPending()
   useCartZoneGuard(zoneId, zoneStatus)
   const hasValidCoordinates = activeLocation && Number.isFinite(activeLocation.latitude) && Number.isFinite(activeLocation.longitude);
   const isOutOfZone = isOutOfService && hasValidCoordinates;
@@ -304,15 +306,23 @@ function UserLayoutContent() {
                        normalizedPath.includes('privacy') || 
                        normalizedPath.includes('support');
 
-  const shouldBlockOutOfZone = 
-    hasValidCoordinates &&
-    !isAuthPage && 
+  const isZoneGatedPath =
+    !isAuthPage &&
     !isPolicyPage &&
     !normalizedPath.includes('profile') &&
     !normalizedPath.includes('wallet') &&
     !normalizedPath.includes('help') &&
     !normalizedPath.includes('address') &&
     !normalizedPath.includes('orders');
+  const shouldBlockOutOfZone = hasValidCoordinates && isZoneGatedPath;
+
+  // The zone for this location is not known yet (first location still coming in, or its zone check still running):
+  // stay on the loading skeleton, then show Home or the out-of-zone screen once - never Home first and the
+  // out-of-zone screen a moment later. A failed zone check falls through to Home as before.
+  const isZonePending =
+    isZoneGatedPath &&
+    !location.pathname.includes('/search') &&
+    (hasValidCoordinates ? zoneStatus === "loading" && !zoneError : isLocationPending || isGeoLoading);
 
   // Debounced loading state to prevent flickering and ensure smooth navigation transitions
   const { showGlobalLoader, setShowGlobalLoader } = useLocationSelector()
@@ -534,9 +544,9 @@ function UserLayoutContent() {
         {showBottomNav && !isOutOfZone && <DesktopNavbar showLogo={!isUnder250} />}
       </div>
       
-      {isInitialChecking && !location.pathname.includes('/search') ? (
+      {(isInitialChecking && !location.pathname.includes('/search')) || isZonePending ? (
         <AppShellSkeleton />
-      ) : (zoneStatus === "OUT_OF_SERVICE" && !isZoneLoading && !isGeoLoading) && shouldBlockOutOfZone ? (
+      ) : zoneStatus === "OUT_OF_SERVICE" && shouldBlockOutOfZone ? (
         <OutOfZoneScreen 
           location={activeLocation} 
           handleLocationClick={openLocationSelector} 

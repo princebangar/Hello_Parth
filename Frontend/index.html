@@ -13,6 +13,12 @@
          their route chunk back until Google answered. -->
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Nunito+Sans:wght@500;600;700;800&family=Sora:wght@600;700&family=Caveat:wght@600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Nunito+Sans:wght@500;600;700;800&family=Sora:wght@600;700&family=Caveat:wght@600;700&display=swap"></noscript>
+    <!-- Login wordmark: Pacifico (OFL), self-hosted subset with only the letters of "Hello Parth" (~5 KB), so it
+         never flashes in a fallback cursive font or waits on Google inside the WebView. -->
+    <link rel="preload" as="font" type="font/woff2" href="/auth_assets/pacifico-hello-parth.woff2" crossorigin>
+    <style>
+      @font-face { font-family: 'Pacifico'; src: url('/auth_assets/pacifico-hello-parth.woff2') format('woff2'); font-display: block; }
+    </style>
     <script>
       (function() {
         try {
@@ -68,6 +74,19 @@
           var taxiPage = consumerApp && !homeLike && bootPath.indexOf('/taxi/user/') === 0;
           root.setAttribute('data-boot', policy ? 'policy' : taxiPage ? 'taxi-page' : consumerApp ? 'app' : 'plain');
           if (taxiPage) window.__bootTaxiPath = bootPath;
+
+          // The login screen: painted below (#boot-login) from this file, so a refresh / app start shows the real
+          // screen at once instead of a blank page while the JS downloads. In the installed app a fresh launch of a
+          // logged-out person also lands there (see resolveNativeInitialRoute in src/index.jsx).
+          var rawPath = (window.location.pathname || '').replace(/\/index\.html$/i, '').replace(/\/+$/, '') || '/';
+          var nativeFresh = false;
+          if (nativeShell && !window.location.hash) {
+            try { nativeFresh = sessionStorage.getItem('helloparth_native_session') !== '1'; } catch (e) { nativeFresh = true; }
+          }
+          var nativeConsumerStart = rawPath === '/food' || rawPath === '/user' || rawPath.indexOf('/food/user') === 0 || rawPath.indexOf('/user/') === 0 || rawPath.indexOf('/taxi/user') === 0;
+          if (/^\/login(?:\/|$)/.test(bootPath) || (nativeFresh && nativeConsumerStart && !signedIn)) {
+            root.setAttribute('data-boot', 'login');
+          }
 
           // The Taxi / Food home on a phone: which header to paint, and the saved location to put in it.
           var homePath = path.replace(/\/+$/, '');
@@ -193,6 +212,69 @@
       .boot-rcard-body { padding: 16px; }
       html[data-theme="dark"] .boot-rcard { border-color: rgba(255, 255, 255, .1); background: #141414; }
       html[data-theme="dark"] .boot-rcard-img { background: linear-gradient(135deg, #262626 0%, #181818 100%); }
+
+      /* ---- Login screen, painted from this file alone ----------------------------------------------------------
+         #boot-login (below #root, so React's first render does not wipe it) covers the page until the React login
+         has mounted (Login.jsx removes it in a layout effect; routes.jsx removes it on any other route). The hero
+         .lg-* rules are also what the React login uses; the card copy here mirrors its Tailwind classes - keep the
+         two in step with src/modules/auth/pages/Login.jsx. */
+      #boot-login { display: none; }
+      html[data-boot="login"] #boot-skeleton { display: none; }
+      html[data-boot="login"] #boot-login {
+        display: block; position: fixed; inset: 0; z-index: 60; overflow: hidden; background: #ECECEE;
+        font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased;
+      }
+      .lg-page { position: relative; margin: 0 auto; width: 100%; max-width: 480px; height: 100%; background: #fff; display: flex; flex-direction: column; }
+      .lg-hero { position: relative; flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; background: linear-gradient(180deg, #D21F26 0%, #C8161D 40%, #A80F16 100%); }
+      .lg-hero svg, .lg-hero img { display: block; }
+      .lg-glow { position: absolute; left: 0; right: 0; bottom: 0; height: 55%; pointer-events: none; background: radial-gradient(70% 70% at 50% 100%, rgba(90,0,6,0.38) 0%, rgba(90,0,6,0) 100%); }
+      .lg-skyline { position: absolute; left: 0; right: 0; bottom: 40px; height: 36%; pointer-events: none; }
+      .lg-skyline svg { width: 100%; height: 100%; }
+      .lg-cloud { position: absolute; height: auto; pointer-events: none; }
+      .lg-cloud-1 { left: 7%; top: 40%; width: 48px; }
+      .lg-cloud-2 { right: 24%; top: 46%; width: 40px; }
+      .lg-word { position: relative; z-index: 10; flex-shrink: 0; padding-top: calc(max(14px, env(safe-area-inset-top)) + 64px); display: flex; flex-direction: column; align-items: center; color: #fff; -webkit-user-select: none; user-select: none; }
+      .lg-word-in { position: relative; }
+      .lg-title { margin: 0; font-family: 'Pacifico', system-ui, sans-serif; font-weight: 400; font-size: 48px; line-height: 1.15; letter-spacing: -0.025em; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15)); }
+      .lg-marks { position: absolute; right: -20px; top: -4px; width: 24px; height: auto; }
+      .lg-tag { margin: 4px 0 0; display: flex; align-items: center; gap: 12px; font-size: 21px; font-weight: 600; letter-spacing: 0.025em; }
+      .lg-dot { width: 8px; height: 8px; border-radius: 9999px; background: #FF4A4F; }
+      .lg-dome { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: 82px; }
+      .lg-art { position: relative; z-index: 20; flex: 1 1 0%; min-height: 0; margin-top: 8px; }
+      .lg-art-box { position: absolute; bottom: 0; left: 50%; transform: translate(-50%, 8%); aspect-ratio: 1000 / 412; height: min(100%, 200px, calc(min(94vw, 440px) * 0.412)); pointer-events: none; -webkit-user-select: none; user-select: none; }
+      .lg-pin { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 172.8%; }
+      .lg-art-img { position: relative; width: 100%; height: 100%; max-width: none; }
+      .lg-card { position: relative; z-index: 30; flex-shrink: 0; width: 100%; box-sizing: border-box; background: #fff; padding: 8px 24px calc(env(safe-area-inset-bottom) + 88px); }
+      .lg-h2 { margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #1A1A1A; letter-spacing: -0.025em; }
+      .lg-sub { margin: 8px 0 0; font-size: 16px; line-height: 1.375; color: #6B7280; }
+      .lg-form { margin-top: 20px; display: flex; flex-direction: column; }
+      .lg-input { box-sizing: border-box; height: 56px; border-radius: 16px; border: 1px solid #E5E7EB; background: #fff; display: flex; align-items: center; padding: 0 16px; }
+      .lg-cc { font-size: 16px; font-weight: 600; color: #1A1A1A; flex: none; }
+      .lg-sep { width: 1px; height: 24px; background: #E5E7EB; margin: 0 12px; flex: none; }
+      .lg-num { font-size: 16px; color: #9CA3AF; }
+      .lg-num.on { color: #1A1A1A; font-weight: 500; letter-spacing: 0.025em; }
+      .lg-btn { position: relative; margin-top: 20px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; background: #E5E7EB; color: #9CA3AF; }
+      .lg-btn-ic { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 9999px; background: #fff; display: flex; align-items: center; justify-content: center; color: #D1D5DB; }
+      .lg-btn.on { background: #C8161D; color: #fff; box-shadow: 0 8px 20px rgba(200,22,29,0.28); }
+      .lg-btn.on .lg-btn-ic { color: #1A1A1A; }
+      .lg-or { margin: 16px 0; padding: 0 24px; display: flex; align-items: center; gap: 16px; }
+      .lg-or i { flex: 1; height: 1px; background: #E5E7EB; }
+      .lg-or span { font-size: 15px; color: #6B7280; }
+      .lg-guest { box-sizing: border-box; height: 56px; border-radius: 16px; border: 1px solid #D1D5DB; background: #fff; color: #1A1A1A; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 12px; }
+      .lg-agree { margin: 20px 0 0; text-align: center; font-size: 13px; line-height: 1.625; color: #6B7280; }
+      .lg-links { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; }
+      .lg-links i { width: 4px; height: 4px; border-radius: 9999px; background: #9CA3AF; }
+      @media (max-height: 700px) {
+        .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 40px); }
+        .lg-title { font-size: 38px; }
+        .lg-tag { font-size: 18px; }
+        .lg-dome { height: 66px; }
+        .lg-card { padding-top: 4px; padding-bottom: calc(env(safe-area-inset-bottom) + 22px); }
+        .lg-h2 { font-size: 23px; }
+        .lg-form { margin-top: 16px; }
+        .lg-or { margin: 12px 0; }
+        .lg-agree { margin-top: 12px; }
+      }
 
       /* Terms / Privacy / Support: the same loader the React screen shows (shared/components/PolicyPageLoader.jsx). */
       #boot-loader { display: none; }
@@ -373,6 +455,71 @@
         };
       })();
     </script>
+    <script>
+      // ---- Login hero (red top of /login) ------------------------------------------------------------------------
+      // ONE drawing for both: the static #boot-login below paints it before the JS arrives, and the React login
+      // (src/modules/auth/pages/Login.jsx) renders the same HTML, so the hand-over is invisible. Styles: .lg-* above.
+      (function () {
+        // City skyline behind the food & taxi: [x, width, height, roof].
+        var SKYLINE = [
+          [0, 16, 46, 'flat'], [14, 20, 74, 'dome'], [36, 12, 56, 'spire'], [50, 24, 92, 'dome'],
+          [76, 16, 60, 'flat'], [94, 30, 70, 'bigdome'], [126, 12, 50, 'spire'], [140, 22, 84, 'dome'],
+          [164, 18, 58, 'flat'], [184, 34, 76, 'bigdome'], [220, 14, 54, 'spire'], [236, 22, 88, 'dome'],
+          [260, 18, 62, 'flat'], [280, 30, 72, 'bigdome'], [312, 12, 52, 'spire'], [326, 22, 80, 'dome'],
+          [350, 16, 58, 'flat'], [368, 20, 70, 'dome'], [390, 14, 48, 'flat']
+        ];
+        // arched window: bottom-left corner (x, y), width w, height h
+        var arch = function (x, y, w, h) {
+          return 'M' + x + ' ' + y + ' V' + (y - h + w / 2) + ' A' + (w / 2) + ' ' + (w / 2) + ' 0 0 1 ' + (x + w) + ' ' + (y - h + w / 2) + ' V' + y;
+        };
+        var path = function (d) { return '<path d="' + d + '"/>'; };
+        var skyline = function () {
+          var out = '';
+          SKYLINE.forEach(function (b) {
+            var x = b[0], w = b[1], h = b[2], roof = b[3], top = 120 - h, cx = x + w / 2;
+            // rows of arched windows (two columns on wide buildings) and a cornice band under the roof
+            var cols = w >= 20 ? [x + w * 0.22, x + w * 0.58] : [cx - w * 0.15];
+            var winW = w >= 20 ? w * 0.2 : w * 0.3;
+            out += '<rect x="' + x + '" y="' + top + '" width="' + w + '" height="' + h + '" fill="rgba(120,0,8,0.18)"/>';
+            out += path('M' + x + ' ' + (top + 5) + ' H' + (x + w));
+            for (var y = top + 16; y <= 112; y += 16) cols.forEach(function (wx) { out += path(arch(wx, y, winW, 9)); });
+            if (roof === 'dome') out += path('M' + x + ' ' + top + ' Q' + cx + ' ' + (top - w * 0.9) + ' ' + (x + w) + ' ' + top + ' M' + cx + ' ' + (top - w * 0.45) + ' V' + (top - w * 0.45 - 8));
+            if (roof === 'bigdome') out += path('M' + (x + 3) + ' ' + top + ' Q' + cx + ' ' + (top - w * 0.8) + ' ' + (x + w - 3) + ' ' + top + ' M' + cx + ' ' + (top - w * 0.4) + ' V' + (top - w * 0.4 - 10) + ' M' + x + ' ' + top + ' V' + (top - 14) + ' M' + (x + w) + ' ' + top + ' V' + (top - 14) + ' M' + (x - 1.5) + ' ' + (top - 14) + ' h3 M' + (x + w - 1.5) + ' ' + (top - 14) + ' h3');
+            if (roof === 'spire') out += path('M' + x + ' ' + top + ' L' + cx + ' ' + (top - 18) + ' L' + (x + w) + ' ' + top);
+            if (roof === 'flat') out += '<rect x="' + (x - 2) + '" y="' + (top - 4) + '" width="' + (w + 4) + '" height="4"/>';
+          });
+          return '<svg viewBox="0 0 404 120" preserveAspectRatio="xMidYMax slice" fill="none" stroke="rgba(255,120,124,0.5)" stroke-width="0.8" aria-hidden="true">' + out + '</svg>';
+        };
+        var cloud = function (cls) {
+          return '<svg class="lg-cloud ' + cls + '" viewBox="0 0 48 22" fill="none" stroke="rgba(255,140,144,0.7)" stroke-width="1.2" aria-hidden="true"><path d="M6 20h36a5 5 0 0 0 0-10 9 9 0 0 0-16-4 7 7 0 0 0-12 4A5 5 0 0 0 6 20z"/></svg>';
+        };
+        var html = null;
+        window.__loginHeroHtml = function () {
+          if (html) return html;
+          html =
+            '<div class="lg-glow"></div>' +
+            '<div class="lg-skyline">' + skyline() + '</div>' +
+            cloud('lg-cloud-1') + cloud('lg-cloud-2') +
+            '<div class="lg-word"><div class="lg-word-in">' +
+              '<h1 class="lg-title">Hello Parth</h1>' +
+              '<svg class="lg-marks" viewBox="0 0 24 20" aria-hidden="true"><path d="M4 12 L12 3" stroke="#FFC21A" stroke-width="3" stroke-linecap="round"/><path d="M9 16 L21 13" stroke="#FFC21A" stroke-width="3" stroke-linecap="round"/></svg>' +
+            '</div><p class="lg-tag">Food <span class="lg-dot"></span> Taxi</p></div>' +
+            // white dome the food & taxi sit on - same white as the card below, so the two read as one sheet
+            '<svg class="lg-dome" viewBox="0 0 400 80" preserveAspectRatio="none" aria-hidden="true"><path d="M0 80 V34 Q200 -22 400 34 V80 Z" fill="#FFFFFF"/></svg>' +
+            // food & taxi in a box with the art's exact aspect ratio, so the pin route is drawn in image coordinates
+            // and lands on the taxi's roof (drawn under the image)
+            '<div class="lg-art"><div class="lg-art-box">' +
+              '<svg class="lg-pin" viewBox="0 -300 1000 712" preserveAspectRatio="none" fill="none" aria-hidden="true">' +
+                '<path d="M930 -95 C930 -45 862 -45 868 5 S886 45 884 70" stroke="rgba(255,150,154,0.85)" stroke-width="5" stroke-linecap="round" stroke-dasharray="12 13"/>' +
+                '<path d="M930 -228c-26 0-45 20-45 44 0 33 45 73 45 73s45-40 45-73c0-24-19-44-45-44z" fill="#F0484E"/>' +
+                '<circle cx="930" cy="-184" r="16" fill="#A80F16"/>' +
+              '</svg>' +
+              '<img class="lg-art-img" src="/auth_assets/login-hero-food-taxi.webp" alt="Food and taxi" width="1000" height="412" fetchpriority="high" decoding="async" draggable="false"/>' +
+            '</div></div>';
+          return html;
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"><div id="boot-loader" aria-hidden="true">
@@ -454,6 +601,29 @@
       <div class="boot-rcard"><div class="boot-rcard-img"></div><div class="boot-rcard-body"><div class="boot-bar" style="height:20px;width:80%"></div><div class="boot-bar" style="height:16px;width:66%;margin-top:8px"></div><div class="boot-bar" style="height:16px;width:100%;margin-top:16px"></div><div class="boot-bar" style="height:16px;width:66%;margin-top:8px"></div></div></div>
       </div>
     </div></div>
+    <div id="boot-login" aria-hidden="true"></div>
+    <script>
+      // drawn straight after its slot, so the very first paint already has the login screen
+      (function () {
+        try {
+          if (document.documentElement.getAttribute('data-boot') !== 'login' || !window.__loginHeroHtml) return;
+          var draft = '';
+          try { draft = String(sessionStorage.getItem('login_phone_draft') || '').replace(/\D/g, '').slice(0, 10); } catch (e) {}
+          var ready = draft.length === 10 ? ' on' : '';
+          document.getElementById('boot-login').innerHTML =
+            '<div class="lg-page"><div class="lg-hero">' + window.__loginHeroHtml() + '</div>' +
+            '<div class="lg-card"><h2 class="lg-h2">Login or Signup</h2><p class="lg-sub">Enter your mobile number to continue</p>' +
+            '<div class="lg-form">' +
+              '<div class="lg-input"><span class="lg-cc">+91</span><i class="lg-sep"></i><span class="lg-num' + (draft ? ' on' : '') + '">' + (draft || 'Enter mobile number') + '</span></div>' +
+              '<div class="lg-btn' + ready + '">Continue<span class="lg-btn-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>' +
+              '<div class="lg-or"><i></i><span>or</span><i></i></div>' +
+              '<div class="lg-guest"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>Continue as Guest</div>' +
+              '<p class="lg-agree">By continuing, you agree to our</p>' +
+              '<div class="lg-links"><span>Terms</span><i></i><span>Privacy</span><i></i><span>Support</span></div>' +
+            '</div></div></div>';
+        } catch (e) {}
+      })();
+    </script>
     <script>
       (function () {
         try {

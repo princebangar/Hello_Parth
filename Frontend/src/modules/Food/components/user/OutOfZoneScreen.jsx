@@ -1,20 +1,32 @@
 import React from 'react';
 import { MapPin, ChevronDown, Wallet } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from "@food/context/ProfileContext";
+import { isModuleAuthenticated } from "../../utils/auth";
 
 import outOfZoneBg from '@food/assets/Outofzone_bg.jpg';
 
+// Same avatar as the home header (shared/components/SuperAppHomeHeader.jsx): the user's photo, else the default one.
+const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
+
 const OutOfZoneScreen = ({ location, handleLocationClick }) => {
   const { userProfile } = useProfile();
-  const BRAND_NAME = "Hello Parth Food";
+  const BRAND_NAME = "Hello Parth";
 
   const routerLocation = useLocation();
-  const initials = React.useMemo(() => {
-    if (!userProfile) return "";
-    const name = userProfile.firstName || userProfile.name || "";
-    return name[0]?.toUpperCase() || "U";
-  }, [userProfile]);
+  const navigate = useNavigate();
+  const isGuest = !isModuleAuthenticated('user');
+  const [avatarBroken, setAvatarBroken] = React.useState(false);
+  const profileImage = isGuest ? '' : userProfile?.profileImage || '';
+
+  // Guests have no profile or wallet: the avatar opens the same login popup as the rest of the guest app.
+  const handleProfileClick = () => {
+    if (isGuest) {
+      window.dispatchEvent(new CustomEvent('show-login-required', { detail: { intent: 'general' } }));
+      return;
+    }
+    navigate('/food/user/profile', { state: { from: routerLocation.pathname } });
+  };
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#2a1c3d] overflow-hidden fixed inset-0 z-40">
@@ -48,25 +60,33 @@ const OutOfZoneScreen = ({ location, handleLocationClick }) => {
             </div>
           </div>
 
-          {/* Right: Wallet and Profile */}
+          {/* Right: Wallet (signed-in only) and Profile */}
           <div className="flex items-center gap-3 shrink-0">
-            <Link
-              to="/food/user/wallet"
-              state={{ from: routerLocation.pathname }}
-              className="h-9 w-9 flex items-center justify-center rounded-full active:scale-90 transition-all"
-            >
-              <Wallet className="h-5.5 w-5.5 text-white" />
-            </Link>
+            {!isGuest && (
+              <Link
+                to="/food/user/wallet"
+                state={{ from: routerLocation.pathname }}
+                aria-label="Wallet"
+                className="h-9 w-9 flex items-center justify-center rounded-full active:scale-90 transition-all"
+              >
+                <Wallet className="h-5.5 w-5.5 text-white" />
+              </Link>
+            )}
 
-            <Link
-              to="/food/user/profile"
-              state={{ from: routerLocation.pathname }}
-              className="h-9 w-9 relative flex items-center justify-center rounded-full bg-[#FFF5E6] border border-white/60 shadow-2xl cursor-pointer active:scale-90 transition-all overflow-hidden"
+            <button
+              type="button"
+              onClick={handleProfileClick}
+              aria-label={isGuest ? "Login" : "Profile"}
+              className="h-9 w-9 relative flex items-center justify-center rounded-full bg-[#FFF5E6] border-[1.5px] border-white shadow-2xl cursor-pointer active:scale-90 transition-all overflow-hidden"
             >
-              <span className="text-[22px] font-black text-[#DC2626] leading-none tracking-tighter">
-                {initials || 'U'}
-              </span>
-            </Link>
+              <img
+                src={!avatarBroken && profileImage ? profileImage : DEFAULT_AVATAR}
+                alt="Profile"
+                className="h-full w-full object-cover"
+                draggable={false}
+                onError={() => setAvatarBroken(true)}
+              />
+            </button>
           </div>
         </div>
       </div>
