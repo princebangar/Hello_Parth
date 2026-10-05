@@ -84,14 +84,38 @@
             try { nativeFresh = sessionStorage.getItem('helloparth_native_session') !== '1'; } catch (e) { nativeFresh = true; }
           }
           var nativeConsumerStart = rawPath === '/food' || rawPath === '/user' || rawPath.indexOf('/food/user') === 0 || rawPath.indexOf('/user/') === 0 || rawPath.indexOf('/taxi/user') === 0;
+          // The login screen refreshes on the same skeleton as every other screen (the static copy of the login design
+          // that used to be painted here is no longer used: it swapped to React's login with a visible font / layout shift).
           if (/^\/login(?:\/|$)/.test(bootPath) || (nativeFresh && nativeConsumerStart && !signedIn)) {
-            root.setAttribute('data-boot', 'login');
+            root.setAttribute('data-boot', 'plain');
           }
 
           // The Taxi / Food home on a phone: which header to paint, and the saved location to put in it.
+          // Under Maintenance: the last answer is cached (helloparth_customization_settings). If it says the apps are locked,
+          // paint the plain loader instead of the login / home placeholder, so a refresh never flashes the screen the
+          // person is about to be locked out of. React then shows the maintenance screen itself.
+          try {
+            var cachedSettings = JSON.parse(localStorage.getItem('helloparth_customization_settings') || 'null') || {};
+            var adminPath = /^\/(?:taxi\/)?admin(?:\/|$)/.test(path);
+            var foodPath = /^\/(?:food|user|restaurant|delivery|usermain|profile|cart|orders)(?:\/|$)/.test(path);
+            if (!adminPath && (cachedSettings.global_maintenance_enabled === true || (cachedSettings.maintenance_mode_enabled === true && foodPath))) {
+              root.setAttribute('data-boot', 'maint');
+              var globalLock = cachedSettings.global_maintenance_enabled === true;
+              root.setAttribute('data-maint', globalLock ? 'global' : 'food');
+              if (!globalLock && !/^\/(?:food\/)?(?:restaurant|delivery)(?:\/|$)/.test(path)) root.setAttribute('data-maint-back', '1');
+            }
+          } catch (e) {}
+
           var homePath = path.replace(/\/+$/, '');
+          // Food home when the last known zone is "out of service": the app will show the out-of-zone screen, not the
+          // home, so paint the plain skeleton (no home header) instead of a home that is about to disappear.
+          var outOfZoneCached = false;
+          try {
+            outOfZoneCached = consumerApp && /^\/food(?:\/|$)/.test(path) && localStorage.getItem('userZoneStatus') === 'OUT_OF_SERVICE' && !!localStorage.getItem('userLocation');
+          } catch (e) {}
+          if (outOfZoneCached && root.getAttribute('data-boot') === 'app') root.setAttribute('data-boot', 'plain');
           var vertical = '';
-          if (consumerApp) {
+          if (consumerApp && !outOfZoneCached) {
             if (homePath === '/taxi/user' || (path === '/' && signedIn)) vertical = 'taxi';
             else if (homePath === '/food' || homePath === '/food/user' || homePath === '/food/user/home') vertical = 'food';
           }
@@ -156,7 +180,7 @@
          injected by JS and isn't available yet at this point. React's
          createRoot(...).render() wipes #root's innerHTML the moment it
          mounts, so this needs no cleanup. */
-      #boot-skeleton {
+      #boot-skeleton, #boot-skeleton-keep {
         min-height: 100vh;
         max-width: 1024px;
         margin: 0 auto;
@@ -164,7 +188,7 @@
         box-sizing: border-box;
         background: radial-gradient(circle at top left, #fff8ef, transparent 34%), linear-gradient(180deg, #fffdf9 0%, #fff8f1 100%);
       }
-      html[data-theme="dark"] #boot-skeleton {
+      html[data-theme="dark"] #boot-skeleton, html[data-theme="dark"] #boot-skeleton-keep {
         background: linear-gradient(180deg, #0b0b0b 0%, #151515 100%);
       }
       .boot-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -184,7 +208,7 @@
       }
 
       /* Only the consumer app screens get the skeleton; everything else stays on the plain page colour. */
-      html[data-boot="plain"] #boot-skeleton,
+      html[data-boot="maint"] #boot-skeleton,
       html[data-boot="policy"] #boot-skeleton { display: none; }
       /* a Taxi screen: only its own placeholder (#boot-taxi-page, drawn by window.__taxiPageSkeleton below) */
       html[data-boot="taxi-page"] #boot-skeleton { padding: 0; max-width: none; background: #f1f4f9; }
@@ -276,7 +300,8 @@
         .lg-agree { margin-top: 12px; }
       }
 
-      /* Terms / Privacy / Support: the same loader the React screen shows (shared/components/PolicyPageLoader.jsx). */
+      /* Terms / Privacy / Support, and a refresh while Under Maintenance is on: the same loader the React screen shows
+         (shared/components/PolicyPageLoader.jsx) instead of a blank page. */
       #boot-loader { display: none; }
       html[data-boot="policy"] #boot-loader {
         position: fixed; inset: 0; z-index: 9999;
@@ -290,6 +315,35 @@
         letter-spacing: 0.1em; text-transform: uppercase; color: #6b7280;
       }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
+
+      /* ---- Under Maintenance, painted from this file ----------------------------------------------------------------
+         A refresh while the Global / Food maintenance switch is on goes straight to the maintenance screen (same look as
+         src/modules/Food/components/MaintenanceScreen.jsx, which replaces this layer once React is up). The last answer
+         from the server is cached, so the app, a loader or a white page never shows first. */
+      /* Admin, restaurant, delivery and driver screens: React replaces #root (and the skeleton in it) as soon as it
+         mounts, but these screens are lazy and need a moment more. A copy of the skeleton (#boot-keep, made by the
+         script after #boot-maint) stays on top until real content has been drawn, so there is no blank page in between. */
+      #boot-keep { display: none; }
+      html[data-boot="plain"] #boot-keep { display: block; position: fixed; inset: 0; z-index: 40; overflow: hidden; background: #fffdf9; pointer-events: none; }
+      html[data-theme="dark"][data-boot="plain"] #boot-keep { background: #0b0b0b; }
+      #boot-maint { display: none; }
+      html[data-boot="maint"] #boot-maint {
+        display: block; position: fixed; inset: 0; z-index: 2000000; overflow-y: auto; box-sizing: border-box;
+        background: #FDF6ED url(/maintenance/maintenance-pattern.jpg) repeat-y; background-size: 100% auto;
+        font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased;
+      }
+      #boot-maint .bm-wrap { box-sizing: border-box; margin: 0 auto; width: 100%; max-width: 480px; min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 40px 20px 32px; }
+      #boot-maint .bm-art { display: block; width: 100%; height: auto; margin: 0 auto; }
+      #boot-maint ul { list-style: none; margin: 24px 0 0; padding: 0 4px; }
+      #boot-maint li { display: flex; align-items: center; gap: 20px; padding: 16px 0; border-bottom: 2px dashed #F3C9A0; }
+      #boot-maint li:last-child { border-bottom: 0; }
+      #boot-maint li img { width: 84px; height: 84px; flex: none; }
+      #boot-maint h2 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.25; letter-spacing: -0.025em; color: #3A2312; }
+      #boot-maint p { margin: 4px 0 0; font-size: 16px; font-weight: 500; line-height: 1.375; color: rgba(58, 35, 18, 0.85); }
+      #boot-maint .bm-back { display: none; position: fixed; left: 16px; top: 16px; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: 9999px; background: rgba(255,255,255,0.9); box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 0 0 1px rgba(0,0,0,.05); color: #262626; }
+      html[data-maint-back="1"] #boot-maint .bm-back { display: flex; }
+      #boot-maint .bm-food, #boot-maint .bm-global { display: none; }
+      html[data-maint="food"] #boot-maint .bm-food, html[data-maint="global"] #boot-maint .bm-global { display: block; }
 
       /* ---- Real top of the Taxi / Food home, painted from this file alone ------------------------------------
          On a phone the first thing on screen after a refresh is the actual header - the person's saved location,
@@ -602,6 +656,37 @@
       </div>
     </div></div>
     <div id="boot-login" aria-hidden="true"></div>
+    <div id="boot-keep" aria-hidden="true"></div>
+    <script>
+      (function () {
+        var html = document.documentElement;
+        var sk = document.getElementById('boot-skeleton');
+        var keep = document.getElementById('boot-keep');
+        var root = document.getElementById('root');
+        if (html.getAttribute('data-boot') !== 'plain' || !sk || !keep || !root) return;
+        var clone = sk.cloneNode(true);
+        clone.id = 'boot-skeleton-keep';
+        keep.appendChild(clone);
+        var timer;
+        var obs;
+        var finish = function () {
+          if (obs) obs.disconnect();
+          clearTimeout(timer);
+          if (keep.parentNode) keep.parentNode.removeChild(keep);
+        };
+        var check = function () {
+          // a real screen has some text; an empty Suspense fallback or a bare "Loading..." does not count
+          var text = (root.innerText || '').replace(/\s+/g, ' ').trim();
+          var spinning = !!root.querySelector('.animate-spin');
+          // a page loader (spinner) has hardly any text; a real screen with a small spinner somewhere has more
+          if (text.length >= 30 && !/loading/i.test(text) && (!spinning || text.length >= 120)) finish();
+        };
+        obs = new MutationObserver(check);
+        obs.observe(root, { childList: true, subtree: true, characterData: true });
+        timer = setTimeout(finish, 7000);
+      })();
+    </script>
+    <div id="boot-maint" aria-hidden="true"><div class="bm-back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></div><div class="bm-wrap"><img class="bm-art" src="/maintenance/maintenance-art.png" alt=""><ul class="bm-food"><li><img src="/maintenance/maintenance-icon-experience.png" alt="" width="84" height="84"><div><h2>Better Experience</h2><p>We are working hard to improve your food ordering experience.</p></div></li><li><img src="/maintenance/maintenance-icon-rocket.png" alt="" width="84" height="84"><div><h2>Coming Back Soon</h2><p>We'll be back very soon with exciting new features.</p></div></li><li><img src="/maintenance/maintenance-icon-gift.png" alt="" width="84" height="84"><div><h2>Thank You!</h2><p>Thank you for your patience and continued support.</p></div></li></ul><ul class="bm-global"><li><img src="/maintenance/maintenance-icon-food-taxi.png" alt="" width="84" height="84"><div><h2>Better Experience</h2><p>We are working hard to improve your food ordering and taxi booking experience.</p></div></li><li><img src="/maintenance/maintenance-icon-rocket.png" alt="" width="84" height="84"><div><h2>Coming Back Soon</h2><p>We'll be back very soon with exciting new features for Food and Taxi.</p></div></li><li><img src="/maintenance/maintenance-icon-gift.png" alt="" width="84" height="84"><div><h2>Thank You!</h2><p>Thank you for your patience and continued support.</p></div></li></ul></div></div>
     <script>
       // drawn straight after its slot, so the very first paint already has the login screen
       (function () {

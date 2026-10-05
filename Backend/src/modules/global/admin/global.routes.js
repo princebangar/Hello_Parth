@@ -34,6 +34,8 @@ router.put('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSoci
 router.get('/customization', requireGlobalAccess({ section: 'customization', action: 'view' }), customizationController.getCustomizationSettings);
 router.patch('/customization/payment-gateways', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updatePaymentGateways);
 // Customer referral system on/off for Food + Taxi wallets.
+// Maintenance, default location and customer COD / wallet / online switches (apply to Food and Taxi).
+router.patch('/customization/app-switches', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updateAppSwitches);
 router.patch('/customization/referral', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updateReferral);
 
 // Landing page "Other Service" cards (public site content, admin-managed).

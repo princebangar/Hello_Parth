@@ -25,6 +25,7 @@ export const globalAdminAPI = {
 
   getCustomizationSettings: () => apiClient.get("/admin/global/customization", admin),
   updatePaymentGateways: (body) => apiClient.patch("/admin/global/customization/payment-gateways", body, admin),
+  updateAppSwitches: (body) => apiClient.patch("/admin/global/customization/app-switches", body, admin),
   updateReferral: (enabled) => apiClient.patch("/admin/global/customization/referral", { enabled }, admin),
 
   getOtherServices: () => apiClient.get("/admin/global/landing/other-services", admin),

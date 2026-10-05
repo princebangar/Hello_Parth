@@ -1,6 +1,7 @@
 import { Outlet, useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { useEffect, useState, createContext, useContext, useRef, useCallback, useMemo } from "react"
 import { toast } from "sonner"
+import { BrandToastIcon } from "@/shared/utils/customToasts"
 import { ProfileProvider } from "@food/context/ProfileContext"
 import { CartProvider } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
@@ -214,11 +215,7 @@ function UserLayoutContent() {
       const { title, message } = e.detail || {}
       toast.custom(() => (
         <div className="w-[calc(100vw-32px)] sm:w-[380px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-3xl pointer-events-auto flex items-center gap-4 p-3.5 border border-gray-50 animate-in fade-in slide-in-from-top-4">
-          <div className="flex-shrink-0">
-            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] flex items-center justify-center shadow-lg">
-              <img src="/hello-parth-logo.png" alt="Hello Parth Food" className="w-7 h-7 object-contain brightness-0 invert" />
-            </div>
-          </div>
+          <BrandToastIcon size="md" />
           <div className="flex-1 pr-1 min-w-0">
             <p className="text-[13px] font-bold text-gray-900 leading-tight truncate">{title || "Notification"}</p>
             {message ? <p className="text-[12px] font-medium text-gray-500 mt-0.5 line-clamp-2 leading-snug">{message}</p> : null}
@@ -477,26 +474,21 @@ function UserLayoutContent() {
   const showBottomNav = !isInitialChecking && isExactMainTabPath(location.pathname)
 
   const isUnder250 = normalizedPath === "/under-250" || normalizedPath === "/user/under-250"
-  const lastOutOfZoneRef = useRef(isOutOfZone)
+  // "Toast already shown for this out-of-zone stay". Starts false so that landing straight on the out-of-zone screen
+  // (guest tapping "Continue as Guest" with a cached out-of-service zone) shows the toast too, not only a live change.
+  const lastOutOfZoneRef = useRef(false)
 
   // Out of Zone Branded Toast Trigger
   useEffect(() => {
     // Only show toast if out of zone, loader is gone, and we are on a main page where the out-of-zone screen is shown
     if (isOutOfZone && !lastOutOfZoneRef.current && !showGlobalLoader && isMainPage) {
       const timer = setTimeout(() => {
+        lastOutOfZoneRef.current = true
         toast.custom(() => (
           <div
             className="w-[calc(100vw-32px)] sm:w-[380px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-3xl pointer-events-auto flex items-center gap-4 p-3.5 border border-gray-50 duration-300 animate-in fade-in slide-in-from-top-4"
           >
-            <div className="flex-shrink-0">
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] flex items-center justify-center p-1.5 shadow-lg">
-                <img 
-                  src="/hello-parth-logo.png" 
-                  alt="Hello Parth Food" 
-                  className="w-full h-full object-contain brightness-0 invert" 
-                />
-              </div>
-            </div>
+            <BrandToastIcon />
             <div className="flex-1 pr-2">
               <p className="text-[14px] font-bold text-gray-800 leading-tight">
                 Restaurants are unavailable here right now.
@@ -513,7 +505,8 @@ function UserLayoutContent() {
         });
       }, 300); // Shorter delay after loader is gone
 
-      lastOutOfZoneRef.current = true;
+      // Marked as shown inside the timer: if this effect re-runs within the 300ms the timer is cleared, and the
+      // toast must still get its turn on the next run.
       return () => clearTimeout(timer);
     }
     

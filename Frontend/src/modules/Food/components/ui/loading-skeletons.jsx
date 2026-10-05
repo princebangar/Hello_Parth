@@ -323,10 +323,20 @@ function RestaurantDetailSkeleton({ className }) {
   )
 }
 
-function AppShellSkeleton({ className }) {
+// Food with a last known zone of "out of service": the screen that follows is the out-of-zone screen, not the home,
+// so the generic skeleton is used instead of the home-shaped one (index.html does the same on a refresh).
+const isCachedOutOfZoneOnFood = () => {
+  try {
+    return window.location.pathname.startsWith("/food") && localStorage.getItem("userZoneStatus") === "OUT_OF_SERVICE" && !!localStorage.getItem("userLocation")
+  } catch {
+    return false
+  }
+}
+
+function AppShellSkeleton({ className, plain = false }) {
   // On a phone, the Taxi / Food home shows its real header (saved location, Taxi | Food switch, icons) right away -
   // the same header index.html paints before any script runs - and only the part below it is a skeleton.
-  const shellVertical = shouldShowBootShell()
+  const shellVertical = plain || isCachedOutOfZoneOnFood() ? null : shouldShowBootShell()
   if (shellVertical) {
     // The body is drawn like the real Taxi / Food home and is the very same markup index.html paints first
     // (".bs-body"), so nothing changes shape between the plain-HTML stage, this one and the real screen.

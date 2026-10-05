@@ -1,7 +1,8 @@
 /**
  * Maintenance lock is for LIVE users only.
- * Local `npm run dev` / localhost UI never shows the page — even when the
- * shared live backend has maintenance_mode_enabled=true in DB.
+ * Local `npm run dev` / localhost UI never shows the page when it talks to a SHARED / live backend, even when that
+ * backend has maintenance on. When the local UI talks to a local backend (VITE_API_BASE_URL on localhost) the
+ * screen is shown, so the switches can be tested.
  *
  * Backend also bypasses API lock for localhost Origin / X-HelloParth-Client: local-dev
  * so local frontend + same live API keep working.
@@ -18,17 +19,18 @@ export function shouldEnforceMaintenanceOnClient() {
       return true;
     }
 
-    // Vite dev server — never lock local work
-    if (import.meta.env.DEV) return false;
+    const isLocalHost = (host) =>
+      host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host.endsWith(".local");
 
-    const host = String(window.location.hostname || "").toLowerCase();
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "0.0.0.0" ||
-      host.endsWith(".local")
-    ) {
-      return false;
+    const pageHost = String(window.location.hostname || "").toLowerCase();
+    if (import.meta.env.DEV || isLocalHost(pageHost)) {
+      // Local UI: lock only when the API it uses is also local (own test backend), never a shared live one.
+      try {
+        const api = String(import.meta.env.VITE_API_BASE_URL || "");
+        return isLocalHost(new URL(api, window.location.origin).hostname.toLowerCase()) && api.startsWith("http");
+      } catch {
+        return false;
+      }
     }
 
     return true;

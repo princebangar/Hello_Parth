@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { assertUserPaymentEnabled } from '../../../../core/platform/appSwitches.service.js';
 import mongoose from 'mongoose';
 import { PoolingRoute } from '../../admin/models/PoolingRoute.js';
 import { PoolingVehicle } from '../../admin/models/PoolingVehicle.js';
@@ -441,6 +442,7 @@ export const createPoolingBookingOrder = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Seat ${conflictingSeatId} was already booked by another user`);
   }
 
+  await assertUserPaymentEnabled('online');
   const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const order = await razorpayRequest({

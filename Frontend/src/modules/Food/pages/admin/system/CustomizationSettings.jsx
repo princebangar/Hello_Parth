@@ -9,65 +9,55 @@ import { Switch } from "@food/components/ui/switch";
 const CUSTOMIZATION_TOGGLES = [
   {
     key: "cod_enabled",
-    label: "Global COD",
+    label: "Food Global COD",
     description:
-      "Global toggle for COD visibility (Applies to Delivery/Dining, NOT Takeaway).",
+      "Food only: master COD switch for delivery and dining orders (not takeaway). The Global admin's User Global COD overrides it.",
     defaultValue: true,
   },
   {
     key: "takeaway_cod_enabled",
-    label: "Takeaway COD",
-    description:
-      "Controls Cash on Delivery (COD) visibility for takeaway orders.",
+    label: "Food Takeaway COD",
+    description: "Food only: Cash on Delivery (COD) visibility for takeaway orders.",
     defaultValue: true,
   },
   {
     key: "delivery_cod_enabled",
-    label: "Delivery COD",
-    description:
-      "Controls Cash on Delivery (COD) visibility for delivery orders.",
+    label: "Food Delivery COD",
+    description: "Food only: Cash on Delivery (COD) visibility for delivery orders.",
     defaultValue: true,
   },
   {
     key: "dining_cod_enabled",
-    label: "Dining COD",
-    description:
-      "Controls Cash on Delivery (COD) visibility for dining orders.",
+    label: "Food Dining COD",
+    description: "Food only: Cash on Delivery (COD) visibility for dining orders.",
     defaultValue: true,
   },
   {
     key: "wallet_payment_enabled",
-    label: "Wallet Payment",
+    label: "Food Wallet Payment",
     description:
-      "Controls visibility of wallet payment method at checkout.",
+      "Food only: wallet payment at Food checkout. The Global admin's User Wallet Payment overrides it.",
     defaultValue: true,
   },
   {
     key: "online_payment_enabled",
-    label: "Online Payment",
+    label: "Food Online Payment",
     description:
-      "Controls visibility of Razorpay online payment at checkout. Razorpay must also be ON in Global > Customization Settings.",
+      "Food only: online payment at Food checkout. Razorpay and the Global admin's User Online Payment must also be ON.",
     defaultValue: true,
   },
   {
-    key: "default_location_enabled",
-    label: "Default Location Mode",
-    description:
-      "Bypasses device location permissions and sets default location to Indore for all users.",
-    defaultValue: false,
-  },
-  {
     key: "cod_blocking_feature_enabled",
-    label: "Global COD Blocked",
+    label: "Food Global COD Blocked",
     description:
-      "Global toggle to enable/disable the automatic COD blocking feature (blocks COD for users with 4 consecutive COD cancellations).",
+      "Food only: automatically blocks COD on Food orders for a user after 4 consecutive COD cancellations. Taxi is not affected.",
     defaultValue: true,
   },
   {
     key: "maintenance_mode_enabled",
-    label: "Under Maintenance",
+    label: "Food Under Maintenance",
     description:
-      "When ON, user / restaurant / delivery apps show the Under Maintenance screen. Admin panel stays available. Default is OFF.",
+      "When ON, the Food user, restaurant and delivery apps show the Under Maintenance screen. Taxi and the admin panels keep working. To stop Food and Taxi together use Global > Customization Settings.",
     defaultValue: false,
   },
 ];
@@ -183,11 +173,7 @@ export default function CustomizationSettings() {
         } catch {
           /* ignore */
         }
-        window.dispatchEvent(
-          new CustomEvent("maintenanceModeChanged", {
-            detail: { enabled: checked === true },
-          })
-        );
+        window.dispatchEvent(new CustomEvent("maintenanceModeChanged"));
       }
     } catch (_error) {
       setSettings((prev) => ({ ...prev, [key]: prevValue }));
@@ -220,7 +206,7 @@ export default function CustomizationSettings() {
             Customization Settings
           </h1>
         </div>
-        <p className="text-neutral-600 dark:text-neutral-400 mt-1">Control global customization toggles for the platform.</p>
+        <p className="text-neutral-600 dark:text-neutral-400 mt-1">Food-only toggles. App-wide switches (maintenance for all apps, default location, customer payment methods) are in Global > Customization Settings.</p>
       </div>
 
       <Card className="dark:bg-[#1a1a1a] dark:border-neutral-800">

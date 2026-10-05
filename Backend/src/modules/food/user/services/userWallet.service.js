@@ -4,6 +4,7 @@ import { FoodUserWallet, ensureSharedUserWallet } from '../models/userWallet.mod
 import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature, fetchRazorpayPayment, assertRazorpayPaymentMatches } from '../../orders/helpers/razorpay.helper.js';
 import { config } from '../../../../config/env.js';
 import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
+import { isUserPaymentEnabled } from '../../../../core/platform/appSwitches.service.js';
 
 const ensureWallet = async (userId) => {
     const wallet = await ensureSharedUserWallet(userId);
@@ -64,6 +65,9 @@ export const createWalletTopupOrder = async (userId, amountInr) => {
     }
 
     // Global admin > Customization Settings can switch Razorpay off for the whole app.
+    if (!(await isUserPaymentEnabled('online'))) {
+        throw new ValidationError('Online payment is currently disabled');
+    }
     if (isRazorpayConfigured() && !(await isPaymentGatewayActive('razorpay'))) {
         throw new ValidationError('Online payment is currently disabled');
     }

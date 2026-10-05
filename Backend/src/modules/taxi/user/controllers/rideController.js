@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { assertUserPaymentEnabled } from '../../../../core/platform/appSwitches.service.js';
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { normalizePoint } from '../../../../utils/geo.js';
@@ -561,6 +562,7 @@ export const createRazorpayRideCompletionOrder = async (req, res) => {
     throw new ApiError(409, 'Feedback already submitted for this ride');
   }
 
+  await assertUserPaymentEnabled('online');
   const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const paymentAmounts = buildCompletionAmounts(ride, tipAmount);
 
@@ -740,6 +742,8 @@ export const payRideCompletionWithWallet = async (req, res) => {
     tipAmount: req.body?.tipAmount,
   });
 
+  await assertUserPaymentEnabled('wallet');
+
   const session = await mongoose.startSession();
 
   try {
@@ -855,6 +859,7 @@ export const createRazorpayRideTipOrder = async (req, res) => {
     throw new ApiError(409, 'Feedback already submitted for this ride');
   }
 
+  await assertUserPaymentEnabled('online');
   const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const amountPaise = Math.round(tipAmount * 100);
   const compactRideId = rideId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'ride';

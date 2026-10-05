@@ -5,31 +5,53 @@ import { shouldEnforceMaintenanceOnClient } from "@food/utils/maintenanceEnv";
 const POLL_WHEN_ON_MS = 2500;
 const POLL_WHEN_OFF_MS = 8000;
 
+const OFF = { food: false, global: false };
+
+// Last answer from the server (kept by applyFlags below), so a refresh while maintenance is on goes straight to the
+// maintenance screen instead of showing the app for a second until the first request returns.
+const readCachedFlags = () => {
+  try {
+    const cached = JSON.parse(localStorage.getItem("helloparth_customization_settings") || "null") || {};
+    return { food: cached.maintenance_mode_enabled === true, global: cached.global_maintenance_enabled === true };
+  } catch {
+    return OFF;
+  }
+};
+
 /**
- * Strict maintenance flag: only true when API returns maintenance_mode_enabled === true
- * AND this client is allowed to enforce it (live only; local stays open).
+ * Strict maintenance flags, only true when the API says so AND this client is allowed to enforce it
+ * (live only; local stays open).
+ *  - `food`:   Food admin's "Food Under Maintenance" (Food apps only)
+ *  - `global`: Global admin's "Under Maintenance" (Food and Taxi, every app)
+ *  - `enabled`: either of the two
  */
 export function useMaintenanceMode({ active = true } = {}) {
-  const [enabled, setEnabled] = useState(false);
-  const [ready, setReady] = useState(false);
-  const enabledRef = useRef(false);
   const enforce = shouldEnforceMaintenanceOnClient();
+  const [flags, setFlags] = useState(() => (enforce && active ? readCachedFlags() : OFF));
+  const [ready, setReady] = useState(false);
+  const enabledRef = useRef(flags.food || flags.global);
 
-  const applyFlag = useCallback(
-    (value) => {
-      const next = enforce && value === true;
-      enabledRef.current = next;
-      setEnabled(next);
+  const applyFlags = useCallback(
+    (settings) => {
+      const real = {
+        food: settings?.maintenance_mode_enabled === true,
+        global: settings?.global_maintenance_enabled === true,
+      };
+      // UI lock only follows the real flags when this client may enforce them.
+      const next = enforce ? real : OFF;
+      enabledRef.current = next.food || next.global;
+      setFlags((prev) => (prev.food === next.food && prev.global === next.global ? prev : next));
 
       try {
         const raw = localStorage.getItem("helloparth_customization_settings");
         const parsed = raw ? JSON.parse(raw) : {};
-        // Keep the real DB flag in cache; UI lock only follows `next`.
+        // Keep the real DB flags in cache; UI lock only follows `next`.
         localStorage.setItem(
           "helloparth_customization_settings",
           JSON.stringify({
             ...parsed,
-            maintenance_mode_enabled: value === true,
+            maintenance_mode_enabled: real.food,
+            global_maintenance_enabled: real.global,
           })
         );
       } catch {
@@ -39,27 +61,26 @@ export function useMaintenanceMode({ active = true } = {}) {
     [enforce]
   );
 
-  const fetchFlag = useCallback(async () => {
+  const fetchFlags = useCallback(async () => {
     if (!enforce) {
-      applyFlag(false);
+      applyFlags(null);
       setReady(true);
       return;
     }
 
     try {
       const response = await apiClient.get("/food/public/customization-settings");
-      const settings = response?.data?.data || response?.data || {};
-      applyFlag(settings?.maintenance_mode_enabled === true);
+      applyFlags(response?.data?.data || response?.data || {});
     } catch {
-      applyFlag(false);
+      applyFlags(null);
     } finally {
       setReady(true);
     }
-  }, [applyFlag, enforce]);
+  }, [applyFlags, enforce]);
 
   useEffect(() => {
     if (!active || !enforce) {
-      setEnabled(false);
+      setFlags(OFF);
       setReady(true);
       return undefined;
     }
@@ -69,7 +90,7 @@ export function useMaintenanceMode({ active = true } = {}) {
 
     const tick = async () => {
       if (cancelled) return;
-      await fetchFlag();
+      await fetchFlags();
       if (cancelled) return;
       const delay = enabledRef.current ? POLL_WHEN_ON_MS : POLL_WHEN_OFF_MS;
       timer = setTimeout(tick, delay);
@@ -78,34 +99,27 @@ export function useMaintenanceMode({ active = true } = {}) {
     tick();
 
     const onFocus = () => {
-      fetchFlag();
+      fetchFlags();
     };
     const onVisibility = () => {
-      if (document.visibilityState === "visible") fetchFlag();
+      if (document.visibilityState === "visible") fetchFlags();
     };
 
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
-
-    const onMaintenanceEvent = (event) => {
-      if (event?.detail && typeof event.detail.enabled === "boolean") {
-        applyFlag(event.detail.enabled === true);
-      } else {
-        fetchFlag();
-      }
-    };
-    window.addEventListener("maintenanceModeChanged", onMaintenanceEvent);
+    // A 503 MAINTENANCE_MODE from the API (or an admin save) asks for a fresh read of both flags.
+    window.addEventListener("maintenanceModeChanged", fetchFlags);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("maintenanceModeChanged", onMaintenanceEvent);
+      window.removeEventListener("maintenanceModeChanged", fetchFlags);
     };
-  }, [active, fetchFlag, applyFlag, enforce]);
+  }, [active, fetchFlags, enforce]);
 
-  return { enabled, ready };
+  return { enabled: flags.food || flags.global, food: flags.food, global: flags.global, ready };
 }
 
 export default useMaintenanceMode;

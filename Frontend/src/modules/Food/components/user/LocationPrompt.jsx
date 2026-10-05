@@ -58,6 +58,9 @@ export default function LocationPrompt() {
   const navigate = useNavigate()
   const routeLocation = useRouteLocation()
   const { location, loading, permissionGranted, requestLocation } = useLocation()
+  // Default Location Mode switched OFF clears the default Indore location; having no location again re-runs the
+  // check below, so the location is fetched at once (permission granted) or the allow-location popup comes up.
+  const hasLocation = Number.isFinite(Number(location?.latitude)) && Number.isFinite(Number(location?.longitude))
   const [showPrompt, setShowPrompt] = useState(false)
   const [isRequesting, setIsRequesting] = useState(false)
   const [geoPermission, setGeoPermission] = useState("unknown")
@@ -123,7 +126,7 @@ export default function LocationPrompt() {
       cancelled = true
       document.body.style.overflow = ""
     }
-  }, [permissionGranted, routeLocation.pathname])
+  }, [permissionGranted, routeLocation.pathname, hasLocation])
 
   // Close once access is actually granted (a stored location alone isn't enough now).
   useEffect(() => {

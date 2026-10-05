@@ -440,6 +440,15 @@ export function useLocation() {
                   parsed?.longitude === TEMPORARY_DEFAULT_INDORE_LOCATION.longitude) {
                 // Clear it so the original flow triggers location prompt
                 localStorage.removeItem("userLocation")
+                // Taxi keeps its own copy of the last location; if that is the default one too, drop it as well
+                try {
+                  const taxiStored = JSON.parse(localStorage.getItem("helloparth:lastLocation") || "null")
+                  const taxiLat = Number(taxiStored?.latitude ?? taxiStored?.lat)
+                  const taxiLng = Number(taxiStored?.longitude ?? taxiStored?.lng)
+                  if (taxiLat === TEMPORARY_DEFAULT_INDORE_LOCATION.latitude && taxiLng === TEMPORARY_DEFAULT_INDORE_LOCATION.longitude) {
+                    localStorage.removeItem("helloparth:lastLocation")
+                  }
+                } catch {}
                 setLocation(null)
                 debugLog("?? Default location mode disabled. Cleared default Indore location from storage.")
               }
@@ -1830,6 +1839,26 @@ export function useLocation() {
       if (showLoading) setGlobalLocationLoading(false)
     }
   }
+
+  // Default Location Mode switched ON (also when it arrives after the first paint): replace a location taken from the
+  // device GPS earlier with Indore. An address the customer picked themselves ("saved" mode) is left alone.
+  useEffect(() => {
+    if (!isDefaultLocationMode) return
+    try {
+      const stored = JSON.parse(localStorage.getItem("userLocation") || "null")
+      const alreadyIndore =
+        stored?.latitude === TEMPORARY_DEFAULT_INDORE_LOCATION.latitude &&
+        stored?.longitude === TEMPORARY_DEFAULT_INDORE_LOCATION.longitude
+      if (alreadyIndore) return
+      if (stored && localStorage.getItem("deliveryAddressMode") === "saved") return
+      persistFoodUserLocation(TEMPORARY_DEFAULT_INDORE_LOCATION)
+      setLocation(TEMPORARY_DEFAULT_INDORE_LOCATION)
+      setLoading(false)
+      window.dispatchEvent(new CustomEvent("userLocationUpdated"))
+    } catch {
+      /* ignore */
+    }
+  }, [isDefaultLocationMode])
 
   /* ===================== INIT ===================== */
   useEffect(() => {

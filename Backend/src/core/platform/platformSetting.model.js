@@ -22,6 +22,18 @@ const platformSettingSchema = new mongoose.Schema(
     referral: {
       enabled: { type: Boolean, default: true },
     },
+    // App-wide switches (Food + Taxi). Maintenance / default location have no schema default on purpose: until the
+    // Global admin saves them once, appSwitches.service falls back to the value Food admin used to hold.
+    app: {
+      maintenance_mode_enabled: { type: Boolean },
+      default_location_enabled: { type: Boolean },
+    },
+    // Customer payment methods for every customer app. Off here beats any per-app (Food) switch.
+    user_payments: {
+      cod_enabled: { type: Boolean, default: true },
+      wallet_enabled: { type: Boolean, default: true },
+      online_enabled: { type: Boolean, default: true },
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
   },
   { timestamps: true, collection: 'platform_settings', minimize: false },

@@ -10,6 +10,7 @@ import bikeIcon from '../../../../assets/icons/bike.png';
 import autoIcon from '../../../../assets/icons/auto.png';
 import deliveryIcon from '../../../../assets/icons/Delivery.png';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import useUserPaymentSwitches from '@/shared/hooks/useUserPaymentSwitches';
 
 const TIP_OPTIONS = [0, 20, 50, 100];
 const PAYMENT_OPTIONS = [
@@ -109,6 +110,20 @@ const RideComplete = () => {
   const fare = Number(serverRide?.fare ?? state.fare ?? 0);
   const paymentMethod = state.paymentMethod || 'Cash';
   const paymentMethodLabel = PAYMENT_OPTIONS.find((option) => option.id === selectedPaymentMethod)?.label || paymentMethod;
+  // Global admin can switch customer wallet / online payment off for the whole app.
+  const paySwitches = useUserPaymentSwitches();
+  const payWithOptions = [
+    { id: 'online', label: 'Online', sub: 'UPI, card or netbanking', enabled: paySwitches.online },
+    { id: 'wallet', label: 'Wallet', sub: `Balance Rs ${Number(walletSnapshot.balance || 0).toFixed(2)}`, enabled: paySwitches.wallet },
+  ].filter((option) => option.enabled);
+  const selectedPayMethodUnavailable =
+    selectedPaymentMethod !== 'cash' && !payWithOptions.some((option) => option.id === selectedPaymentMethod);
+
+  useEffect(() => {
+    if (selectedPayMethodUnavailable && payWithOptions.length) {
+      setSelectedPaymentMethod(payWithOptions[0].id);
+    }
+  }, [selectedPayMethodUnavailable, payWithOptions.length]);
   const pickup = serverRide?.pickupAddress || state.pickup || 'Pickup';
   const drop = serverRide?.dropAddress || state.drop || 'Drop';
   const serviceType = String(state.serviceType || state.type || 'ride').toLowerCase();
@@ -346,6 +361,11 @@ const RideComplete = () => {
 
     if (tipsEnabled && Number(selectedTip || 0) > 0 && minimumTipAmount > 0 && Number(selectedTip || 0) < minimumTipAmount) {
       setError(`Minimum tip amount is Rs ${minimumTipAmount}.`);
+      return;
+    }
+
+    if (selectedPayMethodUnavailable && Number(payableNow || 0) > 0) {
+      setError('Online and wallet payments are currently unavailable. Please try again later.');
       return;
     }
 
@@ -661,10 +681,7 @@ const RideComplete = () => {
           <div className="rounded-[20px] border border-white/80 bg-white/95 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
             <p className="text-center text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Pay with</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {[
-                { id: 'online', label: 'Online', sub: 'UPI, card or netbanking' },
-                { id: 'wallet', label: 'Wallet', sub: `Balance Rs ${Number(walletSnapshot.balance || 0).toFixed(2)}` },
-              ].map((option) => (
+              {payWithOptions.map((option) => (
                 <button
                   key={option.id}
                   type="button"
@@ -680,6 +697,11 @@ const RideComplete = () => {
                 </button>
               ))}
             </div>
+            {!payWithOptions.length ? (
+              <p className="mt-2 text-center text-[11px] font-bold text-red-500">
+                Online and wallet payments are currently unavailable. Please try again later.
+              </p>
+            ) : null}
             {selectedPaymentMethod === 'wallet' && Number(payableNow || 0) > Number(walletSnapshot.balance || 0) ? (
               <p className="mt-2 text-center text-[11px] font-bold text-red-500">
                 Wallet balance is lower than Rs {Number(payableNow || 0).toFixed(2)}. Add money in Wallet or pay online.

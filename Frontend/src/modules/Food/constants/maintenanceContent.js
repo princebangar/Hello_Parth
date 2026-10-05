@@ -29,7 +29,7 @@ export const MAINTENANCE_CONTENT = {
     },
   ],
 
-  footer: "We can't wait to serve you again!",
+
 };
 
 export default MAINTENANCE_CONTENT;

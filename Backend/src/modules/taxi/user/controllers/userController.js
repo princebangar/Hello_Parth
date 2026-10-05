@@ -21,6 +21,7 @@ import {
   needsFreshReferralCode,
 } from '../../../../core/users/referralCode.util.js';
 import { isReferralEnabled } from '../../../../core/platform/referralSwitch.service.js';
+import { assertUserPaymentEnabled } from '../../../../core/platform/appSwitches.service.js';
 import {
   consumeUserSignupSession,
   requireVerifiedUserSignupSession,
@@ -1800,6 +1801,7 @@ export const getMySubscriptions = async (req, res) => {
 };
 
 export const buySubscription = async (req, res) => {
+  await assertUserPaymentEnabled('wallet');
   const result = await purchaseUserSubscription({
     userId: req.auth?.sub,
     planId: req.body?.planId,
@@ -1945,6 +1947,7 @@ export const transferUserWallet = async (req, res) => {
 };
 
 export const transferUserWalletToDriver = async (req, res) => {
+  await assertUserPaymentEnabled('wallet');
   const amount = normalizeMoneyAmount(req.body?.amount);
   const driverPhone = normalizePhone(req.body?.phone);
   validatePhone(driverPhone);
@@ -2067,6 +2070,7 @@ export const transferUserWalletToDriver = async (req, res) => {
 
 export const createRazorpayWalletTopupOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
+  await assertUserPaymentEnabled('online');
   const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
 
   const amountPaise = Math.round(amount * 100);
@@ -2195,6 +2199,7 @@ const verifyAndApplyUserRazorpayWalletTopup = async ({
 
 export const createPhonePeWalletTopupOrder = async (req, res) => {
   const amount = normalizeMoneyAmount(req.body?.amount);
+  await assertUserPaymentEnabled('online');
   const { clientId, clientSecret, clientVersion, environment } = await resolvePhonePeCredentials({ forNewPayment: true });
   const userId = String(req.auth?.sub || '');
   const compactUserId = userId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
@@ -2752,6 +2757,7 @@ export const createBusBookingOrder = async (req, res) => {
     seatAmounts[seatAmounts.length - 1] = Math.round((seatAmounts[seatAmounts.length - 1] + roundingGap) * 100) / 100;
   }
 
+  await assertUserPaymentEnabled('online');
   const { keyId, keySecret } = await resolveRazorpayCredentials({ forNewPayment: true });
   const amountPaise = Math.round(amount * 100);
   const compactUserId = String(userId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';

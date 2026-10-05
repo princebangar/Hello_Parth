@@ -1,10 +1,14 @@
 import { FoodSystemConfig } from '../models/systemConfig.model.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
+import { getAppSwitches } from '../../../../core/platform/appSwitches.service.js';
 import { invalidateMaintenanceModeCache } from '../services/maintenanceMode.service.js';
 import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
 import { isReferralEnabled } from '../../../../core/platform/referralSwitch.service.js';
 
-// Customization toggles live in FoodSystemConfig as individual keys.
+// Food-only customization toggles live in FoodSystemConfig as individual keys. They only affect Food (orders and,
+// for Food Under Maintenance, the Food apps). Default Location Mode, the customer-wide COD / wallet / online
+// switches and the all-apps Under Maintenance are Global admin switches (core/platform/appSwitches.service.js);
+// the public endpoint below folds them in.
 const CUSTOMIZATION_TOGGLES = [
     {
         key: 'cod_enabled',
@@ -37,11 +41,6 @@ const CUSTOMIZATION_TOGGLES = [
         description: 'Global toggle for online payment availability'
     },
     {
-        key: 'default_location_enabled',
-        defaultValue: false,
-        description: 'Enforce default Indore location and disable auto-prompt for new users/guests (App Store mode)'
-    },
-    {
         key: 'cod_blocking_feature_enabled',
         defaultValue: true,
         description: 'Global toggle to enable/disable the automatic COD blocking feature (blocks COD for users with 4 consecutive COD cancellations)'
@@ -49,9 +48,11 @@ const CUSTOMIZATION_TOGGLES = [
     {
         key: 'maintenance_mode_enabled',
         defaultValue: false,
-        description: 'When enabled, user / restaurant / delivery apps show Under Maintenance (admin stays available)'
+        description: 'When enabled, the Food user / restaurant / delivery apps show Under Maintenance (admin and Taxi stay available)'
     }
 ];
+
+const FOOD_COD_KEYS = new Set(['cod_enabled', 'takeaway_cod_enabled', 'delivery_cod_enabled', 'dining_cod_enabled']);
 
 function resolveToggleValue(configDoc, defaultValue) {
     if (!configDoc) return defaultValue;
@@ -75,13 +76,15 @@ export async function getCustomizationSettings(req, res) {
     res.json({ success: true, data });
 }
 
-// What the customer apps see: Food's own "Online Payment" toggle AND the Global Razorpay switch.
+// What the customer apps (Food and Taxi) see. Global admin switches win: a payment method switched off in
+// Global > Customization Settings is off here whatever the Food switch says.
 export async function getPublicCustomizationSettings(req, res) {
     const keys = getCustomizationAllowlist();
-    const [docs, razorpayActive, referralEnabled] = await Promise.all([
+    const [docs, razorpayActive, referralEnabled, appSwitches] = await Promise.all([
         FoodSystemConfig.find({ key: { $in: keys } }).lean(),
         isPaymentGatewayActive('razorpay'),
-        isReferralEnabled()
+        isReferralEnabled(),
+        getAppSwitches()
     ]);
     const map = new Map(docs.map(d => [d.key, d]));
 
@@ -89,7 +92,19 @@ export async function getPublicCustomizationSettings(req, res) {
     for (const t of CUSTOMIZATION_TOGGLES) {
         data[t.key] = resolveToggleValue(map.get(t.key) || null, t.defaultValue);
     }
-    data.online_payment_enabled = data.online_payment_enabled === true && razorpayActive;
+    for (const key of FOOD_COD_KEYS) {
+        data[key] = data[key] === true && appSwitches.user_cod_enabled;
+    }
+    data.wallet_payment_enabled = data.wallet_payment_enabled === true && appSwitches.user_wallet_enabled;
+    data.online_payment_enabled =
+        data.online_payment_enabled === true && razorpayActive && appSwitches.user_online_enabled;
+    data.default_location_enabled = appSwitches.default_location_enabled;
+    // maintenance_mode_enabled stays the Food-only switch; this one locks every app (Food + Taxi)
+    data.global_maintenance_enabled = appSwitches.maintenance_mode_enabled;
+    // Raw Global switches, for the Taxi app
+    data.user_cod_enabled = appSwitches.user_cod_enabled;
+    data.user_wallet_enabled = appSwitches.user_wallet_enabled;
+    data.user_online_enabled = appSwitches.user_online_enabled;
     // Global admin > Customization Settings > Referral System (Food + Taxi wallets)
     data.referral_enabled = referralEnabled;
 
@@ -155,7 +170,8 @@ export async function updateCustomizationSettings(req, res) {
 export async function getTakeawayCodStatus(req, res) {
     const toggleMeta = CUSTOMIZATION_TOGGLES.find(t => t.key === 'takeaway_cod_enabled');
     const config = await FoodSystemConfig.findOne({ key: 'takeaway_cod_enabled' }).lean();
-    const takeawayCodEnabled = resolveToggleValue(config, toggleMeta?.defaultValue ?? true);
+    const takeawayCodEnabled =
+        resolveToggleValue(config, toggleMeta?.defaultValue ?? true) && (await getAppSwitches()).user_cod_enabled;
     
     res.json({
         success: true,

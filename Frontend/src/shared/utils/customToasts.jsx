@@ -1,6 +1,25 @@
 import React from "react";
-import { Trash2, CheckCircle2, Bell } from "lucide-react";
+import { Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+
+const WORDMARK_SIZES = {
+  sm: "h-10 w-10 text-[11px]",
+  md: "h-12 w-12 text-[13px]",
+  lg: "h-14 w-14 text-[15px]",
+};
+
+/** "Hello / Parth" wordmark (the login screen's Pacifico lettering, one word under the other) on the brand red, as the
+ *  leading icon of branded toasts. */
+export const BrandToastIcon = ({ size = "lg" }) => (
+  <div
+    className={`${WORDMARK_SIZES[size] || WORDMARK_SIZES.lg} flex-shrink-0 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] shadow-lg flex flex-col items-center justify-center text-white`}
+    style={{ fontFamily: "'Pacifico', cursive", lineHeight: 0.95, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}
+    aria-label="Hello Parth"
+  >
+    <span>Hello</span>
+    <span>Parth</span>
+  </div>
+);
 
 const NOTIF_TOAST_ID = "app-notification-toast";
 
@@ -8,17 +27,7 @@ export const showNotificationToast = ({ title, message } = {}) => {
   toast.dismiss(NOTIF_TOAST_ID);
   toast.custom(() => (
     <div className="w-[calc(100vw-32px)] sm:w-[380px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-3xl pointer-events-auto flex items-center gap-4 p-3.5 border border-gray-50 animate-in fade-in slide-in-from-top-4">
-      <div className="flex-shrink-0">
-        <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] flex items-center justify-center shadow-lg">
-          <img
-            src="/hello-parth-logo.png"
-            alt="Hello Parth Food"
-            className="w-7 h-7 object-contain brightness-0 invert"
-            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-          />
-          <Bell className="w-5 h-5 text-white hidden" />
-        </div>
-      </div>
+      <BrandToastIcon size="md" />
       <div className="flex-1 pr-1 min-w-0">
         <p className="text-[13px] font-bold text-gray-900 leading-tight truncate">{title || "Notification"}</p>
         {message && (
@@ -37,15 +46,7 @@ export const showHelloParthBrandedToast = ({ title, message, id = "helloparth-br
   toast.custom(
     () => (
       <div className="w-[calc(100vw-32px)] sm:w-[380px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-3xl pointer-events-auto flex items-center gap-4 p-3.5 border border-gray-50 animate-in fade-in slide-in-from-top-4 z-[11000]">
-        <div className="flex-shrink-0">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] flex items-center justify-center p-1.5 shadow-lg">
-            <img
-              src="/hello-parth-logo.png"
-              alt="Hello Parth Food"
-              className="w-full h-full object-contain brightness-0 invert"
-            />
-          </div>
-        </div>
+        <BrandToastIcon />
         <div className="flex-1 pr-2 min-w-0">
           <p className="text-[14px] font-bold text-gray-800 leading-tight">{title}</p>
           {message ? (

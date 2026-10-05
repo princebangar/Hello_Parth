@@ -22,6 +22,7 @@ import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
 import { FoodReferralLog } from '../../food/admin/models/referralLog.model.js';
 import { isReferralEnabled } from '../../../core/platform/referralSwitch.service.js';
+import { getAppSwitches } from '../../../core/platform/appSwitches.service.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -808,10 +809,14 @@ export const resolveSetPriceForRide = async ({ zoneId = null, serviceLocationId 
 export const getAllowedRidePaymentMethodsForPricing = async ({ zoneId = null, serviceLocationId = null, transportType = 'taxi', vehicleTypeId = null }) => {
   const pricingRule = await resolveSetPriceForRide({ zoneId, serviceLocationId, transportType, vehicleTypeId });
 
-  return {
-    pricingRule,
-    allowedPaymentMethods: normalizeAllowedRidePaymentMethods(pricingRule?.payment_type),
-  };
+  // Global admin > Customization Settings (User Global COD / Wallet / Online) overrides the pricing rule.
+  // 'online' stands for both gateway and wallet payment, so it stays while either one is on.
+  const switches = await getAppSwitches();
+  const allowedPaymentMethods = normalizeAllowedRidePaymentMethods(pricingRule?.payment_type).filter((method) =>
+    method === 'cash' ? switches.user_cod_enabled : switches.user_online_enabled || switches.user_wallet_enabled,
+  );
+
+  return { pricingRule, allowedPaymentMethods };
 };
 
 const normalizeRideTransportType = (value = 'taxi') => {
@@ -1008,6 +1013,9 @@ export const createRideRecord = async ({
     transportType: normalizedTransportType,
     vehicleTypeId: primaryVehicleTypeId,
   });
+  if (!allowedPaymentMethods.length) {
+    throw new ApiError(409, 'Payments are currently unavailable. Please try again later.');
+  }
   const normalizedPaymentMethod = normalizeRidePaymentMethod(paymentMethod);
   const resolvedRequestedPaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
     ? normalizedPaymentMethod

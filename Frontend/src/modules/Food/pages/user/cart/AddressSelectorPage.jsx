@@ -13,6 +13,7 @@ import { Textarea } from "@food/components/ui/textarea"
 import { useLocation as useGeoLocation } from "@food/hooks/useLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
+import { BrandToastIcon } from "@/shared/utils/customToasts"
 import { locationAPI, userAPI } from "@food/api"
 import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
@@ -87,13 +88,7 @@ const showAddressRemovedBrandedToast = (uiTheme) => {
   toast.custom(
     () => (
       <div className="w-[calc(100vw-28px)] sm:w-[340px] flex items-center gap-2.5 py-2 px-3 rounded-2xl bg-white/72 dark:bg-zinc-900/72 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.14)] ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-300">
-        <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${uiTheme.toastGradient} flex items-center justify-center p-0.5 shadow-md flex-shrink-0`}>
-          <img
-            src="/hello-parth-logo.png"
-            alt="Hello Parth Food"
-            className="w-full h-full object-contain brightness-0 invert scale-110"
-          />
-        </div>
+        <BrandToastIcon size="sm" />
         <p className="text-[13px] font-semibold text-gray-900/90 dark:text-white leading-none pr-1">
           Address Removed Successfully
         </p>

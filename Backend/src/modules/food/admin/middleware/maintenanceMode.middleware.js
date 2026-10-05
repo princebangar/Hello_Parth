@@ -1,6 +1,4 @@
-import {
-  isMaintenanceModeEnabled,
-} from '../services/maintenanceMode.service.js';
+import { getMaintenanceState } from '../services/maintenanceMode.service.js';
 import { verifyAccessToken } from '../../../../core/auth/token.util.js';
 
 const ADMIN_ROLES = new Set(['ADMIN', 'SUB_ADMIN']);
@@ -77,8 +75,12 @@ function isAdminBearer(req) {
   }
 }
 
+const FOOD_PATH_RE = /^\/v1\/food(\/|$)/;
+
 /**
- * Blocks user / restaurant / delivery APIs while maintenance is on (live clients).
+ * Blocks app APIs while maintenance is on (live clients).
+ * - Global maintenance: every app API, Food and Taxi
+ * - Food maintenance: Food user / restaurant / delivery APIs only (Taxi keeps running)
  * - Admin always allowed
  * - Localhost / local-dev clients allowed (same live backend, local frontend)
  */
@@ -90,8 +92,8 @@ export async function maintenanceModeMiddleware(req, res, next) {
       return next();
     }
 
-    const enabled = await isMaintenanceModeEnabled();
-    if (enabled !== true) {
+    const { global, food } = await getMaintenanceState();
+    if (!global && !(food && FOOD_PATH_RE.test(path))) {
       return next();
     }
 

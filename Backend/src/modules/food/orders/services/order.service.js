@@ -38,6 +38,7 @@ import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
 import { detectZoneIdForPoint } from '../../utils/zoneGeo.js';
 import { isPaymentGatewayActive } from '../../../../core/platform/paymentGateways.service.js';
+import { isUserPaymentEnabled } from '../../../../core/platform/appSwitches.service.js';
 import {
   enqueueOrderEvent,
   assertRestaurantDeliversToZone,
@@ -128,7 +129,7 @@ export async function initiateOnlinePayment(userId, dto) {
     throw new ValidationError("Online payment is currently disabled");
   }
   // Global admin > Customization Settings can switch Razorpay off for the whole app.
-  if (!(await isPaymentGatewayActive("razorpay"))) {
+  if (!(await isPaymentGatewayActive("razorpay")) || !(await isUserPaymentEnabled("online"))) {
     throw new ValidationError("Online payment is currently disabled");
   }
 
@@ -259,6 +260,14 @@ export async function createOrder(userId, dto) {
   const isWallet = paymentMethod === "wallet";
 
   // Global Customization Toggles Enforcement
+  // Global admin > Customization Settings switches (User COD / Wallet / Online) beat the Food switches below.
+  if (isCash && !(await isUserPaymentEnabled("cod"))) {
+    throw new ValidationError("Cash on Delivery is currently disabled");
+  }
+  if (isWallet && !(await isUserPaymentEnabled("wallet"))) {
+    throw new ValidationError("Wallet payment is currently disabled");
+  }
+
   if (isCash) {
     // 1. General COD Toggle (Master switch for non-takeaway)
     if (orderType !== "takeaway") {
@@ -319,7 +328,7 @@ export async function createOrder(userId, dto) {
 
   if (paymentMethod === "razorpay") {
     const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-    if (onlineConfig && onlineConfig.value === false) {
+    if ((onlineConfig && onlineConfig.value === false) || !(await isUserPaymentEnabled("online"))) {
       throw new ValidationError("Online payment is currently disabled");
     }
 
