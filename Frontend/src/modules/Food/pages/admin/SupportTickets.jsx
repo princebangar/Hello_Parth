@@ -190,7 +190,11 @@ export default function SupportTickets() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <button className="px-3 py-1 rounded bg-blue-600 text-white text-sm" onClick={() => update(t._id, { adminResponse: editing[t._id] ?? t.adminResponse ?? "" })}>
+                      <button
+                        className="px-3 py-1 rounded bg-blue-600 text-white text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                        disabled={(editing[t._id] ?? t.adminResponse ?? "") === (t.adminResponse ?? "")}
+                        onClick={() => update(t._id, { adminResponse: editing[t._id] ?? t.adminResponse ?? "" })}
+                      >
                         Save
                       </button>
                     </td>

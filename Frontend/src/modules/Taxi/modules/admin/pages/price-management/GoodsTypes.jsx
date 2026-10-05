@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import { adminService } from '../../services/adminService';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-300 focus:ring-2 focus:ring-orange-100';
 const labelClass = 'mb-2 block text-[12px] font-bold text-slate-700';
@@ -30,6 +31,12 @@ const defaultFormData = {
 };
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
+
+// A picked File does not serialise, so describe it by name/size/date for change detection.
+const toTrackedForm = (form) => ({
+  ...form,
+  iconFile: form.iconFile ? [form.iconFile.name, form.iconFile.size, form.iconFile.lastModified] : null,
+});
 
 const normalizeGoodsTypeFor = (value) => {
   if (Array.isArray(value)) {
@@ -101,6 +108,7 @@ const GoodsTypes = ({ mode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState(defaultFormData);
+  const { isDirty, resetBaseline } = useDirty(toTrackedForm(formData), !loading);
 
   useEffect(() => {
     let mounted = true;
@@ -144,13 +152,15 @@ const GoodsTypes = ({ mode }) => {
         if (mode === 'edit' && id) {
           const existing = normalizedGoods.find((item) => String(item.id) === String(id));
           if (existing) {
-            setFormData({
+            const loadedForm = {
               name: existing.name,
               goods_type_for: existing.goods_type_for,
               active: existing.active,
               icon: existing.icon,
               iconFile: null,
-            });
+            };
+            setFormData(loadedForm);
+            resetBaseline(toTrackedForm(loadedForm));
           }
         } else if (mode === 'create') {
           setFormData((current) => ({
@@ -550,8 +560,8 @@ const GoodsTypes = ({ mode }) => {
           <div className="flex flex-col gap-3 lg:items-end">
             <button
               type="submit"
-              disabled={saving || loading}
-              className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60"
+              disabled={saving || loading || (mode === 'edit' && !isDirty)}
+              className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               {saving ? 'Saving...' : id ? 'Update' : 'Create'}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronRight, 
   ArrowLeft, 
@@ -17,6 +17,7 @@ import {
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const serviceCategoryOptions = [
   { value: 'taxi', label: 'Taxi' },
@@ -111,6 +112,9 @@ const EditDriver = () => {
   });
 
   const [error, setError] = useState('');
+  // Save stays disabled until the admin changes something (auto-normalisation after load is not a change).
+  const { isDirty, resetBaseline } = useDirty(formData, !isFetching);
+  const userEditedRef = useRef(false);
 
   const providedToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
   const storedToken = localStorage.getItem('adminToken');
@@ -217,6 +221,10 @@ const EditDriver = () => {
       const normalized = normalizeTransportTypeForSelect(prev.transportType, transportTypes);
       return normalized === prev.transportType ? prev : { ...prev, transportType: normalized };
     });
+    if (!isFetching && !userEditedRef.current) {
+      const normalized = normalizeTransportTypeForSelect(formData.transportType, transportTypes);
+      if (normalized !== formData.transportType) resetBaseline({ ...formData, transportType: normalized });
+    }
   }, [transportTypes]);
 
   useEffect(() => {
@@ -257,12 +265,16 @@ const EditDriver = () => {
 
     if (matchedVehicleType?._id) {
       setFormData((prev) => ({ ...prev, vehicleType: String(matchedVehicleType._id) }));
+      if (!isFetching && !userEditedRef.current) {
+        resetBaseline({ ...formData, vehicleType: String(matchedVehicleType._id) });
+      }
     }
   }, [vehicleTypes, formData.vehicleType]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+    userEditedRef.current = true;
+
     if (name === 'area') {
       const selectedLoc = locations.find(l => l._id === value);
       if (selectedLoc) {
@@ -292,6 +304,7 @@ const EditDriver = () => {
   };
 
   const toggleServiceCategory = (value) => {
+    userEditedRef.current = true;
     setFormData((prev) => {
       const exists = prev.serviceCategories.includes(value);
       const nextServiceCategories = exists
@@ -739,8 +752,8 @@ const EditDriver = () => {
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
             <button 
               type="submit"
-              disabled={isLoading || success}
-              className="w-full py-3 bg-yellow-400 text-black rounded-lg text-sm font-bold shadow-sm hover:bg-yellow-500 active:bg-yellow-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+              disabled={isLoading || success || !isDirty}
+              className="w-full py-3 bg-yellow-400 text-black rounded-lg text-sm font-bold shadow-sm hover:bg-yellow-500 active:bg-yellow-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <Loader2 size={16} className="animate-spin" />

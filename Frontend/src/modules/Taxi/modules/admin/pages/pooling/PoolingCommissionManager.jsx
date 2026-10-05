@@ -115,13 +115,13 @@ const PoolingCommissionManager = () => {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row w-full lg:w-auto">
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-80">
               <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
-                className={`${inputClass} pl-11`}
+                className={`${inputClass} !pl-11`}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search vehicle, model, number, or type"
+                placeholder="Search vehicle, model or number"
               />
             </div>
             <button
@@ -182,6 +182,10 @@ const PoolingCommissionManager = () => {
               {filteredVehicles.map((vehicle) => {
                 const draft = drafts[vehicle._id] || {};
                 const isSaving = savingId === vehicle._id;
+                const isDirty =
+                  Number(draft.adminCommissionPercentage ?? 0) !== Number(vehicle.adminCommissionPercentage ?? 0) ||
+                  Number(draft.ownerCommissionPercentage ?? 0) !== Number(vehicle.ownerCommissionPercentage ?? 0) ||
+                  Number(draft.serviceTaxPercentage ?? 0) !== Number(vehicle.serviceTaxPercentage ?? 0);
 
                 return (
                   <div
@@ -221,7 +225,7 @@ const PoolingCommissionManager = () => {
                         <div className="relative">
                           <Percent size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                           <input
-                            className={`${inputClass} pl-8`}
+                            className={`${inputClass} !pl-8`}
                             type="number"
                             min="0"
                             max="100"
@@ -237,7 +241,7 @@ const PoolingCommissionManager = () => {
                         <div className="relative">
                           <Percent size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                           <input
-                            className={`${inputClass} pl-8`}
+                            className={`${inputClass} !pl-8`}
                             type="number"
                             min="0"
                             max="100"
@@ -253,7 +257,7 @@ const PoolingCommissionManager = () => {
                         <div className="relative">
                           <Receipt size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                           <input
-                            className={`${inputClass} pl-8`}
+                            className={`${inputClass} !pl-8`}
                             type="number"
                             min="0"
                             max="100"
@@ -268,7 +272,7 @@ const PoolingCommissionManager = () => {
                         <button
                           type="button"
                           onClick={() => handleSave(vehicle)}
-                          disabled={isSaving || Number(draft.adminCommissionPercentage) > 100 || Number(draft.adminCommissionPercentage) < 0 || Number(draft.ownerCommissionPercentage) > 100 || Number(draft.ownerCommissionPercentage) < 0 || Number(draft.serviceTaxPercentage) > 100 || Number(draft.serviceTaxPercentage) < 0}
+                          disabled={isSaving || !isDirty || Number(draft.adminCommissionPercentage) > 100 || Number(draft.adminCommissionPercentage) < 0 || Number(draft.ownerCommissionPercentage) > 100 || Number(draft.ownerCommissionPercentage) < 0 || Number(draft.serviceTaxPercentage) > 100 || Number(draft.serviceTaxPercentage) < 0}
                           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-3 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
                         >
                           {isSaving ? <RefreshCcw size={16} className="animate-spin" /> : <Save size={16} />}

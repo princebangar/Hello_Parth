@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { Phone, Save, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import useDirty from "../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -17,6 +18,7 @@ export default function DeliveryEmergencyHelp() {
     insurance: "",
   })
   const [formErrors, setFormErrors] = useState({})
+  const { isDirty, resetBaseline } = useDirty(formData, !loading)
 
   const fieldLimits = {
     medicalEmergency: 3,
@@ -37,12 +39,14 @@ export default function DeliveryEmergencyHelp() {
       
       if (response?.data?.success && response?.data?.data) {
         const data = response.data.data
-        setFormData({
+        const nextFormData = {
           medicalEmergency: data.medicalEmergency || "",
           accidentHelpline: data.accidentHelpline || "",
           contactPolice: data.contactPolice || "",
           insurance: data.insurance || "",
-        })
+        }
+        setFormData(nextFormData)
+        resetBaseline(nextFormData)
       }
     } catch (error) {
       debugError("Error fetching emergency help:", error)
@@ -239,7 +243,7 @@ export default function DeliveryEmergencyHelp() {
             <div className="pt-4 border-t border-slate-200">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || !isDirty}
                 className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {saving ? (

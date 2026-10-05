@@ -3,6 +3,7 @@ import { ArrowLeft, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-re
 import { AnimatePresence, motion } from 'framer-motion';
 import { adminService } from '../../services/adminService';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const MotionDiv = motion.div;
 
@@ -37,6 +38,7 @@ const OwnerBookings = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState(defaultFormData);
+  const { isDirty, resetBaseline } = useDirty(formData);
 
   const reloadBookings = () => setReloadKey((key) => key + 1);
 
@@ -129,7 +131,7 @@ const OwnerBookings = () => {
 
   const handleEdit = (booking) => {
     setEditingId(booking._id || booking.id);
-    setFormData({
+    const nextFormData = {
       owner_id: booking.owner_id?._id || '',
       booking_reference: booking.booking_reference || '',
       customer_name: booking.customer_name || '',
@@ -143,7 +145,9 @@ const OwnerBookings = () => {
       payment_status: booking.payment_status || 'pending',
       booking_status: booking.booking_status || 'pending',
       notes: booking.notes || '',
-    });
+    };
+    setFormData(nextFormData);
+    resetBaseline(nextFormData);
     setView('form');
   };
 
@@ -420,7 +424,7 @@ const OwnerBookings = () => {
                   <textarea rows="4" value={formData.notes} onChange={(event) => setFormData((prev) => ({ ...prev, notes: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-300" />
                 </div>
                 <div className="md:col-span-2 flex justify-end">
-                  <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-70">
+                  <button type="submit" disabled={saving || (Boolean(editingId) && !isDirty)} className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-70">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                     Save
                   </button>

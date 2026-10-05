@@ -9,6 +9,7 @@ import { Button } from "@food/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@food/components/ui/dialog"
 import { Checkbox } from "@food/components/ui/checkbox"
 import { prepareUploadFile, prepareUploadFiles } from "@/shared/utils/imageCompressor"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -116,6 +117,10 @@ export default function LandingPageManagement() {
   const [showRestaurantModal, setShowRestaurantModal] = useState(false)
   const [selectedBannerId, setSelectedBannerId] = useState(null)
   const [selectedRestaurantIds, setSelectedRestaurantIds] = useState([])
+  const { isDirty: linkedRestaurantsDirty, resetBaseline: resetLinkedRestaurantsBaseline } = useDirty(
+    [...selectedRestaurantIds].map(String).sort(),
+    true
+  )
   const [restaurantSearchQuery, setRestaurantSearchQuery] = useState("")
   const [linkingRestaurants, setLinkingRestaurants] = useState(false)
 
@@ -1528,7 +1533,9 @@ export default function LandingPageManagement() {
                             <button
                               onClick={() => {
                                 setSelectedBannerId(banner._id)
-                                setSelectedRestaurantIds(banner.linkedRestaurants?.map(r => r._id || r) || [])
+                                const linkedIds = banner.linkedRestaurants?.map(r => r._id || r) || []
+                                setSelectedRestaurantIds(linkedIds)
+                                resetLinkedRestaurantsBaseline([...linkedIds].map(String).sort())
                                 if (allRestaurants.length === 0) {
                                   fetchAllRestaurants()
                                 }
@@ -2349,7 +2356,7 @@ export default function LandingPageManagement() {
                   </Button>
                   <Button
                     onClick={handleLinkRestaurants}
-                    disabled={linkingRestaurants}
+                    disabled={linkingRestaurants || !linkedRestaurantsDirty}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 min-w-[140px]"
                   >
                     {linkingRestaurants ? (

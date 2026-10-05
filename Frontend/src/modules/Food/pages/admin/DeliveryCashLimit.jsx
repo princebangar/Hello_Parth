@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { IndianRupee, Loader2, Wallet } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import useDirty from "../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -14,6 +15,8 @@ export default function DeliveryCashLimit() {
   const [deliveryCashLimit, setDeliveryCashLimit] = useState("")
   const [deliveryWithdrawalLimit, setDeliveryWithdrawalLimit] = useState("")
   const isMountedRef = useRef(true)
+  const { isDirty: cashDirty, resetBaseline: resetCashBaseline } = useDirty(deliveryCashLimit, !loading)
+  const { isDirty: withdrawalDirty, resetBaseline: resetWithdrawalBaseline } = useDirty(deliveryWithdrawalLimit, !loading)
 
   const fetchLimit = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -66,6 +69,8 @@ export default function DeliveryCashLimit() {
         response?.data?.deliveryCashLimit ??
         value
       setDeliveryCashLimit(String(saved))
+      resetCashBaseline(String(saved))
+      resetWithdrawalBaseline(String(withdrawalValue))
       toast.success("Delivery cash limit updated successfully")
       await fetchLimit({ silent: true })
     } catch (error) {
@@ -100,6 +105,8 @@ export default function DeliveryCashLimit() {
         response?.data?.deliveryWithdrawalLimit ??
         value
       setDeliveryWithdrawalLimit(String(saved))
+      resetWithdrawalBaseline(String(saved))
+      resetCashBaseline(String(cashValue))
       toast.success("Withdrawal limit updated successfully")
       await fetchLimit({ silent: true })
     } catch (error) {
@@ -166,7 +173,7 @@ export default function DeliveryCashLimit() {
                   </div>
                   <button
                     onClick={saveLimit}
-                    disabled={loading || saving}
+                    disabled={loading || saving || !cashDirty}
                     className="px-4 py-2.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -210,7 +217,7 @@ export default function DeliveryCashLimit() {
                   </div>
                   <button
                     onClick={saveWithdrawalLimit}
-                    disabled={loading || savingWithdrawal}
+                    disabled={loading || savingWithdrawal || !withdrawalDirty}
                     className="px-4 py-2.5 text-sm font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {savingWithdrawal && <Loader2 className="w-4 h-4 animate-spin" />}

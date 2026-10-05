@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const InputField = ({ label, name, value, onChange, placeholder, type = "text" }) => (
   <div className="space-y-1.5 w-full">
@@ -28,6 +29,7 @@ const TransportRideSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({});
+  const { isDirty, resetBaseline } = useDirty(settings, !loading);
 
   const fetchData = async () => {
     try {
@@ -50,6 +52,7 @@ const TransportRideSettings = () => {
     try {
       setSaving(true);
       await api.patch('/admin/general-settings/transport-ride', { settings });
+      resetBaseline(settings);
       toast.success('Transport settings updated successfully!');
     } catch (err) {
       console.error('Update error:', err);
@@ -149,8 +152,8 @@ const TransportRideSettings = () => {
              <div className="mt-10 flex justify-end pt-6 border-t border-gray-100">
                 <button 
                   onClick={handleUpdate}
-                  disabled={saving}
-                  className="bg-yellow-400 text-black px-8 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
+                  disabled={saving || !isDirty}
+                  className="bg-yellow-400 text-black px-8 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                   {saving ? 'Saving...' : 'Update Settings'}

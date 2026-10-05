@@ -5,6 +5,7 @@ import { adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import { networkErrorMessage } from "@/shared/utils/networkError"
+import useDirty from "../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -32,6 +33,7 @@ export default function DeliveryBoyCommission() {
     basePayout: "",
   })
   const [formErrors, setFormErrors] = useState({})
+  const { isDirty, resetBaseline } = useDirty(formData, true)
   const [visibleColumns, setVisibleColumns] = useState({
     si: true,
     name: true,
@@ -200,7 +202,9 @@ export default function DeliveryBoyCommission() {
       return
     }
     setSelectedCommission(null)
-    setFormData({ name: "", minDistance: "0", maxDistance: "", maxDistanceUnlimited: false, commissionPerKm: "", basePayout: "" })
+    const blank = { name: "", minDistance: "0", maxDistance: "", maxDistanceUnlimited: false, commissionPerKm: "", basePayout: "" }
+    setFormData(blank)
+    resetBaseline(blank)
     setFormErrors({})
     setIsAddEditOpen(true)
   }
@@ -208,14 +212,16 @@ export default function DeliveryBoyCommission() {
   const handleEdit = (commission) => {
     setSelectedCommission(commission)
     const isUnlimited = commission.maxDistance === null || commission.maxDistance === undefined
-    setFormData({
+    const editData = {
       name: commission.name,
       minDistance: commission.minDistance?.toString?.() || "",
       maxDistance: isUnlimited ? "" : String(commission.maxDistance),
       maxDistanceUnlimited: isUnlimited,
       commissionPerKm: commission.commissionPerKm.toString(),
       basePayout: commission.basePayout.toString(),
-    })
+    }
+    setFormData(editData)
+    resetBaseline(editData)
     setFormErrors({})
     setIsAddEditOpen(true)
   }
@@ -794,7 +800,7 @@ export default function DeliveryBoyCommission() {
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || (!!selectedCommission && !isDirty)}
               className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}

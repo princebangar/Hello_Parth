@@ -3,18 +3,21 @@ import { Save, Loader2, Gift } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 const debugError = (...args) => {}
 
 export default function ReferralSettings() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [settings, setSettings] = useState({
     referralRewardUser: "",
     referralRewardDelivery: "",
     referralLimitUser: "",
     referralLimitDelivery: "",
   })
+  const { isDirty, resetBaseline } = useDirty(settings, loaded)
 
   const fetchSettings = async () => {
     try {
@@ -41,6 +44,7 @@ export default function ReferralSettings() {
       toast.error("Failed to load referral settings")
     } finally {
       setLoading(false)
+      setLoaded(true)
     }
   }
 
@@ -63,12 +67,16 @@ export default function ReferralSettings() {
         toast.success("Referral settings saved successfully")
         const saved = res?.data?.data?.referralSettings
         if (saved) {
-          setSettings({
+          const savedSettings = {
             referralRewardUser: saved.referralRewardUser ?? "",
             referralRewardDelivery: saved.referralRewardDelivery ?? "",
             referralLimitUser: saved.referralLimitUser ?? "",
             referralLimitDelivery: saved.referralLimitDelivery ?? "",
-          })
+          }
+          setSettings(savedSettings)
+          resetBaseline(savedSettings)
+        } else {
+          resetBaseline()
         }
       } else {
         toast.error(res?.data?.message || "Failed to save referral settings")
@@ -113,7 +121,7 @@ export default function ReferralSettings() {
             </div>
             <Button
               onClick={handleSave}
-              disabled={saving || loading}
+              disabled={saving || loading || !isDirty}
               className="bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-2"
             >
               {saving ? (

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const TipSettings = () => {
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,9 @@ const TipSettings = () => {
   const [presets, setPresets] = useState([10, 20, 30, 50, 100]);
   const [allowCustom, setAllowCustom] = useState(true);
   const [newPreset, setNewPreset] = useState('');
+  // Only the fields that are actually saved to the backend are tracked (presets / allowCustom are UI-only).
+  const savedFields = { enable_tips: settings.enable_tips, min_tip_amount: settings.min_tip_amount };
+  const { isDirty, resetBaseline } = useDirty(savedFields, !loading);
 
   const fetchData = async () => {
     try {
@@ -52,6 +56,7 @@ const TipSettings = () => {
           min_tip_amount: settings.min_tip_amount
         }
       });
+      resetBaseline(savedFields);
       toast.success('Settings updated successfully.', {
         style: { background: '#151515', color: '#fff' }
       });
@@ -225,8 +230,8 @@ const TipSettings = () => {
                  <div className="sticky bottom-0 bg-gray-50 border-t border-gray-100 p-6 flex justify-end z-10">
                     <button 
                       onClick={handleUpdate}
-                      disabled={saving}
-                      className="bg-[#F4B400] text-[#151515] px-8 py-3 rounded-xl text-sm font-bold shadow-md flex items-center gap-2 hover:bg-[#E0A800] hover:shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                      disabled={saving || !isDirty}
+                      className="bg-[#F4B400] text-[#151515] px-8 py-3 rounded-xl text-sm font-bold shadow-md flex items-center gap-2 hover:bg-[#E0A800] hover:shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                       {saving ? 'Saving...' : 'Save Settings'}

@@ -4,6 +4,7 @@ import api from "@food/api"
 import { API_ENDPOINTS } from "@food/api/config"
 import { Textarea } from "@food/components/ui/textarea"
 import { unwrapLegalPage, plainTextToLegalHtml } from "@food/utils/legalContentFormat"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -17,6 +18,8 @@ export default function ShippingPolicy() {
     title: 'Shipping Policy',
     content: ''
   })
+
+  const { isDirty, resetBaseline } = useDirty(shippingData, !loading)
 
   useEffect(() => {
     fetchShippingData()
@@ -51,7 +54,9 @@ export default function ShippingPolicy() {
       )
       if (response.data.success) {
         toast.success('Shipping policy updated successfully')
-        setShippingData(unwrapLegalPage(response.data, { title: 'Shipping Policy' }))
+        const savedData = unwrapLegalPage(response.data, { title: 'Shipping Policy' })
+        setShippingData(savedData)
+        resetBaseline(savedData)
       }
     } catch (error) {
       debugError('Error saving shipping policy:', error)
@@ -141,7 +146,7 @@ export default function ShippingPolicy() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || !isDirty}
             className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : 'Save Changes'}

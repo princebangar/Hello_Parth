@@ -991,7 +991,7 @@ const StepVehicle = () => {
     return (
         <div 
             className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-clip"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" }}
         >
             <main className="mx-auto max-w-sm space-y-6">
                 <header className="contents space-y-6 [&>:last-child]:mb-6">
@@ -999,11 +999,11 @@ const StepVehicle = () => {
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={handleBackNavigation}
-                            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-900 shadow-sm transition-all"
+                            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition-transform active:scale-95"
                         >
                             <ArrowLeft size={18} strokeWidth={2.5} />
                         </motion.button>
-                        <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5">
+                        <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 border border-slate-900/5">
                             Step 3 of 4
                         </div>
                     </div>
@@ -1013,12 +1013,12 @@ const StepVehicle = () => {
                              <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
                                 <Car size={22} strokeWidth={2.5} />
                             </div>
-                            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                                 Vehicle Details
                             </span>
                         </div>
-                        <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
-                            {isOwner ? 'Fleet' : 'Vehicle'} <span className="text-slate-400">Setup</span>
+                        <h1 className="text-[48px] font-bold leading-[1] tracking-[-0.04em] text-slate-900">
+                            {isOwner ? 'Fleet' : 'Vehicle'} <span className="text-slate-500">Setup</span>
                         </h1>
                         <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
                             {isOwner ? 'Setup your business profile to start managing your fleet.' : 'Tell us about the vehicle you\'ll be using for your services.'}
@@ -1032,17 +1032,17 @@ const StepVehicle = () => {
                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
                             fieldErrors.locationId
                                 ? 'border-rose-200 bg-rose-50/30 focus-within:border-rose-300'
-                                : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                         }`}>
                             <div className="flex items-center gap-4">
                                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm transition-all ${
-                                    fieldErrors.locationId ? 'bg-rose-100 text-rose-400' : 'bg-white text-slate-400 group-focus-within:bg-slate-900 group-focus-within:text-white'
+                                    fieldErrors.locationId ? 'bg-rose-100 text-rose-400' : 'bg-white text-slate-500 group-focus-within:bg-slate-900 group-focus-within:text-white'
                                 }`}>
                                     <MapPin size={20} strokeWidth={2.5} />
                                 </div>
                                 <div className="min-w-0 flex-1 space-y-0.5 overflow-hidden">
-                                    <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 ${
-                                        fieldErrors.locationId ? 'text-rose-400' : 'text-slate-400'
+                                    <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 ${
+                                        fieldErrors.locationId ? 'text-rose-400' : 'text-slate-500'
                                     }`}>{locationField.name}</label>
                                     <select 
                                         value={formData.locationId}
@@ -1072,7 +1072,7 @@ const StepVehicle = () => {
                                             }));
                                         }}
                                         disabled={locationsLoading || locations.length === 0}
-                                        className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 appearance-none cursor-pointer disabled:opacity-50"
+                                        className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 appearance-none cursor-pointer disabled:opacity-50"
                                     >
                                         <option value="">{locationsLoading ? 'Loading...' : 'Select City'}</option>
                                         {locations.map(loc => (
@@ -1093,16 +1093,16 @@ const StepVehicle = () => {
                             <div className="space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-300">
                                 {ownerHasVisibleFields && shouldShowField('companyName', true) ? (
                                     <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                        fieldErrors.companyName ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                        fieldErrors.companyName ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                     }`}>
-                                        <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
-                                            fieldErrors.companyName ? 'text-rose-400' : 'text-slate-400'
+                                        <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
+                                            fieldErrors.companyName ? 'text-rose-400' : 'text-slate-500'
                                         }`}>{companyNameField.name}</label>
                                         <input 
                                             value={formData.companyName}
                                             onChange={(e) => { clearFieldError('companyName'); setFormData(p => ({ ...p, companyName: e.target.value })); }}
                                             placeholder={companyNameField.placeholder || 'Legal Company Name'}
-                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                            className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                         />
                                         {fieldErrors.companyName && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.companyName}</p>}
                                     </div>
@@ -1110,16 +1110,16 @@ const StepVehicle = () => {
 
                                 {shouldShowField('companyAddress', true) ? (
                                     <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                        fieldErrors.companyAddress ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                        fieldErrors.companyAddress ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                     }`}>
-                                        <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
-                                            fieldErrors.companyAddress ? 'text-rose-400' : 'text-slate-400'
+                                        <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
+                                            fieldErrors.companyAddress ? 'text-rose-400' : 'text-slate-500'
                                         }`}>{companyAddressField.name}</label>
                                         <input 
                                             value={formData.companyAddress}
                                             onChange={(e) => { clearFieldError('companyAddress'); setFormData(p => ({ ...p, companyAddress: e.target.value })); }}
                                             placeholder={companyAddressField.placeholder || 'Business Address'}
-                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                            className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                         />
                                         {fieldErrors.companyAddress && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.companyAddress}</p>}
                                     </div>
@@ -1128,26 +1128,26 @@ const StepVehicle = () => {
                                 <div className="grid grid-cols-2 gap-3">
                                     {shouldShowField('city', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                            fieldErrors.city ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.city ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
-                                                fieldErrors.city ? 'text-rose-400' : 'text-slate-400'
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
+                                                fieldErrors.city ? 'text-rose-400' : 'text-slate-500'
                                             }`}>{cityField.name}</label>
                                             <input 
                                                 value={formData.city}
                                                 onChange={(e) => { clearFieldError('city'); setFormData(p => ({ ...p, city: e.target.value })); }}
                                                 placeholder={cityField.placeholder || 'City'}
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                             {fieldErrors.city && <p className="text-[10px] font-bold text-rose-500 pt-1">{fieldErrors.city}</p>}
                                         </div>
                                     ) : null}
                                     {shouldShowField('postalCode', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                            fieldErrors.postalCode ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.postalCode ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
-                                                fieldErrors.postalCode ? 'text-rose-400' : 'text-slate-400'
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
+                                                fieldErrors.postalCode ? 'text-rose-400' : 'text-slate-500'
                                             }`}>{postalCodeField.name}</label>
                                             <input 
                                                 value={formData.postalCode}
@@ -1155,7 +1155,7 @@ const StepVehicle = () => {
                                                 placeholder={postalCodeField.placeholder || 'Pincode'}
                                                 inputMode="numeric"
                                                 maxLength={6}
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                             {fieldErrors.postalCode && <p className="text-[10px] font-bold text-rose-500 pt-1">{fieldErrors.postalCode}</p>}
                                         </div>
@@ -1164,16 +1164,16 @@ const StepVehicle = () => {
 
                                 {shouldShowField('taxNumber', true) ? (
                                     <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                        fieldErrors.taxNumber ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                        fieldErrors.taxNumber ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                     }`}>
-                                        <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
-                                            fieldErrors.taxNumber ? 'text-rose-400' : 'text-slate-400'
+                                        <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${
+                                            fieldErrors.taxNumber ? 'text-rose-400' : 'text-slate-500'
                                         }`}>{taxNumberField.name}</label>
                                         <input 
                                             value={formData.taxNumber}
                                             onChange={(e) => { clearFieldError('taxNumber'); setFormData(p => ({ ...p, taxNumber: formatGstNumber(e.target.value) })); }}
                                             placeholder={taxNumberField.placeholder || 'Tax Identification'}
-                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 uppercase"
+                                            className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500 uppercase"
                                         />
                                         {fieldErrors.taxNumber && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.taxNumber}</p>}
                                     </div>
@@ -1183,8 +1183,8 @@ const StepVehicle = () => {
                                 {visibleCustomVehicleFields.length > 0 && (
                                     <div className="space-y-5 pt-1">
                                         <div className="space-y-1 px-1">
-                                            <h2 className="text-lg font-black tracking-tight text-slate-900">Additional Details</h2>
-                                            <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Required information</p>
+                                            <h2 className="text-lg font-bold tracking-tight text-slate-900">Additional Details</h2>
+                                            <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">Required information</p>
                                         </div>
                                         <div className="grid grid-cols-1 gap-3">
                                             {visibleCustomVehicleFields.map((field) => {
@@ -1196,9 +1196,9 @@ const StepVehicle = () => {
 
                                                 if (fieldType === 'select') {
                                                     return (
-                                                        <div key={fieldKey} className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${hasErr ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'}`}>
-                                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${hasErr ? 'text-rose-400' : 'text-slate-400'}`}>{field.name}</label>
-                                                            <select value={value} onChange={(e) => { clearFieldError(`custom_${fieldKey}`); handleCustomFieldChange(fieldKey, e.target.value); }} className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 appearance-none">
+                                                        <div key={fieldKey} className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${hasErr ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'}`}>
+                                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${hasErr ? 'text-rose-400' : 'text-slate-500'}`}>{field.name}</label>
+                                                            <select value={value} onChange={(e) => { clearFieldError(`custom_${fieldKey}`); handleCustomFieldChange(fieldKey, e.target.value); }} className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 appearance-none">
                                                                 <option value="">{field.placeholder || `Select ${field.name}`}</option>
                                                                 {optionList.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                                                             </select>
@@ -1208,14 +1208,14 @@ const StepVehicle = () => {
                                                 }
 
                                                 return (
-                                                    <div key={fieldKey} className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${hasErr ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'}`}>
-                                                        <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${hasErr ? 'text-rose-400' : 'text-slate-400'}`}>{field.name}</label>
+                                                    <div key={fieldKey} className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${hasErr ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'}`}>
+                                                        <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${hasErr ? 'text-rose-400' : 'text-slate-500'}`}>{field.name}</label>
                                                         <input
                                                             type={fieldType === 'number' ? 'tel' : 'text'}
                                                             value={value}
                                                             onChange={(e) => { clearFieldError(`custom_${fieldKey}`); handleCustomFieldChange(fieldKey, fieldType === 'number' ? e.target.value.replace(/\D/g, '') : e.target.value); }}
                                                             placeholder={field.placeholder || ''}
-                                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                            className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                                         />
                                                         {hasErr && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors[`custom_${fieldKey}`]}</p>}
                                                     </div>
@@ -1264,7 +1264,7 @@ const StepVehicle = () => {
                                                                     className="max-h-14 w-auto object-contain transition-transform duration-500"
                                                                 />
                                                             ) : (
-                                                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300">
+                                                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
                                                                     <Car size={24} />
                                                                 </div>
                                                             )}
@@ -1287,16 +1287,16 @@ const StepVehicle = () => {
                                 {driverHasTechnicalFields ? (
                                 <div className="space-y-5 pt-1">
                                     <div className="space-y-1 px-1">
-                                        <h2 className="text-lg font-black tracking-tight text-slate-900">Technical Specs</h2>
-                                        <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Verified from RC/Permit</p>
+                                        <h2 className="text-lg font-bold tracking-tight text-slate-900">Technical Specs</h2>
+                                        <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">Verified from RC/Permit</p>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
                                         {shouldShowField('rcNumber', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2 ${
-                                            fieldErrors.rcNumber ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.rcNumber ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.rcNumber ? 'text-rose-400' : 'text-slate-400' }`}>{rcNumberField.name}</label>
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.rcNumber ? 'text-rose-400' : 'text-slate-500' }`}>{rcNumberField.name}</label>
                                             <input
                                                 value={formData.rcNumber}
                                                 onChange={(e) => {
@@ -1308,14 +1308,14 @@ const StepVehicle = () => {
                                                     setFormData((p) => ({ ...p, rcNumber: normalizeVehicleNumber(e.target.value) }));
                                                 }}
                                                 placeholder={rcNumberField.placeholder || 'MP09AB1234'}
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300 uppercase tracking-widest"
+                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-500 uppercase tracking-widest"
                                             />
                                             <div className="mt-3 flex justify-end">
                                                 <button
                                                     type="button"
                                                     onClick={handleVerifyRc}
                                                     disabled={rcVerificationLoading}
-                                                    className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-colors ${
+                                                    className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
                                                         rcVerificationLoading
                                                             ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                                                             : 'bg-slate-900 text-white hover:bg-black'
@@ -1341,7 +1341,7 @@ const StepVehicle = () => {
                                         <div className="col-span-2 rounded-[1.8rem] border border-emerald-100 bg-emerald-50/50 p-4">
                                             <div className="flex items-center gap-2 px-1">
                                                 <ShieldCheck size={15} className="text-emerald-600" />
-                                                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                                                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-700">
                                                     Verified RC Details
                                                 </p>
                                             </div>
@@ -1351,7 +1351,7 @@ const StepVehicle = () => {
                                             <div className="mt-3 grid grid-cols-2 gap-3">
                                                 {rcVerificationDetailsList.map((item) => (
                                                     <div key={item.key} className="rounded-2xl bg-white/90 px-3 py-2">
-                                                        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">{item.label}</p>
+                                                        <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">{item.label}</p>
                                                         <p className="mt-1 text-[12px] font-bold text-slate-900 break-words">{item.value}</p>
                                                     </div>
                                                 ))}
@@ -1361,14 +1361,14 @@ const StepVehicle = () => {
 
                                         {showRcAutofilledFields && shouldShowField('make', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2 ${
-                                            fieldErrors.make ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.make ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.make ? 'text-rose-400' : 'text-slate-400' }`}>{makeField.name}</label>
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.make ? 'text-rose-400' : 'text-slate-500' }`}>{makeField.name}</label>
                                             <input 
                                                 value={formData.make}
                                                 onChange={(e) => { clearFieldError('make'); setFormData(p => ({ ...p, make: e.target.value })); }}
                                                 placeholder={makeField.placeholder || 'e.g. Maruti Suzuki'}
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                             {fieldErrors.make && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.make}</p>}
                                         </div>
@@ -1376,14 +1376,14 @@ const StepVehicle = () => {
 
                                         {showRcAutofilledFields && shouldShowField('model', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                            fieldErrors.model ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.model ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.model ? 'text-rose-400' : 'text-slate-400' }`}>{modelField.name}</label>
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.model ? 'text-rose-400' : 'text-slate-500' }`}>{modelField.name}</label>
                                             <input 
                                                 value={formData.model}
                                                 onChange={(e) => { clearFieldError('model'); setFormData(p => ({ ...p, model: e.target.value })); }}
                                                 placeholder={modelField.placeholder || 'Swift, Bolt'}
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                             {fieldErrors.model && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.model}</p>}
                                         </div>
@@ -1391,16 +1391,16 @@ const StepVehicle = () => {
 
                                         {showRcAutofilledFields && shouldShowField('year', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 ${
-                                            fieldErrors.year ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.year ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.year ? 'text-rose-400' : 'text-slate-400' }`}>{yearField.name}</label>
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.year ? 'text-rose-400' : 'text-slate-500' }`}>{yearField.name}</label>
                                             <input 
                                                 type="tel"
                                                 maxLength={4}
                                                 value={formData.year}
                                                 onChange={(e) => { clearFieldError('year'); setFormData(p => ({ ...p, year: e.target.value.replace(/\D/g, '') })); }}
                                                 placeholder={yearField.placeholder || String(getCurrentVehicleYear())}
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                             {fieldErrors.year && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.year}</p>}
                                         </div>
@@ -1408,14 +1408,14 @@ const StepVehicle = () => {
 
                                         {showRcAutofilledFields && shouldShowField('number', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2 ${
-                                            fieldErrors.number ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.number ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.number ? 'text-rose-400' : 'text-slate-400' }`}>{numberField.name}</label>
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.number ? 'text-rose-400' : 'text-slate-500' }`}>{numberField.name}</label>
                                             <input 
                                                 value={formData.number}
                                                 onChange={(e) => { clearFieldError('number'); setFormData(p => ({ ...p, number: normalizeVehicleNumber(e.target.value) })); }}
                                                 placeholder={numberField.placeholder || 'DL1RT1234'}
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300 uppercase tracking-widest"
+                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-500 uppercase tracking-widest"
                                             />
                                             {fieldErrors.number && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.number}</p>}
                                         </div>
@@ -1423,14 +1423,14 @@ const StepVehicle = () => {
 
                                         {showRcAutofilledFields && shouldShowField('color', true) ? (
                                         <div className={`group rounded-[1.8rem] border-2 transition-all p-4 focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2 ${
-                                            fieldErrors.color ? 'border-rose-200 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
+                                            fieldErrors.color ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white'
                                         }`}>
-                                            <label className={`block text-[10px] font-black uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.color ? 'text-rose-400' : 'text-slate-400' }`}>{colorField.name}</label>
+                                            <label className={`block text-[10px] font-bold uppercase tracking-[0.15em] opacity-70 px-1 mb-1 ${ fieldErrors.color ? 'text-rose-400' : 'text-slate-500' }`}>{colorField.name}</label>
                                             <input 
                                                 value={formData.color}
                                                 onChange={(e) => { clearFieldError('color'); setFormData(p => ({ ...p, color: e.target.value })); }}
                                                 placeholder={colorField.placeholder || 'e.g. White, Black'}
-                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                             {fieldErrors.color && <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.color}</p>}
                                         </div>
@@ -1442,13 +1442,13 @@ const StepVehicle = () => {
                                 {!isOwner ? (
                                 <div className="space-y-5 pt-1">
                                     <div className="space-y-1 px-1">
-                                        <h2 className="text-lg font-black tracking-tight text-slate-900">Driving License</h2>
-                                        <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Separate DL verification</p>
+                                        <h2 className="text-lg font-bold tracking-tight text-slate-900">Driving License</h2>
+                                        <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">Separate DL verification</p>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2">
-                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">License Number</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5 col-span-2">
+                                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">License Number</label>
                                             <input
                                                 value={dlMeta.identifyNumber}
                                                 onChange={(e) => {
@@ -1458,12 +1458,12 @@ const StepVehicle = () => {
                                                     setDlMeta((prev) => ({ ...prev, identifyNumber: e.target.value.toUpperCase() }));
                                                 }}
                                                 placeholder="Enter DL number"
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300 uppercase tracking-wide"
+                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-500 uppercase tracking-wide"
                                             />
                                         </div>
 
-                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
-                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Birth Date</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">Birth Date</label>
                                             <input
                                                 type="date"
                                                 value={dlMeta.birthDate}
@@ -1477,8 +1477,8 @@ const StepVehicle = () => {
                                             />
                                         </div>
 
-                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
-                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">Request Number</label>
+                                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">Request Number</label>
                                             <input
                                                 value={dlMeta.requestNumber}
                                                 onChange={(e) => {
@@ -1488,7 +1488,7 @@ const StepVehicle = () => {
                                                     setDlMeta((prev) => ({ ...prev, requestNumber: e.target.value }));
                                                 }}
                                                 placeholder="Optional"
-                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                                                className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                             />
                                         </div>
 
@@ -1497,7 +1497,7 @@ const StepVehicle = () => {
                                                 type="button"
                                                 onClick={handleVerifyDl}
                                                 disabled={dlVerificationLoading}
-                                                className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-colors ${
+                                                className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
                                                     dlVerificationLoading
                                                         ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                                                         : 'bg-slate-900 text-white hover:bg-black'
@@ -1518,7 +1518,7 @@ const StepVehicle = () => {
                                         <div className="col-span-2 rounded-[1.8rem] border border-emerald-100 bg-emerald-50/50 p-4">
                                             <div className="flex items-center gap-2 px-1">
                                                 <ShieldCheck size={15} className="text-emerald-600" />
-                                                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                                                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-700">
                                                     Verified From DL
                                                 </p>
                                             </div>
@@ -1528,7 +1528,7 @@ const StepVehicle = () => {
                                             <div className="mt-3 grid grid-cols-2 gap-3">
                                                 {dlVerificationDetailsList.map((item) => (
                                                     <div key={item.key} className="rounded-2xl bg-white/90 px-3 py-2">
-                                                        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">{item.label}</p>
+                                                        <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">{item.label}</p>
                                                         <p className="mt-1 text-[12px] font-bold text-slate-900 break-words">{item.value}</p>
                                                     </div>
                                                 ))}
@@ -1542,8 +1542,8 @@ const StepVehicle = () => {
                                 {visibleCustomVehicleFields.length > 0 && showRcAutofilledFields ? (
                                     <div className="space-y-5 pt-1">
                                         <div className="space-y-1 px-1">
-                                            <h2 className="text-lg font-black tracking-tight text-slate-900">Additional Details</h2>
-                                            <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">
+                                            <h2 className="text-lg font-bold tracking-tight text-slate-900">Additional Details</h2>
+                                            <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">
                                                 Configured from admin
                                             </p>
                                         </div>
@@ -1557,35 +1557,35 @@ const StepVehicle = () => {
 
                                                 if (fieldType === 'textarea') {
                                                     return (
-                                                        <div key={fieldKey} className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
-                                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">{field.name}</label>
+                                                        <div key={fieldKey} className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">{field.name}</label>
                                                             <textarea
                                                                 value={value}
                                                                 onChange={(event) => handleCustomFieldChange(fieldKey, event.target.value)}
                                                                 placeholder={field.placeholder || ''}
                                                                 rows={3}
-                                                                className="w-full resize-none bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                                className="w-full resize-none bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                                             />
-                                                            {field.help_text ? <p className="mt-2 text-xs text-slate-400">{field.help_text}</p> : null}
+                                                            {field.help_text ? <p className="mt-2 text-xs text-slate-500">{field.help_text}</p> : null}
                                                         </div>
                                                     );
                                                 }
 
                                                 if (fieldType === 'select') {
                                                     return (
-                                                        <div key={fieldKey} className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
-                                                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">{field.name}</label>
+                                                        <div key={fieldKey} className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">{field.name}</label>
                                                             <select
                                                                 value={value}
                                                                 onChange={(event) => handleCustomFieldChange(fieldKey, event.target.value)}
-                                                                className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 appearance-none"
+                                                                className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 appearance-none"
                                                             >
                                                                 <option value="">{field.placeholder || `Select ${field.name}`}</option>
                                                                 {optionList.map((option) => (
                                                                     <option key={option} value={option}>{option}</option>
                                                                 ))}
                                                             </select>
-                                                            {field.help_text ? <p className="mt-2 text-xs text-slate-400">{field.help_text}</p> : null}
+                                                            {field.help_text ? <p className="mt-2 text-xs text-slate-500">{field.help_text}</p> : null}
                                                         </div>
                                                     );
                                                 }
@@ -1593,10 +1593,10 @@ const StepVehicle = () => {
                                                 if (fieldType === 'multi_select') {
                                                     const selectedValues = Array.isArray(value) ? value : [];
                                                     return (
-                                                        <div key={fieldKey} className="space-y-3 rounded-[1.8rem] border-2 border-slate-50 bg-slate-50 p-4">
+                                                        <div key={fieldKey} className="space-y-3 rounded-[1.8rem] border-2 border-slate-200 bg-slate-50 p-4">
                                                             <div>
-                                                                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">{field.name}</label>
-                                                                {field.help_text ? <p className="text-xs text-slate-400 px-1">{field.help_text}</p> : null}
+                                                                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">{field.name}</label>
+                                                                {field.help_text ? <p className="text-xs text-slate-500 px-1">{field.help_text}</p> : null}
                                                             </div>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {optionList.map((option) => {
@@ -1627,8 +1627,8 @@ const StepVehicle = () => {
                                                 }
 
                                                 return (
-                                                    <div key={fieldKey} className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
-                                                        <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70 px-1 mb-1">{field.name}</label>
+                                                    <div key={fieldKey} className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                                                        <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 px-1 mb-1">{field.name}</label>
                                                         <input
                                                             type={fieldType === 'number' ? 'tel' : 'text'}
                                                             value={value}
@@ -1639,9 +1639,9 @@ const StepVehicle = () => {
                                                                     : event.target.value,
                                                             )}
                                                             placeholder={field.placeholder || ''}
-                                                            className="w-full bg-transparent border-none p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200"
+                                                            className="w-full bg-transparent border-none p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500"
                                                         />
-                                                        {field.help_text ? <p className="mt-2 text-xs text-slate-400">{field.help_text}</p> : null}
+                                                        {field.help_text ? <p className="mt-2 text-xs text-slate-500">{field.help_text}</p> : null}
                                                     </div>
                                                 );
                                             })}
@@ -1666,14 +1666,14 @@ const StepVehicle = () => {
                     </div>
                 )}
 
-                <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
+                <div className="fixed bottom-0 left-0 right-0 px-6 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
                     <div className="mx-auto max-w-sm">
                         <motion.button
                             whileHover={!loading ? { scale: 1.02, y: -2 } : {}}
                             whileTap={!loading ? { scale: 0.98 } : {}}
                             onClick={handleContinue}
                             disabled={loading}
-                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all relative overflow-hidden ${
+                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-bold tracking-tight transition-all relative overflow-hidden ${
                                 loading
                                     ? 'bg-slate-700 text-white/70 cursor-not-allowed'
                                     : 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black cursor-pointer'

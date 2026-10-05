@@ -313,7 +313,7 @@ const PhoneRegistration = () => {
               }}
               placeholder="10-digit mobile number"
               aria-invalid={Boolean(error)}
-              className="dauth-bare h-full min-w-0 flex-1 bg-transparent text-lg font-semibold tracking-wide text-[#0b1220] placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-[#94a3b8]"
+              className="dauth-bare h-full min-w-0 flex-1 bg-transparent text-lg font-semibold tracking-wide text-[#0b1220] placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-[#64748b]"
             />
             {phone.length === 10 && <CheckCircle2 size={20} className="shrink-0 text-[#059669]" aria-hidden="true" />}
           </div>
@@ -334,7 +334,7 @@ const PhoneRegistration = () => {
           className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-base font-semibold transition-all ${
             canSubmit
               ? 'bg-[#0b1220] text-[#ffffff] shadow-[0_14px_28px_-14px_rgba(11,18,32,0.7)] active:scale-[0.99]'
-              : 'cursor-not-allowed bg-[#e2e8f0] text-[#94a3b8]'
+              : 'cursor-not-allowed bg-[#cbd5e1] text-[#475569]'
           }`}
         >
           {loading ? (

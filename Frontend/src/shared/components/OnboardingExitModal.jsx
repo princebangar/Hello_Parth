@@ -7,6 +7,10 @@ const THEMES = {
     header: "bg-gradient-to-br from-[#0E4B9C] to-[#021024]",
     stay: "bg-[#00B761] hover:bg-[#00A055] shadow-[#00B761]/20",
   },
+  taxi: {
+    header: "bg-gradient-to-br from-[#0b1220] to-[#1e293b]",
+    stay: "bg-slate-900 hover:bg-black shadow-slate-900/20",
+  },
   restaurant: {
     header: "bg-gradient-to-br from-[#B80B3D] to-[#66001D]",
     stay: "bg-green-700 hover:bg-green-800 shadow-green-700/20",

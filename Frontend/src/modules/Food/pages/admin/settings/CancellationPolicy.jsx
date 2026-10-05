@@ -4,6 +4,7 @@ import api from "@food/api"
 import { API_ENDPOINTS } from "@food/api/config"
 import { Textarea } from "@food/components/ui/textarea"
 import { unwrapLegalPage, plainTextToLegalHtml } from "@food/utils/legalContentFormat"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -17,6 +18,8 @@ export default function CancellationPolicy() {
     title: 'Cancellation Policy',
     content: ''
   })
+
+  const { isDirty, resetBaseline } = useDirty(cancellationData, !loading)
 
   useEffect(() => {
     fetchCancellationData()
@@ -51,7 +54,9 @@ export default function CancellationPolicy() {
       )
       if (response.data.success) {
         toast.success('Cancellation policy updated successfully')
-        setCancellationData(unwrapLegalPage(response.data, { title: 'Cancellation Policy' }))
+        const savedData = unwrapLegalPage(response.data, { title: 'Cancellation Policy' })
+        setCancellationData(savedData)
+        resetBaseline(savedData)
       }
     } catch (error) {
       debugError('Error saving cancellation policy:', error)
@@ -141,7 +146,7 @@ export default function CancellationPolicy() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || !isDirty}
             className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : 'Save Changes'}

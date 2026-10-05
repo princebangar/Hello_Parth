@@ -12,6 +12,7 @@ import {
   Save,
   RotateCcw
 } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -167,6 +168,7 @@ export default function EmailTemplate() {
   }
   
   const [formData, setFormData] = useState(templateDefaults["forgot-password"])
+  const { isDirty, resetBaseline } = useDirty(formData, true)
 
   const templates = [
     { id: "forgot-password", label: "Forgot Password" },
@@ -220,12 +222,15 @@ export default function EmailTemplate() {
     e.preventDefault()
     debugLog("Form submitted:", formData)
     // Handle form submission
+    resetBaseline(formData)
   }
 
   // Update form data when template changes
   const handleTemplateChange = (templateId) => {
     setActiveTemplate(templateId)
-    setFormData(templateDefaults[templateId] || templateDefaults["forgot-password"])
+    const nextFormData = templateDefaults[templateId] || templateDefaults["forgot-password"]
+    setFormData(nextFormData)
+    resetBaseline(nextFormData)
   }
 
   const handleReset = () => {
@@ -598,7 +603,8 @@ export default function EmailTemplate() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                  disabled={!isDirty}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Save className="w-4 h-4" />
                   Save

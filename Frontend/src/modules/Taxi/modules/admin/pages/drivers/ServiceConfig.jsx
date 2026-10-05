@@ -221,6 +221,13 @@ const ServiceConfig = () => {
     }));
   };
 
+  // Edit-service modal: Save stays disabled until the draft differs from the service that was opened.
+  const editedService = draft._edit ? services.find(s => s.id === draft.id) : null;
+  const serviceDirty = !editedService ||
+    (draft.label || '') !== (editedService.label || '') ||
+    (draft.emoji || '') !== (editedService.emoji || '') ||
+    (draft.desc || '') !== (editedService.desc || '');
+
   const selLoc    = locations.find(l => l.id === selLocId);
   const filtered  = locations.filter(l => l.city.toLowerCase().includes(search.toLowerCase()) || l.state.toLowerCase().includes(search.toLowerCase()));
 
@@ -528,7 +535,7 @@ const ServiceConfig = () => {
           footer={
             <div className="flex gap-2 mt-1">
               <button onClick={closeModal} className="flex-1 py-2.5 border border-gray-100 rounded-xl text-[12px] font-black text-gray-400 hover:bg-gray-50 transition-all">Cancel</button>
-              <button onClick={saveService} className="flex-1 py-2.5 bg-gray-950 text-white rounded-xl text-[12px] font-black hover:opacity-90 transition-all shadow-lg">{draft._edit ? 'Save' : 'Add Service'}</button>
+              <button onClick={saveService} disabled={Boolean(draft._edit) && !serviceDirty} className="flex-1 py-2.5 bg-gray-950 text-white rounded-xl text-[12px] font-black hover:opacity-90 transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">{draft._edit ? 'Save' : 'Add Service'}</button>
             </div>
           }
         >

@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
 import { hasGlobalSection, readAdminProfile } from "@/shared/utils/adminAccess.js"
 import { prepareUploadFile } from "@/shared/utils/imageCompressor"
+import useDirty from "../../../shared/hooks/useDirty"
 import { apiErrorMessage, globalAdminAPI } from "../api/globalAdminAPI"
 
 const emptyForm = { name: "", url: "", image: "", description: "", isActive: true }
@@ -42,6 +43,7 @@ export default function GlobalLandingManagement() {
   const [services, setServices] = useState([])
   const [dialog, setDialog] = useState(null) // { mode: "create" | "edit", service? }
   const [form, setForm] = useState(emptyForm)
+  const { isDirty, resetBaseline } = useDirty(form, true)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -70,13 +72,15 @@ export default function GlobalLandingManagement() {
   }
 
   const openEdit = (service) => {
-    setForm({
+    const nextForm = {
       name: service.name,
       url: service.url,
       image: service.image || "",
       description: service.description,
       isActive: service.isActive,
-    })
+    }
+    setForm(nextForm)
+    resetBaseline(nextForm)
     setDialog({ mode: "edit", service })
   }
 
@@ -399,8 +403,8 @@ export default function GlobalLandingManagement() {
               </button>
               <button
                 type="submit"
-                disabled={saving || uploadingImage}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all disabled:opacity-60"
+                disabled={saving || uploadingImage || (dialog?.mode === "edit" && !isDirty)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 {dialog?.mode === "edit" ? "Save Changes" : "Create Card"}

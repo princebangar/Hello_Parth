@@ -21,6 +21,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60';
@@ -248,6 +249,8 @@ const PoolingManager = ({ mode: propMode }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState(buildDefaultForm);
+  // Edit mode only: baseline is set explicitly once the existing route has loaded (see load()).
+  const { isDirty, resetBaseline } = useDirty(formData, false);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -278,7 +281,7 @@ const PoolingManager = ({ mode: propMode }) => {
         if (id) {
           const selected = routeResults.find((item) => String(item.id || item._id) === String(id));
           if (selected) {
-            setFormData({
+            const loadedForm = {
               routeName: selected.routeName || '',
               routeCode: selected.routeCode || '',
               originLabel: selected.originLabel || '',
@@ -316,7 +319,9 @@ const PoolingManager = ({ mode: propMode }) => {
               },
               status: selected.status || 'active',
               active: selected.active !== false,
-            });
+            };
+            setFormData(loadedForm);
+            resetBaseline(loadedForm);
           }
         } else if (propMode === 'create') {
           setFormData(buildDefaultForm());
@@ -810,10 +815,10 @@ const PoolingManager = ({ mode: propMode }) => {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => {
-                                navigate(`/admin/pooling/edit/${item.id || item._id}`);
+                                navigate(`/taxi/admin/pooling/edit/${item.id || item._id}`);
                               }}
                               className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[10px] font-bold text-slate-600 transition hover:bg-slate-100"
                               title="Edit Route"
@@ -1364,8 +1369,8 @@ const PoolingManager = ({ mode: propMode }) => {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving || loading}
-                className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60"
+                disabled={isSaving || loading || (Boolean(id) && !isDirty)}
+                className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl bg-[#2e3c78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#24305f] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save size={16} />
                 {isSaving ? 'Saving...' : id ? 'Update Pooling Route' : 'Create Pooling Route'}

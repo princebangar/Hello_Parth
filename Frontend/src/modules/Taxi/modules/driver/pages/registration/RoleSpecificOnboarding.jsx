@@ -278,7 +278,7 @@ const RoleSpecificOnboarding = () => {
   return (
     <div
       className="min-h-screen overflow-x-clip bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-36 pt-8 select-none"
-      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" }}
     >
       <main className="mx-auto max-w-sm space-y-6">
         <header className="contents space-y-5 [&>:last-child]:mb-6">
@@ -286,11 +286,11 @@ const RoleSpecificOnboarding = () => {
             <button
               type="button"
               onClick={handleBack}
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-sm"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm"
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="rounded-full border border-slate-900/5 bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">
+            <div className="rounded-full border border-slate-900/5 bg-slate-900/5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
               {currentStep.badge}
             </div>
           </div>
@@ -299,7 +299,7 @@ const RoleSpecificOnboarding = () => {
             <div className={`flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-white shadow-sm ${meta.color}`}>
               <meta.Icon size={22} />
             </div>
-            <h1 className="font-['Outfit'] text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+            <h1 className="text-[42px] font-bold leading-[1] tracking-[-0.04em] text-slate-900">
               {headerTitle}
             </h1>
             <p className="text-[15px] font-bold leading-relaxed text-slate-500 opacity-80">
@@ -324,7 +324,7 @@ const RoleSpecificOnboarding = () => {
                 <button
                   type="button"
                   onClick={() => setFormData((current) => ({ ...current, busSignupMode: 'existing' }))}
-                  className={`rounded-2xl border px-4 py-4 text-sm font-black transition ${
+                  className={`rounded-2xl border px-4 py-4 text-sm font-bold transition ${
                     formData.busSignupMode === 'existing'
                       ? 'border-slate-900 bg-slate-900 text-white'
                       : 'border-slate-200 bg-slate-50 text-slate-900'
@@ -335,7 +335,7 @@ const RoleSpecificOnboarding = () => {
                 <button
                   type="button"
                   onClick={openBusBuilder}
-                  className={`rounded-2xl border px-4 py-4 text-sm font-black transition ${
+                  className={`rounded-2xl border px-4 py-4 text-sm font-bold transition ${
                     formData.busSignupMode === 'create'
                       ? 'border-slate-900 bg-slate-900 text-white'
                       : 'border-slate-200 bg-slate-50 text-slate-900'
@@ -348,13 +348,13 @@ const RoleSpecificOnboarding = () => {
               {!formData.busSignupMode ? (
                 <div className="space-y-3">
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">How bus signup works</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">How bus signup works</p>
                     <p className="mt-2 text-sm font-bold text-slate-900">
                       Choose an existing bus service if it is already listed, or create a new one with the same full flow used in admin.
                     </p>
                   </div>
                   <div className="rounded-[22px] border border-blue-100 bg-blue-50/70 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">Full Builder Included</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-700">Full Builder Included</p>
                     <p className="mt-2 text-sm font-bold text-slate-900">
                       New bus creation opens the full multi-step builder for bus basics, media, seat layout, route, and schedules.
                     </p>
@@ -365,19 +365,19 @@ const RoleSpecificOnboarding = () => {
               {formData.busSignupMode === 'existing' ? (
                 <>
                   <div className="rounded-[22px] border border-emerald-100 bg-emerald-50/70 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Existing Bus Services</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Existing Bus Services</p>
                     <p className="mt-2 text-sm font-bold text-slate-900">
                       Select any existing bus service if you're joining one that's already listed.
                     </p>
                   </div>
 
                   <div className="relative">
-                    <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Search bus service"
-                      className="w-full rounded-2xl border border-slate-200 py-4 pl-11 pr-4 text-sm font-bold text-slate-900 outline-none"
+                      className="w-full rounded-2xl border border-slate-200 py-4 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none"
                     />
                   </div>
 
@@ -394,7 +394,7 @@ const RoleSpecificOnboarding = () => {
                             isSelected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50 text-slate-900'
                           }`}
                         >
-                          <p className="text-sm font-black">{`${item.operatorName} - ${item.busName}`}</p>
+                          <p className="text-sm font-bold">{`${item.operatorName} - ${item.busName}`}</p>
                           <p className={`mt-1 text-xs font-bold ${isSelected ? 'text-white/70' : 'text-slate-500'}`}>
                             {`${item.originCity || 'Origin'} to ${item.destinationCity || 'Destination'}${item.serviceNumber ? ` - ${item.serviceNumber}` : ''}`}
                           </p>
@@ -414,7 +414,7 @@ const RoleSpecificOnboarding = () => {
               {formData.busSignupMode === 'create' ? (
                 <div className="space-y-3">
                   <div className="rounded-[22px] border border-blue-100 bg-blue-50/70 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">Create New Bus Service</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-700">Create New Bus Service</p>
                     <p className="mt-2 text-sm font-bold text-slate-900">
                       Open the full builder to set up the bus basics, media, seat layout, route, and schedules.
                     </p>
@@ -423,7 +423,7 @@ const RoleSpecificOnboarding = () => {
                   <button
                     type="button"
                     onClick={openBusBuilder}
-                    className="flex w-full items-center justify-center gap-3 rounded-[1.8rem] bg-slate-900 px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-white shadow-[0_20px_40px_rgba(0,0,0,0.12)]"
+                    className="flex w-full items-center justify-center gap-3 rounded-[1.8rem] bg-slate-900 px-5 py-4 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-[0_20px_40px_rgba(0,0,0,0.12)]"
                   >
                     Open Full Bus Builder
                     <ChevronRight size={18} />
@@ -431,8 +431,8 @@ const RoleSpecificOnboarding = () => {
 
                   {createdBusDraft ? (
                     <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Saved Bus Draft</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Saved Bus Draft</p>
+                      <p className="mt-2 text-sm font-bold text-slate-900">
                         {createdBusDraft.operatorName || 'Operator'} - {createdBusDraft.busName || 'Bus'}
                       </p>
                       <p className="mt-1 text-xs font-bold text-slate-500">
@@ -450,7 +450,7 @@ const RoleSpecificOnboarding = () => {
                     <button
                       type="button"
                       onClick={handleNext}
-                      className="flex w-full items-center justify-center gap-3 rounded-[1.8rem] border border-slate-200 bg-white px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-slate-900"
+                      className="flex w-full items-center justify-center gap-3 rounded-[1.8rem] border border-slate-200 bg-white px-5 py-4 text-sm font-bold uppercase tracking-[0.18em] text-slate-900"
                     >
                       Continue With This Draft
                       <ChevronRight size={18} />
@@ -465,8 +465,8 @@ const RoleSpecificOnboarding = () => {
             <>
               {formData.busSignupMode === 'existing' && selectedBusService ? (
                 <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Selected Bus</p>
-                  <p className="mt-2 text-sm font-black text-slate-900">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Selected Bus</p>
+                  <p className="mt-2 text-sm font-bold text-slate-900">
                     {selectedBusService.operatorName} - {selectedBusService.busName}
                   </p>
                   <p className="mt-1 text-xs font-bold text-slate-500">
@@ -479,8 +479,8 @@ const RoleSpecificOnboarding = () => {
               {formData.busSignupMode === 'create' ? (
                 <div className="space-y-3">
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">New Bus Draft</p>
-                    <p className="mt-2 text-sm font-black text-slate-900">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">New Bus Draft</p>
+                    <p className="mt-2 text-sm font-bold text-slate-900">
                       {createdBusDraft?.operatorName || 'Operator'} - {createdBusDraft?.busName || 'Bus'}
                     </p>
                     <p className="mt-1 text-xs font-bold text-slate-500">
@@ -491,7 +491,7 @@ const RoleSpecificOnboarding = () => {
                   <button
                     type="button"
                     onClick={openBusBuilder}
-                    className="flex w-full items-center justify-center gap-3 rounded-[1.8rem] border border-slate-200 bg-white px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-slate-900"
+                    className="flex w-full items-center justify-center gap-3 rounded-[1.8rem] border border-slate-200 bg-white px-5 py-4 text-sm font-bold uppercase tracking-[0.18em] text-slate-900"
                   >
                     Edit Bus Draft
                     <ChevronRight size={18} />
@@ -504,7 +504,7 @@ const RoleSpecificOnboarding = () => {
                 onChange={(event) => setFormData((current) => ({ ...current, requestNote: event.target.value }))}
                 placeholder="Optional note for the admin"
                 rows={5}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-sm font-bold text-slate-900 outline-none"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-sm font-medium text-slate-900 outline-none"
               />
               <p className="text-xs font-semibold text-slate-500">
                 Example: mention your city, shift preference, or who asked you to join this bus service.
@@ -515,10 +515,10 @@ const RoleSpecificOnboarding = () => {
           {role === 'bus_driver' && stepIndex === 2 ? (
             <div className="space-y-4">
               <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
                   {isBusDriverCreateMode ? 'New Bus Service' : 'Bus Service'}
                 </p>
-                <p className="mt-2 text-sm font-black text-slate-900">
+                <p className="mt-2 text-sm font-bold text-slate-900">
                   {isBusDriverCreateMode
                     ? `${createdBusDraft?.operatorName || 'Operator'} - ${createdBusDraft?.busName || 'Bus'}`
                     : selectedBusService
@@ -535,7 +535,7 @@ const RoleSpecificOnboarding = () => {
               </div>
 
               <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Admin Note</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Admin Note</p>
                 <p className="mt-2 text-sm font-bold text-slate-900">{formData.requestNote.trim() || 'No note added'}</p>
               </div>
             </div>
@@ -556,14 +556,14 @@ const RoleSpecificOnboarding = () => {
         ) : null}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent p-8">
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent px-6 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-sm gap-3">
           {stepIndex > 0 ? (
             <button
               type="button"
               onClick={handleBack}
               disabled={submitting}
-              className="flex h-16 items-center justify-center rounded-[1.8rem] border border-slate-200 bg-white px-5 text-[14px] font-black text-slate-700"
+              className="flex h-16 items-center justify-center rounded-[1.8rem] border border-slate-200 bg-white px-5 text-[14px] font-bold text-slate-700"
             >
               Back
             </button>
@@ -576,10 +576,10 @@ const RoleSpecificOnboarding = () => {
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit || submitting || loadingOptions}
-              className={`flex h-16 flex-1 items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all ${
+              className={`flex h-16 flex-1 items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-bold tracking-tight transition-all ${
                 canSubmit && !loadingOptions
                   ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)]'
-                  : 'bg-slate-200 text-slate-400'
+                  : 'bg-slate-200 text-slate-500'
               }`}
             >
               {submitting ? (
@@ -598,10 +598,10 @@ const RoleSpecificOnboarding = () => {
               type="button"
               onClick={handleNext}
               disabled={!canMoveForward || submitting || loadingOptions}
-              className={`flex h-16 flex-1 items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all ${
+              className={`flex h-16 flex-1 items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-bold tracking-tight transition-all ${
                 canMoveForward && !loadingOptions
                   ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)]'
-                  : 'bg-slate-200 text-slate-400'
+                  : 'bg-slate-200 text-slate-500'
               }`}
             >
               <span className="uppercase tracking-widest">Next Step</span>

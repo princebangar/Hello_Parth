@@ -1,5 +1,6 @@
 ﻿import { useState } from "react"
 import { Cloud, Settings, Info } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -137,6 +138,7 @@ export default function FirebaseNotification() {
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ""
   })
+  const { isDirty, resetBaseline } = useDirty({ messages, firebaseConfig }, true)
 
   const handleMessageToggle = (id) => {
     setMessages(prev => prev.map(msg => 
@@ -157,6 +159,7 @@ export default function FirebaseNotification() {
   const handleSubmit = (e) => {
     e.preventDefault()
     debugLog("Form submitted:", { activeTab, messages, firebaseConfig })
+    resetBaseline({ messages, firebaseConfig })
     alert("Firebase Notification settings saved successfully!")
   }
 
@@ -398,7 +401,8 @@ export default function FirebaseNotification() {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  className="px-6 py-2.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={!isDirty}
+                  className="px-6 py-2.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Submit
                 </button>
@@ -420,7 +424,8 @@ export default function FirebaseNotification() {
             <button
               type="button"
               onClick={handleSubmit}
-              className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={!isDirty}
+              className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Submit
             </button>

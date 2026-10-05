@@ -9,12 +9,14 @@ import {
   Armchair,
   Grid3X3,
   RefreshCcw,
-  Eye
+  Eye,
+  PencilLine,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 import { formatPlateNumber, isValidPlateNumber, PLATE_ERROR } from '../../../../shared/utils/inputFormats';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const VEHICLE_TYPES = [
   { id: 'bike', label: 'Bike', capacity: 1, grid: [1, 1] },
@@ -25,13 +27,13 @@ const VEHICLE_TYPES = [
   { id: 'luxury', label: 'Luxury', capacity: 4, grid: [3, 2] },
 ];
 
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition-all focus:border-yellow-400 focus:ring-4 focus:ring-yellow-400/10';
-const labelClass = 'mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-500 focus:border-yellow-400 focus:ring-4 focus:ring-yellow-400/10';
+const labelClass = 'mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-600';
 
 const PoolingVehicleForm = ({
   mode: propMode,
   service = adminService,
-  backPath = '/admin/pooling/vehicles',
+  backPath = '/taxi/admin/pooling/vehicles',
   backLabel = 'Back to Fleet',
   pageLabel = '',
   initialFormData = null,
@@ -44,6 +46,9 @@ const PoolingVehicleForm = ({
   updateSuccessMessage = 'Vehicle updated successfully',
   helperPanel = '',
   placeCreateActionAtEnd = false,
+  onBack = null,
+  variant = 'admin',
+  onProgressChange = null,
 }) => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -73,6 +78,29 @@ const PoolingVehicleForm = ({
       layout: [] // Array of { r, c, type: 'seat' | 'empty' | 'driver' }
     }
   });
+  // Edit mode only: baseline is set explicitly once the existing vehicle has loaded (see loadVehicle).
+  // Numbers are normalised so typing the same value back does not count as a change.
+  const normalizeForm = (data) => ({
+    ...data,
+    adminCommissionPercentage: Number(data.adminCommissionPercentage || 0),
+    ownerCommissionPercentage: Number(data.ownerCommissionPercentage || 0),
+    serviceTaxPercentage: Number(data.serviceTaxPercentage || 0),
+  });
+  const { isDirty, resetBaseline } = useDirty(normalizeForm(formData), false);
+
+  // Lets a host page (driver onboarding) know whether anything has been typed, to guard the back button.
+  const hasInput = Boolean(
+    formData.name?.trim() || formData.vehicleModel?.trim() || formData.vehicleNumber?.trim() || formData.color?.trim() || formData.images?.length,
+  );
+  useEffect(() => {
+    if (typeof onProgressChange === 'function') onProgressChange(hasInput);
+  }, [hasInput]);
+
+  const isDriver = variant === 'driver';
+  const cardClass = isDriver
+    ? 'rounded-[2rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]'
+    : 'rounded-3xl border border-slate-100 bg-white p-5 shadow-sm';
+
   const generateDefaultLayout = (type) => {
     const config = VEHICLE_TYPES.find(t => t.id === type) || VEHICLE_TYPES[2];
     const rows = config.grid[0];
@@ -120,7 +148,7 @@ const PoolingVehicleForm = ({
       const response = await service.getPoolingVehicles();
       const vehicle = response.data.find(v => v._id === id);
       if (vehicle) {
-        setFormData({
+        const loadedForm = {
           name: vehicle.name || '',
           vehicleModel: vehicle.vehicleModel || '',
           vehicleNumber: vehicle.vehicleNumber || '',
@@ -135,7 +163,9 @@ const PoolingVehicleForm = ({
           status: vehicle.status || 'active',
           images: vehicle.images || [],
           blueprint: vehicle.blueprint || generateDefaultLayout(vehicle.vehicleType || 'sedan')
-        });
+        };
+        setFormData(loadedForm);
+        resetBaseline(normalizeForm(loadedForm));
       }
     } catch (error) {
       toast.error('Failed to load vehicle data');
@@ -238,25 +268,66 @@ const PoolingVehicleForm = ({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-4 lg:p-6">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-4">
-          <button
-            onClick={() => navigate(backPath)}
-            className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-400 transition hover:text-slate-900"
-          >
-            <ArrowLeft size={16} />
-            {backLabel}
-          </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">
-                {pageLabel || (isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle')}
+    <div
+      className={isDriver
+        ? 'min-h-screen overflow-x-clip bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-28 pt-8'
+        : 'min-h-screen bg-slate-50/50 p-4 lg:p-6'}
+      style={isDriver ? { fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" } : undefined}
+    >
+      <div className={isDriver ? 'mx-auto max-w-sm space-y-6' : 'mx-auto max-w-5xl'}>
+        {isDriver ? (
+          <header className="space-y-5">
+            <div className="sticky top-0 z-30 -mx-5 flex items-center justify-between bg-[#f6efe4]/90 px-5 py-3 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => (onBack ? onBack() : navigate(backPath))}
+                aria-label={backLabel}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition-transform active:scale-95"
+              >
+                <ArrowLeft size={18} strokeWidth={2.5} />
+              </button>
+              <div className="rounded-full border border-slate-900/5 bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">
+                Pooling Setup
+              </div>
+            </div>
+            <section className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
+                  <Car size={22} strokeWidth={2.5} />
+                </div>
+                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Vehicle Setup</span>
+              </div>
+              <h1 className="text-[44px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
+                Vehicle <span className="text-slate-400">Details</span>
               </h1>
-              <p className="text-sm font-medium text-slate-500">
-                {isViewMode ? 'Review vehicle details and seat layout blueprint' : 'Configure vehicle details and seat layout blueprint'}
+              <p className="max-w-[30ch] text-[15px] font-bold leading-relaxed text-slate-500">
+                Add your pooling vehicle and seat layout. We will send it to admin for approval.
               </p>
+            </section>
+          </header>
+        ) : null}
+        {/* Header */}
+        {!isDriver ? (
+        <div className="mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => (onBack ? onBack() : navigate(backPath))}
+                title={backLabel}
+                aria-label={backLabel}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-white/50 text-slate-700 shadow-[0_4px_16px_rgba(15,23,42,0.08)] backdrop-blur-md transition hover:bg-white/80 active:scale-95"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900">
+                  {pageLabel || (isViewMode ? 'View Vehicle' : isEditMode ? 'Edit Vehicle' : 'Add New Vehicle')}
+                </h1>
+                <p className="text-sm font-medium text-slate-500">
+                  {isViewMode ? 'Review vehicle details and seat layout blueprint' : 'Configure vehicle details and seat layout blueprint'}
+                </p>
+              </div>
             </div>
             {showHeaderAction ? (
               isViewMode ? (
@@ -264,14 +335,14 @@ const PoolingVehicleForm = ({
                   onClick={() => navigate(`${backPath}/edit/${id}`)}
                   className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
                 >
-                  <Save size={18} />
+                  <PencilLine size={18} />
                   Edit Vehicle
                 </button>
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50"
+                  disabled={saving || (isEditMode && !isDirty)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
                   {isEditMode ? editActionLabel : createActionLabel}
@@ -280,11 +351,12 @@ const PoolingVehicleForm = ({
             ) : null}
           </div>
         </div>
+        ) : null}
 
-        <div className="grid gap-4 lg:gap-6 lg:grid-cols-5">
+        <div className={isDriver ? 'grid grid-cols-1 gap-5' : 'grid gap-4 lg:gap-6 lg:grid-cols-5'}>
           {/* Form Side */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className={isDriver ? 'space-y-5' : 'lg:col-span-2 space-y-4'}>
+            <div className={cardClass}>
               <h3 className="mb-4 text-lg font-black text-slate-900">Basic Information</h3>
               <div className="space-y-4">
                 <div>
@@ -442,10 +514,10 @@ const PoolingVehicleForm = ({
               </div>
             ) : null}
 
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+            <div className={cardClass}>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-black text-slate-900">Vehicle Images</h3>
+                  <h3 className="text-base font-semibold text-slate-900">Vehicle Images</h3>
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                     {isViewMode ? 'Vehicle photo gallery' : 'Add multiple photos of the vehicle'}
                   </p>
@@ -525,11 +597,11 @@ const PoolingVehicleForm = ({
           </div>
 
           {/* Blueprint Side */}
-          <div className="lg:col-span-3 space-y-4">
-            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className={isDriver ? 'space-y-5' : 'lg:col-span-3 space-y-4'}>
+            <div className={cardClass}>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-black text-slate-900">Seat Layout Blueprint</h3>
+                  <h3 className="text-base font-semibold text-slate-900">Seat Layout Blueprint</h3>
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Interactive Top View Design</p>
                 </div>
                 <div className="flex gap-2">
@@ -604,7 +676,21 @@ const PoolingVehicleForm = ({
           </div>
         </div>
 
-        {!isViewMode && !isEditMode && placeCreateActionAtEnd ? (
+        {!isViewMode && !isEditMode && placeCreateActionAtEnd && isDriver ? (
+          <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-white via-white/95 to-transparent px-6 pt-8 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
+            <div className="mx-auto max-w-sm">
+              <button
+                onClick={handleSubmit}
+                disabled={saving}
+                className="flex h-14 w-full items-center justify-center gap-3 rounded-[1.6rem] bg-slate-900 text-[14px] font-black uppercase tracking-widest text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] transition-all active:scale-[0.98] disabled:opacity-60"
+              >
+                {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
+                {createActionLabel}
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {!isViewMode && !isEditMode && placeCreateActionAtEnd && !isDriver ? (
           <div className="mt-4 flex justify-end">
             <button
               onClick={handleSubmit}

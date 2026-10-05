@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 import { Autocomplete } from '@react-google-maps/api';
 import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../utils/googleMaps';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass = 'w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-slate-800 outline-none transition-all shadow-sm hover:border-amber-300 focus:border-amber-400 focus:ring-1 focus:ring-amber-400';
 const labelClass = 'mb-0.5 block text-xs font-semibold text-slate-800';
@@ -53,6 +54,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
   const [autocomplete, setAutocomplete] = useState(null);
+  const { isDirty } = useDirty(formData, !loading);
 
   const { isLoaded } = useAppGoogleMapsLoader();
 
@@ -518,7 +520,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
           <div className="mt-8 flex justify-end">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || (isEdit && !isDirty)}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-yellow-400 px-8 py-3 text-sm font-bold text-black transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : null}

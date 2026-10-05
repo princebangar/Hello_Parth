@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/promos';
 const LIST_PATH = '/admin/promotions/promo-codes';
@@ -267,6 +268,7 @@ const PromoCodes = () => {
   const [locations, setLocations] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [formData, setFormData] = useState(createInitialFormData);
+  const { isDirty, resetBaseline } = useDirty(formData);
   const [filters, setFilters] = useState(createInitialFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -306,7 +308,7 @@ const PromoCodes = () => {
     if (isEditRoute && id && promos.length > 0) {
       const promo = promos.find((p) => String(p._id) === String(id));
       if (promo) {
-        setFormData({
+        const loadedForm = {
           service_location_id: promo.service_location_id || '',
           service_location_ids: getPromoLocationIds(promo),
           transport_type: promo.transport_type || '',
@@ -322,7 +324,9 @@ const PromoCodes = () => {
           to: promo.to ? new Date(promo.to).toISOString().split('T')[0] : '',
           uses_per_user: promo.uses_per_user || '1',
           active: promo.active !== false,
-        });
+        };
+        setFormData(loadedForm);
+        resetBaseline(loadedForm);
       }
     } else if (isCreateRoute) {
       setFormData(createInitialFormData());
@@ -928,7 +932,7 @@ const PromoCodes = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || (isEditRoute && !isDirty)}
                   className="w-full py-3 bg-[#FFC400] text-white rounded-lg text-sm font-medium hover:bg-[#E5B000] transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
                   {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}

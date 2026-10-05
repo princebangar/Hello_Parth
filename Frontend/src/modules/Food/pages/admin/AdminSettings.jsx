@@ -12,6 +12,7 @@ import {
 } from "@food/components/ui/card";
 import { toast } from "sonner";
 import { Lock, Eye, EyeOff, Save, Loader2, Shield, User, Mail, Truck } from "lucide-react";
+import useDirty from "../../../../shared/hooks/useDirty";
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -29,6 +30,7 @@ export default function AdminSettings() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const { isDirty } = useDirty(passwordForm, true);
 
   // Single API: getAdminProfile (GET /auth/me) for current account display
   useEffect(() => {
@@ -317,7 +319,7 @@ export default function AdminSettings() {
             <div className="flex justify-end pt-4 border-t border-neutral-200">
               <Button
                 type="submit"
-                disabled={saving}
+                disabled={saving || !isDirty}
                 className="bg-black text-white hover:bg-neutral-900 h-11 px-8"
               >
                 {saving ? (

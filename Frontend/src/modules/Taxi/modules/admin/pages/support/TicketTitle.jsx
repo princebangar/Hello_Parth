@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Edit2, Plus, Trash2 } from 'lucide-react';
 import { adminSupportService } from '../../../shared/services/supportTicketService';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const USER_TYPES = ['user', 'driver', 'owner'];
 
@@ -17,6 +18,7 @@ const TicketTitle = () => {
   const [error, setError] = useState('');
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState('');
+  const { isDirty, resetBaseline } = useDirty(form);
   const [search, setSearch] = useState('');
 
   const loadRows = async () => {
@@ -84,11 +86,13 @@ const TicketTitle = () => {
 
   const onEdit = (row) => {
     setEditingId(row.id);
-    setForm({
+    const nextForm = {
       title: row.title || '',
       userType: row.userType || 'user',
       active: Boolean(row.active),
-    });
+    };
+    setForm(nextForm);
+    resetBaseline(nextForm);
   };
 
   const onDelete = async (row) => {
@@ -186,7 +190,7 @@ const TicketTitle = () => {
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || (Boolean(editingId) && !isDirty)}
                 className="flex-1 rounded-lg bg-yellow-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60 shadow-sm"
               >
                 {saving ? 'Saving...' : editingId ? 'Update' : 'Create'}

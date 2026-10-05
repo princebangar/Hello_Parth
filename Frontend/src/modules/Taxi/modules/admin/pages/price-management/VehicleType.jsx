@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 import CarIcon from '../../../../assets/icons/car.png';
 import BikeIcon from '../../../../assets/icons/bike.png';
@@ -395,6 +396,7 @@ const VehicleType = ({ mode: propMode }) => {
   const [pagination, setPagination] = useState({ total: 0, current_page: 1 });
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
+  const { isDirty, resetBaseline } = useDirty(formData, !loading);
   const { transportTypes } = useTaxiTransportTypes({ enabled: isEditor });
   const transportTypeOptions = useMemo(() => {
     const normalized = new Map();
@@ -444,7 +446,9 @@ const VehicleType = ({ mode: propMode }) => {
 
             const detailPayload = unwrap(response);
             if (detailPayload) {
-              setFormData(buildVehicleFormData(normalizeVehicle(detailPayload)));
+              const loadedForm = buildVehicleFormData(normalizeVehicle(detailPayload));
+              setFormData(loadedForm);
+              resetBaseline(loadedForm);
             }
           })
           .catch(() => {});
@@ -468,7 +472,9 @@ const VehicleType = ({ mode: propMode }) => {
             if (id && !formData.name) {
               const selectedVehicle = normalizedVehicles.find((item) => String(item.id) === String(id));
               if (selectedVehicle) {
-                setFormData(buildVehicleFormData(selectedVehicle));
+                const loadedForm = buildVehicleFormData(selectedVehicle);
+                setFormData(loadedForm);
+                resetBaseline(loadedForm);
               }
             }
           })
@@ -1320,8 +1326,8 @@ const VehicleType = ({ mode: propMode }) => {
           <div className="flex flex-col gap-3 lg:items-end">
             <button
               onClick={handleSave}
-              disabled={isSaving || loading}
-              className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-500 disabled:opacity-60"
+              disabled={isSaving || loading || (propMode === 'edit' && !isDirty)}
+              className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={16} />
               {isSaving ? 'Saving...' : id ? 'Update' : 'Create'}

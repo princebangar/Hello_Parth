@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
 import { env } from '../../../../config/env.js';
 import { normalizePoint, toPoint } from '../../../../utils/geo.js';
 import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
@@ -363,34 +364,10 @@ const getRequiredVehicleFieldMap = async (role) => {
 const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
-const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const getStaticDriverOtpConfig = () => ({
-  phone: normalizePhone(env.sms?.staticOtpPhone || ''),
-  otp: String(env.sms?.staticOtpCode || '').trim(),
-});
+// One source for default/static OTP: core/otp/otp.service.js (USE_DEFAULT_OTP / DEFAULT_TEST_PHONE in .env).
 const resolveDriverOnboardingOtpForPhone = (phone) => {
-  const normalizedPhone = normalizePhone(phone);
-  const staticOtpConfig = getStaticDriverOtpConfig();
-  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
-
-  if (defaultOtpEnabled && staticOtpConfig.otp) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  return {
-    otp: generateOtp(),
-    isStatic: false,
-  };
+  const { otp, isStatic } = resolveOtpForPhone(phone);
+  return { otp, isStatic };
 };
 
 const getVehicleType = (vehicleTypeId, registerFor = '') => {

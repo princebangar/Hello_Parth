@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/owner-management';
 const MotionDiv = motion.div;
@@ -31,6 +32,8 @@ const FleetNeededDocuments = () => {
     is_required: false,
     active: true
   });
+
+  const { isDirty, resetBaseline } = useDirty(formData);
 
   const token = localStorage.getItem('adminToken') || '';
 
@@ -129,7 +132,7 @@ const FleetNeededDocuments = () => {
 
   const handleEdit = (doc) => {
     setEditingId(doc._id);
-    setFormData({
+    const nextFormData = {
       name: doc.name,
       image_type: doc.image_type,
       has_expiry_date: doc.has_expiry_date ? '1' : '0',
@@ -137,7 +140,9 @@ const FleetNeededDocuments = () => {
       is_editable: doc.is_editable,
       is_required: doc.is_required,
       active: doc.active
-    });
+    };
+    setFormData(nextFormData);
+    resetBaseline(nextFormData);
     setView('create');
   };
 
@@ -446,8 +451,8 @@ const FleetNeededDocuments = () => {
                          </button>
                          <button 
                            type="submit"
-                           disabled={submitting}
-                           className="h-10 px-8 bg-black text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-gray-900 transition-colors shadow-sm disabled:opacity-50"
+                           disabled={submitting || (Boolean(editingId) && !isDirty)}
+                           className="h-10 px-8 bg-black text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-gray-900 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                          >
                             {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                             {editingId ? 'Update' : 'Save'}

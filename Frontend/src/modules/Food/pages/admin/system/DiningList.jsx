@@ -5,6 +5,7 @@ import { adminAPI } from "@food/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
 import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -14,6 +15,15 @@ const normalizeImageUrl = (image) => {
     if (typeof image === "string") return image
     if (typeof image === "object") return image.url || image.secure_url || ""
     return ""
+}
+
+const getDiningEditSnapshot = (restaurant) => {
+    if (!restaurant) return null
+    return {
+        isEnabled: restaurant.diningSettings?.isEnabled === true,
+        maxGuests: restaurant.diningSettings?.maxGuests ?? null,
+        primaryCategoryId: restaurant.primaryCategoryId || restaurant.categoryIds?.[0] || null,
+    }
 }
 
 const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
@@ -44,6 +54,10 @@ export default function DiningList() {
     const [error, setError] = useState(null)
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
     const [editingRestaurant, setEditingRestaurant] = useState(null)
+    const { isDirty: diningDirty, resetBaseline: resetDiningBaseline } = useDirty(
+        getDiningEditSnapshot(editingRestaurant),
+        true
+    )
 
     // Fetch restaurants from backend API
     useEffect(() => {
@@ -393,7 +407,9 @@ export default function DiningList() {
                                                     <td className="px-6 py-4 text-right">
                                                         <button
                                                             onClick={() => {
-                                                                setEditingRestaurant({ ...restaurant })
+                                                                const nextEditingRestaurant = { ...restaurant }
+                                                                setEditingRestaurant(nextEditingRestaurant)
+                                                                resetDiningBaseline(getDiningEditSnapshot(nextEditingRestaurant))
                                                                 setIsEditModalOpen(true)
                                                             }}
                                                             className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
@@ -515,7 +531,8 @@ export default function DiningList() {
                                         setLoading(false)
                                     }
                                 }}
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
+                                disabled={!diningDirty}
+                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 Save Changes
                             </button>

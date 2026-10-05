@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   ArrowLeft, 
   Edit2, 
@@ -23,6 +23,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import countryMetadata from '../../constants/countries.json';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const DEFAULT_TIMEZONES = [
   'Asia/Kolkata',
@@ -66,6 +67,13 @@ const ServiceLocation = ({ mode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeLangTab, setActiveLangTab] = useState('English');
   const [formData, setFormData] = useState(defaultFormData);
+  // Declared before the country effect so its baseline is taken first (effects run in declaration order).
+  const { isDirty, resetBaseline } = useDirty(formData, !loading);
+  const userEditedRef = useRef(false);
+  const editForm = (updater) => {
+    userEditedRef.current = true;
+    setFormData(updater);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -103,13 +111,16 @@ const ServiceLocation = ({ mode }) => {
         const item = nextLocations.find(l => String(l._id || l.id) === String(id));
         if (item) {
           const matchedCountry = nextCountries.find(c => (c._id || c.id) === item.country || c.name === item.country || c.name === item.country?.name);
-          setFormData({
+          const loadedForm = {
             name: item.name || item.service_location_name || '',
             country: matchedCountry?._id || matchedCountry?.id || '',
             currency_code: item.currency_code || '',
             currency_symbol: item.currency_symbol || '',
             timezone: item.timezone || ''
-          });
+          };
+          userEditedRef.current = false;
+          setFormData(loadedForm);
+          resetBaseline(loadedForm);
         }
       } else if (isCreate) {
         if (Array.isArray(nextCountries) && nextCountries.length > 0) {
@@ -142,6 +153,15 @@ const ServiceLocation = ({ mode }) => {
           currency_symbol: matched.currency_symbol,
           timezone: (matched.name === 'India') ? 'Asia/Kolkata' : prev.timezone
         }));
+        // Filling these in automatically after the record loads is not an admin change.
+        if (isEdit && !loading && !userEditedRef.current) {
+          resetBaseline({
+            ...formData,
+            currency_code: matched.currency_code,
+            currency_symbol: matched.currency_symbol,
+            timezone: (matched.name === 'India') ? 'Asia/Kolkata' : formData.timezone
+          });
+        }
       }
     }
   }, [formData.country, countries]);
@@ -664,7 +684,7 @@ const ServiceLocation = ({ mode }) => {
                     <label className={labelClass}>Name <span className="text-rose-400">*</span></label>
                     <input 
                        value={formData.name}
-                       onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+                       onChange={(e) => editForm(p => ({ ...p, name: e.target.value }))}
                        placeholder={`Enter Name in ${activeLangTab}`} 
                        className={inputClass} 
                        required
@@ -678,7 +698,7 @@ const ServiceLocation = ({ mode }) => {
                     <div className="relative">
                       <select 
                          value={formData.country} 
-                         onChange={(e) => setFormData(p => ({ ...p, country: e.target.value }))} 
+                         onChange={(e) => editForm(p => ({ ...p, country: e.target.value }))} 
                          className={inputClass + " appearance-none cursor-pointer"}
                          required
                       >
@@ -693,7 +713,7 @@ const ServiceLocation = ({ mode }) => {
                     <label className={labelClass}>Currency Code <span className="text-rose-400">*</span></label>
                     <input 
                        value={formData.currency_code} 
-                       onChange={(e) => setFormData(p => ({ ...p, currency_code: e.target.value.toUpperCase() }))} 
+                       onChange={(e) => editForm(p => ({ ...p, currency_code: e.target.value.toUpperCase() }))} 
                        placeholder="Enter Currency Code" 
                        className={inputClass} 
                        required
@@ -704,7 +724,7 @@ const ServiceLocation = ({ mode }) => {
                     <label className={labelClass}>Currency Symbol <span className="text-rose-400">*</span></label>
                     <input 
                        value={formData.currency_symbol} 
-                       onChange={(e) => setFormData(p => ({ ...p, currency_symbol: e.target.value }))} 
+                       onChange={(e) => editForm(p => ({ ...p, currency_symbol: e.target.value }))} 
                        placeholder="Enter Currency Symbol" 
                        className={inputClass} 
                        required
@@ -716,7 +736,7 @@ const ServiceLocation = ({ mode }) => {
                     <div className="relative">
                       <select 
                          value={formData.timezone} 
-                         onChange={(e) => setFormData(p => ({ ...p, timezone: e.target.value }))} 
+                         onChange={(e) => editForm(p => ({ ...p, timezone: e.target.value }))} 
                          className={inputClass + " appearance-none cursor-pointer"}
                          required
                       >
@@ -730,8 +750,8 @@ const ServiceLocation = ({ mode }) => {
 
               <div className="pt-10 flex justify-end">
                  <button 
-                    type="submit" disabled={saving}
-                    className="px-10 py-3 bg-yellow-400 text-black rounded-lg text-sm font-bold hover:bg-yellow-500 transition-all shadow-sm active:scale-95 flex items-center gap-2"
+                    type="submit" disabled={saving || (isEdit && !isDirty)}
+                    className="px-10 py-3 bg-yellow-400 text-black rounded-lg text-sm font-bold hover:bg-yellow-500 transition-all shadow-sm active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                  >
                     {saving ? <Loader2 size={16} className="animate-spin" /> : null}
                     {isEdit ? 'Update' : 'Save'}

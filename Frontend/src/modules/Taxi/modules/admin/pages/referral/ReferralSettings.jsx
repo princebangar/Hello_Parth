@@ -11,6 +11,7 @@ import {
   Loader2,
   CheckCircle2
 } from 'lucide-react';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const FormSection = ({ title, subTitle, icon: Icon, children }) => (
   <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -62,6 +63,8 @@ const ReferralSettings = () => {
   
   const [userSettings, setUserSettings] = useState({});
   const [driverSettings, setDriverSettings] = useState({});
+  const userDirty = useDirty(userSettings, !loading);
+  const driverDirty = useDirty(driverSettings, !loading);
 
   const token = localStorage.getItem('adminToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
 
@@ -106,6 +109,8 @@ const ReferralSettings = () => {
       });
       const data = await res.json();
       if (data.success) {
+        if (type === 'user') userDirty.resetBaseline(userSettings);
+        if (type === 'driver') driverDirty.resetBaseline(driverSettings);
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       }
@@ -208,8 +213,8 @@ const ReferralSettings = () => {
             </div>
             <button 
               onClick={() => handleUpdate('user')}
-              disabled={saving}
-              className="w-full py-6 bg-indigo-950 text-white rounded-[32px] text-[13px] font-black uppercase tracking-[0.3em] hover:bg-gray-900 transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98]"
+              disabled={saving || !userDirty.isDirty}
+              className="w-full py-6 bg-indigo-950 text-white rounded-[32px] text-[13px] font-black uppercase tracking-[0.3em] hover:bg-gray-900 transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
               Commit Policy Changes
@@ -238,8 +243,8 @@ const ReferralSettings = () => {
              </div>
              <button 
               onClick={() => handleUpdate('driver')}
-              disabled={saving}
-              className="w-full py-6 bg-gray-950 text-white rounded-[32px] text-[13px] font-black uppercase tracking-[0.3em] transition-all shadow-2xl flex items-center justify-center gap-3"
+              disabled={saving || !driverDirty.isDirty}
+              className="w-full py-6 bg-gray-950 text-white rounded-[32px] text-[13px] font-black uppercase tracking-[0.3em] transition-all shadow-2xl flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
               Update Fleet Incentives

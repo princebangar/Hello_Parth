@@ -38,6 +38,7 @@ import {
 } from '../../services/busService';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useAppGoogleMapsLoader } from '../../utils/googleMaps';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const DAY_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const AMENITY_OPTIONS = [
@@ -443,6 +444,7 @@ const BusServiceManager = ({
   const [detailBusId, setDetailBusId] = useState(null);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [draft, setDraft] = useState(() => buildFreshDraft());
+  const { isDirty, resetBaseline } = useDirty(draft);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [ownerDrivers, setOwnerDrivers] = useState([]);
@@ -576,9 +578,11 @@ const BusServiceManager = ({
     if (currentMode === 'create') return;
     const selectedBus = catalog.find((item) => item.id === selectedBusId);
     if (selectedBus) {
-      setDraft(JSON.parse(JSON.stringify(selectedBus)));
+      const loadedDraft = JSON.parse(JSON.stringify(selectedBus));
+      setDraft(loadedDraft);
+      resetBaseline(loadedDraft);
     }
-  }, [catalog, currentMode, selectedBusId]);
+  }, [catalog, currentMode, selectedBusId, resetBaseline]);
 
   const totalSeats = useMemo(() => countTotalSeats(draft.blueprint), [draft.blueprint]);
   const totalStops = draft.route?.stops?.length || 0;
@@ -694,10 +698,12 @@ const BusServiceManager = ({
     if (currentMode !== 'edit' || !currentBusId) return;
     const selectedBus = catalog.find((item) => item.id === currentBusId);
     if (selectedBus) {
+      const loadedDraft = JSON.parse(JSON.stringify(selectedBus));
       setSelectedBusId(selectedBus.id);
-      setDraft(JSON.parse(JSON.stringify(selectedBus)));
+      setDraft(loadedDraft);
+      resetBaseline(loadedDraft);
     }
-  }, [catalog, currentBusId, currentMode]);
+  }, [catalog, currentBusId, currentMode, resetBaseline]);
 
   useEffect(() => {
     if (
@@ -1294,6 +1300,7 @@ const BusServiceManager = ({
       });
       setSelectedBusId(nextBus.id);
       setDraft(nextBus);
+      resetBaseline(nextBus);
       navigate({
         pathname: `${basePath}/edit/${nextBus.id}`,
         search: currentFormStepIndex > 0 ? `?step=${currentFormStepIndex + 1}` : '',
@@ -2921,8 +2928,8 @@ const BusServiceManager = ({
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-amber-100 border border-amber-300 px-6 py-3 text-sm font-bold text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-amber-200 active:scale-95"
+                  disabled={isSaving || (currentMode === 'edit' && !isDirty)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-amber-100 border border-amber-300 px-6 py-3 text-sm font-bold text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-amber-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:active:scale-100"
                 >
                   <Save size={16} />
                   {isSaving ? 'Saving...' : isLastFormStep ? 'Save Bus Service' : 'Save Draft'}

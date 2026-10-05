@@ -11,6 +11,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass = "w-full border border-gray-200 rounded-md px-2 py-0.5 text-xs text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors shadow-sm";
 const labelClass = "block text-[10px] font-semibold text-gray-500 mb-0";
@@ -21,6 +22,7 @@ const SurgePricing = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Sunday');
   const [surges, setSurges] = useState([]);
+  const { isDirty } = useDirty(surges, !loading);
   const [details, setDetails] = useState({ zone_name: '', vehicle_type: '' });
 
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -229,7 +231,7 @@ const SurgePricing = () => {
               </div>
 
               <div className="p-3 border-t border-gray-100 flex justify-end bg-gray-50/20">
-                 <button onClick={handleUpdate} className="bg-indigo-600 text-white px-6 py-1.5 rounded text-[11px] font-black uppercase tracking-widest shadow hover:bg-indigo-700 transition-all active:scale-95">
+                 <button onClick={handleUpdate} disabled={!isDirty} className="bg-indigo-600 text-white px-6 py-1.5 rounded text-[11px] font-black uppercase tracking-widest shadow hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100">
                     Update Surge
                  </button>
               </div>

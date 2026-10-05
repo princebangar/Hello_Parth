@@ -36,6 +36,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from '../../../../shared/api/runtimeConfig';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass = "w-full border border-gray-200 rounded-md px-2 py-0.5 text-xs text-gray-800 bg-white hover:border-indigo-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-100 transition-all outline-none shadow-sm";
 const labelClass = "block text-[10px] font-semibold text-gray-700 mb-0";
@@ -281,6 +282,8 @@ const SetPrices = ({ mode }) => {
   const [zones, setZones] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
+  // Declared before the effects below so its baseline is taken first (effects run in declaration order).
+  const { isDirty, resetBaseline } = useDirty(formData, !loading);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const selectedVehicleType = React.useMemo(
     () => vehicleTypes.find((vehicle) => String(vehicle._id || vehicle.id) === String(formData.vehicle_type || '')) || null,
@@ -319,6 +322,10 @@ const SetPrices = ({ mode }) => {
         ? previous
         : { ...previous, transport_type: nextTransportType }
     ));
+    // Deriving the transport type from the vehicle is automatic: if the form was still clean, keep it clean.
+    if (mode === 'edit' && !loading && !isDirty && formData.transport_type !== nextTransportType) {
+      resetBaseline({ ...formData, transport_type: nextTransportType });
+    }
   }, [selectedVehicleType]);
 
   const fetchInitialData = async () => {
@@ -389,7 +396,7 @@ const SetPrices = ({ mode }) => {
         const detailResponse = await adminService.getSetPriceById(editingId);
         const pData = detailResponse?.data?.data || detailResponse?.data || {};
 
-        setFormData({
+        const loadedForm = {
           ...initialFormState,
           ...pData,
           zone_id: pData.zone_id?._id || pData.zone_id || ALL_ZONES_OPTION_VALUE,
@@ -405,7 +412,9 @@ const SetPrices = ({ mode }) => {
           payment_type: normalizePaymentTypes(pData.payment_type).length ? normalizePaymentTypes(pData.payment_type) : ['cash'],
           user_cancellation_fee_type: pData.user_cancellation_fee_type || 'percentage',
           driver_cancellation_fee_type: pData.driver_cancellation_fee_type || 'percentage',
-        });
+        };
+        setFormData(loadedForm);
+        resetBaseline(loadedForm);
       }
       
     } catch (error) { 
@@ -1029,7 +1038,7 @@ const SetPrices = ({ mode }) => {
 
                   {/* Footer Action */}
                   <div className="pt-2 flex justify-end border-t border-gray-50 mt-1">
-                     <button type="submit" disabled={saving} className="px-6 py-1.5 bg-yellow-400 text-black rounded text-xs font-bold shadow-lg hover:opacity-90 transition-all active:scale-95 flex items-center gap-2">
+                     <button type="submit" disabled={saving || (mode === 'edit' && !isDirty)} className="px-6 py-1.5 bg-yellow-400 text-black rounded text-xs font-bold shadow-lg hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100">
                         {saving && <Loader2 size={16} className="animate-spin" />}
                         {saving ? 'Saving Changes...' : 'Save'}
                      </button>

@@ -12,6 +12,7 @@ import {
 } from "@food/components/ui/card";
 import { toast } from "sonner";
 import { User, Mail, Phone, Save, Loader2, Upload, X, Pencil, Eye, EyeOff } from "lucide-react";
+import useDirty from "../../../../shared/hooks/useDirty";
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -42,6 +43,10 @@ export default function AdminProfile() {
     newPassword: false,
     confirmPassword: false,
   });
+  const { isDirty, resetBaseline } = useDirty(
+    { formData, passwordData, hasNewImage: !!selectedFile },
+    !loading
+  );
 
   useEffect(() => {
     fetchProfile();
@@ -218,11 +223,17 @@ export default function AdminProfile() {
       
       if (updatedAdmin) {
         setProfile(updatedAdmin);
-        setFormData({
+        const savedForm = {
           name: updatedAdmin.name || "",
           email: updatedAdmin.email || "",
           phone: updatedAdmin.phone || "",
           profileImage: updatedAdmin.profileImage || "",
+        };
+        setFormData(savedForm);
+        resetBaseline({
+          formData: savedForm,
+          passwordData: { currentPassword: "", newPassword: "", confirmPassword: "" },
+          hasNewImage: false,
         });
         // Clear selected file and preview
         setSelectedFile(null);
@@ -374,7 +385,7 @@ export default function AdminProfile() {
                 <Button
                   type="submit"
                   form="admin-profile-form"
-                  disabled={saving || uploading}
+                  disabled={saving || uploading || !isDirty}
                   className="bg-black text-white hover:bg-neutral-900 h-10 px-6"
                 >
                   {uploading ? (

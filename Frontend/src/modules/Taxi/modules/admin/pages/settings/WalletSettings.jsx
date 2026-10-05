@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../shared/api/axiosInstance';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const AMOUNT_FIELDS = [
   {
@@ -112,6 +113,7 @@ const WalletSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({});
+  const { isDirty, resetBaseline } = useDirty(settings, !loading);
 
   const fetchData = async () => {
     try {
@@ -145,7 +147,9 @@ const WalletSettings = () => {
     try {
       setSaving(true);
       const response = await api.patch('/admin/general-settings/wallet', { settings });
-      setSettings(response.data?.settings || response.settings || settings);
+      const savedSettings = response.data?.settings || response.settings || settings;
+      setSettings(savedSettings);
+      resetBaseline(savedSettings);
       toast.success('Wallet settings saved');
     } catch (err) {
       toast.error('Failed to save wallet settings');
@@ -183,7 +187,7 @@ const WalletSettings = () => {
         </div>
         <button
           onClick={handleUpdate}
-          disabled={saving}
+          disabled={saving || !isDirty}
           className="flex h-11 w-full lg:w-auto min-w-[120px] items-center justify-center gap-2 rounded-lg bg-yellow-400 px-6 text-sm font-bold text-black shadow-sm transition-colors hover:bg-yellow-500 disabled:opacity-60"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}

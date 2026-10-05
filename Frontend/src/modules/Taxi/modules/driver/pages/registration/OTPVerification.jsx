@@ -517,7 +517,7 @@ const OTPVerification = () => {
                         className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-base font-semibold transition-all ${
                             isComplete && !loading
                                 ? 'bg-[#0b1220] text-[#ffffff] shadow-[0_14px_28px_-14px_rgba(11,18,32,0.7)] active:scale-[0.99]'
-                                : 'cursor-not-allowed bg-[#e2e8f0] text-[#94a3b8]'
+                                : 'cursor-not-allowed bg-[#cbd5e1] text-[#475569]'
                         }`}
                     >
                         {loading ? (
@@ -537,7 +537,7 @@ const OTPVerification = () => {
                             onClick={handleResend}
                             disabled={timer > 0 || loading}
                             className={`inline-flex items-center gap-1.5 font-semibold ${
-                                timer > 0 ? 'cursor-not-allowed text-[#94a3b8]' : 'text-[#0b1220] underline underline-offset-2'
+                                timer > 0 ? 'cursor-not-allowed text-[#64748b]' : 'text-[#0b1220] underline underline-offset-2'
                             }`}
                         >
                             <MessageSquare size={14} />
@@ -569,7 +569,7 @@ const OTPVerification = () => {
                                     <span className="block text-[15px] font-semibold text-[#0b1220]">{roleConfig.label}</span>
                                     <span className="mt-0.5 block text-xs text-[#64748b]">{roleConfig.description}</span>
                                 </span>
-                                <ChevronRight size={18} className="shrink-0 text-[#94a3b8]" />
+                                <ChevronRight size={18} className="shrink-0 text-[#64748b]" />
                             </button>
                         );
                     })}

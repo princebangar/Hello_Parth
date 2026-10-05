@@ -20,6 +20,7 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { networkErrorMessage } from "@/shared/utils/networkError"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 const defaultFormData = {
   name: "",
@@ -81,6 +82,7 @@ export default function Category() {
   const [selectedImageFile, setSelectedImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const { isDirty, resetBaseline } = useDirty({ formData, hasNewImage: !!selectedImageFile }, true)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -191,14 +193,16 @@ export default function Category() {
         ? category.zoneId
         : category?.zoneId?._id || category?.zoneId?.id || "global"
 
-    setFormData({
+    const editData = {
       name: category?.name || "",
       image: category?.image || "",
       status: category?.status !== false,
       type: category?.type || "",
       zoneId: zoneIdValue || "global",
       foodTypeScope: category?.foodTypeScope || "Both",
-    })
+    }
+    setFormData(editData)
+    resetBaseline({ formData: editData, hasNewImage: false })
     setSelectedImageFile(null)
     setImagePreview(category?.image || null)
     setIsModalOpen(true)
@@ -766,7 +770,8 @@ export default function Category() {
                         </button>
                         <button
                           type="submit"
-                          className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-white"
+                          disabled={uploadingImage || (!!editingCategory && !isDirty)}
+                          className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-white disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {editingCategory ? "Update" : "Create"}
                         </button>

@@ -509,16 +509,16 @@ const getStatusColor = (status) => {
             </div>
 
             <div className="space-y-3">
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 opacity-60">
                     {pendingReverificationDocs.length > 0 ? "Submission received" : isVehicleReapproval ? "Update in review" : "Live Audit Status"}
                 </p>
                 <h1 className="font-['Outfit'] text-[42px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
                     {rejectedDocs.length > 0 ? (
-                        <>Action <span className="text-slate-400">Required</span></>
+                        <>Action <span className="text-slate-500">Required</span></>
                     ) : pendingReverificationDocs.length > 0 ? (
-                        <>Verification <span className="text-slate-400">Pending</span></>
+                        <>Verification <span className="text-slate-500">Pending</span></>
                     ) : (
-                        <>Review <span className="text-slate-400">Started</span></>
+                        <>Review <span className="text-slate-500">Started</span></>
                     )}
                 </h1>
                 {connectionIssue && (
@@ -544,12 +544,12 @@ const getStatusColor = (status) => {
                 className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.04)] space-y-4"
             >
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-slate-50 rounded-[1rem] flex items-center justify-center text-slate-400">
+                    <div className="w-12 h-12 bg-slate-50 rounded-[1rem] flex items-center justify-center text-slate-500">
                         <Mail size={24} />
                     </div>
                     <div className="min-w-0 flex-1">
                         <h4 className="text-base font-black tracking-tight text-slate-900 truncate">{driver.name || 'Partner'}</h4>
-                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest opacity-60 truncate">
+                        <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest opacity-60 truncate">
                             +91 {driver.phone}
                         </p>
                     </div>
@@ -561,7 +561,7 @@ const getStatusColor = (status) => {
         )}
 
         <section className="space-y-4">
-            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 opacity-60">Checklist Summary</h3>
+            <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] px-2 opacity-60">Checklist Summary</h3>
             <div className="space-y-4">
                 {docDetails.length > 0 ? docDetails.map((doc, idx) => (
                     <div key={idx} className="bg-white rounded-[1.8rem] border border-slate-100 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.03)] space-y-4">
@@ -618,12 +618,12 @@ const getStatusColor = (status) => {
                     </div>
                 )) : isSpecialRole ? (
                     <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
-                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">No document uploads required for this role.</p>
+                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-500 opacity-60">No document uploads required for this role.</p>
                     </div>
                 ) : (
                     <div className="bg-white rounded-[1.8rem] border border-slate-100 p-10 text-center shadow-sm">
                         <div className="h-6 w-6 border-2 border-slate-100 border-t-slate-900 rounded-full animate-spin mx-auto mb-4" />
-                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-400 opacity-60">Syncing documents...</p>
+                        <p className="text-[12px] font-black uppercase tracking-widest text-slate-500 opacity-60">Syncing documents...</p>
                     </div>
                 )}
             </div>

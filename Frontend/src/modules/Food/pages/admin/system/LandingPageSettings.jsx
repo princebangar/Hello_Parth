@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Monitor, Info, X, ChevronRight, RotateCcw, Save } from "lucide-react";
 import mobileImage1 from "@food/assets/Transaction-report-icons/mobile_image1.png";
+import useDirty from "../../../../../shared/hooks/useDirty";
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -49,6 +50,10 @@ export default function LandingPageSettings({ type = "admin" }) {
     happyCustomer: "10000",
     averageDelivery: "30",
   });
+  const { isDirty, resetBaseline } = useDirty(
+    { adminHeaderContent, adminImageContent, adminFloatingIcon, reactHeaderContent, reactLocationPicker, reactBusinessStats },
+    true
+  );
 
   const adminTabs = [
     "Header",
@@ -142,6 +147,7 @@ export default function LandingPageSettings({ type = "admin" }) {
   const handleSave = () => {
     // Handle save logic here
     debugLog("Saving...");
+    resetBaseline({ adminHeaderContent, adminImageContent, adminFloatingIcon, reactHeaderContent, reactLocationPicker, reactBusinessStats });
   };
 
   if (isAdmin) {
@@ -345,8 +351,8 @@ export default function LandingPageSettings({ type = "admin" }) {
                   </button>
                   <button
                     type="button"
-                    onClick={handleSave}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                    onClick={handleSave} disabled={!isDirty}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Save className="w-3 h-3" />
                     Save
@@ -456,8 +462,8 @@ export default function LandingPageSettings({ type = "admin" }) {
                   </button>
                   <button
                     type="button"
-                    onClick={handleSave}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                    onClick={handleSave} disabled={!isDirty}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Save className="w-3 h-3" />
                     Save
@@ -540,8 +546,8 @@ export default function LandingPageSettings({ type = "admin" }) {
                   </button>
                   <button
                     type="button"
-                    onClick={handleSave}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                    onClick={handleSave} disabled={!isDirty}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Save className="w-3 h-3" />
                     Save
@@ -586,7 +592,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -628,7 +634,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -670,7 +676,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -712,7 +718,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -754,7 +760,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -796,7 +802,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -837,7 +843,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -890,7 +896,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -954,7 +960,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -1028,7 +1034,7 @@ export default function LandingPageSettings({ type = "admin" }) {
                 <button type="button" onClick={handleReset} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" /> Reset
                 </button>
-                <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                <button type="button" onClick={handleSave} disabled={!isDirty} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Save className="w-3 h-3" /> Save
                 </button>
               </div>
@@ -1204,8 +1210,8 @@ export default function LandingPageSettings({ type = "admin" }) {
                 </button>
                 <button
                   type="button"
-                  onClick={handleSave}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                  onClick={handleSave} disabled={!isDirty}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Save className="w-3 h-3" />
                   Save
@@ -1271,8 +1277,8 @@ export default function LandingPageSettings({ type = "admin" }) {
                 </button>
                 <button
                   type="button"
-                  onClick={handleSave}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                  onClick={handleSave} disabled={!isDirty}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Save className="w-3 h-3" />
                   Save
@@ -1344,8 +1350,8 @@ export default function LandingPageSettings({ type = "admin" }) {
                 </button>
                 <button
                   type="button"
-                  onClick={handleSave}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                  onClick={handleSave} disabled={!isDirty}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Save className="w-3 h-3" />
                   Save
@@ -1397,8 +1403,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1459,8 +1465,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1518,8 +1524,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1570,8 +1576,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1632,8 +1638,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1684,8 +1690,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1735,8 +1741,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1787,8 +1793,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save
@@ -1839,8 +1845,8 @@ export default function LandingPageSettings({ type = "admin" }) {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                onClick={handleSave} disabled={!isDirty}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save className="w-3 h-3" />
                 Save

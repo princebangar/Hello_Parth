@@ -72,7 +72,7 @@ const DriverWelcome = () => {
                             <h3 className="text-lg font-black tracking-tight text-slate-900">
                                 Partner Benefits
                             </h3>
-                            <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Why partners choose {appName}</p>
+                            <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest opacity-60">Why partners choose {appName}</p>
                         </div>
                     </div>
                     
@@ -100,7 +100,7 @@ const DriverWelcome = () => {
             </main>
 
             {/* Sticky Action Footer */}
-            <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-50">
+            <div className="fixed bottom-0 left-0 right-0 px-6 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-50">
                 <div className="mx-auto max-w-sm">
                     <motion.button 
                         whileHover={{ scale: 1.02, y: -2 }}

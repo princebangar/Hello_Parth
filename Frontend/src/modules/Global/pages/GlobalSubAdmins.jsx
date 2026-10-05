@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
 import { GLOBAL_ADMIN_HOME } from "@/shared/utils/activeModule.js"
+import useDirty from "../../../shared/hooks/useDirty"
 import { apiErrorMessage, globalAdminAPI } from "../api/globalAdminAPI"
 
 const emptyForm = { name: "", email: "", phone: "", password: "", servicesAccess: ["food", "taxi"] }
@@ -67,6 +68,7 @@ export default function GlobalSubAdmins() {
   const [actionLoading, setActionLoading] = useState(false)
   const [passwordDialog, setPasswordDialog] = useState(null)
   const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" })
+  const { isDirty: passwordDirty, resetBaseline: resetPasswordBaseline } = useDirty(passwordForm, true)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const requestIdRef = useRef(0)
@@ -417,7 +419,9 @@ export default function GlobalSubAdmins() {
                       <button
                         type="button"
                         onClick={() => {
-                          setPasswordForm({ newPassword: "", confirmPassword: "" })
+                          const blankPasswordForm = { newPassword: "", confirmPassword: "" }
+                          setPasswordForm(blankPasswordForm)
+                          resetPasswordBaseline(blankPasswordForm)
                           setPasswordDialog(admin)
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-white hover:border-slate-300 transition-colors"
@@ -545,7 +549,7 @@ export default function GlobalSubAdmins() {
               <button type="button" onClick={() => closePasswordDialog()} disabled={savingPassword} className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all">
                 Cancel
               </button>
-              <button type="button" onClick={handleSavePassword} disabled={savingPassword} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all disabled:opacity-60">
+              <button type="button" onClick={handleSavePassword} disabled={savingPassword || !passwordDirty} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 {savingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
                 Save Password
               </button>

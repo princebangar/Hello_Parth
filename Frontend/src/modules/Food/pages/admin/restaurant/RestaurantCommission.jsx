@@ -9,6 +9,7 @@ import { adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import { networkErrorMessage } from "@/shared/utils/networkError"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -38,6 +39,7 @@ export default function RestaurantCommission() {
     notes: ""
   })
   const [formErrors, setFormErrors] = useState({})
+  const { isDirty, resetBaseline } = useDirty(formData, true)
   const [visibleColumns, setVisibleColumns] = useState({
     si: true,
     restaurant: true,
@@ -230,14 +232,16 @@ export default function RestaurantCommission() {
           }
         }
         
-        setFormData({
+        const editData = {
           restaurantId: restaurantId,
           defaultCommission: {
             type: commissionData.defaultCommission?.type || "percentage",
             value: commissionData.defaultCommission?.value?.toString() || DEFAULT_COMMISSION_PERCENT
           },
           notes: commissionData.notes || ""
-        })
+        }
+        setFormData(editData)
+        resetBaseline(editData)
         setFormErrors({})
         setIsAddEditOpen(true)
       }
@@ -645,7 +649,7 @@ export default function RestaurantCommission() {
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || (!!selectedCommission && !isDirty)}
               className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}

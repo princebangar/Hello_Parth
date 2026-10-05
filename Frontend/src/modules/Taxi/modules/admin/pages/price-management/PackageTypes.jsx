@@ -16,6 +16,7 @@ import {
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 import { motion, AnimatePresence } from "framer-motion";
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-800 font-semibold bg-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none transition-colors shadow-sm";
@@ -57,6 +58,7 @@ const PackageTypes = ({ mode: propMode }) => {
     description: '',
     status: 'active',
   });
+  const { isDirty, resetBaseline } = useDirty(formData, !loading);
 
   const fetchPackages = async () => {
     try {
@@ -85,13 +87,15 @@ const PackageTypes = ({ mode: propMode }) => {
           const itemsArr = Array.isArray(items) ? items : [];
           const item = itemsArr.find(p => String(p._id || p.id) === String(id));
           if (item) {
-            setFormData({
+            const loadedForm = {
               name: item.name || '',
               transport_type: item.transport_type || 'taxi',
               short_description: item.short_description || '',
               description: item.description || '',
               status: item.status || 'active',
-            });
+            };
+            setFormData(loadedForm);
+            resetBaseline(loadedForm);
           }
         } catch (err) {
           toast.error('Failed to fetch package details');
@@ -378,8 +382,8 @@ const PackageTypes = ({ mode: propMode }) => {
                 Cancel
              </button>
              <button 
-                onClick={handleSubmit} disabled={submitting}
-                className="px-8 py-2.5 bg-amber-400 text-slate-900 rounded-lg text-sm font-bold hover:bg-amber-500 transition-all shadow-sm active:scale-95 flex items-center gap-2 group"
+                onClick={handleSubmit} disabled={submitting || (isEdit && !isDirty)}
+                className="px-8 py-2.5 bg-amber-400 text-slate-900 rounded-lg text-sm font-bold hover:bg-amber-500 transition-all shadow-sm active:scale-95 flex items-center gap-2 group disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
               >
                 {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} className="group-hover:scale-110 transition-transform" />}
                 {isEdit ? 'Update Package' : 'Save Package'}

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PoolingVehicleForm from '../../../admin/pages/pooling/PoolingVehicleForm';
+import useOnboardingExitGuard from '../../../../../../shared/hooks/useOnboardingExitGuard';
+import OnboardingExitModal from '../../../../../../shared/components/OnboardingExitModal';
 import {
   clearDriverRegistrationSession,
   completePoolingDriverOnboarding,
@@ -17,6 +19,14 @@ const PoolingDriverOnboarding = () => {
   const registrationId = String(session.registrationId || '').trim();
   const phone = String(session.phone || '').replace(/\D/g, '').slice(-10);
   const finishedRef = useRef(false);
+  const hasInputRef = useRef(false);
+
+  // Back arrow / phone back button: leave straight away if the form is empty, otherwise ask first.
+  const { showExitModal, handleBack, handleStay, handleExit } = useOnboardingExitGuard({
+    isFirstStep: true,
+    hasUnsavedProgress: () => hasInputRef.current,
+    onExit: () => navigate('/taxi/driver/login', { replace: true }),
+  });
 
   useEffect(() => {
     if (finishedRef.current) {
@@ -53,8 +63,12 @@ const PoolingDriverOnboarding = () => {
   }
 
   return (
+    <>
     <PoolingVehicleForm
       service={poolingOnboardingService}
+      onBack={handleBack}
+      variant="driver"
+      onProgressChange={(value) => { hasInputRef.current = value; }}
       backPath="/taxi/driver/login"
       backLabel="Back to Login"
       pageLabel="Pooling Driver Onboarding"
@@ -74,7 +88,6 @@ const PoolingDriverOnboarding = () => {
       placeCreateActionAtEnd
       createActionLabel="Submit For Approval"
       createSuccessMessage="Pooling request submitted"
-      helperPanel="Your mobile number becomes the login number for this pooling profile. Submit the vehicle setup and we will send it to admin review."
       onSaveSuccess={async (response, payload) => {
         saveDriverRegistrationSession({
           fullName: payload.driverName || '',
@@ -96,6 +109,17 @@ const PoolingDriverOnboarding = () => {
         navigate('/taxi/driver/pooling/status', { replace: true });
       }}
     />
+    <OnboardingExitModal
+      open={showExitModal}
+      onStay={handleStay}
+      onExit={handleExit}
+      theme="taxi"
+      title="Exit registration?"
+      message="Are you sure you want to exit? The details you entered will not be submitted."
+      stayLabel="Cancel"
+      exitLabel="Exit"
+    />
+    </>
   );
 };
 

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const emptyForm = {
   audience: 'user',
@@ -22,6 +23,14 @@ const emptyForm = {
   description: '',
   active: true,
 };
+
+const buildPayload = (form) => ({
+  audience: form.audience,
+  order: Number(form.order || 1),
+  title: String(form.title || '').trim(),
+  description: String(form.description || '').trim(),
+  active: form.active,
+});
 
 const OnboardingScreens = () => {
   const [loading, setLoading] = useState(true);
@@ -32,6 +41,8 @@ const OnboardingScreens = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState('');
   const [form, setForm] = useState(emptyForm);
+  // Edit mode: Save stays disabled until the form differs from the screen that was opened.
+  const { isDirty, resetBaseline } = useDirty(buildPayload(form), true);
 
   const fetchAllScreens = async () => {
     try {
@@ -91,13 +102,15 @@ const OnboardingScreens = () => {
 
   const openEditModal = (screen) => {
     setEditingId(String(screen?._id || ''));
-    setForm({
+    const nextForm = {
       audience: screen?.audience || screen?.screen || 'user',
       order: Number(screen?.order || 1),
       title: screen?.title || '',
       description: screen?.description || '',
       active: screen?.active !== false,
-    });
+    };
+    setForm(nextForm);
+    resetBaseline(buildPayload(nextForm));
     setIsModalOpen(true);
   };
 
@@ -108,13 +121,7 @@ const OnboardingScreens = () => {
   };
 
   const handleSubmit = async () => {
-    const payload = {
-      audience: form.audience,
-      order: Number(form.order || 1),
-      title: String(form.title || '').trim(),
-      description: String(form.description || '').trim(),
-      active: form.active,
-    };
+    const payload = buildPayload(form);
 
     if (!payload.title) {
       toast.error('Title is required');
@@ -383,8 +390,8 @@ const OnboardingScreens = () => {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                disabled={saving || (Boolean(editingId) && !isDirty)}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 {saving ? 'Saving...' : editingId ? 'Update Screen' : 'Create Screen'}

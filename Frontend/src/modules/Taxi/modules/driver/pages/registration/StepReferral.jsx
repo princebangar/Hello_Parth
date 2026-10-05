@@ -62,7 +62,7 @@ const StepReferral = () => {
     return (
         <div 
             className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-clip"
-            style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+            style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" }}
         >
             <main className="mx-auto max-w-sm space-y-6">
                 <header className="contents space-y-6 [&>:last-child]:mb-6">
@@ -70,11 +70,11 @@ const StepReferral = () => {
                          <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => navigate(`${routePrefix}/step-personal`)}
-                            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-900 shadow-sm transition-all"
+                            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition-transform active:scale-95"
                         >
                             <ArrowLeft size={18} strokeWidth={2.5} />
                         </motion.button>
-                        <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5">
+                        <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 border border-slate-900/5">
                             Step 2 of 4
                         </div>
                     </div>
@@ -84,12 +84,12 @@ const StepReferral = () => {
                              <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
                                 <Gift size={22} strokeWidth={2.5} />
                             </div>
-                            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                                 Rewards Program
                             </span>
                         </div>
-                        <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
-                            Got a <span className="text-slate-400">Code?</span>
+                        <h1 className="text-[48px] font-bold leading-[1] tracking-[-0.04em] text-slate-900">
+                            Got a <span className="text-slate-500">Code?</span>
                         </h1>
                         <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
                             Invited by a Hello Parth driver? Enter their referral code. Rewards follow the current referral programme.
@@ -105,23 +105,23 @@ const StepReferral = () => {
 
                 <section className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
                     <div className="space-y-1 px-1">
-                        <h2 className="text-lg font-black tracking-tight text-slate-900">Referral Code</h2>
-                        <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest opacity-60">Optional Bonus</p>
+                        <h2 className="text-lg font-bold tracking-tight text-slate-900">Referral Code</h2>
+                        <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">Optional Bonus</p>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                        <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
                             <div className="flex items-center gap-4">
-                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                                     <Tag size={20} strokeWidth={2.5} />
                                 </div>
                                 <div className="min-w-0 flex-1 space-y-0.5 overflow-hidden">
-                                    <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">Referral Code</label>
+                                    <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Referral Code</label>
                                     <input
                                         value={referral}
                                         onChange={(e) => setReferral(e.target.value.toUpperCase())}
                                         placeholder="Enter referral code"
-                                        className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-200 tracking-wider uppercase"
+                                        className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-500 tracking-wider uppercase"
                                     />
                                 </div>
                             </div>
@@ -133,22 +133,22 @@ const StepReferral = () => {
                 <button 
                     onClick={() => handleNext(true)}
                     disabled={loading}
-                    className="w-full text-[12px] font-black text-slate-400 hover:text-slate-900 transition-colors py-4 uppercase tracking-[0.2em] opacity-60 hover:opacity-100"
+                    className="w-full text-[12px] font-bold text-slate-500 hover:text-slate-900 transition-colors py-4 uppercase tracking-[0.2em] opacity-60 hover:opacity-100"
                 >
                     Skip referral program
                 </button>
 
-                <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
+                <div className="fixed bottom-0 left-0 right-0 px-6 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
                     <div className="mx-auto max-w-sm">
                         <motion.button
                             whileHover={{ scale: 1.02, y: -2 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => handleNext(false)}
                             disabled={loading || !referral}
-                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all relative overflow-hidden ${
+                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-bold tracking-tight transition-all relative overflow-hidden ${
                                 referral
                                     ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black'
-                                    : 'pointer-events-none bg-slate-200 text-slate-400 shadow-none'
+                                    : 'pointer-events-none bg-slate-300 text-slate-600 shadow-none'
                             }`}
                         >
                             {loading ? (

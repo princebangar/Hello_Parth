@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Bot, Settings, Info, Store } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -28,6 +29,8 @@ export default function AISetup() {
   const [organization, setOrganization] = useState("")
   const [sectionWiseLimit, setSectionWiseLimit] = useState("60")
   const [imageUploadLimit, setImageUploadLimit] = useState("20")
+  const { isDirty: configDirty, resetBaseline: resetConfigBaseline } = useDirty({ isEnabled, apiKey, organization }, true)
+  const { isDirty: limitsDirty, resetBaseline: resetLimitsBaseline } = useDirty({ sectionWiseLimit, imageUploadLimit }, true)
 
   const handleReset = () => {
     setApiKey("")
@@ -37,6 +40,7 @@ export default function AISetup() {
   const handleAIConfigSave = (e) => {
     e.preventDefault()
     debugLog("Saving AI Configuration:", { apiKey, organization, isEnabled })
+    resetConfigBaseline({ isEnabled, apiKey, organization })
     alert("AI Configuration saved successfully!")
   }
 
@@ -48,6 +52,7 @@ export default function AISetup() {
   const handleAISettingsSave = (e) => {
     e.preventDefault()
     debugLog("Saving AI Settings:", { sectionWiseLimit, imageUploadLimit })
+    resetLimitsBaseline({ sectionWiseLimit, imageUploadLimit })
     alert("AI Settings saved successfully!")
   }
 
@@ -156,7 +161,8 @@ export default function AISetup() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={!configDirty}
+                  className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Save
                 </button>
@@ -224,7 +230,8 @@ export default function AISetup() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={!limitsDirty}
+                  className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Save Information
                 </button>

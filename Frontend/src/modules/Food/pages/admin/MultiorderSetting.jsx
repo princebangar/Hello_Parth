@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Package, Loader2, Bike } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import useDirty from "../../../../shared/hooks/useDirty"
 const debugError = (...args) => {}
 
 
@@ -10,6 +11,7 @@ export default function MultiorderSetting() {
   const [savingConcurrent, setSavingConcurrent] = useState(false)
   const [maxConcurrentOrders, setMaxConcurrentOrders] = useState("1")
   const isMountedRef = useRef(true)
+  const { isDirty, resetBaseline } = useDirty(maxConcurrentOrders, !loading)
 
   const fetchSetting = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -52,6 +54,7 @@ export default function MultiorderSetting() {
         response?.data?.maxConcurrentOrders ??
         value
       setMaxConcurrentOrders(String(saved))
+      resetBaseline(String(saved))
       toast.success("Concurrent order limit updated successfully")
       await fetchSetting({ silent: true })
     } catch (error) {
@@ -128,7 +131,7 @@ export default function MultiorderSetting() {
               </div>
               <button
                 onClick={saveConcurrentLimit}
-                disabled={loading || savingConcurrent}
+                disabled={loading || savingConcurrent || !isDirty}
                 className="flex items-center justify-center gap-2 self-end rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingConcurrent && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Plus, Trash2, Settings, ChevronDown } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -47,6 +48,7 @@ export default function JoinUsPageSetup() {
       fileFormats: { jpg: true, pdf: true, docs: true }
     }
   ])
+  const { isDirty, resetBaseline } = useDirty(customFields, true)
 
   const handleAddField = () => {
     const newField = {
@@ -82,6 +84,7 @@ export default function JoinUsPageSetup() {
   const handleSubmit = (e) => {
     e.preventDefault()
     debugLog("Form submitted:", { activeTab, customFields })
+    resetBaseline(customFields)
     alert("Join Request Form Setup saved successfully!")
   }
 
@@ -323,7 +326,8 @@ export default function JoinUsPageSetup() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={!isDirty}
+              className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               Submit
             </button>

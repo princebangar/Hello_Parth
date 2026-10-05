@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
 import { env } from '../../../../config/env.js';
 import { UserAuthSession } from '../models/UserAuthSession.js';
 import { User } from '../models/User.js';
@@ -25,36 +26,10 @@ const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(otp) : null);
-const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
-const TEST_LOGIN_OTP_PHONE = '7610416911';
-const TEST_LOGIN_OTP_CODE = '0000';
-const getStaticUserOtpConfig = () => ({
-  phone: normalizeUserPhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
-  otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
-});
+// One source for default/static OTP: core/otp/otp.service.js (USE_DEFAULT_OTP / DEFAULT_TEST_PHONE in .env).
 const resolveUserOtpForPhone = (phone) => {
-  const normalizedPhone = normalizeUserPhone(phone);
-  const staticOtpConfig = getStaticUserOtpConfig();
-  const defaultOtpEnabled = isTruthy(env.sms?.useDefaultOtp);
-
-  if (defaultOtpEnabled && staticOtpConfig.otp) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
-    return {
-      otp: staticOtpConfig.otp,
-      isStatic: true,
-    };
-  }
-
-  return {
-    otp: generateOtp(),
-    isStatic: false,
-  };
+  const { otp, isStatic } = resolveOtpForPhone(phone);
+  return { otp, isStatic };
 };
 
 const ensureUserCanLogin = (user) => {

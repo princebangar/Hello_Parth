@@ -6,6 +6,7 @@ import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Button } from "@food/components/ui/button"
 import { prepareUploadFile } from "@/shared/utils/imageCompressor"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -24,6 +25,10 @@ export default function DiningManagement() {
     const [editingCategoryId, setEditingCategoryId] = useState(null)
     const [editingCategoryImageUrl, setEditingCategoryImageUrl] = useState("")
     const categoryFileInputRef = useRef(null)
+    const { isDirty: categoryDirty, resetBaseline: resetCategoryBaseline } = useDirty(
+        { categoryName, hasNewImage: !!categoryFile },
+        true
+    )
 
     // Banners
     const [banners, setBanners] = useState([])
@@ -86,6 +91,7 @@ export default function DiningManagement() {
         setSuccess(null)
         setEditingCategoryId(category._id)
         setCategoryName(category.name || "")
+        resetCategoryBaseline({ categoryName: category.name || "", hasNewImage: false })
         setCategoryFile(null)
         setEditingCategoryImageUrl(category.imageUrl || "")
         if (categoryFileInputRef.current) categoryFileInputRef.current.value = ""
@@ -272,7 +278,7 @@ export default function DiningManagement() {
                                             </div>
                                         )}
                                     </div>
-                                    <Button onClick={handleSubmitCategory} disabled={categoriesUploading} className="w-full bg-blue-600 hover:bg-blue-700">
+                                    <Button onClick={handleSubmitCategory} disabled={categoriesUploading || (!!editingCategoryId && !categoryDirty)} className="w-full bg-blue-600 hover:bg-blue-700">
                                         {categoriesUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingCategoryId ? "Update Category" : "Create Category")}
                                     </Button>
                                 </div>

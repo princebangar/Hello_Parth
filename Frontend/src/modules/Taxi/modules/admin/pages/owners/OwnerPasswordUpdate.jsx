@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { adminService } from '../../services/adminService';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const OwnerPasswordUpdate = () => {
   const { id } = useParams();
@@ -13,6 +14,7 @@ const OwnerPasswordUpdate = () => {
     password_confirmation: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const { isDirty } = useDirty(formData);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -98,7 +100,7 @@ const OwnerPasswordUpdate = () => {
           <div className="mt-5 flex justify-end">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !isDirty}
               className="inline-flex h-10 items-center gap-3 rounded bg-indigo-900 px-6 text-sm font-semibold text-white transition-colors hover:bg-indigo-950 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? (

@@ -1,10 +1,12 @@
 import { useState } from "react"
 import { Info } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 import mobileImage1 from "@food/assets/Transaction-report-icons/mobile_image1.png"
 import mobileImage2 from "@food/assets/Transaction-report-icons/mobile_image2.png"
 
 export default function ThemeSettings() {
   const [selectedTheme, setSelectedTheme] = useState("theme1")
+  const { isDirty, resetBaseline } = useDirty(selectedTheme, true)
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
@@ -63,7 +65,11 @@ export default function ThemeSettings() {
 
           {/* Apply Button */}
           <div className="flex justify-end mt-6">
-            <button className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+            <button
+              onClick={() => resetBaseline(selectedTheme)}
+              disabled={!isDirty}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               Apply
             </button>
           </div>

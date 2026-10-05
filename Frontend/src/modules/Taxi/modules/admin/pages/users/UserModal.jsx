@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, Lock, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const UserModal = ({ isOpen, onClose, onSubmit, editingUser = null, isLoading = false }) => {
   const [formData, setFormData] = useState({
@@ -12,29 +13,31 @@ const UserModal = ({ isOpen, onClose, onSubmit, editingUser = null, isLoading = 
   });
 
   const [errors, setErrors] = useState({});
+  const { isDirty, resetBaseline } = useDirty(formData);
 
   useEffect(() => {
-    if (editingUser) {
-      setFormData({
-        name: editingUser.name || '',
-        email: editingUser.email || '',
-        mobile: editingUser.phone || '', // Note: phone is mapped to mobile in UserList
-        password: '',
-        gender: editingUser.gender || 'male',
-        active: editingUser.status === 'Active'
-      });
-    } else {
-      setFormData({
-        name: '',
-        email: '',
-        mobile: '',
-        password: '',
-        gender: 'male',
-        active: true
-      });
-    }
+    const nextFormData = editingUser
+      ? {
+          name: editingUser.name || '',
+          email: editingUser.email || '',
+          mobile: editingUser.phone || '', // Note: phone is mapped to mobile in UserList
+          password: '',
+          gender: editingUser.gender || 'male',
+          active: editingUser.status === 'Active'
+        }
+      : {
+          name: '',
+          email: '',
+          mobile: '',
+          password: '',
+          gender: 'male',
+          active: true
+        };
+    setFormData(nextFormData);
+    // The record as loaded is the starting point: Update stays disabled until something changes.
+    resetBaseline(nextFormData);
     setErrors({});
-  }, [editingUser, isOpen]);
+  }, [editingUser, isOpen, resetBaseline]);
 
   if (!isOpen) return null;
 
@@ -195,8 +198,8 @@ const UserModal = ({ isOpen, onClose, onSubmit, editingUser = null, isLoading = 
               </button>
               <button 
                 type="submit"
-                disabled={isLoading}
-                className="flex-1 py-4 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-900 transition-all shadow-md flex items-center justify-center gap-2"
+                disabled={isLoading || (Boolean(editingUser) && !isDirty)}
+                className="flex-1 py-4 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-900 transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>

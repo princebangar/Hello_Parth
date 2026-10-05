@@ -946,18 +946,18 @@ const StepDocuments = () => {
   return (
     <div 
         className="min-h-screen bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-32 pt-8 select-none overflow-x-clip"
-        style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+        style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" }}
     >
       <main className="mx-auto max-w-sm space-y-6">
         <header className="contents space-y-5 [&>:last-child]:mb-6">
             <div className="sticky top-0 z-30 -mx-5 flex items-center justify-between bg-[#f6efe4]/90 px-5 py-3 backdrop-blur-md">
                 <button
                     onClick={handleBackNavigation}
-                    className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-sm transition-transform active:scale-95"
+                    className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition-transform active:scale-95"
                 >
                     <ArrowLeft size={18} strokeWidth={2.5} />
                 </button>
-                <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 border border-slate-900/5">
+                <div className="rounded-full bg-slate-900/5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600 border border-slate-900/5">
                     Step 4 of 4
                 </div>
             </div>
@@ -967,12 +967,12 @@ const StepDocuments = () => {
                      <div className="flex h-11 w-11 items-center justify-center rounded-[1.25rem] bg-slate-900 text-white shadow-xl shadow-slate-900/10">
                         <ShieldCheck size={22} strokeWidth={2.5} />
                     </div>
-                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                         Identity Verification
                     </span>
                 </div>
-                <h1 className="font-['Outfit'] text-[48px] font-black leading-[1] tracking-[-0.04em] text-slate-900">
-                    KYC <span className="text-slate-400">Vault</span>
+                <h1 className="text-[48px] font-bold leading-[1] tracking-[-0.04em] text-slate-900">
+                    KYC <span className="text-slate-500">Vault</span>
                 </h1>
                 <p className="text-[15px] leading-relaxed text-slate-500 font-bold opacity-80 max-w-[28ch]">
                     Upload clear photos of the required documents to verify your identity.
@@ -990,27 +990,27 @@ const StepDocuments = () => {
           {templatesLoading ? (
             <div className="bg-white rounded-[2.5rem] p-12 text-center space-y-4 shadow-[0_10px_40px_rgba(0,0,0,0.04)] border border-slate-100">
               <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto animate-pulse">
-                <FileText size={20} className="text-slate-300" />
+                <FileText size={20} className="text-slate-400" />
               </div>
-              <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Loading checklist...</p>
+              <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">Loading checklist...</p>
             </div>
           ) : (
             documentTemplates.map((template) => (
               <section key={template.id} className="space-y-5 rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1.5">
-                    <h3 className="text-lg font-black tracking-tight text-slate-900">{template.name}</h3>
+                    <h3 className="text-lg font-bold tracking-tight text-slate-900">{template.name}</h3>
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest opacity-60">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                            {template.fields.length > 1 ? 'Multiple Sides' : 'Single Side'}
                         </span>
                         <div className="w-1 h-1 rounded-full bg-slate-200" />
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${template.is_required ? 'text-emerald-600' : 'text-slate-400 opacity-60'}`}>
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${template.is_required ? 'text-emerald-600' : 'text-slate-500'}`}>
                           {template.is_required ? 'Mandatory' : 'Optional'}
                         </span>
                     </div>
                   </div>
-                  <div className="rounded-full bg-slate-900/5 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 border border-slate-900/5">
+                  <div className="rounded-full bg-slate-900/5 px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-slate-500 border border-slate-900/5">
                     {template.account_type || 'individual'}
                   </div>
                 </div>
@@ -1024,8 +1024,8 @@ const StepDocuments = () => {
                     return (
                       <div key={field.key} className="space-y-3">
                         <div className="flex items-center justify-between gap-2 px-1">
-                          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 opacity-80">{field.label}</label>
-                          <span className={`text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md ${isRequired ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                          <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">{field.label}</label>
+                          <span className={`text-[9px] font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-md ${isRequired ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-500'}`}>
                             {isRequired ? 'Required' : 'Optional'}
                           </span>
                         </div>
@@ -1041,7 +1041,7 @@ const StepDocuments = () => {
                                 {isUploading ? (
                                     <div className="flex flex-col items-center gap-3">
                                         <div className="w-6 h-6 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Uploading</span>
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Uploading</span>
                                     </div>
                                 ) : document?.previewUrl ? (
                                     <>
@@ -1052,28 +1052,28 @@ const StepDocuments = () => {
                                         </div>
                                         <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-md rounded-xl px-3 py-1.5 flex items-center gap-2 border border-white/20">
                                             <Camera size={12} className="text-white" />
-                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Retake Photo</span>
+                                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Retake Photo</span>
                                         </div>
                                     </>
                                 ) : (
                                     <>
-                                        <div className="w-12 h-12 rounded-2xl bg-white text-slate-400 flex items-center justify-center shadow-sm border border-slate-100">
+                                        <div className="w-12 h-12 rounded-2xl bg-white text-slate-500 flex items-center justify-center shadow-sm border border-slate-100">
                                             <UploadCloud size={20} />
                                         </div>
                                         <div className="text-center">
-                                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Tap to upload</p>
+                                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Tap to upload</p>
                                         </div>
                                         <div className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-slate-900/5 flex items-center justify-center">
-                                            <Camera size={14} className="text-slate-400" />
+                                            <Camera size={14} className="text-slate-500" />
                                         </div>
                                     </>
                                 )}
                             </div>
 
                             <div className="flex gap-2">
-                                <label className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-black uppercase tracking-widest transition-all ${
+                                <label className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-widest transition-all ${
                                     isUploading
-                                    ? 'cursor-not-allowed border-slate-50 bg-slate-50 text-slate-300'
+                                    ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
                                     : 'cursor-pointer border-slate-100 bg-white text-slate-600 hover:bg-slate-50 active:scale-[0.98]'
                                 }`}>
                                     <ImagePlus size={16} />
@@ -1091,9 +1091,9 @@ const StepDocuments = () => {
                                     type="button"
                                     disabled={isUploading}
                                     onClick={() => handleCameraCapture(template.id, field.key, field.label)}
-                                    className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-black uppercase tracking-widest transition-all ${
+                                    className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-widest transition-all ${
                                       isUploading
-                                        ? 'cursor-not-allowed border-slate-50 bg-slate-50 text-slate-300'
+                                        ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
                                         : 'cursor-pointer border-slate-900 bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-900/10 active:scale-[0.98]'
                                     }`}
                                 >
@@ -1120,7 +1120,7 @@ const StepDocuments = () => {
                 {(template.has_identify_number || template.has_expiry_date || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
                   <div className="space-y-2 pt-2">
                     {normalizeVerificationType(template.verification_type) !== 'none' ? (
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                         Verification details required for API check
                       </p>
                     ) : null}
@@ -1130,13 +1130,13 @@ const StepDocuments = () => {
                 {(template.has_identify_number || template.has_expiry_date || templateNeedsBirthDate(template) || templateSupportsRequestNumber(template) || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
                   <div className="space-y-4 pt-2">
                     {template.has_identify_number ? (
-                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
                         <div className="flex items-center gap-4">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                                 <FileText size={20} strokeWidth={2.5} />
                             </div>
                             <div className="min-w-0 flex-1 space-y-0.5">
-                                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                                     {formatMetaLabel(template.identify_number_key) || `${template.name} Number`}
                                 </label>
                                 <input
@@ -1144,7 +1144,7 @@ const StepDocuments = () => {
                                     value={documentMeta[template.id]?.identifyNumber || ''}
                                     onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.toUpperCase())}
                                     placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || `${template.name} number`}`}
-                                    className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                                    className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                                 />
                             </div>
                         </div>
@@ -1164,21 +1164,21 @@ const StepDocuments = () => {
                             }
                           }
                         }}
-                        className="group cursor-pointer rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5"
+                        className="group cursor-pointer rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                             <AlertCircle size={20} strokeWidth={2.5} />
                           </div>
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                               Birth Date
                             </label>
                             <input
                               type="date"
                               value={documentMeta[template.id]?.birthDate || ''}
                               onChange={(event) => handleMetaChange(template.id, 'birthDate', event.target.value)}
-                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0"
+                              className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0"
                             />
                           </div>
                         </div>
@@ -1198,14 +1198,14 @@ const StepDocuments = () => {
                             }
                           }
                         }}
-                        className="group cursor-pointer rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5"
+                        className="group cursor-pointer rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5"
                       >
                         <div className="flex items-center gap-4">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                                 <AlertCircle size={20} strokeWidth={2.5} />
                             </div>
                             <div className="min-w-0 flex-1 space-y-0.5">
-                                <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                                     Expiry Date
                                 </label>
                                 <input
@@ -1213,7 +1213,7 @@ const StepDocuments = () => {
                                     min={todayDateInputValue()}
                                     value={documentMeta[template.id]?.expiryDate || ''}
                                     onChange={(event) => handleMetaChange(template.id, 'expiryDate', event.target.value)}
-                                    className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0"
+                                    className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0"
                                 />
                                 {isPastExpiryDate(documentMeta[template.id]?.expiryDate) ? (
                                     <p className="pt-1 text-[11px] font-bold text-rose-600">This date is over. Pick today or a later date.</p>
@@ -1224,13 +1224,13 @@ const StepDocuments = () => {
                     ) : null}
 
                     {templateSupportsRequestNumber(template) ? (
-                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
                         <div className="flex items-center gap-4">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                             <FileText size={20} strokeWidth={2.5} />
                           </div>
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                               Request Number
                             </label>
                             <input
@@ -1238,7 +1238,7 @@ const StepDocuments = () => {
                               value={documentMeta[template.id]?.requestNumber || ''}
                               onChange={(event) => handleMetaChange(template.id, 'requestNumber', event.target.value)}
                               placeholder="Optional, auto-generated later if left blank"
-                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                              className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                             />
                           </div>
                         </div>
@@ -1252,7 +1252,7 @@ const StepDocuments = () => {
                             type="button"
                             onClick={() => handleVerifyDrivingLicense(template)}
                             disabled={verifyingTemplateId === template.id}
-                            className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.15em] transition-colors ${
+                            className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
                               verifyingTemplateId === template.id
                                 ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                                 : 'bg-slate-900 text-white hover:bg-black'
@@ -1280,14 +1280,14 @@ const StepDocuments = () => {
                             <div className="rounded-[1.8rem] border border-emerald-100 bg-emerald-50/50 p-4">
                               <div className="flex items-center gap-2 px-1">
                                 <ShieldCheck size={15} className="text-emerald-600" />
-                                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-700">
                                   Verified From DL
                                 </p>
                               </div>
                               <div className="mt-3 grid grid-cols-2 gap-3">
                                 {details.map((item) => (
                                   <div key={item.key} className="rounded-2xl bg-white/90 px-3 py-2">
-                                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">{item.label}</p>
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">{item.label}</p>
                                     <p className="mt-1 text-[12px] font-bold text-slate-900 break-words">{item.value}</p>
                                   </div>
                                 ))}
@@ -1299,13 +1299,13 @@ const StepDocuments = () => {
                     ) : null}
 
                     {normalizeVerificationType(template.verification_type) === 'bank_account' ? (
-                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
                         <div className="flex items-center gap-4">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                             <FileText size={20} strokeWidth={2.5} />
                           </div>
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                               IFSC Code
                             </label>
                             <input
@@ -1313,7 +1313,7 @@ const StepDocuments = () => {
                               value={documentMeta[template.id]?.ifsc || ''}
                               onChange={(event) => handleMetaChange(template.id, 'ifsc', event.target.value.toUpperCase())}
                               placeholder="Enter IFSC code"
-                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                              className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                             />
                           </div>
                         </div>
@@ -1321,13 +1321,13 @@ const StepDocuments = () => {
                     ) : null}
 
                     {normalizeVerificationType(template.verification_type) === 'bank_account' ? (
-                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-50 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
                         <div className="flex items-center gap-4">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                             <FileText size={20} strokeWidth={2.5} />
                           </div>
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <label className="block text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 opacity-70">
+                            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">
                               Account Holder Name
                             </label>
                             <input
@@ -1335,7 +1335,7 @@ const StepDocuments = () => {
                               value={documentMeta[template.id]?.accountHolderName || ''}
                               onChange={(event) => handleMetaChange(template.id, 'accountHolderName', event.target.value)}
                               placeholder="Enter account holder name"
-                              className="w-full border-none bg-transparent p-0 text-lg font-black text-slate-900 outline-none focus:ring-0 placeholder:text-slate-200"
+                              className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                             />
                           </div>
                         </div>
@@ -1352,22 +1352,22 @@ const StepDocuments = () => {
           <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
             <AlertCircle size={20} className="text-amber-600" />
           </div>
-          <p className="text-[12px] font-black text-amber-900/60 leading-relaxed uppercase tracking-tight">
+          <p className="text-[12px] font-bold text-amber-900/60 leading-relaxed uppercase tracking-tight">
             Choose Gallery or Camera for each document. Ensure all photos are well-lit and all text is clearly readable to avoid rejection.
           </p>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
+        <div className="fixed bottom-0 left-0 right-0 px-6 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
             <div className="mx-auto max-w-sm">
                 <motion.button
                     whileHover={{ scale: 1.02, y: -2 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleSubmit}
                     disabled={loading || !isComplete}
-                    className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-black tracking-tight transition-all relative overflow-hidden ${
+                    className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-bold tracking-tight transition-all relative overflow-hidden ${
                         isComplete
                             ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black'
-                            : 'pointer-events-none bg-slate-200 text-slate-400 shadow-none'
+                            : 'pointer-events-none bg-slate-300 text-slate-600 shadow-none'
                     }`}
                 >
                     {loading ? (

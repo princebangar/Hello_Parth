@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Save } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/owner-management`;
 
@@ -33,6 +34,7 @@ const OwnerNeededDocumentsCreate = () => {
     is_required: false,
     active: true,
   });
+  const { isDirty } = useDirty(formData, !loadingEdit);
 
   useEffect(() => {
     if (!editId) return;
@@ -223,8 +225,8 @@ const OwnerNeededDocumentsCreate = () => {
               </button>
               <button
                 type="submit"
-                disabled={submitting || loadingEdit}
-                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
+                disabled={submitting || loadingEdit || (Boolean(editId) && !isDirty)}
+                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 Save

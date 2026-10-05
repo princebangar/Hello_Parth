@@ -3,6 +3,7 @@ import { ArrowLeft, Check, ChevronDown, Loader2, User } from 'lucide-react';
 
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 import { adminCardClass, adminInputClass, adminLabelClass } from '../../components/ui/adminUi';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const phoneInputClass =
   'min-w-0 flex-1 bg-transparent px-4 text-sm text-gray-800 outline-none';
@@ -19,6 +20,8 @@ const OwnerFormPanel = ({
   backLabel = 'Manage Owners',
 }) => {
   const isEdit = mode === 'edit';
+  // Edit mode: Update stays disabled until something changes (the form is mounted with the loaded record).
+  const { isDirty } = useDirty(formData);
   const title = isEdit ? 'Edit Owner' : 'Create Owner';
 
   return (
@@ -163,7 +166,7 @@ const OwnerFormPanel = ({
           <div className="flex justify-end pt-2">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || (isEdit && !isDirty)}
               className="inline-flex items-center gap-3 rounded-lg bg-yellow-400 px-6 py-3 text-sm font-bold text-black transition-colors hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? (

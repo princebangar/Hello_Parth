@@ -9,6 +9,7 @@ import {
   Loader2,
   ArrowLeft,
 } from 'lucide-react';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const BASE = () => `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/payment-methods`;
 
@@ -37,6 +38,7 @@ const PaymentMethods = () => {
     methodName: '',
     fields: [buildField()],
   });
+  const { isDirty, resetBaseline } = useDirty(formData);
 
   const fetchMethods = async () => {
     setLoading(true);
@@ -80,7 +82,7 @@ const PaymentMethods = () => {
 
   const startEdit = (method) => {
     setEditingId(method._id);
-    setFormData({
+    const nextFormData = {
       methodName: method.name || '',
       fields: (method.fields || []).map((field) => ({
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -89,7 +91,9 @@ const PaymentMethods = () => {
         placeholder: field.placeholder || '',
         isRequired: Boolean(field.is_required),
       })),
-    });
+    };
+    setFormData(nextFormData);
+    resetBaseline(nextFormData);
     setView('form');
   };
 
@@ -309,8 +313,8 @@ const PaymentMethods = () => {
             </button>
             <button
               onClick={handleSubmit}
-              className="px-6 py-2.5 text-sm font-bold text-black bg-yellow-400 rounded-lg shadow-sm hover:bg-yellow-500 transition-colors disabled:opacity-70"
-              disabled={saving}
+              className="px-6 py-2.5 text-sm font-bold text-black bg-yellow-400 rounded-lg shadow-sm hover:bg-yellow-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              disabled={saving || (Boolean(editingId) && !isDirty)}
             >
               {saving ? 'Saving...' : 'Submit'}
             </button>

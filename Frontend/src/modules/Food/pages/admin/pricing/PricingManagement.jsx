@@ -20,6 +20,7 @@ import {
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 const RUPEE = "\u20B9"
 
@@ -69,7 +70,7 @@ function PreviewCard({ type, value }) {
   )
 }
 
-function RuleEditor({ title, form, setForm, onSave, saving, onClear, canClear }) {
+function RuleEditor({ title, form, setForm, onSave, saving, onClear, canClear, canSave = true }) {
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
@@ -129,9 +130,9 @@ function RuleEditor({ title, form, setForm, onSave, saving, onClear, canClear })
 
       <Button
         type="button"
-        disabled={saving}
+        disabled={saving || !canSave}
         onClick={onSave}
-        className="h-11 w-full rounded-xl bg-[#DC2626] font-bold text-white hover:bg-[#B91C1C]"
+        className="h-11 w-full rounded-xl bg-[#DC2626] font-bold text-white hover:bg-[#B91C1C] disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {saving ? (
           <span className="inline-flex items-center gap-2">
@@ -1275,6 +1276,7 @@ export default function PricingManagement() {
   const [selectedZoneId, setSelectedZoneId] = useState("")
   const [zonesLoading, setZonesLoading] = useState(true)
   const [globalForm, setGlobalForm] = useState(emptyRuleForm)
+  const { isDirty: globalDirty, resetBaseline: resetGlobalBaseline } = useDirty(globalForm, !loading)
   const [deleteRuleTarget, setDeleteRuleTarget] = useState(null)
   const saveLockRef = useRef(false)
 
@@ -1289,6 +1291,7 @@ export default function PricingManagement() {
       setRules([])
       setRestaurants([])
       setGlobalForm(emptyRuleForm)
+      resetGlobalBaseline(emptyRuleForm)
       setLoading(false)
       return
     }
@@ -1323,21 +1326,24 @@ export default function PricingManagement() {
 
       const global = nextRules.find((r) => r.scope === "GLOBAL" && r.status === "active")
       if (global) {
-        setGlobalForm({
+        const nextGlobalForm = {
           type: global.type || "PERCENTAGE",
           value: String(global.value ?? "10"),
           status: global.status || "active",
           id: global.id,
-        })
+        }
+        setGlobalForm(nextGlobalForm)
+        resetGlobalBaseline(nextGlobalForm)
       } else {
         setGlobalForm(emptyRuleForm)
+        resetGlobalBaseline(emptyRuleForm)
       }
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load pricing")
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [selectedZoneId])
+  }, [selectedZoneId, resetGlobalBaseline])
 
   useEffect(() => {
     const fetchZones = async () => {
@@ -1419,6 +1425,7 @@ export default function PricingManagement() {
 
       if (removed?.scope === "GLOBAL" || String(globalForm.id) === removedId) {
         setGlobalForm(emptyRuleForm)
+        resetGlobalBaseline(emptyRuleForm)
         setSummary((prev) => (prev ? { ...prev, global: null } : prev))
       } else if (removed?.scope === "RESTAURANT") {
         setSummary((prev) =>
@@ -1643,6 +1650,7 @@ export default function PricingManagement() {
           form={globalForm}
           setForm={setGlobalForm}
           saving={saving}
+          canSave={!globalForm.id || globalDirty}
           canClear={Boolean(globalForm.id)}
           onClear={() =>
             requestClearRule(globalForm.id, "Remove the Global pricing rule? Restaurants without overrides will show base price only.")

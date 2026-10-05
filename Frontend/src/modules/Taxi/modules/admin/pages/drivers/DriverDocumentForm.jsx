@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass =
   'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors';
@@ -190,6 +191,7 @@ const DriverDocumentForm = () => {
   const [loading, setLoading] = useState(isEditMode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const { isDirty } = useDirty({ documentForm, vehicleFieldForm }, !loading);
   const isCustomVehicleField = templateType === 'vehicle_field' && vehicleFieldForm.field_key === customVehicleFieldSentinel;
 
   useEffect(() => {
@@ -770,7 +772,7 @@ const DriverDocumentForm = () => {
         <div className="mt-6 flex justify-end">
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || (isEditMode && !isDirty)}
             className="px-6 py-2.5 bg-yellow-400 text-black rounded-lg text-sm font-bold shadow-sm hover:bg-yellow-500 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Saving...' : 'Save'}

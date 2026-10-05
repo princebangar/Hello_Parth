@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react"
 import { Monitor, Info, Check, Copy, Edit, ExternalLink, Settings, ArrowUpDown, Columns } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -50,6 +51,7 @@ export default function LoginSetup() {
     phoneVerification: true
   })
   const [panelUrls, setPanelUrls] = useState(panelLoginUrls)
+  const { isDirty, resetBaseline } = useDirty({ loginOptions, socialMedia, verification, panelUrls }, true)
   const [editingId, setEditingId] = useState(null)
   const [editUrl, setEditUrl] = useState("")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -89,6 +91,7 @@ export default function LoginSetup() {
     } else {
       debugLog("Panel URLs submitted:", panelUrls)
     }
+    resetBaseline({ loginOptions, socialMedia, verification, panelUrls })
     alert("Settings saved successfully!")
   }
 
@@ -528,7 +531,8 @@ export default function LoginSetup() {
           <button
             type="button"
             onClick={handleSubmit}
-            className="px-6 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+            disabled={!isDirty}
+            className="px-6 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Submit
           </button>

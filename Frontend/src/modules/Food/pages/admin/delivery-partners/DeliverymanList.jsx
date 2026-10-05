@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { setVisibleInterval } from "@/shared/utils/visibleInterval.js"
 import { networkErrorMessage } from "@/shared/utils/networkError"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugError = () => {}
 
 
@@ -37,6 +38,7 @@ export default function DeliverymanList() {
   const [viewDetails, setViewDetails] = useState(null)
   const [editingDeliveryId, setEditingDeliveryId] = useState(null)
   const [editValues, setEditValues] = useState({ pocketBalance: "", cashInHand: "" })
+  const { isDirty: walletDirty, resetBaseline: resetWalletBaseline } = useDirty(editValues, true)
   const [savingDeliveryId, setSavingDeliveryId] = useState(null)
   const [deletingDeliveryId, setDeletingDeliveryId] = useState(null)
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" })
@@ -347,10 +349,12 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
 
   const startEditingWallet = (deliveryman) => {
     setEditingDeliveryId(String(deliveryman._id))
-    setEditValues({
+    const nextEditValues = {
       pocketBalance: String(Number(deliveryman.pocketBalance) || 0),
       cashInHand: String(Number(deliveryman.cashInHand) || 0),
-    })
+    }
+    setEditValues(nextEditValues)
+    resetWalletBaseline(nextEditValues)
   }
 
   const cancelEditingWallet = () => {
@@ -810,8 +814,8 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                                 <>
                                   <button
                                     onClick={() => saveWalletChanges(dm)}
-                                    disabled={savingDeliveryId === String(dm._id)}
-                                    className="p-1.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                    disabled={savingDeliveryId === String(dm._id) || !walletDirty}
+                                    className="p-1.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     title="Save Wallet"
                                   >
                                     {savingDeliveryId === String(dm._id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

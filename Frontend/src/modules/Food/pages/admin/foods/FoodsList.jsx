@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@food/components/ui/pop
 import { getFoodDisplayPrice, getFoodVariants } from "@food/utils/foodVariants"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -114,6 +115,10 @@ export default function FoodsList() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => Number(localStorage.getItem('admin_foods_pageSize')) || 20)
   const [imageVersion, setImageVersion] = useState(Date.now())
+  const { isDirty: foodEditDirty, resetBaseline: resetFoodEditBaseline } = useDirty(
+    { foodForm, hasNewImage: !!selectedImageFile },
+    true
+  )
 
   const isFormDirty = useMemo(() => {
     if (foodFormMode === "edit") return true;
@@ -387,7 +392,7 @@ export default function FoodsList() {
         : String(food.foodType || "Non-Veg") === "Veg"
           ? "Veg"
           : "Non-Veg"
-    setFoodForm({
+    const nextFoodForm = {
       restaurantId: String(food.restaurantId || ""),
       categoryId: String(food.categoryId || ""),
       categoryName: String(food.categoryName || ""),
@@ -399,7 +404,9 @@ export default function FoodsList() {
       foodType: nextFoodType,
       isAvailable: food.isAvailable !== false,
       preparationTime: String(food.preparationTime || ""),
-    })
+    }
+    setFoodForm(nextFoodForm)
+    resetFoodEditBaseline({ foodForm: nextFoodForm, hasNewImage: false })
     setSelectedImageFile(null)
     setImagePreviewUrl(String(food.image || ""))
     setCategorySearch("")
@@ -1145,7 +1152,7 @@ export default function FoodsList() {
               <button
                 type="button"
                 onClick={handleFoodFormSubmit}
-                disabled={submittingFood}
+                disabled={submittingFood || (foodFormMode === "edit" && !foodEditDirty)}
                 className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2"
               >
                 {submittingFood ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

@@ -374,11 +374,26 @@ const PreviewCard = ({ title, code, bannerText, blocks }) => (
   </div>
 );
 
+// What gets saved for one language. An editor that was only focused (empty paragraph) counts as empty.
+const translationSnapshot = (record) => {
+  const clean = (section) =>
+    Object.fromEntries(
+      Object.entries(section || {}).map(([key, value]) => [key, value === '<p><br></p>' ? '' : value]),
+    );
+  return JSON.stringify({
+    language_name: record?.language_name,
+    user_referral: clean(record?.user_referral),
+    driver_referral: clean(record?.driver_referral),
+  });
+};
+
 const ReferralTranslation = () => {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'App';
   const [records, setRecords] = useState([]);
+  // Last loaded/saved state per language, so Save is only enabled when the selected language was edited.
+  const [savedSnapshots, setSavedSnapshots] = useState({});
   const [selectedLanguageCode, setSelectedLanguageCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -395,6 +410,9 @@ const ReferralTranslation = () => {
         const items = response?.data?.results || response?.data || [];
         const safeItems = items.length > 0 ? items : [createEmptyReferralTranslationRecord()];
         setRecords(safeItems);
+        setSavedSnapshots(
+          Object.fromEntries(safeItems.map((item) => [item.language_code, translationSnapshot(item)])),
+        );
         setSelectedLanguageCode((current) => current || safeItems[0]?.language_code || 'en');
       } catch (fetchError) {
         console.error('Fetch error:', fetchError);
@@ -410,6 +428,9 @@ const ReferralTranslation = () => {
 
   const selectedRecord =
     records.find((item) => item.language_code === selectedLanguageCode) || records[0] || createEmptyReferralTranslationRecord();
+
+  const savedSnapshot = savedSnapshots[selectedRecord?.language_code];
+  const isDirty = savedSnapshot !== undefined && translationSnapshot(selectedRecord) !== savedSnapshot;
 
   const visibleLanguageRecords = records.filter(
     (item) => item.active || item.default_status || item._id || item.language_code === selectedLanguageCode,
@@ -452,6 +473,10 @@ const ReferralTranslation = () => {
         setRecords((current) =>
           current.map((item) => (item.language_code === savedRecord.language_code ? savedRecord : item)),
         );
+        setSavedSnapshots((current) => ({
+          ...current,
+          [savedRecord.language_code]: translationSnapshot(savedRecord),
+        }));
         setShowSuccess(true);
         toast.success(`Saved ${savedRecord.language_name || savedRecord.language_code} referral translation.`);
         setTimeout(() => setShowSuccess(false), 3000);
@@ -498,8 +523,8 @@ const ReferralTranslation = () => {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-2 bg-yellow-400 text-black text-sm font-bold rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
+            disabled={saving || !isDirty}
+            className="flex items-center gap-2 px-6 py-2 bg-yellow-400 text-black text-sm font-bold rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             Save Changes

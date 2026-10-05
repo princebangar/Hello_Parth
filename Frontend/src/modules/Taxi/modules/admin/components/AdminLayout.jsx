@@ -370,7 +370,7 @@ const SidebarBadge = ({ count, isActive = false }) => {
 
 // The sidebar highlights the page you just clicked immediately ("optimistic" active path) instead of waiting for
 // the route (and its lazy chunk) to finish loading. Before, the OLD item stayed lit for a second after a click.
-const SidebarNavContext = createContext({ activePath: '', onNavigate: () => {} });
+const SidebarNavContext = createContext({ activePath: '', onNavigate: () => {}, focusedGroupKey: null, setFocusedGroupKey: () => {} });
 
 const normalizeSidebarPath = (value = '') => String(value || '').split('?')[0].replace(/\/+$/, '') || '/';
 const isSidebarPathActive = (activePath, to) => normalizeSidebarPath(activePath) === normalizeSidebarPath(to);
@@ -406,6 +406,24 @@ const SidebarItem = ({ icon, label, path, isCollapsed, sidebarTextColor, unreadC
   </SidebarLink>
 );
 
+// After a sidebar group is opened, bring the whole group (heading + its rows) to the middle of the sidebar.
+const centreGroupInSidebar = (el) => {
+  if (!el) return;
+  let nav = el.parentElement;
+  while (nav && !(nav.scrollHeight > nav.clientHeight && /(auto|scroll)/.test(getComputedStyle(nav).overflowY))) {
+    nav = nav.parentElement;
+  }
+  if (!nav) return;
+  const navRect = nav.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  const offsetTop = rect.top - navRect.top + nav.scrollTop;
+  const top = rect.height >= navRect.height
+    ? offsetTop - 8
+    : offsetTop - (navRect.height - rect.height) / 2;
+  const max = Math.max(0, nav.scrollHeight - nav.clientHeight);
+  nav.scrollTo({ top: Math.max(0, Math.min(top, max)), behavior: 'smooth' });
+};
+
 const SidebarGroup = ({
   icon,
   label,
@@ -419,27 +437,33 @@ const SidebarGroup = ({
   sidebarTextColor,
   unreadCountsByPath,
 }) => {
-  const isActive = hasActiveChild(pathname, subItems);
+  const { focusedGroupKey, setFocusedGroupKey } = useContext(SidebarNavContext);
+  // A group heading you just clicked takes the highlight; the page that was open stops looking selected.
+  const isFocused = focusedGroupKey === groupKey;
+  const isActive = focusedGroupKey ? isFocused : hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isOpen;
   const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
+  const groupRef = useRef(null);
   const toggleGroup = () => {
     setExpandedGroups((current) =>
       current.includes(groupKey)
         ? current.filter((key) => key !== groupKey)
         : [...current, groupKey]
     );
+    setFocusedGroupKey(isOpen ? null : groupKey);
+    if (!isOpen) requestAnimationFrame(() => requestAnimationFrame(() => centreGroupInSidebar(groupRef.current)));
   };
 
   return (
-    <div className="space-y-1">
+    <div ref={groupRef} className="space-y-1">
       <button
         type="button"
         onClick={toggleGroup}
         className={cn(
           "group w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-colors duration-100 outline-none focus:outline-none focus-visible:outline-none",
           isActive ? "text-white" : "text-neutral-400 hover:text-neutral-200",
-          "hover:bg-white/5"
+          isFocused ? "bg-white/10" : "hover:bg-white/5"
         )}
       >
         <div className="flex min-w-0 items-center gap-3">
@@ -504,27 +528,33 @@ const NestedGroup = ({
   sidebarTextColor,
   unreadCountsByPath,
 }) => {
-  const isActive = hasActiveChild(pathname, subItems);
+  const { focusedGroupKey, setFocusedGroupKey } = useContext(SidebarNavContext);
+  // A group heading you just clicked takes the highlight; the page that was open stops looking selected.
+  const isFocused = focusedGroupKey === groupKey;
+  const isActive = focusedGroupKey ? isFocused : hasActiveChild(pathname, subItems);
   const isOpen = expandedGroups.includes(groupKey);
   const isExpanded = forceOpen || isOpen;
   const unreadCount = subItems.reduce((sum, item) => sum + getSidebarItemCount(item, unreadCountsByPath), 0);
+  const groupRef = useRef(null);
   const toggleGroup = () => {
     setExpandedGroups((current) =>
       current.includes(groupKey)
         ? current.filter((key) => key !== groupKey)
         : [...current, groupKey]
     );
+    setFocusedGroupKey(isOpen ? null : groupKey);
+    if (!isOpen) requestAnimationFrame(() => requestAnimationFrame(() => centreGroupInSidebar(groupRef.current)));
   };
 
   return (
-    <div className="space-y-1">
+    <div ref={groupRef} className="space-y-1">
       <button
         type="button"
         onClick={toggleGroup}
         className={cn(
           "group w-full flex items-center justify-between px-3 py-1.5 rounded-xl transition-colors duration-100 outline-none focus:outline-none focus-visible:outline-none",
           isActive ? "text-white" : "text-neutral-400 hover:text-neutral-200",
-          "hover:bg-white/5"
+          isFocused ? "bg-white/10" : "hover:bg-white/5"
         )}
       >
         <span className="flex min-w-0 items-center gap-3 text-[12px] font-medium">
@@ -682,6 +712,7 @@ const AdminLayout = () => {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState(() => readDismissedNotifications());
   const [pendingSidebarPath, setPendingSidebarPath] = useState(null);
+  const [focusedGroupKey, setFocusedGroupKey] = useState(null);
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -1104,14 +1135,20 @@ const AdminLayout = () => {
   // The real route caught up (or the click went nowhere): stop using the optimistic highlight.
   useEffect(() => {
     setPendingSidebarPath(null);
+    setFocusedGroupKey(null);
   }, [location.pathname]);
   const activeSidebarPath = pendingSidebarPath || location.pathname;
   const sidebarNavContextValue = useMemo(
     () => ({
-      activePath: activeSidebarPath,
-      onNavigate: (to) => setPendingSidebarPath(isSidebarPathActive(location.pathname, to) ? null : to),
+      activePath: focusedGroupKey ? '' : activeSidebarPath,
+      onNavigate: (to) => {
+        setFocusedGroupKey(null);
+        setPendingSidebarPath(isSidebarPathActive(location.pathname, to) ? null : to);
+      },
+      focusedGroupKey,
+      setFocusedGroupKey,
     }),
-    [activeSidebarPath, location.pathname],
+    [activeSidebarPath, location.pathname, focusedGroupKey],
   );
 
   // Open the groups that contain the current page whenever the route changes (collapsing is left to the user).
@@ -1150,7 +1187,7 @@ const AdminLayout = () => {
       cancelAnimationFrame(frame);
       window.clearTimeout(timer);
     };
-  }, [activeSidebarPath, expandedSidebarGroups, mode]);
+  }, [activeSidebarPath, mode]);
 
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
   const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);

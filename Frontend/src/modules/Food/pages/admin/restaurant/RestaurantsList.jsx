@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { formatRestaurantDisplayAddress, getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 // Import icons from Dashboard-icons
 const debugLog = (...args) => {}
@@ -157,6 +158,11 @@ export default function RestaurantsList() {
     landmark: "",
     pincode: "",
   })
+  const { isDirty: detailsDirty, resetBaseline: resetDetailsBaseline } = useDirty(
+    { detailsForm, hasNewImage: !!profileImageFile },
+    true
+  )
+  const { isDirty: locationDirty, resetBaseline: resetLocationBaseline } = useDirty(locationForm, true)
   const locationSearchInputRef = useRef(null)
   const placesAutocompleteRef = useRef(null)
 
@@ -782,6 +788,7 @@ export default function RestaurantsList() {
     const sourceRestaurant = restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant
     const initialForm = normalizeLocationFormFromRestaurant(sourceRestaurant)
     setLocationForm(initialForm)
+    resetLocationBaseline(initialForm)
     setLocationEditError("")
 
     setZonesLoading(true)
@@ -863,7 +870,9 @@ export default function RestaurantsList() {
 
   const handleStartEditDetails = () => {
     const source = getDetailsEditSource()
-    setDetailsForm(buildDetailsFormFromRestaurant(source))
+    const nextDetailsForm = buildDetailsFormFromRestaurant(source)
+    setDetailsForm(nextDetailsForm)
+    resetDetailsBaseline({ detailsForm: nextDetailsForm, hasNewImage: false })
     setProfileImageFile(null)
     setProfileImagePreview(getPrimaryRestaurantImage(source))
     setIsEditingLocation(true)
@@ -1538,7 +1547,7 @@ export default function RestaurantsList() {
                       </button>
                       <button
                         onClick={handleSaveDetails}
-                        disabled={savingDetails}
+                        disabled={savingDetails || !detailsDirty}
                         className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-60 flex items-center gap-2"
                       >
                         {savingDetails && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2544,8 +2553,8 @@ export default function RestaurantsList() {
                         {locationEditError && <p className="text-xs text-red-600">{locationEditError}</p>}
                         <button
                           onClick={handleSaveLocation}
-                          disabled={savingLocation}
-                          className={`inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-semibold text-white ${savingLocation ? "bg-indigo-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                          disabled={savingLocation || !locationDirty}
+                          className={`inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed ${savingLocation ? "bg-indigo-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}
                         >
                           {savingLocation ? "Saving..." : "Save Location"}
                         </button>

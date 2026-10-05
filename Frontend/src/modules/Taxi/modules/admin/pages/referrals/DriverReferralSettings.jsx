@@ -16,6 +16,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const labelClass = 'block text-sm font-semibold text-gray-700 mb-1.5';
 const inputClass = 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors';
@@ -136,6 +137,27 @@ const normalizeDriverReferralSettings = (data = {}) => {
   };
 };
 
+// Exactly what is sent to the backend (numbers coerced) - also what the dirty check compares.
+const buildPayload = (settings) => ({
+  ...settings,
+  amount: Number(settings.amount || 0),
+  ride_count: Number(settings.ride_count || 0),
+  milestone_programs: settings.milestone_programs.map((item, index) => ({
+    ...item,
+    id: item.id || `milestone_${index + 1}`,
+    active_hours_per_day: Number(item.active_hours_per_day || 0),
+    required_weeks: Number(item.required_weeks || 0),
+    min_trips_per_week: Number(item.min_trips_per_week || 0),
+    payout_amount: Number(item.payout_amount || 0),
+  })),
+  reward_features: settings.reward_features.map((item, index) => ({
+    ...item,
+    id: item.id || `feature_${index + 1}`,
+    reward_amount: Number(item.reward_amount || 0),
+    target_value: Number(item.target_value || 0),
+  })),
+});
+
 const referralTypes = [
   { value: 'instant_referrer', label: 'Instant for Referrer Driver' },
   { value: 'instant_referrer_new', label: 'Instant for Referrer Driver and New Driver' },
@@ -149,6 +171,7 @@ const DriverReferralSettings = () => {
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [settings, setSettings] = useState(() => normalizeDriverReferralSettings());
+  const { isDirty, resetBaseline } = useDirty(buildPayload(settings), !loading);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -170,28 +193,11 @@ const DriverReferralSettings = () => {
     setSaving(true);
 
     try {
-      const payload = {
-        ...settings,
-        amount: Number(settings.amount || 0),
-        ride_count: Number(settings.ride_count || 0),
-        milestone_programs: settings.milestone_programs.map((item, index) => ({
-          ...item,
-          id: item.id || `milestone_${index + 1}`,
-          active_hours_per_day: Number(item.active_hours_per_day || 0),
-          required_weeks: Number(item.required_weeks || 0),
-          min_trips_per_week: Number(item.min_trips_per_week || 0),
-          payout_amount: Number(item.payout_amount || 0),
-        })),
-        reward_features: settings.reward_features.map((item, index) => ({
-          ...item,
-          id: item.id || `feature_${index + 1}`,
-          reward_amount: Number(item.reward_amount || 0),
-          target_value: Number(item.target_value || 0),
-        })),
-      };
+      const payload = buildPayload(settings);
 
       const res = await adminService.updateReferralSettings('driver', payload);
       if (res) {
+        resetBaseline(payload);
         setShowSuccess(true);
         toast.success('Driver incentive settings updated');
         setTimeout(() => setShowSuccess(false), 3000);
@@ -211,6 +217,8 @@ const DriverReferralSettings = () => {
 
     try {
       await adminService.updateReferralSettings('driver', updated);
+      // The toggle request saves the whole form, so everything on screen is now saved.
+      resetBaseline(buildPayload(updated));
       setShowSuccess(true);
       toast.success('Driver referral settings toggled');
       setTimeout(() => setShowSuccess(false), 3000);
@@ -565,8 +573,8 @@ const DriverReferralSettings = () => {
           <div className="p-6 bg-gray-50 border-t border-gray-100 flex flex-col gap-4">
             <button
               onClick={handleUpdate}
-              disabled={saving}
-              className="w-fit flex items-center gap-2 px-6 py-2.5 bg-yellow-400 text-black text-xs font-bold  rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
+              disabled={saving || !isDirty}
+              className="w-fit flex items-center gap-2 px-6 py-2.5 bg-yellow-400 text-black text-xs font-bold  rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Update Driver Incentive Settings

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Edit, Upload, Info } from "lucide-react"
+import useDirty from "../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -11,18 +12,22 @@ export default function PromotionalBanner() {
   const [activeLanguage, setActiveLanguage] = useState("default")
   const [title, setTitle] = useState("Promotional")
   const [bannerImage, setBannerImage] = useState(bannerPreview)
+  const [loaded, setLoaded] = useState(false)
+  const { isDirty, resetBaseline } = useDirty({ title, activeLanguage, bannerImage }, loaded)
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem("admin_promotional_banner")
-      if (!saved) return
-      const parsed = JSON.parse(saved)
-      if (parsed?.title) setTitle(parsed.title)
-      if (parsed?.activeLanguage) setActiveLanguage(parsed.activeLanguage)
-      if (parsed?.bannerImage) setBannerImage(parsed.bannerImage)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed?.title) setTitle(parsed.title)
+        if (parsed?.activeLanguage) setActiveLanguage(parsed.activeLanguage)
+        if (parsed?.bannerImage) setBannerImage(parsed.bannerImage)
+      }
     } catch (error) {
       debugError("Failed to load saved promotional banner:", error)
     }
+    setLoaded(true)
   }, [])
 
   const languageTabs = [
@@ -30,7 +35,7 @@ export default function PromotionalBanner() {
     { key: "en", label: "English(EN)" },
     { key: "bn", label: "Bengali - বাংলা(BN)" },
     { key: "ar", label: "Arabic - العربية (AR)" },
-    { key: "es", label: "Spanish - espa�ol(ES)" },
+    { key: "es", label: "Spanish - español(ES)" },
   ]
 
   const handleSubmit = (e) => {
@@ -44,6 +49,7 @@ export default function PromotionalBanner() {
         updatedAt: new Date().toISOString(),
       }),
     )
+    resetBaseline({ title, activeLanguage, bannerImage })
     alert("Promotional banner saved successfully!")
   }
 
@@ -152,7 +158,8 @@ export default function PromotionalBanner() {
             <div className="flex items-center justify-end">
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md"
+                disabled={!isDirty}
+                className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Save
               </button>

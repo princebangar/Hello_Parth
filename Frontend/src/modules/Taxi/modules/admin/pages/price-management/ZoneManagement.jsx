@@ -33,6 +33,7 @@ import {
 } from "@react-google-maps/api";
 import { useDrawingGoogleMapsLoader } from "../../utils/googleMaps";
 import { adminService } from "../../services/adminService";
+import useDirty from "../../../../../../shared/hooks/useDirty";
 import {
   buildCountryBoundaryUrl,
   normalizeBoundaryRings,
@@ -94,6 +95,8 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     maximum_distance_for_outstation_rides: '',
     status: 'active'
   });
+  // Everything the zone form saves: the details plus the drawn boundary.
+  const { isDirty, resetBaseline } = useDirty({ formData, boundaryMode, polygonCoords, circleCenter, circleRadiusMeters });
 
   useEffect(() => {
     setView(initialMode === 'edit' || initialMode === 'create' || initialMode === 'view' ? 'form' : 'list');
@@ -409,7 +412,7 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     setEditingId(zid);
     const localizedNames = typeof zone.name === 'object' && zone.name !== null ? zone.name : {};
     let zoneName = typeof zone.name === 'string' ? zone.name : (localizedNames.English || zone.zone_name || '');
-    setFormData({
+    const loadedForm = {
       service_location_id: zone.service_location_id || '',
       name: {
         English: zoneName,
@@ -427,7 +430,8 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
       maximum_distance_for_regular_rides: zone.maximum_distance_for_regular_rides || '',
       maximum_distance_for_outstation_rides: zone.maximum_distance_for_outstation_rides || '',
       status: zone.active ? 'active' : 'inactive'
-    });
+    };
+    setFormData(loadedForm);
     let parsedCoords = [];
     if (Array.isArray(zone.coordinates)) {
       parsedCoords = zone.coordinates.map(coord => {
@@ -438,21 +442,29 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
     }
     if (parsedCoords.length > 0) setMapCenter(parsedCoords[0]);
     const nextBoundaryMode = zone.boundary_mode === 'circle' ? 'circle' : 'polygon';
-    setBoundaryMode(nextBoundaryMode);
-    setPolygonCoords(parsedCoords);
-    setCircleCenter(
+    const loadedCircleCenter =
       zone.circle_center && Number.isFinite(Number(zone.circle_center?.lat)) && Number.isFinite(Number(zone.circle_center?.lng))
         ? {
             lat: Number(zone.circle_center.lat),
             lng: Number(zone.circle_center.lng),
           }
-        : null,
-    );
-    setCircleRadiusMeters(
+        : null;
+    const loadedCircleRadius =
       zone.circle_radius_meters !== null && zone.circle_radius_meters !== undefined
         ? String(zone.circle_radius_meters)
-        : '',
-    );
+        : '';
+    setBoundaryMode(nextBoundaryMode);
+    setPolygonCoords(parsedCoords);
+    setCircleCenter(loadedCircleCenter);
+    setCircleRadiusMeters(loadedCircleRadius);
+    // The loaded zone is the starting point: Update stays disabled until the admin changes something.
+    resetBaseline({
+      formData: loadedForm,
+      boundaryMode: nextBoundaryMode,
+      polygonCoords: parsedCoords,
+      circleCenter: loadedCircleCenter,
+      circleRadiusMeters: loadedCircleRadius,
+    });
   };
 
   const handleExplore = (zone) => {
@@ -788,8 +800,8 @@ const ZoneManagement = ({ mode: initialMode = "list" }) => {
 
                 <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3 shadow-sm">
                    <button 
-                     disabled={saving} onClick={handleSave}
-                     className="w-full py-3 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                     disabled={saving || (Boolean(editingId) && !isDirty)} onClick={handleSave}
+                     className="w-full py-3 bg-[#FFC400] text-[#0B1220] rounded-lg text-sm font-medium hover:brightness-95 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                    >
                      {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                      {editingId ? 'Update Zone' : 'Save'}

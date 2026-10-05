@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const BASE = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
 const MotionDiv = motion.div;
@@ -126,6 +127,8 @@ const ManageFleet = () => {
     license_plate_number: '',
     car_color: ''
   });
+
+  const { isDirty, resetBaseline } = useDirty(formData);
 
   const token = localStorage.getItem('adminToken') || '';
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -271,7 +274,7 @@ const ManageFleet = () => {
 
   const handleEditClick = (item) => {
     setEditingId(item._id);
-    setFormData({
+    const nextFormData = {
       owner_id: item.owner_id?._id || item.owner_id || owners[0]?._id || '',
       service_location_id: item.service_location_id?._id || item.service_location_id || areas[0]?._id || '',
       transport_type: item.transport_type || 'taxi',
@@ -280,7 +283,9 @@ const ManageFleet = () => {
       car_model: item.car_model || '',
       license_plate_number: item.license_plate_number || '',
       car_color: item.car_color || ''
-    });
+    };
+    setFormData(nextFormData);
+    resetBaseline(nextFormData);
     setView('edit');
   };
 
@@ -614,8 +619,8 @@ const ManageFleet = () => {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
-                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
+                disabled={submitting || (view === 'edit' && !isDirty)}
+                className="h-10 px-8 bg-yellow-400 text-black rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? <Loader2 className="animate-spin" size={16} /> : null}
                 Save

@@ -21,6 +21,7 @@ import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaxiTransportTypes } from '../../../../shared/hooks/useTaxiTransportTypes';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors";
 const labelClass = "block text-xs font-semibold text-gray-500 mb-1.5";
@@ -70,6 +71,9 @@ const AppModules = ({ mode: propMode }) => {
     active: true,
     mobile_menu_icon: ''
   });
+  // Edit mode only: baseline is set explicitly once the existing module has loaded (see fetchItem).
+  const normalizeForm = (data) => ({ ...data, order_by: String(data.order_by ?? '') });
+  const { isDirty, resetBaseline } = useDirty(normalizeForm(formData), false);
 
   const fetchModules = async () => {
     try {
@@ -94,7 +98,7 @@ const AppModules = ({ mode: propMode }) => {
           const data = res.data?.data?.results || res.data?.results || (Array.isArray(res.data?.data) ? res.data.data : []);
           const item = data.find(m => String(m._id || m.id) === String(id));
           if (item) {
-            setFormData({
+            const loadedForm = {
               name: item.name || '',
               transport_type: item.transport_type || '',
               service_type: item.service_type || '',
@@ -104,7 +108,9 @@ const AppModules = ({ mode: propMode }) => {
               description: item.description || '',
               active: item.active !== false,
               mobile_menu_icon: item.mobile_menu_icon || ''
-            });
+            };
+            setFormData(loadedForm);
+            resetBaseline(normalizeForm(loadedForm));
           }
         } catch (err) {
           toast.error('Failed to fetch module details');
@@ -561,8 +567,8 @@ const AppModules = ({ mode: propMode }) => {
                 Cancel
              </button>
              <button 
-                onClick={handleSubmit} disabled={submitting || imageUploading}
-                className="px-8 py-2.5 bg-yellow-400 text-white rounded-lg text-sm font-semibold hover:bg-yellow-500 transition-all shadow-md shadow-indigo-100 active:scale-95 flex items-center gap-2"
+                onClick={handleSubmit} disabled={submitting || imageUploading || (isEdit && !isDirty)}
+                className="px-8 py-2.5 bg-yellow-400 text-white rounded-lg text-sm font-semibold hover:bg-yellow-500 transition-all shadow-md shadow-indigo-100 active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
              >
                 {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 {isEdit ? 'Update Module' : 'Push to Production'}

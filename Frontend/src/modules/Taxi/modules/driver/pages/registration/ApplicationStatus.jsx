@@ -43,34 +43,34 @@ const ApplicationStatus = () => {
                     <h1 className="text-3xl font-black text-taxi-text leading-tight tracking-tight">
                         Application Successfully Submitted
                     </h1>
-                    <p className="text-[14px] font-bold text-slate-400 leading-relaxed">
+                    <p className="text-[14px] font-bold text-slate-500 leading-relaxed">
                         Our team is currently reviewing your documents. This usually takes <span className="text-taxi-text">12-24 hours.</span>
                     </p>
                 </div>
 
                 {/* Status Breakdown */}
                 <div className="w-full space-y-4">
-                    <div className="bg-white p-5 rounded-3xl border border-slate-50 shadow-[0_4px_25px_rgba(0,0,0,0.01)] flex items-center justify-between">
+                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-[0_4px_25px_rgba(0,0,0,0.01)] flex items-center justify-between">
                          <div className="flex items-center gap-4">
                              <div className="w-10 h-10 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center">
                                  <FileText size={20} />
                              </div>
                              <div className="space-y-0.5">
                                  <h4 className="text-[14px] font-black text-taxi-text">KYC Verification</h4>
-                                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter">In Progress</p>
+                                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tighter">In Progress</p>
                              </div>
                          </div>
                          <TrendingUp size={16} className="text-emerald-500 animate-pulse" />
                     </div>
 
-                    <div className="bg-white p-5 rounded-3xl border border-slate-50 shadow-[0_4px_25px_rgba(0,0,0,0.01)] flex items-center justify-between">
+                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-[0_4px_25px_rgba(0,0,0,0.01)] flex items-center justify-between">
                          <div className="flex items-center gap-4">
-                             <div className="w-10 h-10 bg-slate-50 text-slate-300 rounded-2xl flex items-center justify-center">
+                             <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center">
                                  <ShieldCheck size={20} />
                              </div>
                              <div className="space-y-0.5 opacity-40">
                                  <h4 className="text-[14px] font-black text-taxi-text">Background Check</h4>
-                                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter">Waiting</p>
+                                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tighter">Waiting</p>
                              </div>
                          </div>
                     </div>

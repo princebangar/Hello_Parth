@@ -4,6 +4,7 @@ import { MapPin, ArrowLeft, Save, X, Hand, Shapes, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { networkErrorMessage } from "@/shared/utils/networkError"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -61,6 +62,8 @@ export default function AddZone() {
   })
   
   const [coordinates, setCoordinates] = useState([])
+  const [zoneLoaded, setZoneLoaded] = useState(!isEditMode)
+  const { isDirty } = useDirty({ formData, coordinates }, zoneLoaded)
   const [isDrawing, setIsDrawing] = useState(false)
   const [locationSearch, setLocationSearch] = useState("")
   const [existingZones, setExistingZones] = useState([])
@@ -169,6 +172,7 @@ export default function AddZone() {
         if (zoneData.coordinates && zoneData.coordinates.length > 0) {
           setCoordinates(zoneData.coordinates)
         }
+        setZoneLoaded(true)
       }
     } catch (error) {
       debugError("Error fetching zone:", error)
@@ -864,7 +868,7 @@ export default function AddZone() {
             </button>
             <button
               type="submit"
-              disabled={loading || coordinates.length < 3 || !formData.zoneName || !formData.country}
+              disabled={loading || coordinates.length < 3 || !formData.zoneName || !formData.country || (isEditMode && !isDirty)}
               className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (

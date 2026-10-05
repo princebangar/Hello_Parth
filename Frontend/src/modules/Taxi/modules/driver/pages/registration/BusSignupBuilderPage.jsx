@@ -81,7 +81,7 @@ const BusSignupBuilderPage = () => {
             <ChevronLeft size={16} />
             Back To Signup
           </button>
-          <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-blue-700">
+          <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">
             <Bus size={14} />
             Bus Signup Builder
           </div>

@@ -6,6 +6,7 @@ import { Button } from "@food/components/ui/button"
 import { Label } from "@food/components/ui/label"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { ArrowLeft, Loader2 } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 const debugError = (..._args) => {}
 
@@ -139,6 +140,9 @@ export default function EditRestaurant() {
   const [detailsForm, setDetailsForm] = useState(() => normalizeDetailsFormFromRestaurant(null))
   const [locationForm, setLocationForm] = useState(() => normalizeLocationFormFromRestaurant(null))
   const [locationError, setLocationError] = useState("")
+  const detailsReady = !loading && !error
+  const { isDirty: detailsDirty, resetBaseline: resetDetailsBaseline } = useDirty(detailsForm, detailsReady)
+  const { isDirty: locationDirty, resetBaseline: resetLocationBaseline } = useDirty(locationForm, detailsReady)
 
   const locationSearchInputRef = useRef(null)
   const placesAutocompleteRef = useRef(null)
@@ -328,6 +332,7 @@ export default function EditRestaurant() {
       if (updated) {
         setRestaurant((prev) => ({ ...(prev || {}), ...updated }))
       }
+      resetDetailsBaseline(detailsForm)
       alert("Restaurant details updated successfully")
     } catch (e) {
       alert(e?.response?.data?.message || "Failed to update restaurant details")
@@ -376,6 +381,7 @@ export default function EditRestaurant() {
       if (updatedRestaurant) {
         setRestaurant((prev) => ({ ...(prev || {}), ...updatedRestaurant }))
       }
+      resetLocationBaseline(locationForm)
       alert("Restaurant location updated successfully")
     } catch (e) {
       alert(e?.response?.data?.message || "Failed to update restaurant location")
@@ -419,7 +425,7 @@ export default function EditRestaurant() {
             <section className="bg-white rounded-xl border border-slate-200 p-6">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h2 className="text-lg font-semibold text-slate-900">Basic Details</h2>
-                <Button onClick={handleSaveDetails} disabled={savingDetails}>
+                <Button onClick={handleSaveDetails} disabled={savingDetails || !detailsDirty}>
                   {savingDetails ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -537,7 +543,7 @@ export default function EditRestaurant() {
                     <p className="text-xs text-slate-500 mt-1">Current Zone: {currentZoneLabel}</p>
                   ) : null}
                 </div>
-                <Button onClick={handleSaveLocation} disabled={savingLocation}>
+                <Button onClick={handleSaveLocation} disabled={savingLocation || !locationDirty}>
                   {savingLocation ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />

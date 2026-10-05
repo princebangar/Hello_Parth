@@ -11,8 +11,15 @@ import {
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
+
+const buildPayload = (settings) => ({
+  ...settings,
+  amount: Number(settings.amount || 0),
+  ride_count: Number(settings.ride_count || 0),
+});
 
 const UserReferralSettings = () => {
   const navigate = useNavigate();
@@ -25,6 +32,7 @@ const UserReferralSettings = () => {
     amount: 0,
     ride_count: 0,
   });
+  const { isDirty, resetBaseline } = useDirty(buildPayload(settings), !loading);
 
   const referralTypes = [
     { value: 'instant_referrer', label: 'Instant for Referrer User' },
@@ -59,12 +67,10 @@ const UserReferralSettings = () => {
   const handleUpdate = async () => {
     setSaving(true);
     try {
-      const res = await adminService.updateReferralSettings('user', {
-        ...settings,
-        amount: Number(settings.amount || 0),
-        ride_count: Number(settings.ride_count || 0),
-      });
+      const payload = buildPayload(settings);
+      const res = await adminService.updateReferralSettings('user', payload);
       if (unwrap(res)) {
+        resetBaseline(payload);
         setShowSuccess(true);
         toast.success('Referral settings updated successfully');
         setTimeout(() => setShowSuccess(false), 3000);
@@ -82,6 +88,8 @@ const UserReferralSettings = () => {
     setSettings(updated);
     try {
       await adminService.updateReferralSettings('user', updated);
+      // The toggle request saves the whole form, so everything on screen is now saved.
+      resetBaseline(buildPayload(updated));
       setShowSuccess(true);
       toast.success('Referral settings toggled successfully');
       setTimeout(() => setShowSuccess(false), 3000);
@@ -201,8 +209,8 @@ const UserReferralSettings = () => {
           <div className="p-4 sm:p-5 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <button
               onClick={handleUpdate}
-              disabled={saving}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-yellow-400 text-black text-sm font-bold rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50"
+              disabled={saving || !isDirty}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-yellow-400 text-black text-sm font-bold rounded-lg hover:bg-yellow-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Update Referral Settings

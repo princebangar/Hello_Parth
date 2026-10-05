@@ -6,6 +6,7 @@ import { Label } from "@food/components/ui/label"
 import { Textarea } from "@food/components/ui/textarea"
 import { exportSEOPagesToCSV, exportSEOPagesToExcel, exportSEOPagesToPDF, exportSEOPagesToJSON } from "@food/components/admin/seo/seoExportUtils"
 import { useCompanyName } from "@food/hooks/useCompanyName"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -29,6 +30,7 @@ const seoPages = [
 ]
 
 export default function PageMetaDataPageMetaData() {
+  const companyName = useCompanyName()
   const [searchQuery, setSearchQuery] = useState("")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -43,6 +45,7 @@ export default function PageMetaDataPageMetaData() {
     ogDescription: "",
     ogImage: ""
   })
+  const { isDirty, resetBaseline } = useDirty(seoData, true)
   const [visibleColumns, setVisibleColumns] = useState({
     si: true,
     pages: true,
@@ -65,7 +68,7 @@ export default function PageMetaDataPageMetaData() {
     if (page) {
       setEditingPage(page)
       // Load existing SEO data (in real app, this would come from API)
-      setSeoData({
+      const loadedSeoData = {
         title: page.name,
         description: "",
         keywords: "",
@@ -74,7 +77,9 @@ export default function PageMetaDataPageMetaData() {
         ogTitle: `${page.name} - ${companyName}`,
         ogDescription: `Open Graph description for ${page.name}`,
         ogImage: ""
-      })
+      }
+      setSeoData(loadedSeoData)
+      resetBaseline(loadedSeoData)
       setIsEditDialogOpen(true)
     }
   }
@@ -448,7 +453,8 @@ export default function PageMetaDataPageMetaData() {
               </button>
               <button
                 onClick={handleSaveSEO}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all"
+                disabled={!isDirty}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Save Changes
               </button>

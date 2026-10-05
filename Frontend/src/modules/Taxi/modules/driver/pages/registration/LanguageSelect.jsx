@@ -46,7 +46,7 @@ const LanguageSelect = () => {
                 )}
                 <div className="space-y-1">
                     <h1 className="font-['Outfit'] text-[32px] font-black leading-[1.1] tracking-[-0.04em] text-slate-900">
-                        Select <span className="text-slate-400">Language</span>
+                        Select <span className="text-slate-500">Language</span>
                     </h1>
                     <p className="text-[14px] font-bold text-slate-500 opacity-80 max-w-[32ch] mx-auto leading-relaxed">Choose your preferred communication language to get started.</p>
                 </div>
@@ -64,18 +64,18 @@ const LanguageSelect = () => {
                         className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between group relative overflow-hidden ${
                             selectedLang === lang.id 
                             ? 'bg-slate-950 border-slate-950 shadow-lg shadow-slate-900/20' 
-                            : 'bg-white border-slate-50 shadow-sm hover:border-slate-100'
+                            : 'bg-white border-slate-200 shadow-sm hover:border-slate-100'
                         }`}
                     >
                         <div className="flex items-center gap-3.5 relative z-10">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
-                                selectedLang === lang.id ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-400'
+                                selectedLang === lang.id ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-500'
                             }`}>
                                 <Globe size={20} strokeWidth={2.5} />
                             </div>
                             <div className="leading-tight">
                                 <h4 className={`text-base font-black tracking-tight transition-colors ${selectedLang === lang.id ? 'text-white' : 'text-slate-900'}`}>{lang.label}</h4>
-                                <p className={`text-[11px] font-black uppercase tracking-widest mt-0.5 opacity-60 ${selectedLang === lang.id ? 'text-white' : 'text-slate-400'}`}>{lang.native}</p>
+                                <p className={`text-[11px] font-black uppercase tracking-widest mt-0.5 opacity-60 ${selectedLang === lang.id ? 'text-white' : 'text-slate-500'}`}>{lang.native}</p>
                             </div>
                         </div>
 
@@ -98,7 +98,7 @@ const LanguageSelect = () => {
             </main>
 
             {/* Footer Action */}
-            <div className="fixed bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-white via-white/95 to-transparent z-20">
+            <div className="fixed bottom-0 left-0 right-0 px-5 pt-5 pb-[calc(2rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-white via-white/95 to-transparent z-20">
                 <motion.button
                     whileHover={{ scale: 1.01, y: -1 }}
                     whileTap={{ scale: 0.99 }}

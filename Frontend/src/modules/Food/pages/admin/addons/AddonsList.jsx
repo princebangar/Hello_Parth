@@ -5,6 +5,7 @@ import { adminAPI, uploadAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 const debugError = (...args) => {}
 
@@ -55,6 +56,10 @@ export default function AddonsList() {
   const [editForm, setEditForm] = useState({ name: "", price: "", description: "", isAvailable: true })
   const [editImagePreview, setEditImagePreview] = useState("")
   const [editImageFile, setEditImageFile] = useState(null)
+  const { isDirty: editDirty, resetBaseline: resetEditBaseline } = useDirty(
+    { editForm, hasNewImage: !!editImageFile },
+    true
+  )
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
@@ -116,12 +121,14 @@ export default function AddonsList() {
 
   const handleEdit = (addon) => {
     setEditingAddon(addon)
-    setEditForm({
+    const nextEditForm = {
       name: addon?.draft?.name || addon?.name || "",
       price: addon?.draft?.price ?? addon?.price ?? "",
       description: addon?.draft?.description || addon?.description || "",
       isAvailable: addon?.isAvailable !== false,
-    })
+    }
+    setEditForm(nextEditForm)
+    resetEditBaseline({ editForm: nextEditForm, hasNewImage: false })
     const img =
       addon?.draft?.image ||
       (Array.isArray(addon?.draft?.images) && addon.draft.images[0]) ||
@@ -505,7 +512,7 @@ export default function AddonsList() {
             <button
               type="button"
               onClick={handleSaveEdit}
-              disabled={submittingAction}
+              disabled={submittingAction || !editDirty}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submittingAction ? "Saving..." : "Save"}

@@ -17,6 +17,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@food/components/ui/dialog"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -67,6 +68,7 @@ export default function RestaurantComplaints() {
   })
   const [editingComplaint, setEditingComplaint] = useState(null)
   const [updateData, setUpdateData] = useState({ status: '', adminResponse: '' })
+  const { isDirty, resetBaseline } = useDirty(updateData, true)
 
   useEffect(() => {
     fetchComplaints()
@@ -104,7 +106,9 @@ export default function RestaurantComplaints() {
 
   const handleOpenModal = (complaint) => {
     setEditingComplaint(complaint)
-    setUpdateData({ status: complaint.status, adminResponse: complaint.adminResponse || '' })
+    const nextUpdateData = { status: complaint.status, adminResponse: complaint.adminResponse || '' }
+    setUpdateData(nextUpdateData)
+    resetBaseline(nextUpdateData)
   }
 
   const handleUpdateComplaint = async () => {
@@ -334,7 +338,13 @@ export default function RestaurantComplaints() {
           </div>
           <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button onClick={() => setEditingComplaint(null)} className="px-4 py-2 border rounded-md">Cancel</button>
-            <button onClick={handleUpdateComplaint} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save Changes</button>
+            <button
+              onClick={handleUpdateComplaint}
+              disabled={!isDirty}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Save Changes
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

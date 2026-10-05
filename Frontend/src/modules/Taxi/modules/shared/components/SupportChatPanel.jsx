@@ -299,7 +299,9 @@ const SupportChatPanel = ({
         updatedAt: message.createdAt,
       };
       const next = current.map((item) =>
-        getConversationIdentityKey(item.conversationKey) === identityKey ? mergeConversationEntry(item, nextConversation) : item,
+        getConversationIdentityKey(item.conversationKey) === identityKey
+          ? { ...mergeConversationEntry(item, nextConversation), unreadCount }
+          : item,
       );
 
       if (next.some((item) => getConversationIdentityKey(item.conversationKey) === identityKey)) {
@@ -398,7 +400,7 @@ const SupportChatPanel = ({
         }
 
         if (isActiveDeleted) {
-          setSelectedConversationKey(next[0]?.conversationKey || '');
+          setSelectedConversationKey('');
         }
 
         return next;
@@ -452,7 +454,7 @@ const SupportChatPanel = ({
           return dedupeConversations([...current, ...nextConversations]);
         });
 
-        if (!selectedConversationKey && nextConversations.length > 0) {
+        if (!isAdminPanel && !selectedConversationKey && nextConversations.length > 0) {
           setSelectedConversationKey(getConversationIdentityKey(nextConversations[0].conversationKey));
         }
       } catch (chatError) {
@@ -503,6 +505,7 @@ const SupportChatPanel = ({
         socketService.emit('chat:join', { conversationKey: selectedConversationKey });
         socketService.emit('chat:read', { conversationKey: selectedConversationKey });
         await markSupportMessagesRead(selectedConversationKey, session.token);
+        if (active) clearUnread(selectedConversationKey);
       } catch (chatError) {
         if (!active) {
           return;
@@ -546,8 +549,20 @@ const SupportChatPanel = ({
     appliedInitialDraftRef.current = normalizedInitialDraft;
   }, [initialDraft]);
 
+  const clearUnread = (conversationKey) => {
+    const identityKey = getConversationIdentityKey(conversationKey);
+    setConversations((current) =>
+      current.some((item) => getConversationIdentityKey(item.conversationKey) === identityKey && item.unreadCount > 0)
+        ? current.map((item) =>
+            getConversationIdentityKey(item.conversationKey) === identityKey ? { ...item, unreadCount: 0 } : item,
+          )
+        : current,
+    );
+  };
+
   const handleSelectConversation = (conversationKey) => {
     const parsedConversation = parseSupportConversationKey(conversationKey);
+    clearUnread(conversationKey);
     setSelectedConversationKey(parsedConversation?.canonicalKey || conversationKey);
   };
 
@@ -581,7 +596,7 @@ const SupportChatPanel = ({
         }
 
         const next = current.filter((item) => !selectedKeys.some((key) => matchesConversationKey(item.conversationKey, key)));
-        setSelectedConversationKey(next[0]?.conversationKey || '');
+        setSelectedConversationKey('');
         return next;
       });
     } catch (chatError) {
@@ -662,7 +677,7 @@ const SupportChatPanel = ({
           .chat-thin-scrollbar::-webkit-scrollbar-thumb { background-color: #CBD5E1; border-radius: 20px; }
         `}</style>
       )}
-      <div className={`flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/60 bg-white px-4 py-4 sm:px-6 sm:py-5 ${isPlainSurface ? 'sticky top-0 z-20' : ''}`}>
+      <div className={`flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/60 bg-white px-4 py-3 sm:px-6 sm:py-3.5 ${isPlainSurface ? 'sticky top-0 z-20' : ''}`}>
         <div className="flex min-w-0 items-center gap-4">
           <div className={`flex h-12 w-12 items-center justify-center rounded-2xl shadow-lg ${isAdminPanel ? 'bg-[#FFC400] text-[#0B1220] shadow-[#FFC400]/10' : 'bg-[#405189] text-white shadow-indigo-600/10'}`}>
             <MessageCircle size={20} />
@@ -670,11 +685,11 @@ const SupportChatPanel = ({
           <div className="min-w-0">
             {isAdminPanel ? (
               <>
-                <h2 className="truncate text-[34px] font-bold tracking-tight text-slate-900" style={{ fontFamily: 'Times New Roman' }}>Chats</h2>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <span className="text-[16px] font-medium tracking-[1px] text-[#6B7280]">Admin Support Conversations</span>
+                <h2 className="truncate text-[24px] font-bold tracking-tight text-slate-900">Chats</h2>
+                <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <span className="text-[12px] font-medium tracking-[0.5px] text-[#6B7280]">Admin Support Conversations</span>
                   <span className="w-1 h-1 rounded-full bg-slate-300" />
-                  <span className="text-[16px] font-medium tracking-[1px] text-[#6B7280]">Desk Terminal</span>
+                  <span className="text-[12px] font-medium tracking-[0.5px] text-[#6B7280]">Desk Terminal</span>
                 </div>
               </>
             ) : (
@@ -708,7 +723,7 @@ const SupportChatPanel = ({
       <div className={`grid min-h-0 flex-1 ${isPlainSurface ? 'h-full' : 'min-h-[calc(100vh-220px)]'} ${isAdminPanel && showSidebar ? 'xl:grid-cols-[380px_1fr]' : 'grid-cols-1'}`}>
         {isAdminPanel && showSidebar && (
           <aside className="flex min-h-0 flex-col border-r-[1.5px] border-slate-200/60 bg-[#F8FAFC]">
-            <div className="shrink-0 border-b border-slate-200/60 bg-white p-5">
+            <div className="shrink-0 border-b border-slate-200/60 bg-white p-3">
               <div className={`flex items-center gap-3 border border-slate-200 bg-slate-50/50 px-4 transition-all focus-within:ring-4 ${
                 isAdminPanel 
                   ? 'h-[42px] rounded-[12px] focus-within:border-[#FFC400]/30 focus-within:ring-[#FFC400]/5' 
@@ -731,7 +746,7 @@ const SupportChatPanel = ({
                   onClick={() => handleSelectConversation(conversation.conversationKey)}
                   className={`flex w-full items-center text-left transition-all relative group ${
                     isAdminPanel
-                      ? `gap-4 rounded-[14px] p-[18px] mb-[12px] border-l-[3px] hover:-translate-y-0.5 hover:shadow-sm duration-150 ${
+                      ? `gap-3 rounded-[12px] px-3 py-2.5 mb-1.5 border-l-[3px] hover:shadow-sm duration-150 ${
                           selectedConversationKey === conversation.conversationKey
                             ? 'bg-[#111827] border-l-[#FFC400] shadow-md'
                             : 'bg-transparent border-l-transparent hover:bg-slate-50'
@@ -744,7 +759,7 @@ const SupportChatPanel = ({
                   }`}
                 >
                   <div className={`flex shrink-0 items-center justify-center rounded-[18px] transition-colors ${
-                    isAdminPanel ? 'h-10 w-10' : 'h-12 w-12'
+                    isAdminPanel ? 'h-9 w-9' : 'h-12 w-12'
                   } ${
                     selectedConversationKey === conversation.conversationKey 
                       ? isAdminPanel ? 'bg-[#FFC400] text-[#0B1220]' : 'bg-indigo-600 text-white' 
@@ -757,14 +772,14 @@ const SupportChatPanel = ({
                     <div className="flex items-center justify-between gap-2">
                       <p className={`truncate tracking-tight ${
                         isAdminPanel 
-                          ? `text-[17px] font-bold ${selectedConversationKey === conversation.conversationKey ? 'text-white' : 'text-slate-900'}`
+                          ? `text-[14px] font-bold ${selectedConversationKey === conversation.conversationKey ? 'text-white' : 'text-slate-900'}`
                           : `text-[13px] font-bold ${selectedConversationKey === conversation.conversationKey ? 'text-indigo-600' : 'text-slate-900'}`
-                      }`} style={isAdminPanel ? { fontFamily: 'Times New Roman' } : {}}>
+                      }`}>
                         {conversation.peer?.name || 'Support Contact'}
                       </p>
                       {conversation.unreadCount > 0 && (
                         <span className={`rounded-full bg-orange-500 font-black text-white flex items-center justify-center ${
-                          isAdminPanel ? 'h-4 w-4 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+                          isAdminPanel ? 'h-[18px] min-w-[18px] px-1 text-[10px]' : 'px-2 py-0.5 text-[10px]'
                         }`}>
                           {conversation.unreadCount}
                         </span>
@@ -774,7 +789,7 @@ const SupportChatPanel = ({
                       <div className="flex items-center gap-2">
                         <p className={`uppercase tracking-widest ${
                           isAdminPanel 
-                            ? `text-[14px] font-medium ${selectedConversationKey === conversation.conversationKey ? 'text-white/80' : 'text-slate-500'}`
+                            ? `text-[11px] font-medium ${selectedConversationKey === conversation.conversationKey ? 'text-white/80' : 'text-slate-500'}`
                             : `text-[10px] font-black ${selectedConversationKey === conversation.conversationKey ? 'text-indigo-600/60' : 'text-slate-400'}`
                         }`}>
                           {conversation.peer?.role || 'user'}
@@ -782,13 +797,13 @@ const SupportChatPanel = ({
                       </div>
                       <p className={`font-medium ${
                         isAdminPanel
-                          ? `text-[13px] ${selectedConversationKey === conversation.conversationKey ? 'text-white/60' : 'text-slate-400'}`
+                          ? `text-[11px] ${selectedConversationKey === conversation.conversationKey ? 'text-white/60' : 'text-slate-400'}`
                           : `text-[10px] font-bold text-slate-400`
                       }`}>{formatTime(conversation.updatedAt).split(',')[1] || 'Today'}</p>
                     </div>
                     <p className={`truncate leading-relaxed ${
                       isAdminPanel 
-                        ? `text-[15px] mt-1 ${selectedConversationKey === conversation.conversationKey ? 'text-white/70' : 'text-slate-500'}`
+                        ? `text-[12px] mt-0.5 ${selectedConversationKey === conversation.conversationKey ? 'text-white/70' : 'text-slate-500'}`
                         : `text-[12px] mt-1.5 font-medium ${selectedConversationKey === conversation.conversationKey ? 'text-slate-600' : 'text-slate-500'}`
                     }`}>
                       {conversation.latestMessage?.message || 'No messages yet'}
@@ -812,23 +827,23 @@ const SupportChatPanel = ({
               <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 mb-6">
                 <MessageCircle size={40} />
               </div>
-              <h2 className="text-[28px] font-bold text-slate-900 mb-2" style={{ fontFamily: 'Times New Roman' }}>Select a conversation</h2>
-              <p className="text-slate-500 text-[15px]">Choose a conversation from the left to view messages.</p>
+              <h2 className="text-[20px] font-bold text-slate-900 mb-1">Select a conversation</h2>
+              <p className="text-slate-500 text-[13px]">Choose a conversation from the left to view messages.</p>
             </div>
           ) : (
             <>
-              <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-4 sm:px-5 ${isPlainSurface ? 'sticky top-0 z-10' : ''}`}>
+              <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-3 sm:px-5 ${isPlainSurface ? 'sticky top-0 z-10' : ''}`}>
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                     {selectedConversation?.peer?.role === 'driver' ? <CircleUser size={20} /> : <Bot size={20} />}
                   </div>
                   <div className="min-w-0 flex-1">
                     {isAdminPanel ? (
                       <>
-                        <h3 className="truncate text-[24px] font-bold tracking-tight text-slate-900" style={{ fontFamily: 'Times New Roman' }}>
+                        <h3 className="truncate text-[17px] font-bold tracking-tight text-slate-900">
                           {selectedConversation?.peer?.name || 'Support Team'}
                         </h3>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 mt-[-4px]">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">
                           {selectedConversation?.peer?.role === 'driver' ? 'Driver Support Thread' : 'User Support Thread'}
                         </p>
                       </>
@@ -891,7 +906,7 @@ const SupportChatPanel = ({
                     </div>
                   </div>
                 ) : (
-                  <div className={`mx-auto flex max-w-4xl flex-col ${isAdminPanel ? 'gap-6' : 'gap-4'}`}>
+                  <div className={`mx-auto flex max-w-4xl flex-col ${isAdminPanel ? 'gap-4' : 'gap-4'}`}>
                     {messages.map((message) => {
                       const isMine =
                         message.sender.id && session.id
@@ -913,14 +928,14 @@ const SupportChatPanel = ({
                               <div
                                 className={`shadow-sm ${
                                   isAdminPanel
-                                    ? `rounded-[22px] px-[16px] py-[10px] ${isMine ? 'rounded-br-sm bg-indigo-600 text-white border border-indigo-600' : 'rounded-bl-sm bg-white text-slate-800 border border-slate-200'}`
+                                    ? `rounded-[18px] px-[14px] py-[8px] ${isMine ? 'rounded-br-sm bg-indigo-600 text-white border border-indigo-600' : 'rounded-bl-sm bg-white text-slate-800 border border-slate-200'}`
                                     : `rounded-3xl px-4 py-3 ${isMine ? 'rounded-br-md border border-indigo-600 bg-indigo-600 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'}`
                                 }`}
                               >
-                                <p className="text-[14px] font-medium leading-6">{message.message}</p>
+                                <p className={`font-medium ${isAdminPanel ? 'text-[13px] leading-5' : 'text-[14px] leading-6'}`}>{message.message}</p>
                               </div>
                               <div className={`mt-1.5 flex items-center gap-2 uppercase tracking-wider ${
-                                isAdminPanel ? 'text-[12px] text-slate-400 font-medium' : 'text-[10px] font-bold text-slate-400'
+                                isAdminPanel ? 'text-[10px] text-slate-400 font-medium' : 'text-[10px] font-bold text-slate-400'
                               } ${isMine ? 'justify-end' : ''}`}>
                                 <Clock3 size={11} />
                                 <span>{formatTime(message.createdAt)}</span>
@@ -950,7 +965,7 @@ const SupportChatPanel = ({
             </AnimatePresence>
 
             <div className={`mx-auto flex max-w-4xl items-center gap-3 border border-slate-200 bg-slate-50 px-4 ${
-              isAdminPanel ? 'h-[48px] rounded-[14px]' : 'rounded-[24px] py-3'
+              isAdminPanel ? 'h-[44px] rounded-[12px]' : 'rounded-[24px] py-3'
             }`}>
               <button
                 type="button"

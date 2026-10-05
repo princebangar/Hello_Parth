@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Upload, X, RotateCcw, Plus, Save, Info } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -28,6 +29,10 @@ export default function ReactRegistration() {
     { id: 1, question: "", answer: "" },
     { id: 2, question: "", answer: "" },
   ])
+  const { isDirty, resetBaseline } = useDirty(
+    { hasHeroImage: !!heroImagePreview, steeperSteps, opportunities, faqs },
+    true
+  )
 
   const tabs = [
     { id: "hero-section", label: "Hero Section" },
@@ -61,6 +66,7 @@ export default function ReactRegistration() {
   const handleSubmit = (e) => {
     e.preventDefault()
     debugLog("Form submitted:", { heroImage, activeTab })
+    resetBaseline({ hasHeroImage: !!heroImagePreview, steeperSteps, opportunities, faqs })
   }
 
   return (
@@ -381,7 +387,8 @@ export default function ReactRegistration() {
           <button
             type="button"
             onClick={handleSubmit}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+            disabled={!isDirty}
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Save className="w-4 h-4" />
             Save

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Bus, ArrowUpRight, Loader2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../shared/api/axiosInstance';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const SectionHeader = ({ title }) => (
   <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3 bg-gray-50/30">
@@ -16,6 +17,7 @@ const CustomizationSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busServiceEnabled, setBusServiceEnabled] = useState(false);
+  const { isDirty, resetBaseline } = useDirty(busServiceEnabled, !loading);
 
   useEffect(() => {
     const fetchBusSettings = async () => {
@@ -43,6 +45,7 @@ const CustomizationSettings = () => {
           enable_bus_service: busServiceEnabled ? '1' : '0',
         },
       });
+      resetBaseline(busServiceEnabled);
       toast.success('Bus service setting updated successfully');
     } catch (error) {
       console.error('Failed to save bus service setting:', error);
@@ -119,8 +122,8 @@ const CustomizationSettings = () => {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving}
-                className="bg-yellow-400 text-black px-8 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
+                disabled={saving || !isDirty}
+                className="bg-yellow-400 text-black px-8 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                 {saving ? 'Saving Changes...' : 'Save Bus Service Setting'}

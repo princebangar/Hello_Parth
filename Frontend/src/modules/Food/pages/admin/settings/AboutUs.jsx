@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@food/components/ui/ca
 import { Label } from "@food/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@food/components/ui/select"
 import { useCompanyName } from "@food/hooks/useCompanyName"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -54,6 +55,7 @@ export default function AboutUs() {
     logo: '',
     features: []
   })
+  const { isDirty, resetBaseline } = useDirty(aboutData, !loading)
 
   useEffect(() => {
     fetchAboutData()
@@ -89,11 +91,15 @@ export default function AboutUs() {
         toast.success('About page updated successfully')
         const data = response.data.data
         if (data && typeof data === "object") {
-          setAboutData((prev) => ({
-            ...prev,
+          const merged = {
+            ...aboutData,
             ...data,
             features: Array.isArray(data.features) ? data.features : [],
-          }))
+          }
+          setAboutData(merged)
+          resetBaseline(merged)
+        } else {
+          resetBaseline(aboutData)
         }
       }
     } catch (error) {
@@ -138,11 +144,15 @@ export default function AboutUs() {
         toast.success('Feature deleted successfully')
         const data = response.data.data
         if (data && typeof data === "object") {
-          setAboutData((prev) => ({
-            ...prev,
+          const merged = {
+            ...updatedData,
             ...data,
             features: Array.isArray(data.features) ? data.features : [],
-          }))
+          }
+          setAboutData(merged)
+          resetBaseline(merged)
+        } else {
+          resetBaseline(updatedData)
         }
       }
     } catch (error) {
@@ -339,7 +349,7 @@ export default function AboutUs() {
 
         {/* Save Button */}
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving} size="lg">
+          <Button onClick={handleSave} disabled={saving || !isDirty} size="lg">
             {saving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>

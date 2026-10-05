@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@food/components/ui/dialog"
+import useDirty from "../../../../../shared/hooks/useDirty"
 
 export default function AddEditBasicCampaignDialog({ isOpen, onOpenChange, campaign, onSave }) {
   const [formData, setFormData] = useState({
@@ -17,16 +18,19 @@ export default function AddEditBasicCampaignDialog({ isOpen, onOpenChange, campa
     timeEnd: "",
   })
   const [errors, setErrors] = useState({})
+  const { isDirty, resetBaseline } = useDirty(formData, true)
 
   useEffect(() => {
     if (campaign) {
-      setFormData({
+      const loadedForm = {
         title: campaign.title || "",
         dateStart: campaign.dateStart || "",
         dateEnd: campaign.dateEnd || "",
         timeStart: campaign.timeStart || "",
         timeEnd: campaign.timeEnd || "",
-      })
+      }
+      setFormData(loadedForm)
+      resetBaseline(loadedForm)
     } else {
       setFormData({
         title: "",
@@ -215,7 +219,8 @@ export default function AddEditBasicCampaignDialog({ isOpen, onOpenChange, campa
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md"
+              disabled={!!campaign && !isDirty}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {campaign ? "Update Campaign" : "Create Campaign"}
             </button>

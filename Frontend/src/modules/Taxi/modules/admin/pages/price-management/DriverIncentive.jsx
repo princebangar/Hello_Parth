@@ -10,6 +10,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const DriverIncentive = () => {
   const { id } = useParams();
@@ -17,6 +18,7 @@ const DriverIncentive = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('daily');
   const [incentives, setIncentives] = useState([{ min_rides: '0', amount: '0' }]);
+  const { isDirty } = useDirty(incentives, !loading);
   const [details, setDetails] = useState({ zone_name: '', vehicle_type: '' });
 
   useEffect(() => {
@@ -170,7 +172,7 @@ const DriverIncentive = () => {
          </div>
 
          <div className="p-3 border-t border-gray-50 flex justify-end bg-gray-50/20">
-            <button onClick={handleSubmit} className="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-1.5 rounded-md text-xs font-bold shadow  transition-all active:scale-95">
+            <button onClick={handleSubmit} disabled={!isDirty} className="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-1.5 rounded-md text-xs font-bold shadow  transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100">
                Submit
             </button>
          </div>

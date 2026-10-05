@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Globe, Trash2, ChevronRight, Loader2, Edit2, X, AlertTriangle } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const StatusToggle = ({ active, onToggle }) => (
   <button
@@ -27,6 +28,7 @@ const Languages = () => {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', code: '', active: 1, default_status: 0 });
   const [submitting, setSubmitting] = useState(false);
+  const { isDirty, resetBaseline } = useDirty(formData);
   
   // Delete confirm state
   const [deleteId, setDeleteId] = useState(null);
@@ -102,12 +104,14 @@ const Languages = () => {
 
   const openEditModal = (lang) => {
     setEditingId(lang._id || lang.id);
-    setFormData({
+    const nextFormData = {
       name: lang.name || '',
       code: lang.code || '',
       active: lang.active ?? 1,
       default_status: lang.default_status ?? 0
-    });
+    };
+    setFormData(nextFormData);
+    resetBaseline(nextFormData);
     setIsModalOpen(true);
   };
 
@@ -420,8 +424,8 @@ const Languages = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 text-sm font-semibold text-black bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                  disabled={submitting || (Boolean(editingId) && !isDirty)}
+                  className="px-5 py-2 text-sm font-semibold text-black bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
                 >
                   {submitting && <Loader2 size={16} className="animate-spin" />}
                   {submitting ? 'Saving...' : 'Save Language'}

@@ -9,6 +9,7 @@ import {
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 let liveFaviconObjectUrl = '';
 const DEFAULT_ADMIN_THEME_COLOR = '#405189';
 const DEFAULT_LANDING_THEME_COLOR = '#0AB39C';
@@ -221,6 +222,7 @@ const GeneralSettings = () => {
     general: {},
     customization: {}
   });
+  const { isDirty, resetBaseline } = useDirty(settings, !loading);
 
   const fetchSettings = async () => {
     try {
@@ -296,6 +298,7 @@ const GeneralSettings = () => {
         api.patch('/admin/general-settings/general', { settings: settings.general }),
         api.patch('/admin/general-settings/customize', { settings: customizationPayload })
       ]);
+      resetBaseline(settings);
       await refreshSettings();
       toast.success('Configuration saved successfully!');
     } catch (err) {
@@ -413,8 +416,8 @@ const GeneralSettings = () => {
       <div className="fixed bottom-6 right-6 z-50">
          <button 
             onClick={handleUpdate} 
-            disabled={saving} 
-            className="bg-yellow-400 text-black px-6 py-3 rounded-full flex items-center justify-center gap-2 font-semibold shadow-lg hover:bg-yellow-500 hover:shadow-xl active:scale-95 transition-all disabled:opacity-50"
+            disabled={saving || !isDirty}
+            className="bg-yellow-400 text-black px-6 py-3 rounded-full flex items-center justify-center gap-2 font-semibold shadow-lg hover:bg-yellow-500 hover:shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
          >
             {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
             {saving ? 'Saving...' : 'Save settings'}

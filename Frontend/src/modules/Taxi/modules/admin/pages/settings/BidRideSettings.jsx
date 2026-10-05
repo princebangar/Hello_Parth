@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import useDirty from '../../../../../../shared/hooks/useDirty';
 
 const SectionHeader = ({ title }) => (
   <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3 bg-gray-50/30">
@@ -102,6 +103,7 @@ const BidRideSettings = () => {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({});
   const [infoModal, setInfoModal] = useState({ open: false, title: '', content: '' });
+  const { isDirty, resetBaseline } = useDirty(settings, !loading);
 
   const fetchData = async () => {
     try {
@@ -146,6 +148,7 @@ const BidRideSettings = () => {
     try {
       setSaving(true);
       await api.patch('/admin/general-settings/bid-ride', { settings });
+      resetBaseline(settings);
       toast.success('Bidding logic updated successfully!');
     } catch (err) {
       console.error('Update error:', err);
@@ -228,8 +231,8 @@ const BidRideSettings = () => {
               <div className="px-6 py-5 bg-gray-50/50 border-t border-gray-100 flex justify-end">
                  <button 
                   onClick={handleUpdate}
-                  disabled={saving}
-                  className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
+                  disabled={saving || !isDirty}
+                  className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                  >
                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                    Save Bid Settings
@@ -291,8 +294,8 @@ const BidRideSettings = () => {
               <div className="px-6 py-5 bg-gray-50/50 border-t border-gray-100 flex justify-end">
                  <button 
                   onClick={handleUpdate}
-                  disabled={saving}
-                  className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
+                  disabled={saving || !isDirty}
+                  className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                  >
                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                    Save Bid Settings

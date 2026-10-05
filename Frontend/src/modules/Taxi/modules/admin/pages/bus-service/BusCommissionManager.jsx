@@ -120,6 +120,14 @@ const BusCommissionManager = () => {
     setActiveMenuId(null);
   };
 
+  // Save stays disabled until the draft differs from the bus that was opened.
+  const isDirty = Boolean(editingBus) && (
+    Number(draft.commission || 0) !== Number(editingBus.adminCommissionPercentage ?? 0) ||
+    Number(draft.tax || 0) !== Number(editingBus.serviceTaxPercentage ?? 0) ||
+    draft.status !== (editingBus.status || 'active') ||
+    String(draft.remarks || '').trim() !== ''
+  );
+
   const handleSave = async () => {
     if (!editingBus) return;
     setSavingId(editingBus.id);
@@ -531,8 +539,8 @@ const BusCommissionManager = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!!savingId}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-black px-4 py-3 text-sm font-black text-white hover:bg-slate-800 transition disabled:opacity-60"
+                  disabled={!!savingId || !isDirty}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-black px-4 py-3 text-sm font-black text-white hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {savingId === editingBus.id ? <RefreshCcw size={16} className="animate-spin" /> : <Save size={16} />}
                   Save Changes

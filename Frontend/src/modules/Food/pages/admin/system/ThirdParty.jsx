@@ -122,6 +122,14 @@ export default function ThirdParty() {
       return acc
     }, {})
   )
+  // Values as last saved; a service's Save button stays disabled until one of its fields differs from this.
+  const [savedValues, setSavedValues] = useState(fieldValues)
+
+  const isServiceDirty = (service) =>
+    service.fields.some((field) => {
+      const key = `${service.id}-${field.key}`
+      return (fieldValues[key] || field.value || "") !== (savedValues[key] || field.value || "")
+    })
 
   const handleToggle = (id) => {
     setServices(prev => prev.map(service => 
@@ -163,6 +171,14 @@ export default function ThirdParty() {
     }))
     debugLog("Saving service:", service.name, serviceFields)
     alert(`${service.name} configuration saved successfully!`)
+    setSavedValues(prev => {
+      const next = { ...prev }
+      service.fields.forEach(field => {
+        const key = `${serviceId}-${field.key}`
+        next[key] = fieldValues[key] || field.value || ""
+      })
+      return next
+    })
     
     setServices(prev => prev.map(s => 
       s.id === serviceId ? { ...s, configured: true } : s
@@ -290,7 +306,8 @@ export default function ThirdParty() {
                             <button
                               type="button"
                               onClick={() => handleSave(service.id)}
-                              className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                              disabled={!isServiceDirty(service)}
+                              className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               Save
                             </button>

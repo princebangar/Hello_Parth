@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Info,
   Eye,
-  PencilLine,
   List,
   CalendarDays,
   Phone,
@@ -23,6 +22,7 @@ const PoolingVehicles = () => {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [approvingId, setApprovingId] = useState('');
 
   const loadVehicles = async () => {
     setLoading(true);
@@ -39,6 +39,19 @@ const PoolingVehicles = () => {
   useEffect(() => {
     loadVehicles();
   }, []);
+
+  const handleApprove = async (id) => {
+    setApprovingId(id);
+    try {
+      await adminService.approvePoolingVehicle(id);
+      toast.success('Vehicle approved');
+      loadVehicles();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to approve vehicle');
+    } finally {
+      setApprovingId('');
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this vehicle?')) return;
@@ -197,7 +210,7 @@ const PoolingVehicles = () => {
                     <th className="px-3 py-2">Capacity</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Created</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
+                    <th className="px-3 py-2 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -268,20 +281,23 @@ const PoolingVehicles = () => {
                         <span className="text-xs font-medium text-slate-500">{formatDate(vehicle.createdAt)}</span>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {vehicle.approve === false && (
+                            <button
+                              onClick={() => handleApprove(vehicle._id)}
+                              disabled={approvingId === vehicle._id}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                            >
+                              <CheckCircle2 size={12} />
+                              {approvingId === vehicle._id ? 'Approving...' : 'Approve'}
+                            </button>
+                          )}
                           <button
-                            onClick={() => navigate(`/admin/pooling/vehicles/view/${vehicle._id}`)}
+                            onClick={() => navigate(`/taxi/admin/pooling/vehicles/view/${vehicle._id}`)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-100"
                           >
                             <Eye size={12} />
-                            View
-                          </button>
-                          <button
-                            onClick={() => navigate(`/admin/pooling/vehicles/edit/${vehicle._id}`)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-700 transition hover:bg-yellow-50 hover:text-yellow-700 hover:border-yellow-200"
-                          >
-                            <PencilLine size={12} />
-                            Edit
+                            View & Edit
                           </button>
                           <button
                             onClick={() => handleDelete(vehicle._id)}

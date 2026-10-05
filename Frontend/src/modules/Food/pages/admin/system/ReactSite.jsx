@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { X, Monitor } from "lucide-react"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -9,10 +10,12 @@ export default function ReactSite() {
   const [reactLicenseCode, setReactLicenseCode] = useState("")
   const [reactDomain, setReactDomain] = useState("")
   const [showWarning, setShowWarning] = useState(true)
+  const { isDirty, resetBaseline } = useDirty({ reactLicenseCode, reactDomain }, true)
 
   const handleSave = (e) => {
     e.preventDefault()
     debugLog("Saving React Site:", { reactLicenseCode, reactDomain })
+    resetBaseline({ reactLicenseCode, reactDomain })
     alert("React Site settings saved successfully!")
   }
 
@@ -82,7 +85,8 @@ export default function ReactSite() {
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="px-6 py-2.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={!isDirty}
+                className="px-6 py-2.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Save
               </button>

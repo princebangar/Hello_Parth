@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import useDirty from "../../../../../shared/hooks/useDirty"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -48,6 +49,7 @@ export default function EarningAddon() {
     endDate: "",
     maxRedemptions: "",
   })
+  const { isDirty, resetBaseline } = useDirty(formData, true)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
@@ -94,14 +96,16 @@ export default function EarningAddon() {
     if (addon) {
       setSelectedAddon(addon)
       setIsEditMode(true)
-      setFormData({
+      const editData = {
         title: addon.title || "",
         requiredOrders: addon.requiredOrders?.toString() || "",
         earningAmount: addon.earningAmount?.toString() || "",
         startDate: addon.startDate ? new Date(addon.startDate).toISOString().split('T')[0] : "",
         endDate: addon.endDate ? new Date(addon.endDate).toISOString().split('T')[0] : "",
         maxRedemptions: addon.maxRedemptions?.toString() || "",
-      })
+      }
+      setFormData(editData)
+      resetBaseline(editData)
     } else {
       setSelectedAddon(null)
       setIsEditMode(false)
@@ -633,7 +637,8 @@ export default function EarningAddon() {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 shadow-md shadow-emerald-500/30 transition-all"
+                disabled={isEditMode && !isDirty}
+                className="px-5 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 shadow-md shadow-emerald-500/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isEditMode ? "Update" : "Create"} Offer
               </button>
