@@ -7,3 +7,8 @@ temp_interactive_push.bat
 
 # Local reports / flow docs (md + pdf) - keep on this machine only, never push
 docs/
+
+# never install packages at the repo root: sharp etc. belong in Backend/ or Frontend/
+/node_modules/
+/package.json
+/package-lock.json
