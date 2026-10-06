@@ -1128,10 +1128,14 @@ const AdminLayout = () => {
     setFocusedGroupKey(null);
   }, [location.pathname]);
   const activeSidebarPath = pendingSidebarPath || location.pathname;
+  // When the admin clicks a menu item the menu must stay exactly where it is: only a page opened from somewhere
+  // else (search, a link, first load) scrolls the menu to its item.
+  const lastSidebarClickAtRef = useRef(0);
   const sidebarNavContextValue = useMemo(
     () => ({
       activePath: focusedGroupKey ? '' : activeSidebarPath,
       onNavigate: (to) => {
+        lastSidebarClickAtRef.current = Date.now();
         setFocusedGroupKey(null);
         setPendingSidebarPath(isSidebarPathActive(location.pathname, to) ? null : to);
       },
@@ -1157,6 +1161,7 @@ const AdminLayout = () => {
     if (!nav) return undefined;
 
     const centreActive = (behavior) => {
+      if (Date.now() - lastSidebarClickAtRef.current < 2000) return;
       const active = nav.querySelector('a[aria-current="page"]');
       if (!active) return;
       const navRect = nav.getBoundingClientRect();
@@ -1871,7 +1876,7 @@ const AdminLayout = () => {
                                 navigate('/taxi/admin/trips');
                                 setIsNotificationsOpen(false);
                               }}
-                              className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                              className="relative w-full rounded-2xl border border-slate-100 bg-white pl-4 pr-12 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -1931,7 +1936,7 @@ const AdminLayout = () => {
                               navigate('/taxi/admin/owners/bookings');
                               setIsNotificationsOpen(false);
                             }}
-                            className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                            className="relative w-full rounded-2xl border border-slate-100 bg-white pl-4 pr-12 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -2004,7 +2009,11 @@ const AdminLayout = () => {
                                     ? 'Document'
                                     : item.type === 'owner_registration'
                                       ? 'Owner'
-                                      : 'Driver'}
+                                      : item.type === 'bus_driver_registration'
+                                        ? 'Bus'
+                                        : item.type === 'pooling_registration'
+                                          ? 'Pooling'
+                                          : 'Driver'}
                               </span>
                             </div>
                             <div className="mt-2 flex items-center justify-end text-[11px] font-semibold text-slate-400">
@@ -2029,7 +2038,7 @@ const AdminLayout = () => {
                               setChatNotifications([]);
                               setIsNotificationsOpen(false);
                             }}
-                            className="relative w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
+                            className="relative w-full rounded-2xl border border-slate-100 bg-white pl-4 pr-12 py-3 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50/40"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">

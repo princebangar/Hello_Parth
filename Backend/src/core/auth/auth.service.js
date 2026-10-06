@@ -1081,9 +1081,68 @@ export const resetAdminPasswordWithOtp = async (email, otp, newPassword) => {
  * one `users` document (see core/users/accountDeletion.service.js), so this
  * affects the whole account regardless of which app the user deleted from.
  */
+/**
+ * Money still owed to the account holder, shown before deleting: customer wallet, restaurant payout waiting to be
+ * withdrawn, delivery partner pocket balance. A balance above 0 makes the app ask them to withdraw it first.
+ */
+export const checkAccountBalance = async (userId, role) => {
+  if (!userId || !role) {
+    throw new AuthError("Invalid token payload");
+  }
+
+  if (role === ROLES.USER) {
+    const { FoodUserWallet } = await import("../../modules/food/user/models/userWallet.model.js");
+    const wallet = await FoodUserWallet.findOne({ userId }).select("balance").lean();
+    return { balance: Math.max(0, Number(wallet?.balance) || 0), type: "Wallet Balance" };
+  }
+
+  if (role === ROLES.RESTAURANT) {
+    const { getRestaurantFinance } = await import("../../modules/food/restaurant/services/restaurantFinance.service.js");
+    const { FoodRestaurantWithdrawal } = await import("../../modules/food/restaurant/models/foodRestaurantWithdrawal.model.js");
+    const finance = await getRestaurantFinance(String(userId));
+    const payout = Number(finance?.currentCycle?.estimatedPayout) || 0;
+    const pending = await FoodRestaurantWithdrawal.aggregate([
+      { $match: { restaurantId: new mongoose.Types.ObjectId(String(userId)), status: "pending" } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } } } },
+    ]);
+    // A withdrawal that is still waiting for the admin is money not yet paid out, so it counts as owed too.
+    const owed = Math.max(0, payout) + (Number(pending?.[0]?.total) || 0);
+    return { balance: Math.round(owed * 100) / 100, type: "Restaurant Available Balance" };
+  }
+
+  if (role === ROLES.DELIVERY_PARTNER) {
+    const { getDeliveryPartnerWalletEnhanced } = await import("../../modules/food/delivery/services/deliveryFinance.service.js");
+    const wallet = await getDeliveryPartnerWalletEnhanced(String(userId));
+    return { balance: Math.max(0, Number(wallet?.pocketBalance) || 0), type: "Delivery Pocket Balance" };
+  }
+
+  return { balance: 0, type: "Balance" };
+};
+
 export const deleteAccount = async (userId, role) => {
   if (!userId || !role) {
     throw new AuthError("Invalid token payload");
+  }
+
+  if (role === ROLES.RESTAURANT || role === ROLES.DELIVERY_PARTNER) {
+    const { balance } = await checkAccountBalance(userId, role);
+    if (balance > 0) {
+      throw new ValidationError("Please withdraw your remaining balance before deleting the account.");
+    }
+
+    // Soft delete: the record stays for admin history (orders, payouts); the phone can no longer log in.
+    const Model = role === ROLES.RESTAURANT ? FoodRestaurant : FoodDeliveryPartner;
+    const deletedAt = new Date();
+    const updated = await Model.findOneAndUpdate(
+      { _id: userId, status: { $ne: "deleted" } },
+      { $set: { status: "deleted", fcmTokens: [], fcmTokenMobile: [] } },
+      { returnDocument: "after" },
+    ).lean();
+    if (!updated) {
+      throw new AuthError("Account not found or already deleted");
+    }
+    await FoodRefreshToken.deleteMany({ userId }).catch(() => {});
+    return { success: true, deletedAt };
   }
 
   if (role !== ROLES.USER) {

@@ -264,7 +264,14 @@ const DriverDocuments = () => {
 
       return {
         id: field.key,
-        name: field.label,
+        // "Driving Licence - Front", not just "Front": a side label alone doesn't say which document it is.
+        name: (() => {
+          const label = String(field.label || '').trim();
+          const template = String(field.templateName || '').trim();
+          if (!template) return label;
+          if (!label || label.toLowerCase().includes(template.toLowerCase())) return label || template;
+          return `${template} - ${label}`;
+        })(),
         templateName: field.templateName,
         verificationType: field.verificationType,
         hasExpiryDate: field.hasExpiryDate,
@@ -779,17 +786,17 @@ const DriverDocuments = () => {
                 <div
                   key={doc.id}
                   onClick={() => setSelectedDoc(doc)}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-[0_2px_15px_rgba(0,0,0,0.02)] flex items-center justify-between group active:scale-[0.99] transition-all relative cursor-pointer"
+                  className="bg-white p-3.5 pl-4 rounded-2xl border border-slate-100 shadow-[0_2px_15px_rgba(0,0,0,0.02)] flex flex-col gap-3 group active:scale-[0.99] transition-all relative cursor-pointer overflow-hidden"
                 >
                   <div className={`absolute top-3 bottom-3 left-0 w-1 rounded-r-full ${doc.verified ? 'bg-emerald-500' : doc.status === 'Uploaded' ? 'bg-blue-500' : 'bg-rose-500'}`} />
 
-                  <div className="flex items-center gap-3.5 overflow-hidden">
+                  <div className="flex items-center gap-3.5 min-w-0">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-50 text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-all flex-shrink-0">
                       <FileText size={18} strokeWidth={2.5} />
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="text-[13px] font-black text-slate-900 leading-tight uppercase truncate">{doc.name}</h4>
-                      <div className="flex items-center gap-2 mt-0.5">
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-[13px] font-black text-slate-900 leading-tight uppercase break-words">{doc.name}</h4>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{doc.date}</p>
                         {doc.expiryDate && (
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 ${doc.expired ? 'text-rose-500' : 'text-slate-500'}`}>
@@ -809,24 +816,24 @@ const DriverDocuments = () => {
                       </div>
                       
                       {doc.reverificationPending && (
-                        <p className="text-[9px] font-bold text-blue-500 mt-1 leading-tight max-w-[180px]">
+                        <p className="text-[9px] font-bold text-blue-500 mt-1 leading-tight">
                           Waiting for admin verification
                         </p>
                       )}
                       {doc.reason && !doc.reverificationPending && (
-                        <p className="text-[9px] font-bold text-rose-500 mt-1 leading-tight max-w-[180px] line-clamp-1">
+                        <p className="text-[9px] font-bold text-rose-500 mt-1 leading-tight line-clamp-2">
                           {doc.reason}
                         </p>
                       )}
                       {doc.rawDocument?.verificationMessage && doc.verified && (
-                        <p className="text-[9px] font-bold text-emerald-600 mt-1 leading-tight max-w-[180px] line-clamp-1">
+                        <p className="text-[9px] font-bold text-emerald-600 mt-1 leading-tight line-clamp-2">
                           {doc.rawDocument.verificationMessage}
                         </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border shadow-sm ${
                       doc.verified
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -841,7 +848,7 @@ const DriverDocuments = () => {
                       {doc.status === 'Pending Reverification' ? 'Pending' : doc.status}
                     </span>
                     
-                    <div className="flex items-center gap-1.5 ml-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {isDrivingLicenseDocument(doc) || isPanDocument(doc) || isGstDocument(doc) || isRcDocument(doc) || isBankDocument(doc) ? (
                         <button
                           type="button"
@@ -878,7 +885,7 @@ const DriverDocuments = () => {
                               : isGstDocument(doc)
                                 ? doc.verified ? 'View GST' : 'Verify GST'
                                 : isRcDocument(doc)
-                                  ? doc.verified ? 'View RC' : 'Verify RC'
+                                  ? 'RC Details'
                                   : isBankDocument(doc)
                                     ? doc.verified ? 'View Bank' : 'Verify Bank'
                               : doc.verified ? 'View DL' : 'Verify DL'}

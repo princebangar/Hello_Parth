@@ -2496,6 +2496,15 @@ const DriverHome = () => {
                             className="mb-4 self-center max-w-[280px] rounded-2xl bg-slate-900/92 px-4 py-3 text-center shadow-2xl backdrop-blur"
                         >
                             <p className="text-[12px] font-bold leading-relaxed text-white">{statusMessage}</p>
+                            {/documents/i.test(statusMessage) ? (
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/taxi/driver/documents')}
+                                    className="mt-2 rounded-full bg-white px-4 py-1.5 text-[11px] font-black uppercase tracking-widest text-slate-900 active:scale-95"
+                                >
+                                    Open Documents
+                                </button>
+                            ) : null}
                         </motion.div>
                     ) : null}
                 </AnimatePresence>

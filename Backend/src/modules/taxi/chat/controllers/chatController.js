@@ -1,4 +1,5 @@
 import { ApiError } from '../../../../utils/ApiError.js';
+import { alertTaxiAdmins } from '../../services/adminAlertService.js';
 import {
   broadcastSupportConversationDeleted,
   broadcastSupportMessage,
@@ -86,6 +87,18 @@ export const sendSupportMessage = async (req, res) => {
   });
 
   broadcastSupportMessage(savedMessage);
+
+  // Bell + push for admins when a customer / captain writes in (not for admin replies).
+  if (String(req.auth.role).toLowerCase() !== 'admin') {
+    const text = String(message || '').trim();
+    alertTaxiAdmins({
+      type: 'support_chat',
+      title: `New chat message from ${savedMessage?.sender?.name || req.auth.role}`,
+      body: text.length > 100 ? `${text.slice(0, 97)}...` : text,
+      link: '/taxi/admin/chat',
+      id: String(savedMessage?.conversationKey || ''),
+    });
+  }
 
   res.status(201).json({
     success: true,

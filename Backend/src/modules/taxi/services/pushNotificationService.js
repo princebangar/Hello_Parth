@@ -173,13 +173,18 @@ const sendPushToTargets = async ({
       },
       android: {
         priority: 'high',
-        notification: image ? { imageUrl: image } : undefined,
+        ...(safeData.notificationId ? { collapseKey: safeData.notificationId } : {}),
+        notification: {
+          ...(image ? { imageUrl: image } : {}),
+          ...(safeData.notificationId ? { tag: safeData.notificationId } : {}),
+        },
       },
       webpush: {
         notification: {
           title,
           body,
           ...(image ? { image } : {}),
+          ...(safeData.notificationId ? { tag: safeData.notificationId, renotify: false } : {}),
         },
       },
     });
@@ -314,15 +319,21 @@ export const sendPushNotificationToAudience = async ({
         targetUrl: TAXI_PUSH_TARGET_URL[role],
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
       },
+      // Same tag on every copy: a phone that still holds several tokens for this account shows it once.
       android: {
         priority: 'high',
-        notification: image ? { imageUrl: image } : undefined,
+        ...(notificationId ? { collapseKey: String(notificationId) } : {}),
+        notification: {
+          ...(image ? { imageUrl: image } : {}),
+          ...(notificationId ? { tag: String(notificationId) } : {}),
+        },
       },
       webpush: {
         notification: {
           title,
           body,
           ...(image ? { image } : {}),
+          ...(notificationId ? { tag: String(notificationId), renotify: false } : {}),
         },
       },
     });

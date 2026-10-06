@@ -52,6 +52,27 @@ export default function AdminModulesKeepAlive() {
     }
   }, [active, location])
 
+  // Save this device's push token for the signed-in admin (Food, Taxi and Global panels alike). Without it the
+  // server has no device to send admin alerts to (new sign-ups, re-uploaded documents, withdrawals, chats), so they
+  // only showed while the panel was open on screen - never in the phone app.
+  useEffect(() => {
+    if (!active) return undefined
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      import('@food/utils/firebaseMessaging')
+        .then(({ initPushNotificationClient, registerWebPushForCurrentModule }) => {
+          if (cancelled) return
+          initPushNotificationClient()
+          return registerWebPushForCurrentModule('/admin')
+        })
+        .catch(() => {})
+    }, 3000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [active])
+
   // Free memory when leaving admin entirely (user/driver/food consumer).
   useEffect(() => {
     if (active) return

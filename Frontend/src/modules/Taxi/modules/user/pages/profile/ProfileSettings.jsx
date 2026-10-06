@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Mail, Smartphone, Camera, CheckCircle2, Loader2, ImagePlus } from 'lucide-react';
+import { openCamera } from '@food/utils/imageUploadUtils';
 import { userAuthService } from '../../services/authService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import toast from 'react-hot-toast';
@@ -23,6 +24,8 @@ const ProfileSettings = () => {
     folder: 'user-profiles',
     onSuccess: (url) => setProfileImage(url)
   });
+
+  const cameraInputRef = useRef(null);
 
   const avatarSrc = useMemo(() => {
     return (
@@ -149,23 +152,34 @@ const ProfileSettings = () => {
                   onChange={onPhotoFileChange}
                 />
               </label>
-              <label className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
-                photoUploading
-                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
-                  : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'
-              }`}>
+              {/* A plain <input capture> is ignored by the phone app's WebView (it opened the gallery), so the camera
+                  goes through the app's own camera bridge, same as Food; browsers still use the capture input. */}
+              <button
+                type="button"
+                disabled={photoUploading}
+                onClick={() => openCamera({
+                  onSelectFile: (file) => onPhotoFileChange({ target: { files: [file] } }),
+                  fileNamePrefix: 'profile-photo',
+                  fallbackInputRef: cameraInputRef,
+                })}
+                className={`relative flex h-11 items-center justify-center gap-2 rounded-2xl border text-[11px] font-bold uppercase tracking-wider transition-all ${
+                  photoUploading
+                    ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                    : 'cursor-pointer border-slate-900 bg-slate-950 text-white active:scale-[0.99]'
+                }`}
+              >
                 <Camera size={14} />
                 Camera
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="user"
-                  disabled={photoUploading}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  aria-label="Capture profile photo"
-                  onChange={onPhotoFileChange}
-                />
-              </label>
+              </button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="user"
+                className="hidden"
+                aria-label="Capture profile photo"
+                onChange={onPhotoFileChange}
+              />
             </div>
             <div className="text-center">
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">

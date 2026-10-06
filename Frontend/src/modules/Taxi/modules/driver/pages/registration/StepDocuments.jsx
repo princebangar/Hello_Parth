@@ -55,6 +55,54 @@ const normalizeDocument = (doc) => {
   };
 };
 
+// What kind of paper a template is, from its admin-given name (DrivingLicence, AadhaarCard, VehicleRC, ...).
+const getTemplateKind = (template = {}) => {
+  const name = String(template?.name || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (/aadhaar|aadhar/.test(name)) return 'aadhaar';
+  if (/drivinglicen[cs]e|^dl$/.test(name)) return 'dl';
+  if (/vehiclerc|registrationcertificate|^rc$/.test(name)) return 'rc';
+  if (/pan(card)?$/.test(name)) return 'pan';
+  return 'other';
+};
+
+const DL_REGEX = /^[A-Z]{2}\d{2}\d{4}\d{7}$/;
+const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const PLATE_LIKE_REGEX = /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$|^\d{2}BH\d{4}[A-Z]{1,2}$/;
+
+// Keep only characters that can appear in the number, so a wrong key press never gets in.
+const cleanIdentifyNumber = (template, value) => {
+  const raw = String(value || '').toUpperCase();
+  switch (getTemplateKind(template)) {
+    case 'aadhaar': return raw.replace(/\D/g, '').slice(0, 12);
+    case 'dl': return raw.replace(/[^A-Z0-9]/g, '').slice(0, 16);
+    case 'rc': return raw.replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    case 'pan': return raw.replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    default: return raw.slice(0, 30);
+  }
+};
+
+// '' when the number is fine (or still empty - "required" is checked separately).
+const getIdentifyNumberError = (template, value) => {
+  const v = String(value || '').trim().replace(/[\s-]/g, '').toUpperCase();
+  if (!v) return '';
+  switch (getTemplateKind(template)) {
+    case 'aadhaar': return /^\d{12}$/.test(v) ? '' : 'Aadhaar number must be 12 digits';
+    case 'dl': return DL_REGEX.test(v) ? '' : 'Enter a valid licence number like MP0920150001234';
+    case 'rc': return PLATE_LIKE_REGEX.test(v) ? '' : 'Enter a valid RC number like MP09AB1234';
+    case 'pan': return /^[A-Z]{5}\d{4}[A-Z]$/.test(v) ? '' : 'PAN must look like ABCDE1234F';
+    default: return v.length >= 3 ? '' : 'Enter a valid number';
+  }
+};
+
+const getIfscError = (value) => {
+  const v = String(value || '').trim();
+  return !v || IFSC_REGEX.test(v) ? '' : 'IFSC must look like SBIN0001234';
+};
+const getHolderNameError = (value) => {
+  const v = String(value || '').trim();
+  return !v || /^[A-Za-z][A-Za-z .'-]{2,}$/.test(v) ? '' : 'Enter the name as on the bank account (letters only)';
+};
+
 const getDocumentIdentifyValue = (doc) =>
   String(doc?.identifyNumber || doc?.identify_number || doc?.documentNumber || doc?.document_number || '').trim();
 
@@ -508,6 +556,18 @@ const StepDocuments = () => {
     );
   };
 
+  // The RC number was typed on Step 3 (vehicle details): copy it into the RC document instead of asking again.
+  const sessionRcNumber = String(getStoredDriverRegistrationSession().rcNumber || '').trim().toUpperCase();
+  useEffect(() => {
+    if (!sessionRcNumber) return;
+    documentTemplates.forEach((template) => {
+      if (getTemplateKind(template) !== 'rc' || !template.has_identify_number) return;
+      if ((documentMeta[template.id]?.identifyNumber || '') !== sessionRcNumber) {
+        handleMetaChange(template.id, 'identifyNumber', sessionRcNumber);
+      }
+    });
+  }, [documentTemplates, sessionRcNumber]);
+
   const handleMetaChange = (templateId, fieldName, nextValue) => {
     const nextMeta = {
       ...(documentMeta[templateId] || {}),
@@ -834,13 +894,14 @@ const StepDocuments = () => {
       }
 
       const meta = documentMeta[template.id] || {};
-      const hasIdentifyNumber = !template.has_identify_number || Boolean(String(meta.identifyNumber || '').trim());
+      const hasIdentifyNumber = !template.has_identify_number
+        || (Boolean(String(meta.identifyNumber || '').trim()) && !getIdentifyNumberError(template, meta.identifyNumber));
       const hasExpiryDate = !template.has_expiry_date || Boolean(String(meta.expiryDate || '').trim());
       const hasBirthDate = !templateNeedsBirthDate(template) || /^\d{4}-\d{2}-\d{2}$/.test(String(meta.birthDate || '').trim());
       const needsBankMeta = normalizeVerificationType(template.verification_type) === 'bank_account';
       const hasBankMeta = !needsBankMeta || (
-        Boolean(String(meta.ifsc || '').trim()) &&
-        Boolean(String(meta.accountHolderName || '').trim())
+        Boolean(String(meta.ifsc || '').trim()) && !getIfscError(meta.ifsc) &&
+        Boolean(String(meta.accountHolderName || '').trim()) && !getHolderNameError(meta.accountHolderName)
       );
       return hasIdentifyNumber && hasExpiryDate && hasBirthDate && hasBankMeta;
     }) &&
@@ -1031,8 +1092,9 @@ const StepDocuments = () => {
                         </div>
                         
                         <div className="grid grid-cols-1 gap-3">
-                            <div
-                                className={`relative min-h-[160px] rounded-[1.8rem] border-2 transition-all overflow-hidden flex flex-col items-center justify-center gap-2 ${
+                            <label
+                                htmlFor={isUploading ? undefined : `doc-gallery-${field.key}`}
+                                className={`relative min-h-[160px] cursor-pointer rounded-[1.8rem] border-2 transition-all overflow-hidden flex flex-col items-center justify-center gap-2 ${
                                     document?.previewUrl
                                         ? 'border-emerald-500/20 bg-emerald-50/10'
                                         : 'border-dashed border-slate-100 bg-slate-50 hover:border-slate-200'
@@ -1068,7 +1130,7 @@ const StepDocuments = () => {
                                         </div>
                                     </>
                                 )}
-                            </div>
+                            </label>
 
                             <div className="flex gap-2">
                                 <label className={`flex-1 relative flex h-12 items-center justify-center gap-2 text-center rounded-2xl border text-[11px] font-bold uppercase tracking-widest transition-all ${
@@ -1079,6 +1141,7 @@ const StepDocuments = () => {
                                     <ImagePlus size={16} />
                                     Gallery
                                     <input
+                                    id={`doc-gallery-${field.key}`}
                                     type="file"
                                     accept="image/*"
                                     disabled={isUploading}
@@ -1129,8 +1192,11 @@ const StepDocuments = () => {
 
                 {(template.has_identify_number || template.has_expiry_date || templateNeedsBirthDate(template) || templateSupportsRequestNumber(template) || normalizeVerificationType(template.verification_type) === 'bank_account') ? (
                   <div className="space-y-4 pt-2">
-                    {template.has_identify_number ? (
-                      <div className="group rounded-[1.8rem] border-2 transition-all p-4 border-slate-200 bg-slate-50 focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5">
+                    {/* RC number and licence number are already typed on Step 3: don't ask them a second time. */}
+                    {template.has_identify_number
+                      && !(getTemplateKind(template) === 'rc' && sessionRcNumber)
+                      && !(getTemplateKind(template) === 'dl' && !getIdentifyNumberError(template, documentMeta[template.id]?.identifyNumber) && documentMeta[template.id]?.identifyNumber) ? (
+                      <div className={`group rounded-[1.8rem] border-2 transition-all p-4 ${getIdentifyNumberError(template, documentMeta[template.id]?.identifyNumber) ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200 bg-slate-50'} focus-within:border-slate-900/10 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-slate-900/5`}>
                         <div className="flex items-center gap-4">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm group-focus-within:bg-slate-900 group-focus-within:text-white transition-all">
                                 <FileText size={20} strokeWidth={2.5} />
@@ -1142,10 +1208,14 @@ const StepDocuments = () => {
                                 <input
                                     type="text"
                                     value={documentMeta[template.id]?.identifyNumber || ''}
-                                    onChange={(event) => handleMetaChange(template.id, 'identifyNumber', event.target.value.toUpperCase())}
+                                    onChange={(event) => handleMetaChange(template.id, 'identifyNumber', cleanIdentifyNumber(template, event.target.value))}
+                                    inputMode={getTemplateKind(template) === 'aadhaar' ? 'numeric' : 'text'}
                                     placeholder={`Enter ${formatMetaLabel(template.identify_number_key) || `${template.name} number`}`}
                                     className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                                 />
+                                {getIdentifyNumberError(template, documentMeta[template.id]?.identifyNumber) ? (
+                                    <p className="pt-1 text-[11px] font-bold text-rose-600">{getIdentifyNumberError(template, documentMeta[template.id]?.identifyNumber)}</p>
+                                ) : null}
                             </div>
                         </div>
                       </div>
@@ -1311,10 +1381,13 @@ const StepDocuments = () => {
                             <input
                               type="text"
                               value={documentMeta[template.id]?.ifsc || ''}
-                              onChange={(event) => handleMetaChange(template.id, 'ifsc', event.target.value.toUpperCase())}
+                              onChange={(event) => handleMetaChange(template.id, 'ifsc', event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
                               placeholder="Enter IFSC code"
                               className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                             />
+                            {getIfscError(documentMeta[template.id]?.ifsc) ? (
+                              <p className="pt-1 text-[11px] font-bold text-rose-600">{getIfscError(documentMeta[template.id]?.ifsc)}</p>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -1333,10 +1406,13 @@ const StepDocuments = () => {
                             <input
                               type="text"
                               value={documentMeta[template.id]?.accountHolderName || ''}
-                              onChange={(event) => handleMetaChange(template.id, 'accountHolderName', event.target.value)}
+                              onChange={(event) => handleMetaChange(template.id, 'accountHolderName', event.target.value.replace(/[^A-Za-z .'-]/g, '').slice(0, 60))}
                               placeholder="Enter account holder name"
                               className="w-full border-none bg-transparent p-0 text-base font-semibold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-500"
                             />
+                            {getHolderNameError(documentMeta[template.id]?.accountHolderName) ? (
+                              <p className="pt-1 text-[11px] font-bold text-rose-600">{getHolderNameError(documentMeta[template.id]?.accountHolderName)}</p>
+                            ) : null}
                           </div>
                         </div>
                       </div>

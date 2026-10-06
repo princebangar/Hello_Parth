@@ -10,6 +10,7 @@ import {
   logout,
   getProfile,
   deleteAccount,
+  checkAccountBalance,
   recoverAccount,
   startFreshAccount,
   updateAdminProfile,
@@ -169,6 +170,16 @@ export const getMeController = async (req, res, next) => {
     const { userId, role } = req.user;
     const result = await getProfile(userId, role);
     return sendResponse(res, 200, "Profile retrieved successfully", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkAccountBalanceController = async (req, res, next) => {
+  try {
+    const { userId, role } = req.user;
+    const result = await checkAccountBalance(userId, role);
+    return sendResponse(res, 200, "Balance fetched", result);
   } catch (error) {
     next(error);
   }

@@ -20,6 +20,10 @@ import { whenAppSettled } from '@/shared/utils/whenSettled.js'
 // Lazy load the Food service module (Quick-spicy app)
 const AuthApp = lazy(loadAuthApp)
 const PlatformLanding = lazy(() => import('../modules/Landing/pages/PlatformLanding'))
+// Where Razorpay (redirect mode, used in the phone app / WebView) and PhonePe send the customer or captain back
+// after a wallet top-up. The backend URLs point here, so these must stay top-level routes.
+const RazorpayStatusPage = lazy(() => import('../modules/Taxi/modules/shared/pages/RazorpayStatusPage'))
+const PhonePeStatusPage = lazy(() => import('../modules/Taxi/modules/shared/pages/PhonePeStatusPage'))
 
 // Auth only — Food and Taxi get a real skeleton below instead (see
 // FoodAppWrapper/TaxiAppWrapper).
@@ -162,6 +166,8 @@ const AppRoutes = () => {
       <Routes>
         <Route path="/" element={<RootGate />} />
         <Route path="/login/*" element={<Suspense fallback={<SoftFallback />}><AuthApp /></Suspense>} />
+        <Route path="/razorpay/status" element={<Suspense fallback={<SoftFallback />}><RazorpayStatusPage /></Suspense>} />
+        <Route path="/phonepe/status" element={<Suspense fallback={<SoftFallback />}><PhonePeStatusPage /></Suspense>} />
         <Route path="/food/*" element={<FoodAppWrapper />} />
         {/* More specific than /taxi/* — UI comes from AdminModulesKeepAlive. */}
         <Route path="/taxi/admin/*" element={<AdminKeepAliveSlot />} />

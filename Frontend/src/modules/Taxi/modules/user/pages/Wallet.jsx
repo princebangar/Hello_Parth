@@ -14,6 +14,8 @@ import NumberSkeleton from '@/shared/components/NumberSkeleton';
 
 const PHONEPE_USER_WALLET_FLOW_KEY = 'user-wallet-topup';
 
+const RECENT_TX_COUNT = 5;
+
 const Wallet = () => {
   const navigate = useNavigate();
   const { settings } = useSettings();
@@ -32,6 +34,7 @@ const Wallet = () => {
   const [walletLoading, setWalletLoading] = React.useState(!cachedWallet);
   const [walletError, setWalletError] = React.useState('');
   const [wallet, setWallet] = React.useState(cachedWallet || { balance: 0, currency: 'INR', recentTransactions: [] });
+  const [showAllTransactions, setShowAllTransactions] = React.useState(false);
 
   const basePath = useMemo(
     () => (window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
@@ -387,14 +390,19 @@ const Wallet = () => {
       <div className="px-5 mt-10">
         <div className="flex items-center justify-between mb-4 px-1">
           <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transaction History</h3>
-          <button onClick={() => navigate(`${basePath}/activity`)} className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>View All</button>
+          {/* Activity is the rides list, not wallet history: the full wallet history opens right here. */}
+          {(wallet.recentTransactions?.length || 0) > RECENT_TX_COUNT && (
+            <button onClick={() => setShowAllTransactions((value) => !value)} className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {showAllTransactions ? 'Show Less' : 'View All'}
+            </button>
+          )}
         </div>
         
         <div className={`rounded-3xl border shadow-sm overflow-hidden divide-y ${isDark ? 'bg-slate-900 border-slate-800 divide-slate-800/60' : 'bg-white border-slate-100 divide-slate-50'}`}>
           {walletLoading ? (
             <div className="p-8 text-center text-xs font-bold text-slate-400">Loading transactions...</div>
           ) : wallet.recentTransactions?.length ? (
-            wallet.recentTransactions.map((tx) => {
+            (showAllTransactions ? wallet.recentTransactions : wallet.recentTransactions.slice(0, RECENT_TX_COUNT)).map((tx) => {
               const isDebit = tx.kind === 'debit';
               const title = tx.title || (isDebit ? 'Debit' : 'Credit');
               const sign = isDebit ? '-' : '+';

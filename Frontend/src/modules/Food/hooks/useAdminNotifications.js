@@ -182,6 +182,31 @@ const mapDeliverySupport = (response) => {
     }));
 };
 
+const mapPendingWithdrawals = (response, kind) => {
+  const payload = response?.data?.data;
+  const rows = payload?.requests || payload?.withdrawals || payload?.items || payload?.data || [];
+  const isDelivery = kind === "delivery";
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "pending").toLowerCase() === "pending")
+    .map((item) => {
+      const who = isDelivery
+        ? item?.deliveryName || item?.deliveryPartnerName || item?.deliveryPartnerId?.name || item?.name || "Delivery partner"
+        : item?.restaurantName || item?.restaurantId?.restaurantName || "Restaurant";
+      return {
+        id: `withdrawal-${kind}-${String(item?._id || item?.id || "")}`,
+        title: "Withdrawal Request Pending",
+        message: `${who} requested a withdrawal of ₹${Number(item?.amount || 0)}.`,
+        type: "approval",
+        category: "withdrawal",
+        path: isDelivery ? "/admin/food/delivery-withdrawal" : "/admin/food/restaurant-withdraws",
+        createdAt: item?.createdAt || item?.updatedAt,
+        timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+        metaLabel: joinMeta(who, `₹${Number(item?.amount || 0)}`),
+      };
+    });
+};
+
 const mapExpiredFssai = (response) => {
   const payload = response?.data?.data;
   const rows = payload?.items || payload?.data || response?.data?.items || [];
@@ -242,6 +267,8 @@ export default function useAdminNotifications(options = {}) {
         supportAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
         adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
         adminAPI.getExpiredFssaiNotifications(),
+        adminAPI.getWithdrawals({ page: 1, limit: 50, status: "pending" }),
+        adminAPI.getDeliveryWithdrawals({ page: 1, limit: 50, status: "pending" }),
       ]);
 
       const pick = (result) => (result.status === "fulfilled" ? result.value : null);
@@ -252,6 +279,8 @@ export default function useAdminNotifications(options = {}) {
         supportRes,
         deliverySupportRes,
         fssaiExpiredRes,
+        restaurantWithdrawalsRes,
+        deliveryWithdrawalsRes,
       ] = settled.map(pick);
 
       const restaurantPayload = restaurantsRes?.data?.data
@@ -270,6 +299,8 @@ export default function useAdminNotifications(options = {}) {
         ...mapUserRestaurantSupport(supportRes),
         ...mapDeliverySupport(deliverySupportRes),
         ...mapExpiredFssai(fssaiExpiredRes),
+        ...mapPendingWithdrawals(restaurantWithdrawalsRes, "restaurant"),
+        ...mapPendingWithdrawals(deliveryWithdrawalsRes, "delivery"),
       ]);
 
       const sorted = sortNotifications(

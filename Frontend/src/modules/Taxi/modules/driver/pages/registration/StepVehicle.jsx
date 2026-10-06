@@ -21,17 +21,17 @@ import {
     verifyDriverVehicleRc,
 } from '../../services/registrationService';
 import { normalizeDriverDocumentTemplates } from '../../utils/documentTemplates';
-import { formatGstNumber, isValidGstNumber, GST_ERROR } from '../../../../shared/utils/inputFormats';
+import { getVehicleTypeFallbackImage } from '../../utils/vehicleTypeIcon';
+import { formatGstNumber, isValidGstNumber, GST_ERROR, formatPlateNumber, isValidPlateNumber, PLATE_ERROR } from '../../../../shared/utils/inputFormats';
 
 const VEHICLE_NUMBER_PATTERNS = [
     /^[A-Z]{2}\d{1,2}[A-Z]{1,4}\d{4}$/,
     /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
 ];
 const getCurrentVehicleYear = () => new Date().getFullYear();
-const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
+const normalizeVehicleNumber = (value = '') => formatPlateNumber(value);
 const normalizePostalCode = (value = '') => String(value).replace(/\D/g, '').slice(0, 6);
-const isValidIndianVehicleNumber = (value = '') =>
-    VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(value));
+const isValidIndianVehicleNumber = (value = '') => isValidPlateNumber(value);
 const normalizeLabel = (value = '') => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const findAutofillCustomFieldKey = (fields, aliases = []) => {
     const normalizedAliases = aliases.map(normalizeLabel).filter(Boolean);
@@ -532,7 +532,8 @@ const StepVehicle = () => {
     const seatCapacityFieldKey = findAutofillCustomFieldKey(visibleCustomVehicleFields, ['seat capacity', 'seating capacity', 'seats']);
     const manufacturerFieldKey = findAutofillCustomFieldKey(visibleCustomVehicleFields, ['manufacturer', 'vehicle manufacturer', 'brand']);
     const rcAutofillCustomFieldKeys = [fuelTypeFieldKey, seatCapacityFieldKey, manufacturerFieldKey].filter(Boolean);
-    const showRcAutofilledFields = isOwner || rcManualEntry || hasRcAutofillData(formData, formData.customFields, rcAutofillCustomFieldKeys);
+    // There is no RC lookup service: the captain always types the vehicle details, the admin checks the papers.
+    const showRcAutofilledFields = true;
     const drivingLicenseTemplate = documentTemplates.find(
         (template) => normalizeVerificationType(template?.verification_type) === 'driving_license',
     ) || null;
@@ -605,7 +606,7 @@ const StepVehicle = () => {
         }
 
         if (!isValidIndianVehicleNumber(normalizedRcNumber)) {
-            setFieldErrors((previous) => ({ ...previous, rcNumber: 'Invalid RC format - e.g. DL1RT1234 or MH12AB1234' }));
+            setFieldErrors((previous) => ({ ...previous, rcNumber: PLATE_ERROR }));
             setRcVerificationError('');
             setRcVerificationMessage('');
             return;
@@ -834,11 +835,8 @@ const StepVehicle = () => {
             } else {
                 const normalizedRcNumber = normalizeVehicleNumber(formData.rcNumber);
                 if (!isValidIndianVehicleNumber(normalizedRcNumber)) {
-                    errors.rcNumber = 'Invalid RC format - e.g. DL1RT1234 or MH12AB1234';
+                    errors.rcNumber = PLATE_ERROR;
                 }
-            }
-            if (!showRcAutofilledFields) {
-                errors.rcNumber = errors.rcNumber || 'Verify the RC number to fetch vehicle details';
             }
             if (isFieldRequired('make', true) && !isFilled(formData.make)) {
                 errors.make = 'Brand / make is required';
@@ -861,7 +859,7 @@ const StepVehicle = () => {
             } else if (isFilled(formData.number)) {
                 const normalizedNum = normalizeVehicleNumber(formData.number);
                 if (!isValidIndianVehicleNumber(normalizedNum)) {
-                    errors.number = 'Invalid format â€” e.g. DL1RT1234 or MH12AB1234';
+                    errors.number = PLATE_ERROR;
                 }
             }
             if (isFieldRequired('color', true) && !isFilled(formData.color)) {
@@ -1257,17 +1255,11 @@ const StepVehicle = () => {
                                                          }`}
                                                      >
                                                          <div className="flex-1 flex items-center justify-center p-3">
-                                                            {type.image || type.icon || type.map_icon ? (
-                                                                <img 
-                                                                    src={type.image || type.icon || type.map_icon} 
-                                                                    alt={type.name} 
-                                                                    className="max-h-14 w-auto object-contain transition-transform duration-500"
-                                                                />
-                                                            ) : (
-                                                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
-                                                                    <Car size={24} />
-                                                                </div>
-                                                            )}
+                                                            <img
+                                                                src={type.image || type.icon || type.map_icon || getVehicleTypeFallbackImage(type.name || type.vehicle_type_name)}
+                                                                alt={type.name}
+                                                                className="max-h-14 w-auto object-contain transition-transform duration-500"
+                                                            />
                                                          </div>
                                                          <div className={`p-2.5 text-center transition-colors ${
                                                              formData.vehicleTypeId === (type._id || type.id) ? 'bg-slate-900 text-white font-bold' : 'bg-white/50 text-slate-700 font-semibold'
@@ -1288,7 +1280,7 @@ const StepVehicle = () => {
                                 <div className="space-y-5 pt-1">
                                     <div className="space-y-1 px-1">
                                         <h2 className="text-lg font-bold tracking-tight text-slate-900">Technical Specs</h2>
-                                        <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">Verified from RC/Permit</p>
+                                        <p className="text-[12px] font-bold text-slate-500 uppercase tracking-widest">As per your RC / Permit</p>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
@@ -1310,20 +1302,6 @@ const StepVehicle = () => {
                                                 placeholder={rcNumberField.placeholder || 'MP09AB1234'}
                                                 className="w-full bg-transparent border-none p-0 text-[16px] font-semibold text-slate-950 focus:outline-none focus:ring-0 placeholder:text-slate-500 uppercase tracking-widest"
                                             />
-                                            <div className="mt-3 flex justify-end">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleVerifyRc}
-                                                    disabled={rcVerificationLoading}
-                                                    className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
-                                                        rcVerificationLoading
-                                                            ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                                                            : 'bg-slate-900 text-white hover:bg-black'
-                                                    }`}
-                                                >
-                                                    {rcVerificationLoading ? 'Verifying...' : 'Verify RC'}
-                                                </button>
-                                            </div>
                                             {fieldErrors.rcNumber ? <p className="text-[10px] font-bold text-rose-500 pt-1 px-1">{fieldErrors.rcNumber}</p> : null}
                                             {!fieldErrors.rcNumber && !isOwner && rcVerificationLoading ? (
                                                 <p className="text-[10px] font-bold text-sky-600 pt-1 px-1">Verifying RC and fetching vehicle details...</p>

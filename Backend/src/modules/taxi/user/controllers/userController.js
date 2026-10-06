@@ -174,7 +174,11 @@ const isPublicWebOrigin = (value = '') => {
       return false;
     }
 
-    return !['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(hostname);
+    if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(hostname)) {
+      return false;
+    }
+    // A payment callback is posted by Razorpay / PhonePe, so its Origin/Referer is the gateway, never our app.
+    return !/(^|\.)(razorpay\.com|phonepe\.com)$/i.test(hostname);
   } catch {
     return false;
   }

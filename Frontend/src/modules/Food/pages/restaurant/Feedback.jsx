@@ -88,6 +88,7 @@ export default function Feedback() {
   })
   const [isFilterLoading, setIsFilterLoading] = useState(false)
   const [displayedReviews, setDisplayedReviews] = useState([])
+  const [reviewSearchQuery, setReviewSearchQuery] = useState("")
   
   const [isComplaintsFilterOpen, setIsComplaintsFilterOpen] = useState(false)
   const [selectedComplaintsFilterCategory, setSelectedComplaintsFilterCategory] = useState("issueType")
@@ -292,6 +293,14 @@ export default function Feedback() {
 
   useEffect(() => {
     let filtered = [...reviews]
+    if (filterValues.reviewType?.length) {
+      filtered = filtered.filter((review) => filterValues.reviewType.includes(Math.round(Number(review.rating) || 0)))
+    }
+    const query = reviewSearchQuery.trim().toLowerCase()
+    if (query) {
+      filtered = filtered.filter((review) =>
+        [review.userName, review.reviewText, review.orderNumber].some((value) => String(value || "").toLowerCase().includes(query)))
+    }
     if (filterValues.sortBy) {
       filtered.sort((a, b) => {
         const dateA = new Date(a.date); const dateB = new Date(b.date)
@@ -303,9 +312,9 @@ export default function Feedback() {
       })
     }
     setDisplayedReviews(filtered)
-  }, [reviews, filterValues])
+  }, [reviews, filterValues, reviewSearchQuery])
 
-  const handleFilterReset = () => { setFilterValues({ duration: null, sortBy: "newest", reviewType: [] }); setIsFilterApply() }
+  const handleFilterReset = () => { setFilterValues({ duration: null, sortBy: "newest", reviewType: [] }); setReviewSearchQuery("") }
   const handleFilterApply = () => { setIsFilterLoading(true); setIsFilterOpen(false); setTimeout(() => setIsFilterLoading(false), 200) }
 
   const formatDate = (date) => {
@@ -505,14 +514,22 @@ export default function Feedback() {
             <div className="flex gap-2">
               <div className="flex-1 bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-2">
                 <Search className="w-4 h-4 text-gray-400" />
-                <input type="text" placeholder="Search reviews" className="flex-1 text-sm bg-transparent focus:outline-none dark:text-white" />
+                <input type="text" value={reviewSearchQuery} onChange={(e) => setReviewSearchQuery(e.target.value)} placeholder="Search reviews" className="flex-1 text-sm bg-transparent focus:outline-none dark:text-white" />
               </div>
-              <button onClick={() => setIsFilterOpen(true)} className="bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+              <button onClick={() => setIsFilterOpen(true)} aria-label="Filter reviews" className="relative bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] p-3 rounded-xl border border-gray-200 dark:border-gray-800">
                 <SlidersHorizontal className="w-4 h-4 text-gray-900 dark:text-white" />
+                {(filterValues.reviewType?.length > 0 || filterValues.sortBy !== "newest") && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-[#B80B3D] border-2 border-white" />
+                )}
               </button>
             </div>
 
             <div className="space-y-4 pb-20">
+              {displayedReviews.length === 0 && (
+                <p className="py-10 text-center text-sm font-medium text-gray-500 dark:text-gray-400">
+                  {reviews.length === 0 ? "No reviews yet" : "No reviews match these filters"}
+                </p>
+              )}
               {displayedReviews.map((review) => (
                 <div key={review.id} className="bg-white dark:bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
                   <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase">
@@ -615,6 +632,102 @@ export default function Feedback() {
         )}
       </AnimatePresence>
 
+      {/* Reviews Filter Popup */}
+      <AnimatePresence>
+        {isFilterOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm"
+              onClick={() => setIsFilterOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] rounded-t-[32px] shadow-2xl z-50 overflow-hidden"
+              style={{ maxHeight: "80vh" }}
+            >
+              <div className="p-6 flex flex-col h-full">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold font-primary text-slate-900 dark:text-white">Filters</h3>
+                  <button onClick={() => setIsFilterOpen(false)} className="p-2 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-full transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-6 mb-6">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Sort by</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { id: "newest", label: "Newest first" },
+                        { id: "oldest", label: "Oldest first" },
+                        { id: "bestRated", label: "Best rated" },
+                        { id: "worstRated", label: "Worst rated" },
+                      ].map((option) => (
+                        <button
+                          key={option.id}
+                          onClick={() => setFilterValues((current) => ({ ...current, sortBy: option.id }))}
+                          className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                            filterValues.sortBy === option.id
+                              ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white shadow-lg shadow-slate-200 dark:shadow-none"
+                              : "bg-slate-50 dark:bg-gray-800 text-slate-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-700"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Rating</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {[5, 4, 3, 2, 1].map((stars) => (
+                        <button
+                          key={stars}
+                          onClick={() => setFilterValues((current) => {
+                            const selected = current.reviewType || []
+                            return {
+                              ...current,
+                              reviewType: selected.includes(stars) ? selected.filter((value) => value !== stars) : [...selected, stars],
+                            }
+                          })}
+                          className={`flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                            filterValues.reviewType?.includes(stars)
+                              ? "bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white shadow-lg shadow-slate-200 dark:shadow-none"
+                              : "bg-slate-50 dark:bg-gray-800 text-slate-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-700"
+                          }`}
+                        >
+                          {stars} <Star className="w-3.5 h-3.5 fill-current" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-auto">
+                  <button
+                    onClick={handleFilterReset}
+                    className="flex-1 py-4 rounded-2xl font-bold text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={handleFilterApply}
+                    className="flex-[2] bg-gradient-to-br from-[#B80B3D] to-[#66001D] text-white py-4 rounded-2xl font-bold shadow-xl shadow-slate-200 dark:shadow-none active:scale-[0.98] transition-all"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       {/* Complaints Filter Popup */}
       <AnimatePresence>
         {isComplaintsFilterOpen && (
@@ -646,7 +759,8 @@ export default function Feedback() {
                   <div>
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Issue Type</h4>
                     <div className="flex flex-wrap gap-2">
-                      {["Missing Item", "Wrong Item", "Quality Issue", "Delivery Delay", "Other"].map((type) => (
+                      {/* Same values the customer picks on Submit Complaint, so the filter matches stored complaints */}
+                      {["Food Quality", "Wrong Item", "Missing Item", "Packaging Issue", "Late Delivery", "Other"].map((type) => (
                         <button
                           key={type}
                           onClick={() => {

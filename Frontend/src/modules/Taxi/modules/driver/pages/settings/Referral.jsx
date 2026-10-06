@@ -217,8 +217,8 @@ const DriverReferral = () => {
         </div>
 
         <div className="px-4 py-4">
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-            <div className="rounded-xl border border-dashed border-gray-300 px-3 py-3 text-center">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2 rounded-xl border border-dashed border-gray-300 px-3 py-3 text-center">
               <p className="text-[18px] font-semibold text-gray-900 tracking-wide">
                 {referralCode || 'Not available'}
               </p>
@@ -228,7 +228,7 @@ const DriverReferral = () => {
               type="button"
               onClick={handleCopy}
               disabled={!referralCode}
-              className="rounded-xl bg-[#1830b8] text-white px-4 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              className="rounded-xl bg-[#1830b8] text-white px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {copied ? <CheckCircle2 size={15} /> : <Copy size={15} />}
               Copy
@@ -237,7 +237,7 @@ const DriverReferral = () => {
               type="button"
               onClick={handleShare}
               disabled={!referralCode}
-              className="rounded-xl bg-[#ef4444] text-white px-4 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              className="rounded-xl bg-[#ef4444] text-white px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
             >
               Share <Share2 size={15} />
             </button>

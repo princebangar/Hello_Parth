@@ -2241,8 +2241,11 @@ export const getDriverNotifications = async (req, res) => {
     throw new ApiError(404, "Driver not found");
   }
 
+  // A captain only sees what was sent after the account exists: broadcasts from before sign-up are not for them.
+  const joinedAt = account.createdAt ? new Date(account.createdAt) : null;
   const query = {
     status: "sent",
+    ...(joinedAt && !Number.isNaN(joinedAt.getTime()) ? { createdAt: { $gte: joinedAt } } : {}),
     $or: [
       { send_to: { $in: ["all", "drivers"] } },
       { send_to: "custom", recipients: { $elemMatch: { role: "driver", id: account._id } } },
@@ -4285,7 +4288,11 @@ const isPublicWebOrigin = (value = "") => {
       return false;
     }
 
-    return !["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname);
+    if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname)) {
+      return false;
+    }
+    // A payment callback is posted by Razorpay / PhonePe, so its Origin/Referer is the gateway, never our app.
+    return !/(^|\.)(razorpay\.com|phonepe\.com)$/i.test(hostname);
   } catch {
     return false;
   }

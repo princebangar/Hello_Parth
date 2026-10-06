@@ -1268,6 +1268,14 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         },
       });
 
+      alertTaxiAdmins({
+        type: 'bus_driver_registration',
+        title: 'New bus driver registration',
+        body: `${busDriver.name || 'A bus driver'}${busDriver.phone ? ` (${busDriver.phone})` : ''} is waiting for approval`,
+        link: '/taxi/admin/bus-service',
+        id: String(busDriver._id),
+      });
+
       session.finalEntityId = busDriver._id;
       session.finalEntityRole = normalizedRole;
       session.status = 'completed';

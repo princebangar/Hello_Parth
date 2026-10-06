@@ -1,6 +1,8 @@
 import { Driver } from '../driver/models/Driver.js';
 import { Owner } from '../admin/models/Owner.js';
 import { SupportTicket } from '../support/models/SupportTicket.js';
+import { BusDriver } from '../driver/models/BusDriver.js';
+import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 
 // Tells the Taxi admin panel that something is waiting for review: a live socket event (bell + toast in the
 // open panel) and a push to admin devices. Never throws — an alert must not break the request that caused it.
@@ -50,7 +52,10 @@ const isAwaitingReverification = (doc) => {
 export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
   const perKind = Math.min(Math.max(Number(limit) || 30, 1), 100);
 
-  const [pendingDrivers, pendingDriverCount, pendingOwners, pendingOwnerCount, openTickets, openTicketCount, approvedDrivers] =
+  const [
+    pendingDrivers, pendingDriverCount, pendingOwners, pendingOwnerCount, openTickets, openTicketCount, approvedDrivers,
+    pendingBusDrivers, pendingBusDriverCount, pendingPooling, pendingPoolingCount,
+  ] =
     await Promise.all([
       Driver.find({ approve: false, deletedAt: null })
         .sort({ createdAt: -1 })
@@ -76,6 +81,18 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
         .limit(500)
         .select('name phone documents updatedAt')
         .lean(),
+      BusDriver.find({ signupSource: 'self_signup', approve: false })
+        .sort({ createdAt: -1 })
+        .limit(perKind)
+        .select('name phone busName createdAt')
+        .lean(),
+      BusDriver.countDocuments({ signupSource: 'self_signup', approve: false }),
+      PoolingVehicle.find({ approve: false })
+        .sort({ createdAt: -1 })
+        .limit(perKind)
+        .select('driverName driverPhone vehicleNumber name createdAt')
+        .lean(),
+      PoolingVehicle.countDocuments({ approve: false }),
     ]);
 
   const reverifications = [];
@@ -110,6 +127,22 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
       link: '/taxi/admin/owners/pending',
       createdAt: owner.createdAt,
     })),
+    ...pendingBusDrivers.map((busDriver) => ({
+      id: String(busDriver._id),
+      type: 'bus_driver_registration',
+      title: `${busDriver.name || 'New bus driver'} is waiting for approval`,
+      body: `Bus driver${busDriver.busName ? ` · ${busDriver.busName}` : ''}${busDriver.phone ? ` · ${busDriver.phone}` : ''}`,
+      link: '/taxi/admin/bus-service',
+      createdAt: busDriver.createdAt,
+    })),
+    ...pendingPooling.map((vehicle) => ({
+      id: String(vehicle._id),
+      type: 'pooling_registration',
+      title: `${vehicle.driverName || 'New pooling driver'} is waiting for approval`,
+      body: `Pooling · ${vehicle.name || 'Vehicle'}${vehicle.vehicleNumber ? ` · ${vehicle.vehicleNumber}` : ''}`,
+      link: `/taxi/admin/pooling/vehicles/view/${vehicle._id}`,
+      createdAt: vehicle.createdAt,
+    })),
     ...openTickets.map((ticket) => ({
       id: String(ticket._id),
       type: 'support_ticket',
@@ -127,8 +160,10 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
       pendingOwners: pendingOwnerCount,
       openTickets: openTicketCount,
       documentReverifications: reverifications.length,
+      pendingBusDrivers: pendingBusDriverCount,
+      pendingPoolingDrivers: pendingPoolingCount,
     },
-    total: pendingDriverCount + pendingOwnerCount + openTicketCount + reverifications.length,
+    total: pendingDriverCount + pendingOwnerCount + openTicketCount + reverifications.length + pendingBusDriverCount + pendingPoolingCount,
     results: items,
   };
 };

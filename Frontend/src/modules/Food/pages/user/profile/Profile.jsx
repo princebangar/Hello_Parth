@@ -834,12 +834,12 @@ export default function Profile() {
 
       {/* Veg Mode Popup */}
       <Dialog open={vegModeOpen} onOpenChange={setVegModeOpen}>
-        <DialogContent className="max-w-sm md:max-w-md lg:max-w-lg w-[calc(100%-2rem)] rounded-2xl p-0 overflow-hidden">
+        <DialogContent className="max-w-sm md:max-w-md lg:max-w-lg w-[calc(100%-2rem)] rounded-2xl p-0 overflow-hidden bg-white dark:bg-[#1a1a1a] dark:border-gray-800">
           <DialogHeader className="p-5 pb-3">
-            <DialogTitle className="text-lg font-bold text-gray-900">
+            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-white">
               Veg Mode
             </DialogTitle>
-            <DialogDescription className="text-sm text-gray-500">
+            <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
               Filter restaurants and dishes based on your dietary preferences
             </DialogDescription>
           </DialogHeader>
@@ -850,8 +850,8 @@ export default function Profile() {
                 setVegModeOpen(false);
               }}
               className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-between ${vegMode && vegModeOption === "all"
-                ? "border-green-600 bg-green-50"
-                : "border-gray-200 bg-white hover:border-gray-300"
+                ? "border-green-600 bg-green-50 dark:bg-green-900/20"
+                : "border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111] hover:border-gray-300 dark:hover:border-gray-600"
                 }`}>
               <div className="flex items-center gap-3">
                 <div
@@ -862,10 +862,10 @@ export default function Profile() {
                   {vegMode && vegModeOption === "all" && <Check className="h-3 w-3 text-white" />}
                 </div>
                 <div className="text-left">
-                  <p className="font-medium text-gray-900 text-sm">
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">
                     All restaurants
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Veg dishes from every restaurant
                   </p>
                 </div>
@@ -880,8 +880,8 @@ export default function Profile() {
                 setVegModeOpen(false);
               }}
               className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-between ${vegMode && vegModeOption === "pure-veg"
-                ? "border-green-600 bg-green-50"
-                : "border-gray-200 bg-white hover:border-gray-300"
+                ? "border-green-600 bg-green-50 dark:bg-green-900/20"
+                : "border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111] hover:border-gray-300 dark:hover:border-gray-600"
                 }`}>
               <div className="flex items-center gap-3">
                 <div
@@ -892,10 +892,10 @@ export default function Profile() {
                   {vegMode && vegModeOption === "pure-veg" && <Check className="h-3 w-3 text-white" />}
                 </div>
                 <div className="text-left">
-                  <p className="font-medium text-gray-900 text-sm">
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">
                     Pure Veg restaurants only
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Hide restaurants that serve non-veg
                   </p>
                 </div>
@@ -911,7 +911,7 @@ export default function Profile() {
               }}
               className={`w-full p-3 rounded-xl border-2 transition-all flex items-center justify-between ${!vegMode
                 ? "border-[#991B1B] bg-[#fdfafc] dark:bg-[#7F1D1D]/10"
-                : "border-gray-200 dark:border-gray-800 bg-white hover:border-gray-300"
+                : "border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111] hover:border-gray-300 dark:hover:border-gray-600"
                 }`}>
               <div className="flex items-center gap-3">
                 <div
@@ -920,10 +920,10 @@ export default function Profile() {
                   {!vegMode && <Check className="h-3 w-3 text-white" />}
                 </div>
                 <div className="text-left">
-                  <p className="font-medium text-gray-900 text-sm">
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">
                     Veg Mode OFF
                   </p>
-                  <p className="text-xs text-gray-500">Show all options</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Show all options</p>
                 </div>
               </div>
             </button>

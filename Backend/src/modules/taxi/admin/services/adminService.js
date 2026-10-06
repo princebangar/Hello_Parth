@@ -3126,6 +3126,24 @@ export const adjustUserWallet = async (id, payload = {}) => {
   });
 
   await wallet.save();
+
+  // Tell the customer about the change even when the app is closed (push). Never blocks the admin action.
+  const rupees = Number(amount).toFixed(2);
+  import('../../services/pushNotificationService.js')
+    .then(({ sendPushNotificationToEntities }) => sendPushNotificationToEntities({
+      userIds: [String(user._id)],
+      title: operation === 'credit' ? 'Money added to your wallet' : 'Money deducted from your wallet',
+      body: operation === 'credit'
+        ? `Rs ${rupees} has been added to your Hello Parth wallet. New balance: Rs ${nextBalance.toFixed(2)}`
+        : `Rs ${rupees} has been deducted from your Hello Parth wallet. New balance: Rs ${nextBalance.toFixed(2)}`,
+      data: {
+        type: 'wallet_adjustment',
+        notificationId: `wallet-${String(user._id)}-${Date.now()}`,
+        targetUrl: '/taxi/user/wallet',
+      },
+    }))
+    .catch(() => {});
+
   return { balance: Number(nextBalance.toFixed(2)) };
 };
 
@@ -4161,8 +4179,23 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
     update.onboarding = payload.onboarding;
   }
 
+  const wasApproved = update.approve === true
+    ? Boolean((await Driver.findById(id).select('approve').lean())?.approve)
+    : true;
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
   if (!driver) throw new ApiError(404, 'Driver not found');
+
+  // Newly approved: tell the captain right away, even if the app is closed.
+  if (update.approve === true && !wasApproved) {
+    import('../../services/pushNotificationService.js')
+      .then(({ sendPushNotificationToEntities }) => sendPushNotificationToEntities({
+        driverIds: [String(driver._id)],
+        title: 'You are approved!',
+        body: 'Your Hello Parth captain account is approved. Go online to start getting rides.',
+        data: { type: 'driver_approved', notificationId: `approved-${String(driver._id)}`, targetUrl: '/taxi/driver/home' },
+      }))
+      .catch(() => {});
+  }
   return serializeDriver(driver);
 };
 
@@ -7659,6 +7692,17 @@ export const approveBusDriverSignup = async (id) => {
   item.active = true;
   item.rejectionReason = '';
   await item.save();
+
+  import('../../../core/notifications/firebase.service.js')
+    .then(({ notifyOwnerSafely }) => notifyOwnerSafely(
+      { ownerType: 'BUS_DRIVER', ownerId: String(item._id) },
+      {
+        title: 'You are approved!',
+        body: 'Your Hello Parth bus driver account is approved.',
+        data: { type: 'driver_approved', notificationId: `approved-${String(item._id)}` },
+      },
+    ))
+    .catch(() => {});
 
   return {
     _id: item._id,

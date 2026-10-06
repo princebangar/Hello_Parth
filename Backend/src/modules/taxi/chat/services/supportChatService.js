@@ -603,12 +603,20 @@ export const broadcastSupportMessage = (message) => {
   const parsed = parseSupportConversationKey(message.conversationKey);
   const rooms = parsed ? parsed.keys.map((key) => getSupportRoom(key)) : [getSupportRoom(message.conversationKey)];
 
-  for (const room of rooms) {
-    chatIo.to(room).emit('chat:message', message);
+  // One emit to every room: a socket that sits in several of them still gets the message only once.
+  // A customer / captain writing to support reaches EVERY signed-in admin (their message names one admin as the
+  // receiver, but any admin may answer), not just that one.
+  const targetRooms = [
+    ...rooms,
+    getSupportParticipantRoom(message.sender.role, message.sender.id),
+    getSupportParticipantRoom(message.receiver.role, message.receiver.id),
+    ...(message.receiver.role === 'admin' && message.sender.role !== 'admin' ? [getSupportRoleRoom('admin')] : []),
+  ];
+  let emitter = chatIo;
+  for (const room of new Set(targetRooms)) {
+    emitter = emitter.to(room);
   }
-
-  chatIo.to(getSupportParticipantRoom(message.sender.role, message.sender.id)).emit('chat:message', message);
-  chatIo.to(getSupportParticipantRoom(message.receiver.role, message.receiver.id)).emit('chat:message', message);
+  emitter.emit('chat:message', message);
   chatIo.to(getSupportRoleRoom('admin')).emit('chat:conversation-updated', {
     conversationKey: message.conversationKey,
     message,

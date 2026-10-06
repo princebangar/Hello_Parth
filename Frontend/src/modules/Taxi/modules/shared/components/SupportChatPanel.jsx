@@ -323,6 +323,27 @@ const SupportChatPanel = ({
     return leftKeys.some((key) => rightKeys.includes(key));
   };
 
+  // Connection went away (weak network, phone slept, server restart): keep trying on its own, and let the
+  // person tap "Offline" to retry right now. Before, nothing ever re-tried and the pill just stayed red.
+  const reconnectNow = () => {
+    socketService.connect({ role: session.role, token: session.token });
+    window.setTimeout(() => setIsConnected(socketService.isConnected()), 600);
+  };
+  useEffect(() => {
+    if (!isLiveEnabled || isConnected) {
+      return undefined;
+    }
+    const retry = window.setInterval(reconnectNow, 4000);
+    const onBackOnline = () => reconnectNow();
+    window.addEventListener('online', onBackOnline);
+    document.addEventListener('visibilitychange', onBackOnline);
+    return () => {
+      window.clearInterval(retry);
+      window.removeEventListener('online', onBackOnline);
+      document.removeEventListener('visibilitychange', onBackOnline);
+    };
+  }, [isLiveEnabled, isConnected, session.role, session.token]);
+
   useEffect(() => {
     if (!isLiveEnabled) {
       return undefined;
@@ -704,7 +725,12 @@ const SupportChatPanel = ({
             )}
           </div>
         </div>
-        <div className={`max-w-full shrink-0 transition-all ${
+        <div
+          role={isConnected ? undefined : 'button'}
+          tabIndex={isConnected ? undefined : 0}
+          onClick={isConnected ? undefined : reconnectNow}
+          onKeyDown={isConnected ? undefined : (event) => { if (event.key === 'Enter' || event.key === ' ') reconnectNow(); }}
+          className={`max-w-full shrink-0 transition-all ${isConnected ? '' : 'cursor-pointer active:scale-95'} ${
           isAdminPanel ? 'rounded-full px-[18px] py-[10px]' : 'rounded-xl border px-3 py-2'
         } ${
           isConnected 
@@ -714,7 +740,7 @@ const SupportChatPanel = ({
           <div className="flex items-center gap-2.5">
             <div className={`h-2 w-2 shrink-0 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
             <span className="whitespace-normal text-[10px] font-black uppercase tracking-[0.18em] sm:text-[11px] sm:tracking-widest">
-            {isConnected ? 'Connection: Live' : 'Connection: Offline'}
+            {isConnected ? 'Connection: Live' : 'Offline - tap to reconnect'}
             </span>
           </div>
         </div>

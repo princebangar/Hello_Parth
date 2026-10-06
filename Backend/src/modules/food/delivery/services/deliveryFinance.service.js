@@ -215,6 +215,14 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
         status: 'pending'
     });
 
+    import('../../../../core/notifications/firebase.service.js')
+        .then(({ notifyAdminsSafely }) => notifyAdminsSafely({
+            title: 'New withdrawal request',
+            body: `${partner.name || 'A delivery partner'} asked to withdraw ₹${amount}. Open Delivery Withdrawal to review.`,
+            data: { type: 'withdrawal_request', subType: 'delivery', id: String(withdrawal._id), link: '/admin/food/delivery-withdrawal' }
+        }))
+        .catch(() => {});
+
     return withdrawal;
 };
 

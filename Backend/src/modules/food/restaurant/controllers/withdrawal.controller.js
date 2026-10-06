@@ -29,6 +29,15 @@ export const createWithdrawalRequestController = async (req, res, next) => {
 
         await withdrawal.save();
 
+        // Tell the admins right away (push); never blocks the restaurant's request.
+        import('../../../../core/notifications/firebase.service.js')
+            .then(({ notifyAdminsSafely }) => notifyAdminsSafely({
+                title: 'New withdrawal request',
+                body: `A restaurant asked to withdraw ₹${Number(amount)}. Open Restaurant Withdraws to review.`,
+                data: { type: 'withdrawal_request', subType: 'restaurant', id: String(withdrawal._id), link: '/admin/food/restaurant-withdraws' }
+            }))
+            .catch(() => {});
+
         return sendResponse(res, 201, 'Withdrawal request submitted successfully', withdrawal);
     } catch (error) {
         next(error);

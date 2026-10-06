@@ -11,6 +11,7 @@ import {
     logoutController,
     getMeController,
     deleteAccountController,
+    checkAccountBalanceController,
     recoverAccountController,
     startFreshAccountController,
     updateAdminProfileController,
@@ -67,6 +68,7 @@ router.post('/logout', logoutController);
 router.get('/me', authMiddleware, getMeController);
 
 // Instant self-serve account deletion (Food + Taxi share one user account)
+router.get('/delete-account/check-balance', authMiddleware, checkAccountBalanceController);
 router.delete('/delete-account', authMiddleware, deleteAccountController);
 
 // Deleted-account login choice: recover old data, or start fresh on the same phone.

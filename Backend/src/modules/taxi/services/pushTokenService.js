@@ -59,7 +59,8 @@ const pathLooksLikeArray = (entity, fieldName) => {
 
 const upsertTokenOnEntity = (entity, fieldName, token) => {
   const existing = toTokenList(entity?.[fieldName]);
-  const next = [...existing.filter((item) => item !== token), token];
+  // Newest last, only the latest few: stale tokens of the same phone would each get their own copy of a push.
+  const next = [...existing.filter((item) => item !== token), token].slice(-3);
   const schemaInstance = entity?.schema?.paths?.[fieldName]?.instance;
   const useArray =
     pathLooksLikeArray(entity, fieldName) ||

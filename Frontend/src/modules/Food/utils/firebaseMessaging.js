@@ -1175,9 +1175,10 @@ async function saveTokenByModule(moduleName, token, platform = "web") {
   } else if (moduleName === "admin") {
     // Admin panel: pending approvals (restaurants, delivery, items) are pushed
     // to every active admin's registered devices.
+    // The mobile endpoint refuses a `platform` field (the path already says it is mobile), the web one needs it.
     await apiClient.post(
       platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save",
-      { token: normalizedToken, platform },
+      platform === "mobile" ? { token: normalizedToken } : { token: normalizedToken, platform },
       { contextModule: "admin" },
     );
   } else {

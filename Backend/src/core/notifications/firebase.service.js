@@ -193,13 +193,19 @@ const buildMessagePayload = (payload = {}, token) => {
         message.data = data;
     }
 
+    // One phone can hold several still-valid tokens for the same account (reinstall, WebView + app, token refresh).
+    // A stable tag per notification makes the copies replace each other, so the user sees it once.
+    const tag = sanitizeString(payload.tag || data.broadcastId || data.notificationId || data.orderId || '');
+
     message.android = {
         priority: 'high',
+        ...(tag ? { collapse_key: tag } : {}),
         notification: {
             channel_id: 'default',
             sound: 'default',
             default_vibrate_timings: true,
-            default_light_settings: true
+            default_light_settings: true,
+            ...(tag ? { tag } : {})
         }
     };
 
@@ -210,7 +216,8 @@ const buildMessagePayload = (payload = {}, token) => {
         notification: {
             title: notification.title,
             body: notification.body,
-            icon: image || payload.icon || '/favicon.ico'
+            icon: image || payload.icon || '/hello-parth-icon.png',
+            ...(tag ? { tag, renotify: false } : {})
         }
     };
 
@@ -293,6 +300,8 @@ export const listOwnerTokens = async ({ ownerType, ownerId, platform }) => {
     return readTokensFromDoc(doc, platform);
 };
 
+const MAX_TOKENS_PER_FIELD = 3;
+
 export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, platform = 'web' }) => {
     const normalizedToken = sanitizeString(token);
 
@@ -325,7 +334,8 @@ export const upsertFirebaseDeviceToken = async ({ ownerType, ownerId, token, pla
         `[FCM Service] upsert start ownerType=${normalizeOwnerType(ownerType)} ownerId=${ownerId} platform=${normalizedPlatform} field=${field} existingCount=${existingTokens.length} tokenPreview=${previewToken(normalizedToken)}`
     );
 
-    const tokens = normalizeTokenList([...existingTokens, normalizedToken]);
+    // Newest token last; keep only the latest few so stale tokens of the same phone don't each get a copy.
+    const tokens = normalizeTokenList([...existingTokens.filter((t) => t !== normalizedToken), normalizedToken]).slice(-MAX_TOKENS_PER_FIELD);
     const updateValue = Array.isArray(doc[field]) ? tokens : (tokens[tokens.length - 1] || '');
 
     await model.updateOne({ _id: normalizedOwnerId }, { $set: { [field]: updateValue } });

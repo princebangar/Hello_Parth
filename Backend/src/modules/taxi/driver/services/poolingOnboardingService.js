@@ -3,6 +3,7 @@ import { env } from '../../../../config/env.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
 import { PoolingVehicle } from '../../admin/models/PoolingVehicle.js';
+import { alertTaxiAdmins } from '../../services/adminAlertService.js';
 import { sendOtpSms } from '../../services/smsService.js';
 import { signAccessToken } from './authService.js';
 import { PoolingDriverOnboardingSession } from '../models/PoolingDriverOnboardingSession.js';
@@ -54,7 +55,13 @@ const sanitizeVehicleDraft = (draft = {}) => ({
   vehicleNumber: normalizeVehicleNumber(draft.vehicleNumber),
   driverName: String(draft.driverName || '').trim(),
   color: String(draft.color || '').trim(),
-  capacity: Math.max(1, Number(draft.capacity || 1)),
+  // Seat count comes from the chosen seat layout, not a separate number.
+  capacity: Math.max(
+    1,
+    (Array.isArray(draft.blueprint?.layout) ? draft.blueprint.layout.filter((item) => item?.type === 'seat').length : 0)
+      || Number(draft.capacity || 1)
+      || 1,
+  ),
   vehicleType: VEHICLE_TYPES.has(String(draft.vehicleType || '').trim().toLowerCase())
     ? String(draft.vehicleType).trim().toLowerCase()
     : 'sedan',
@@ -324,6 +331,14 @@ export const completePoolingDriverOnboarding = async ({ registrationId, phone })
   session.status = 'submitted';
   await session.save();
   await PoolingDriverOnboardingSession.deleteOne({ _id: session._id });
+
+  alertTaxiAdmins({
+    type: 'pooling_registration',
+    title: 'New pooling driver registration',
+    body: `${vehicle.driverName || 'A pooling driver'} (${vehicle.vehicleNumber || vehicle.driverPhone}) is waiting for approval`,
+    link: `/taxi/admin/pooling/vehicles/view/${vehicle._id}`,
+    id: String(vehicle._id),
+  });
 
   return {
     message: 'Pooling onboarding submitted successfully',

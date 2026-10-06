@@ -42,6 +42,13 @@ const normalizeBlueprint = (blueprint = {}) => {
   return { rows, cols, layout };
 };
 
+// Capacity = number of 'seat' cells in the layout (falls back to the stored number for old vehicles without a layout),
+// so the seat count shown in admin/app can never disagree with the vehicle's seat layout.
+const capacityFromBlueprint = (blueprint, fallback = 1) => {
+  const seats = Array.isArray(blueprint?.layout) ? blueprint.layout.filter((item) => item?.type === 'seat').length : 0;
+  return Math.max(1, seats || Number(fallback || 1) || 1);
+};
+
 const serializePoolingVehicle = (vehicle) => {
   const item = typeof vehicle?.toObject === 'function' ? vehicle.toObject() : vehicle;
   return {
@@ -50,7 +57,7 @@ const serializePoolingVehicle = (vehicle) => {
     driverCommissionPercentage: clampPercentage(item?.adminCommissionPercentage),
     ownerCommissionPercentage: clampPercentage(item?.ownerCommissionPercentage),
     serviceTaxPercentage: clampPercentage(item?.serviceTaxPercentage),
-    capacity: Math.max(1, Number(item?.capacity || 1)),
+    capacity: capacityFromBlueprint(item?.blueprint, item?.capacity),
     blueprint: normalizeBlueprint(item?.blueprint),
     images: Array.isArray(item?.images) ? item.images.filter(Boolean) : [],
     poolingEnabled: item?.poolingEnabled !== false,
@@ -64,7 +71,7 @@ const buildAdminPoolingVehiclePayload = (payload = {}, existing = {}) => ({
   driverName: toTrimmedString(payload.driverName, existing.driverName || ''),
   driverPhone: toTrimmedString(payload.driverPhone, existing.driverPhone || ''),
   color: toTrimmedString(payload.color, existing.color || ''),
-  capacity: Math.max(1, Number(payload.capacity ?? existing.capacity ?? 1) || 1),
+  capacity: capacityFromBlueprint(payload.blueprint ?? existing.blueprint, payload.capacity ?? existing.capacity),
   adminCommissionPercentage: clampPercentage(
     payload.driverCommissionPercentage ?? payload.adminCommissionPercentage,
     existing.adminCommissionPercentage ?? 0,

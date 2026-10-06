@@ -11,6 +11,8 @@ import {
   RefreshCcw,
   Eye,
   PencilLine,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
@@ -18,14 +20,23 @@ import toast from 'react-hot-toast';
 import { formatPlateNumber, isValidPlateNumber, PLATE_ERROR } from '../../../../shared/utils/inputFormats';
 import useDirty from '../../../../../../shared/hooks/useDirty';
 
+// grid = [rows, cols] of the default top-view layout. Capacity is never stored separately from the layout:
+// it is always the number of 'seat' cells (countSeats), so the type, the layout and the seat count can't disagree.
 const VEHICLE_TYPES = [
-  { id: 'bike', label: 'Bike', capacity: 1, grid: [1, 1] },
+  { id: 'bike', label: 'Bike', capacity: 1, grid: [2, 1] },
   { id: 'hatchback', label: 'Hatchback', capacity: 4, grid: [3, 2] },
   { id: 'sedan', label: 'Sedan', capacity: 4, grid: [3, 2] },
   { id: 'suv', label: 'SUV', capacity: 6, grid: [4, 2] },
   { id: 'van', label: 'Van', capacity: 12, grid: [5, 3] },
   { id: 'luxury', label: 'Luxury', capacity: 4, grid: [3, 2] },
 ];
+
+const countSeats = (blueprint) =>
+  (Array.isArray(blueprint?.layout) ? blueprint.layout.filter((cell) => cell?.type === 'seat').length : 0);
+
+// A stored/default numeric 0 shows as empty (placeholder "0"), so typing "5" gives 5 and not "05".
+// What the admin types is kept as the raw string, so "0.5" can still be typed.
+const numberInputValue = (value) => (value === null || value === undefined || value === 0 ? '' : value);
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-500 focus:border-yellow-400 focus:ring-4 focus:ring-yellow-400/10';
 const labelClass = 'mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-600';
@@ -56,6 +67,8 @@ const PoolingVehicleForm = ({
   const isEditMode = Boolean(id) && !isViewMode;
   const showHeaderAction = isViewMode || isEditMode || !placeCreateActionAtEnd;
   const [loading, setLoading] = useState(false);
+  const [previewImage, setPreviewImage] = useState('');
+  const [approving, setApproving] = useState(false);
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -123,24 +136,16 @@ const PoolingVehicleForm = ({
     if (id) {
       loadVehicle();
     } else {
-      // Set default layout for Sedan
+      // Default layout for the starting type (Sedan unless the host page passed one)
+      const blueprint = initialFormData?.blueprint || generateDefaultLayout(initialFormData?.vehicleType || 'sedan');
       setFormData(prev => ({
         ...prev,
         ...(initialFormData || {}),
-        blueprint: initialFormData?.blueprint || generateDefaultLayout(initialFormData?.vehicleType || 'sedan')
+        blueprint,
+        capacity: countSeats(blueprint),
       }));
     }
   }, [id]);
-
-  useEffect(() => {
-    if (!id && initialFormData) {
-      setFormData((prev) => ({
-        ...prev,
-        ...initialFormData,
-        blueprint: initialFormData.blueprint || prev.blueprint,
-      }));
-    }
-  }, [id, initialFormData]);
 
   const loadVehicle = async () => {
     setLoading(true);
@@ -148,21 +153,26 @@ const PoolingVehicleForm = ({
       const response = await service.getPoolingVehicles();
       const vehicle = response.data.find(v => v._id === id);
       if (vehicle) {
+        // A saved layout with no seat at all (old 1x1 bike layout = only the driver) is useless: use the type's default.
+        const blueprint = countSeats(vehicle.blueprint) > 0
+          ? vehicle.blueprint
+          : generateDefaultLayout(vehicle.vehicleType || 'sedan');
         const loadedForm = {
           name: vehicle.name || '',
           vehicleModel: vehicle.vehicleModel || '',
           vehicleNumber: vehicle.vehicleNumber || '',
           driverName: vehicle.driverName || '',
           driverPhone: vehicle.driverPhone || '',
-          capacity: vehicle.capacity || 4,
+          capacity: countSeats(blueprint),
           adminCommissionPercentage: Number(vehicle.adminCommissionPercentage ?? 0),
           ownerCommissionPercentage: Number(vehicle.ownerCommissionPercentage ?? 0),
           serviceTaxPercentage: Number(vehicle.serviceTaxPercentage ?? 0),
           color: vehicle.color || '',
           vehicleType: vehicle.vehicleType || 'sedan',
           status: vehicle.status || 'active',
+          approve: vehicle.approve !== false,
           images: vehicle.images || [],
-          blueprint: vehicle.blueprint || generateDefaultLayout(vehicle.vehicleType || 'sedan')
+          blueprint,
         };
         setFormData(loadedForm);
         resetBaseline(normalizeForm(loadedForm));
@@ -171,6 +181,21 @@ const PoolingVehicleForm = ({
       toast.error('Failed to load vehicle data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Pending driver requests (approve === false) can be approved straight from the View page.
+  const handleApprove = async () => {
+    if (!id || approving) return;
+    setApproving(true);
+    try {
+      await service.approvePoolingVehicle(id);
+      setFormData((prev) => ({ ...prev, approve: true, status: 'active' }));
+      toast.success('Pooling request approved');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to approve vehicle');
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -183,35 +208,63 @@ const PoolingVehicleForm = ({
 
   const handleTypeChange = (type) => {
     if (isViewMode) return;
+    const blueprint = generateDefaultLayout(type);
     setFormData(prev => ({
       ...prev,
       vehicleType: type,
-      blueprint: generateDefaultLayout(type)
+      blueprint,
+      capacity: countSeats(blueprint),
     }));
   };
 
   const toggleSeat = (r, c) => {
     if (isViewMode) return;
-    const layout = [...formData.blueprint.layout];
-    const index = layout.findIndex(s => s.r === r && s.c === c);
+    const index = formData.blueprint.layout.findIndex(s => s.r === r && s.c === c);
     if (index === -1) return;
 
-    const currentType = layout[index].type;
+    const currentType = formData.blueprint.layout[index].type;
     let nextType = 'seat';
     if (currentType === 'seat') nextType = 'empty';
     else if (currentType === 'empty') nextType = 'driver';
     else if (currentType === 'driver') nextType = 'seat';
 
-    layout[index].type = nextType;
-    
-    // Auto-update capacity based on 'seat' count
-    const seatCount = layout.filter(s => s.type === 'seat').length;
+    const layout = formData.blueprint.layout.map((cell, i) => (i === index ? { ...cell, type: nextType } : cell));
+    const blueprint = { ...formData.blueprint, layout };
 
     setFormData(prev => ({
       ...prev,
-      capacity: seatCount,
-      blueprint: { ...prev.blueprint, layout }
+      capacity: countSeats(blueprint),
+      blueprint,
     }));
+  };
+
+  const uploadImages = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) => file?.type?.startsWith('image/'));
+    if (!files.length) return;
+    const loadingToast = toast.loading(files.length > 1 ? `Uploading ${files.length} images...` : 'Uploading image...');
+    const readAsDataUrl = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    let uploaded = 0;
+    for (const file of files) {
+      try {
+        const res = await service.uploadImage(await readAsDataUrl(file));
+        const imageUrl = res?.data?.url || res?.data?.data?.url || res?.url || '';
+        if (!imageUrl) throw new Error('Upload response missing image URL');
+        uploaded += 1;
+        setFormData(prev => ({ ...prev, images: [...prev.images, imageUrl] }));
+      } catch {
+        // counted below
+      }
+    }
+    if (uploaded === files.length) {
+      toast.success(uploaded > 1 ? `${uploaded} images uploaded` : 'Image uploaded', { id: loadingToast });
+    } else {
+      toast.error(`${files.length - uploaded} of ${files.length} images failed to upload`, { id: loadingToast });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -331,13 +384,25 @@ const PoolingVehicleForm = ({
             </div>
             {showHeaderAction ? (
               isViewMode ? (
-                <button
-                  onClick={() => navigate(`${backPath}/edit/${id}`)}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
-                >
-                  <PencilLine size={18} />
-                  Edit Vehicle
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {formData.approve === false && typeof service.approvePoolingVehicle === 'function' ? (
+                    <button
+                      onClick={handleApprove}
+                      disabled={approving}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95 disabled:opacity-60"
+                    >
+                      {approving ? <RefreshCcw size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                      {approving ? 'Approving...' : 'Approve Request'}
+                    </button>
+                  ) : null}
+                  <button
+                    onClick={() => navigate(`${backPath}/edit/${id}`)}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
+                  >
+                    <PencilLine size={18} />
+                    Edit Vehicle
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={handleSubmit}
@@ -467,9 +532,9 @@ const PoolingVehicleForm = ({
                         min="0"
                         max="100"
                         step="0.01"
-                        value={formData.adminCommissionPercentage}
+                        value={numberInputValue(formData.adminCommissionPercentage)}
                         onChange={(e) => setFormData({ ...formData, adminCommissionPercentage: e.target.value })}
-                        placeholder="e.g. 12.5"
+                        placeholder="0"
                         className={inputClass}
                         readOnly={isViewMode}
                       />
@@ -481,9 +546,9 @@ const PoolingVehicleForm = ({
                         min="0"
                         max="100"
                         step="0.01"
-                        value={formData.ownerCommissionPercentage}
+                        value={numberInputValue(formData.ownerCommissionPercentage)}
                         onChange={(e) => setFormData({ ...formData, ownerCommissionPercentage: e.target.value })}
-                        placeholder="e.g. 8"
+                        placeholder="0"
                         className={inputClass}
                         readOnly={isViewMode}
                       />
@@ -495,9 +560,9 @@ const PoolingVehicleForm = ({
                         min="0"
                         max="100"
                         step="0.01"
-                        value={formData.serviceTaxPercentage}
+                        value={numberInputValue(formData.serviceTaxPercentage)}
                         onChange={(e) => setFormData({ ...formData, serviceTaxPercentage: e.target.value })}
-                        placeholder="e.g. 5"
+                        placeholder="0"
                         className={inputClass}
                         readOnly={isViewMode}
                       />
@@ -532,30 +597,11 @@ const PoolingVehicleForm = ({
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       onChange={async (e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        
-                        const reader = new FileReader();
-                        reader.onloadend = async () => {
-                          const base64 = reader.result;
-                          const loadingToast = toast.loading('Uploading image...');
-                          try {
-                            const res = await service.uploadImage(base64);
-                            const imageUrl = res?.data?.url || res?.data?.data?.url || res?.url || '';
-                            if (!imageUrl) {
-                              throw new Error('Upload response missing image URL');
-                            }
-                            setFormData(prev => ({
-                              ...prev,
-                              images: [...prev.images, imageUrl]
-                            }));
-                            toast.success('Image uploaded', { id: loadingToast });
-                          } catch (error) {
-                            toast.error('Upload failed', { id: loadingToast });
-                          }
-                        };
-                        reader.readAsDataURL(file);
+                        const { files } = e.target;
+                        await uploadImages(files);
+                        e.target.value = '';
                       }}
                       className="absolute inset-0 cursor-pointer opacity-0"
                       id="vehicle-image-upload"
@@ -574,12 +620,19 @@ const PoolingVehicleForm = ({
               <div className="grid grid-cols-3 gap-3">
                 {formData.images.map((img, idx) => (
                   <div key={idx} className="group relative aspect-square overflow-hidden rounded-2xl bg-slate-100 border border-slate-200 shadow-sm">
-                    <img src={img} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage(img)}
+                      aria-label="View image"
+                      className="block h-full w-full cursor-zoom-in"
+                    >
+                      <img src={img} alt="" className="h-full w-full object-cover" />
+                    </button>
                     {!isViewMode ? (
                       <button
                         type="button"
                         onClick={() => removeImage(idx)}
-                        className="absolute right-2 top-2 rounded-lg bg-rose-500 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 shadow-lg"
+                        className="absolute right-2 top-2 rounded-lg bg-rose-500 p-1.5 text-white transition-opacity lg:opacity-0 lg:group-hover:opacity-100 shadow-lg"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -703,6 +756,29 @@ const PoolingVehicleForm = ({
           </div>
         ) : null}
       </div>
+      {previewImage ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewImage('')}
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 p-4"
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewImage('')}
+            aria-label="Close"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={previewImage}
+            alt="Vehicle"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] max-w-[95vw] rounded-2xl object-contain shadow-2xl"
+          />
+        </div>
+      ) : null}
     </div>
   );
 };
