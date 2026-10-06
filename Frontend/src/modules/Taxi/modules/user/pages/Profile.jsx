@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useNavigationType } from 'react-router-dom';
+import { useNavigate, useNavigationType, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
-  MapPin, Star, Package, Gift, Tag, Check, BusFront,
+  MapPin, Star, Package, Gift, Tag, Check, BusFront, ArrowLeft,
   CreditCard, History, Phone, Palette, Settings
 } from 'lucide-react';
 // ... removed BottomNavbar import ...
@@ -95,6 +95,12 @@ const menuSections = [
 
 const Profile = () => {
   const navigate = useNavigate();
+  const routerLocation = useLocation();
+  // Back to the screen Profile was opened from; opened directly: Home.
+  const goBack = () => {
+    if (routerLocation.key !== 'default') navigate(-1);
+    else navigate('/taxi/user');
+  };
   const navType = useNavigationType();
   const { theme } = useUserTheme();
   const referralEnabled = useReferralEnabled();
@@ -330,7 +336,16 @@ const Profile = () => {
       <div className="relative z-10">
         {/* Header Section */}
         <div className="px-4 pt-8 pb-8">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3 mb-8">
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label="Back"
+              className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full border active:scale-95 transition-transform"
+              style={{ backgroundColor: 'var(--user-card-bg)', borderColor: 'var(--user-border)', color: 'var(--user-text-primary)' }}
+            >
+              <ArrowLeft size={20} strokeWidth={2.5} />
+            </button>
             <h1 className="font-['Outfit'] text-2xl font-extrabold text-[var(--user-text-primary)] tracking-tight">Profile</h1>
           </div>
 
@@ -338,7 +353,7 @@ const Profile = () => {
           <MotionDiv
             initial={false}
             animate={{ opacity: 1, scale: 1 }}
-            className="rounded-[24px] p-5 border transition-all duration-300 animate-fade-in"
+            className="rounded-[24px] p-5 border"
             style={{
               backgroundColor: 'var(--user-card-bg)',
               borderColor: 'var(--user-border)',

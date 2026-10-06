@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Bell, Trash2, Tag, ShieldCheck, Star, AlertCircle, RefreshCw, Megaphone, CheckCircle2 } from 'lucide-react';
 // ... removed BottomNavbar import ...
@@ -52,6 +52,13 @@ const SkeletonCard = () => (
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const routerLocation = useLocation();
+  // Back goes to the screen the bell was tapped on (Home, Profile ...), not always to Profile. Opened directly
+  // (no screen before it in this tab): Home.
+  const goBack = () => {
+    if (routerLocation.key !== 'default') navigate(-1);
+    else navigate('/taxi/user');
+  };
   // The last list seen shows at once (and its count); it is refreshed in the background. Nothing seen yet -> skeletons.
   const [serverNotifications, setServerNotifications] = useState(() => {
     const remembered = recallLastKnown(NOTIFICATIONS_KEY);
@@ -162,7 +169,7 @@ const Notifications = () => {
       {/* Header */}
       <header className={`backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b transition-colors duration-300 ${isDark ? 'bg-slate-900/90 border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.3)]' : 'bg-white/90 border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]'}`}>
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/taxi/user/profile')} className={`w-9 h-9 rounded-[12px] border flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer ${isDark ? 'border-slate-800 bg-slate-950 text-white' : 'border-white/80 bg-white/90 text-slate-900'}`}>
+          <button onClick={goBack} className={`w-9 h-9 rounded-[12px] border flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer ${isDark ? 'border-slate-800 bg-slate-950 text-white' : 'border-white/80 bg-white/90 text-slate-900'}`}>
             <ArrowLeft size={18} className={isDark ? 'text-white' : 'text-slate-900'} strokeWidth={2.5} />
           </button>
           <div className="flex-1 min-w-0">

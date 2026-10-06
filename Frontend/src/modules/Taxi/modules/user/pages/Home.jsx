@@ -1557,36 +1557,9 @@ const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
     });
   }, []);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.03,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, scale: 0.85 },
-    show: {
-      opacity: 1,
-      scale: 1,
-      transition: {
-        type: 'spring',
-        stiffness: 300,
-        damping: 20,
-      },
-    },
-  };
-
   return (
-    <div className="all-services-backdrop flex items-center justify-center animate-fade-in" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
+    <div className="all-services-backdrop flex items-center justify-center" onClick={onClose}>
+      <div
         onClick={(e) => e.stopPropagation()}
         className="all-services-sheet flex flex-col"
         style={{ color: 'var(--user-text-primary)', boxShadow: '0 20px 56px rgba(8,12,20,0.4)' }}
@@ -1607,16 +1580,11 @@ const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
 
         {/* Services grid — 4 across */}
         <div className="flex-1 overflow-y-auto mt-5 no-scrollbar">
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-4 gap-y-5 gap-x-2"
-          >
+          <div className="grid grid-cols-4 gap-y-5 gap-x-2">
             {services.map((service, index) => {
               const { icon, label, hasImage } = service;
               return (
-                <motion.div key={index} variants={itemVariants} className="flex justify-center">
+                <div key={index} className="flex justify-center">
                   <button
                     type="button"
                     onClick={() => {
@@ -1631,12 +1599,12 @@ const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
                       {label}
                     </span>
                   </button>
-                </motion.div>
+                </div>
               );
             })}
-          </motion.div>
+          </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
