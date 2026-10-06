@@ -108,3 +108,8 @@
   border-color: color-mix(in srgb, var(--rt-primary) 55%, #ffffff) !important;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rt-primary) 15%, transparent) !important;
 }
+
+/* Desktop panel: mobile pages that are shown inside the dashboard frame must not draw their phone bottom bar. */
+.rt-legacy-frame [data-rt-bottom-nav] {
+  display: none !important;
+}

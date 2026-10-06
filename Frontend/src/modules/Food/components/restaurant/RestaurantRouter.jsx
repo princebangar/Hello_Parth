@@ -6,6 +6,7 @@ import Loader from "@food/components/Loader"
 import { OnboardingSkeleton } from "@food/components/ui/loading-skeletons"
 import PolicyPageLoader from "@/shared/components/PolicyPageLoader"
 import { isPolicyPath } from "@/shared/utils/policyPaths"
+import useDesktopLayout from "@food/pages/restaurant/desktop/useDesktopLayout"
 import "./restaurantTheme.css"
 import { toast } from "sonner"
 
@@ -48,6 +49,35 @@ const ManageOutlets = lazy(() => import("@food/pages/restaurant/ManageOutlets"))
 const UpdateBankDetails = lazy(() => import("@food/pages/restaurant/UpdateBankDetails"))
 const ZoneSetup = lazy(() => import("@food/pages/restaurant/ZoneSetup"))
 const DiningReservations = lazy(() => import("@food/pages/restaurant/DiningReservations"))
+
+// Laptop / desktop dashboard (the phone + Flutter app keep the mobile pages above)
+const DesktopShell = lazy(() => import("@food/pages/restaurant/desktop/DesktopShell"))
+const DesktopDashboard = lazy(() => import("@food/pages/restaurant/desktop/DesktopDashboard"))
+const DesktopOrders = lazy(() => import("@food/pages/restaurant/desktop/DesktopOrders"))
+const DesktopNotifications = lazy(() => import("@food/pages/restaurant/desktop/DesktopNotifications"))
+const DesktopInventory = lazy(() => import("@food/pages/restaurant/desktop/DesktopInventory"))
+const DesktopItemEditor = lazy(() => import("@food/pages/restaurant/desktop/DesktopItemEditor"))
+const DesktopEarnings = lazy(() => import("@food/pages/restaurant/desktop/DesktopEarnings"))
+const DesktopReviews = lazy(() => import("@food/pages/restaurant/desktop/DesktopReviews"))
+const DesktopReservations = lazy(() => import("@food/pages/restaurant/desktop/DesktopReservations"))
+const DesktopSupport = lazy(() => import("@food/pages/restaurant/desktop/DesktopSupport"))
+const DesktopSettings = lazy(() => import("@food/pages/restaurant/desktop/DesktopSettings"))
+const DesktopAccount = lazy(() => import("@food/pages/restaurant/desktop/DesktopAccount"))
+const DesktopOutletInfo = lazy(() => import("@food/pages/restaurant/desktop/DesktopOutletInfo"))
+const DesktopTimings = lazy(() => import("@food/pages/restaurant/desktop/DesktopTimings"))
+const DesktopProfile = lazy(() => import("@food/pages/restaurant/desktop/DesktopProfile"))
+const DesktopOnlineStatus = lazy(() => import("@food/pages/restaurant/desktop/DesktopOnlineStatus"))
+const DesktopReport = lazy(() => import("@food/pages/restaurant/desktop/DesktopReport"))
+const DesktopShareFeedback = lazy(() => import("@food/pages/restaurant/desktop/DesktopShareFeedback"))
+const DesktopZoneSetup = lazy(() => import("@food/pages/restaurant/desktop/DesktopZoneSetup"))
+
+function DesktopLayoutSwitch() {
+  return useDesktopLayout() ? <DesktopShell /> : <Outlet />
+}
+
+function Responsive({ desktop, mobile }) {
+  return useDesktopLayout() ? desktop : mobile
+}
 
 const Login = lazy(() => import("@food/pages/restaurant/auth/Login"))
 const OTP = lazy(() => import("@food/pages/restaurant/auth/OTP"))
@@ -114,42 +144,52 @@ export default function RestaurantRouter() {
         {/* Protected Routes */}
         <Route element={
           <ProtectedRoute requiredRole="restaurant" loginPath="/food/restaurant/login">
-            <Outlet />
+            <DesktopLayoutSwitch />
           </ProtectedRoute>
         }>
-          <Route path="" element={<OrdersMain />} />
-          <Route path="orders/all" element={<AllOrdersPage />} />
-          <Route path="orders/:id" element={<OrderDetails />} />
-          <Route path="notifications" element={<RestaurantNotifications />} />
-          <Route path="delivery-settings" element={<DeliverySettings />} />
-          <Route path="rush-hour" element={<RushHour />} />
-          <Route path="menu-categories" element={<MenuCategoriesPage />} />
-          <Route path="status" element={<RestaurantStatus />} />
-          <Route path="explore" element={<ExploreMore />} />
-          <Route path="outlet-timings" element={<OutletTimings />} />
-          <Route path="outlet-timings/:day" element={<DaySlots />} />
-          <Route path="outlet-info" element={<OutletInfo />} />
-          <Route path="ratings-reviews" element={<RatingsReviews />} />
-          <Route path="edit-owner" element={<EditOwner />} />
-          <Route path="edit-cuisines" element={<EditCuisines />} />
-          <Route path="edit-address" element={<EditRestaurantAddress />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="feedback" element={<Feedback />} />
-          <Route path="share-feedback" element={<ShareFeedback />} />
-          <Route path="dish-ratings" element={<DishRatings />} />
-          <Route path="fssai" element={<FssaiDetails />} />
-          <Route path="fssai/update" element={<FssaiUpdate />} />
-          <Route path="hyperpure" element={<Hyperpure />} />
-          <Route path="hub-menu/item/:id" element={<ItemDetailsPage />} />
-          <Route path="hub-finance" element={<HubFinance />} />
-          <Route path="withdrawal-history" element={<WithdrawalHistoryPage />} />
-          <Route path="finance-details" element={<FinanceDetailsPage />} />
-          <Route path="phone" element={<PhoneNumbersPage />} />
-          <Route path="download-report" element={<DownloadReport />} />
-          <Route path="manage-outlets" element={<ManageOutlets />} />
-          <Route path="update-bank-details" element={<UpdateBankDetails />} />
-          <Route path="reservations" element={<DiningReservations />} />
-          <Route path="zone-setup" element={<ZoneSetup />} />
+          {/* Dashboard + the screens that have a real desktop layout. Phone / app keep the original mobile pages. */}
+          <Route path="" element={<Responsive desktop={<DesktopDashboard />} mobile={<OrdersMain />} />} />
+          <Route path="orders" element={<Responsive desktop={<DesktopOrders />} mobile={<OrdersMain />} />} />
+          <Route path="orders/all" element={<Responsive desktop={<Navigate to="/food/restaurant/orders?tab=all" replace />} mobile={<AllOrdersPage />} />} />
+          <Route path="orders/:id" element={<Responsive desktop={<DesktopOrders />} mobile={<OrderDetails />} />} />
+          <Route path="notifications" element={<Responsive desktop={<DesktopNotifications />} mobile={<RestaurantNotifications />} />} />
+          <Route path="inventory" element={<Responsive desktop={<DesktopInventory />} mobile={<Inventory />} />} />
+          <Route path="inventory/item/:id" element={<Responsive desktop={<DesktopItemEditor />} mobile={<ItemDetailsPage />} />} />
+          <Route path="hub-menu/item/:id" element={<Responsive desktop={<DesktopItemEditor />} mobile={<ItemDetailsPage />} />} />
+          <Route path="menu" element={<Responsive desktop={<Navigate to="/food/restaurant/inventory" replace />} mobile={<Inventory />} />} />
+          <Route path="menu-categories" element={<Responsive desktop={<Navigate to="/food/restaurant/inventory?tab=categories" replace />} mobile={<MenuCategoriesPage />} />} />
+          <Route path="earnings" element={<Responsive desktop={<DesktopEarnings />} mobile={<HubFinance />} />} />
+          <Route path="hub-finance" element={<Responsive desktop={<Navigate to="/food/restaurant/earnings" replace />} mobile={<HubFinance />} />} />
+          <Route path="finance-details" element={<Responsive desktop={<Navigate to="/food/restaurant/earnings" replace />} mobile={<FinanceDetailsPage />} />} />
+          <Route path="withdrawal-history" element={<Responsive desktop={<Navigate to="/food/restaurant/earnings" replace />} mobile={<WithdrawalHistoryPage />} />} />
+          <Route path="reviews" element={<Responsive desktop={<DesktopReviews />} mobile={<Feedback />} />} />
+          <Route path="feedback" element={<Responsive desktop={<DesktopReviews />} mobile={<Feedback />} />} />
+          <Route path="ratings-reviews" element={<Responsive desktop={<DesktopReviews />} mobile={<RatingsReviews />} />} />
+          <Route path="dish-ratings" element={<Responsive desktop={<Navigate to="/food/restaurant/reviews" replace />} mobile={<DishRatings />} />} />
+          <Route path="share-feedback" element={<Responsive desktop={<DesktopShareFeedback />} mobile={<ShareFeedback />} />} />
+          <Route path="Share-Feedback" element={<Responsive desktop={<DesktopShareFeedback />} mobile={<ShareFeedback />} />} />
+          <Route path="reservations" element={<Responsive desktop={<DesktopReservations />} mobile={<DiningReservations />} />} />
+          <Route path="support" element={<Responsive desktop={<DesktopSupport />} mobile={<RestaurantSupport />} />} />
+          <Route path="settings" element={<Responsive desktop={<DesktopSettings />} mobile={<ExploreMore />} />} />
+          <Route path="explore" element={<Responsive desktop={<Navigate to="/food/restaurant/settings" replace />} mobile={<ExploreMore />} />} />
+          <Route path="account" element={<Responsive desktop={<DesktopAccount />} mobile={<Navigate to="/food/restaurant" replace />} />} />
+          <Route path="outlet-info" element={<Responsive desktop={<DesktopOutletInfo />} mobile={<OutletInfo />} />} />
+          <Route path="outlet-timings" element={<Responsive desktop={<DesktopTimings />} mobile={<OutletTimings />} />} />
+          <Route path="outlet-timings/:day" element={<Responsive desktop={<Navigate to="/food/restaurant/outlet-timings" replace />} mobile={<DaySlots />} />} />
+          <Route path="edit-owner" element={<Responsive desktop={<DesktopProfile defaultTab="owner" />} mobile={<EditOwner />} />} />
+          <Route path="phone" element={<Responsive desktop={<DesktopProfile defaultTab="owner" />} mobile={<PhoneNumbersPage />} />} />
+          <Route path="edit-address" element={<Responsive desktop={<DesktopProfile defaultTab="address" />} mobile={<EditRestaurantAddress />} />} />
+          <Route path="edit-cuisines" element={<Responsive desktop={<DesktopProfile defaultTab="cuisines" />} mobile={<EditCuisines />} />} />
+          <Route path="fssai" element={<Responsive desktop={<DesktopProfile defaultTab="business" />} mobile={<FssaiDetails />} />} />
+          <Route path="fssai/update" element={<Responsive desktop={<DesktopProfile defaultTab="business" />} mobile={<FssaiUpdate />} />} />
+          <Route path="update-bank-details" element={<Responsive desktop={<DesktopProfile defaultTab="bank" />} mobile={<UpdateBankDetails />} />} />
+          <Route path="delivery-settings" element={<Responsive desktop={<DesktopOnlineStatus />} mobile={<DeliverySettings />} />} />
+          <Route path="status" element={<Responsive desktop={<DesktopOnlineStatus />} mobile={<RestaurantStatus />} />} />
+          <Route path="rush-hour" element={<Responsive desktop={<Navigate to="/food/restaurant/settings" replace />} mobile={<RushHour />} />} />
+          <Route path="download-report" element={<Responsive desktop={<DesktopReport />} mobile={<DownloadReport />} />} />
+          <Route path="hyperpure" element={<Responsive desktop={<Navigate to="/food/restaurant/settings" replace />} mobile={<Hyperpure />} />} />
+          <Route path="manage-outlets" element={<Responsive desktop={<Navigate to="/food/restaurant/settings" replace />} mobile={<ManageOutlets />} />} />
+          <Route path="zone-setup" element={<Responsive desktop={<DesktopZoneSetup />} mobile={<ZoneSetup />} />} />
         </Route>
         <Route path="onboarding" element={<RestaurantOnboarding />} />
         

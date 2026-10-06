@@ -41,6 +41,8 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
+    // Screenshots / logs written by local browser test scripts must never trigger a reload of the dev page.
+    watch: { ignored: ['**/.claude-test/**'] },
     proxy: {
       // Backend API (default 5000)
       '/api/v1': {

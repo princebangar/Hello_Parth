@@ -44,6 +44,7 @@ import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo";
 import { adminAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import useAdminNotifications from "@food/hooks/useAdminNotifications";
+import AdminThemeToggle from "@/shared/components/AdminThemeToggle";
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -278,6 +279,7 @@ export default function AdminNavbar({ onMenuClick }) {
 
           {/* Right: User Profile */}
           <div className="flex items-center gap-3">
+            <AdminThemeToggle scope="food" />
             <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
               <PopoverTrigger asChild>
                 <button

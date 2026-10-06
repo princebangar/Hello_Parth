@@ -400,7 +400,6 @@ export default function UnifiedOTPFastLogin() {
       } catch (fcmSaveError) {
         console.warn("[Auth] FCM save route failed after login:", fcmSaveError?.message || fcmSaveError)
       }
-      toast.success("Authentication successful!")
       consumeLoginReturnTo()
       const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
       const fromHint = String(location.state?.from || "").split("?")[0]
@@ -467,7 +466,6 @@ export default function UnifiedOTPFastLogin() {
 
       setUnifiedAuthData(nextData)
       writePhoneDraft("")
-      toast.success("Profile completed successfully!")
       consumeLoginReturnTo()
       const postLoginTo = String(location.state?.postLoginTo || "").split("?")[0]
       const fromHint = String(location.state?.from || "").split("?")[0]
@@ -513,7 +511,6 @@ export default function UnifiedOTPFastLogin() {
       const response = await authAPI.recoverAccount(deletedAccountRecovery.recoveryToken)
       const data = response?.data?.data || response?.data || {}
       setUnifiedAuthData(data)
-      toast.success("Welcome back! Your account has been recovered.")
       goToPostLoginRoute()
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Failed to recover account."
@@ -548,7 +545,6 @@ export default function UnifiedOTPFastLogin() {
       const response = await authAPI.startFreshAccount(deletedAccountRecovery.recoveryToken, trimmedName)
       const data = response?.data?.data || response?.data || {}
       setUnifiedAuthData(data)
-      toast.success("Account created!")
       goToPostLoginRoute()
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Failed to create account."

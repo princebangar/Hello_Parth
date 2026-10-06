@@ -1,0 +1,199 @@
+/*
+ * Dark theme for the restaurant desktop panel only (the phone / app UI never gets the .rt-dark class).
+ * The desktop pages are written with a fixed light palette (white / slate / tinted -50 backgrounds), so dark mode
+ * re-maps exactly those utilities inside .rt-dark. Unlayered rules beat Tailwind's layered utilities.
+ */
+
+.rt-dark {
+  color-scheme: dark;
+  --rt-bg: #09090b;
+  --rt-surface: #131316;
+  --rt-surface-2: #1a1a1e;
+  --rt-surface-3: #232328;
+  --rt-line: #2c2c32;
+  --rt-line-soft: #212126;
+  --rt-text: #ededf0;
+}
+
+/* surfaces */
+.rt-dark.bg-\[\#f6f7f9\],
+.rt-dark .bg-\[\#f6f7f9\] { background-color: var(--rt-bg) !important; }
+.rt-dark .bg-white { background-color: var(--rt-surface); }
+.rt-dark .bg-slate-50,
+.rt-dark .bg-slate-50\/70 { background-color: var(--rt-surface-2); }
+.rt-dark .bg-slate-100 { background-color: var(--rt-surface-3); }
+.rt-dark .bg-slate-200 { background-color: #2e2e34; }
+.rt-dark .bg-slate-300 { background-color: #3f3f47; }
+.rt-dark .bg-slate-400 { background-color: #62626d; }
+.rt-dark .hover\:bg-white:hover { background-color: var(--rt-surface-2); }
+.rt-dark .hover\:bg-slate-50:hover { background-color: var(--rt-surface-2); }
+.rt-dark .hover\:bg-slate-100:hover { background-color: var(--rt-surface-3); }
+.rt-dark .from-slate-200 { --tw-gradient-from: #26262b; }
+.rt-dark .to-slate-100 { --tw-gradient-to: #1a1a1e; }
+.rt-dark .disabled\:bg-slate-50:disabled { background-color: var(--rt-surface-2); }
+
+/* the white pill used for the active segment of tab switchers keeps good contrast */
+.rt-dark .bg-slate-100 > .bg-white,
+.rt-dark .bg-slate-100 > button.bg-white { background-color: #34343b; color: #fff; }
+
+/* borders, dividers, rings */
+.rt-dark .border-slate-50 { border-color: var(--rt-line-soft); }
+.rt-dark .border-slate-100 { border-color: var(--rt-line-soft); }
+.rt-dark .border-slate-200,
+.rt-dark .border-slate-200\/80 { border-color: var(--rt-line); }
+.rt-dark .border-slate-300 { border-color: #3a3a42; }
+.rt-dark .border-white { border-color: var(--rt-surface); }
+.rt-dark .hover\:border-slate-200:hover,
+.rt-dark .hover\:border-slate-300:hover { border-color: #45454e; }
+.rt-dark .divide-slate-100 > :not(:last-child) { border-color: var(--rt-line-soft); }
+.rt-dark .ring-slate-200,
+.rt-dark .ring-slate-200\/80 { --tw-ring-color: var(--rt-line); }
+
+/* text */
+.rt-dark .text-slate-900,
+.rt-dark .hover\:text-slate-900:hover { color: #f4f4f6; }
+.rt-dark .text-slate-800,
+.rt-dark .hover\:text-slate-800:hover { color: #e4e4e8; }
+.rt-dark .text-slate-700,
+.rt-dark .hover\:text-slate-700:hover { color: #cacad2; }
+.rt-dark .text-slate-600 { color: #b4b4bd; }
+.rt-dark .text-slate-500,
+.rt-dark .group-hover\:text-slate-500 { color: #9a9aa6; }
+.rt-dark .text-slate-400,
+.rt-dark .disabled\:text-slate-400:disabled,
+.rt-dark .disabled\:text-slate-500:disabled { color: #767682; }
+.rt-dark .text-slate-300 { color: #52525c; }
+.rt-dark .text-slate-200 { color: #3a3a42; }
+.rt-dark .text-\[\#B80B3D\] { color: #ff6b8f; }
+.rt-dark .placeholder\:text-slate-400::placeholder,
+.rt-dark input::placeholder,
+.rt-dark textarea::placeholder { color: #6f6f7b; }
+
+/* tinted backgrounds: soft translucent colour instead of pastel */
+.rt-dark .bg-rose-50, .rt-dark .bg-rose-50\/60, .rt-dark .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.13); }
+.rt-dark .bg-rose-100, .rt-dark .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, 0.22); }
+.rt-dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.15); }
+.rt-dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.15); }
+.rt-dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14); }
+.rt-dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.24); }
+.rt-dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.17); }
+.rt-dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.15); }
+.rt-dark .bg-cyan-50 { background-color: rgba(6, 182, 212, 0.15); }
+.rt-dark .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.18); }
+.rt-dark .bg-teal-50 { background-color: rgba(20, 184, 166, 0.15); }
+.rt-dark .bg-pink-50 { background-color: rgba(236, 72, 153, 0.15); }
+.rt-dark .bg-lime-50 { background-color: rgba(132, 204, 22, 0.14); }
+.rt-dark .bg-sky-50 { background-color: rgba(14, 165, 233, 0.15); }
+
+.rt-dark .text-rose-500, .rt-dark .text-rose-600, .rt-dark .hover\:text-rose-600:hover { color: #fb7185; }
+.rt-dark .text-rose-700, .rt-dark .text-rose-800 { color: #fda4af; }
+.rt-dark .text-emerald-600 { color: #34d399; }
+.rt-dark .text-emerald-700, .rt-dark .text-emerald-800 { color: #6ee7b7; }
+.rt-dark .text-amber-400, .rt-dark .text-amber-500, .rt-dark .text-amber-600 { color: #fbbf24; }
+.rt-dark .text-amber-700, .rt-dark .text-amber-800, .rt-dark .text-amber-900 { color: #fcd34d; }
+.rt-dark .text-blue-600 { color: #60a5fa; }
+.rt-dark .text-blue-700, .rt-dark .text-blue-800, .rt-dark .text-blue-900 { color: #93c5fd; }
+.rt-dark .text-violet-600 { color: #a78bfa; }
+.rt-dark .text-orange-500, .rt-dark .text-orange-600, .rt-dark .text-orange-700 { color: #fb923c; }
+.rt-dark .text-cyan-600 { color: #22d3ee; }
+.rt-dark .text-indigo-500, .rt-dark .text-indigo-600 { color: #818cf8; }
+.rt-dark .text-teal-600 { color: #2dd4bf; }
+.rt-dark .text-pink-600 { color: #f472b6; }
+.rt-dark .text-lime-700 { color: #a3e635; }
+.rt-dark .text-sky-600 { color: #38bdf8; }
+
+.rt-dark .border-rose-100, .rt-dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
+.rt-dark .border-blue-100 { border-color: rgba(59, 130, 246, 0.3); }
+.rt-dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.4); }
+.rt-dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.4); }
+.rt-dark .ring-emerald-200 { --tw-ring-color: rgba(16, 185, 129, 0.4); }
+.rt-dark .ring-amber-200 { --tw-ring-color: rgba(245, 158, 11, 0.4); }
+.rt-dark .ring-rose-200 { --tw-ring-color: rgba(244, 63, 94, 0.4); }
+.rt-dark .ring-blue-200 { --tw-ring-color: rgba(59, 130, 246, 0.4); }
+.rt-dark .ring-orange-200 { --tw-ring-color: rgba(249, 115, 22, 0.4); }
+.rt-dark .focus\:ring-rose-50:focus { --tw-ring-color: rgba(244, 63, 94, 0.2); }
+
+/* form controls */
+.rt-dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.rt-dark select,
+.rt-dark textarea {
+  background-color: #0d0d10;
+  color: var(--rt-text);
+  border-color: #34343b;
+}
+.rt-dark select option { background-color: #131316; color: var(--rt-text); }
+.rt-dark kbd { background-color: var(--rt-surface-2); border-color: var(--rt-line); color: #9a9aa6; }
+
+/* charts */
+.rt-dark .recharts-cartesian-grid line { stroke: #26262b; }
+.rt-dark .recharts-cursor { stroke: #3a3a42; fill: rgba(148, 163, 184, 0.08); }
+.rt-dark .recharts-pie-sector path { stroke: none; }
+
+/* scrollbars */
+.rt-dark *::-webkit-scrollbar { width: 10px; height: 10px; }
+.rt-dark *::-webkit-scrollbar-thumb { background: #34343b; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+.rt-dark *::-webkit-scrollbar-track { background: transparent; }
+
+/* elevated surfaces: a little more depth than the light theme */
+.rt-dark [class*="shadow-xl"], .rt-dark [class*="shadow-2xl"] { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55); }
+
+/* ---- smooth theme switch: circular reveal that grows from the bottom-left corner ---- */
+.rt-theme-transition::view-transition-old(root),
+.rt-theme-transition::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+.rt-theme-transition::view-transition-old(root) { z-index: 1; }
+.rt-theme-transition::view-transition-new(root) { z-index: 2; }
+
+/* the theme button itself: sun / moon swap */
+.rt-theme-icon { transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease; }
+
+/* ---- phone screens embedded as-is inside the panel (Zone setup map picker) ---- */
+.rt-embed > div > :first-child { display: none; }
+.rt-embed > div { min-height: 0 !important; background: transparent !important; }
+.rt-dark .rt-embed .bg-gray-50 { background-color: var(--rt-surface-2); }
+.rt-dark .rt-embed .bg-white { background-color: var(--rt-surface); }
+.rt-dark .rt-embed .border-gray-200, .rt-dark .rt-embed .border-gray-100 { border-color: var(--rt-line); }
+.rt-dark .rt-embed .text-gray-900 { color: #f4f4f6; }
+.rt-dark .rt-embed .text-gray-700 { color: #cacad2; }
+.rt-dark .rt-embed .text-gray-600, .rt-dark .rt-embed .text-gray-500 { color: #9a9aa6; }
+.rt-dark .rt-embed .hover\:bg-gray-100:hover { background-color: var(--rt-surface-3); }
+
+/* ---- the old mobile theme (restaurantTheme.css) recolours every amber/orange utility to the brand pink ----
+   The desktop panel uses amber/orange as real status colours, so restore them (light + dark). ---- */
+.restaurant-theme .rt-root .bg-amber-50 { background-color: #fffbeb !important; }
+.restaurant-theme .rt-root .bg-orange-50 { background-color: #fff7ed !important; }
+.restaurant-theme .rt-root .bg-amber-500 { background-color: #f59e0b !important; }
+.restaurant-theme .rt-root .text-amber-500 { color: #f59e0b !important; }
+.restaurant-theme .rt-root .text-amber-600 { color: #d97706 !important; }
+.restaurant-theme .rt-root .text-amber-700 { color: #b45309 !important; }
+.restaurant-theme .rt-root .text-orange-500 { color: #f97316 !important; }
+.restaurant-theme .rt-root .text-orange-600 { color: #ea580c !important; }
+.restaurant-theme .rt-root .text-orange-700 { color: #c2410c !important; }
+.restaurant-theme .rt-root.rt-dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14) !important; }
+.restaurant-theme .rt-root.rt-dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.15) !important; }
+.restaurant-theme .rt-root.rt-dark .text-amber-500,
+.restaurant-theme .rt-root.rt-dark .text-amber-600 { color: #fbbf24 !important; }
+.restaurant-theme .rt-root.rt-dark .text-amber-700 { color: #fcd34d !important; }
+.restaurant-theme .rt-root.rt-dark .text-orange-500,
+.restaurant-theme .rt-root.rt-dark .text-orange-600,
+.restaurant-theme .rt-root.rt-dark .text-orange-700 { color: #fb923c !important; }
+
+/* the root element itself carries the text colour, and switch thumbs must stay white */
+.rt-dark.text-slate-900 { color: #f4f4f6; }
+.rt-dark .bg-white.shadow.rounded-full { background-color: #fff; }
+.restaurant-theme .rt-root .text-emerald-700 { color: #047857 !important; }
+.restaurant-theme .rt-root.rt-dark .text-emerald-700 { color: #6ee7b7 !important; }
+
+/* no colour transitions while the theme is being switched (keeps the switch instant) */
+.rt-no-transition *, .rt-no-transition *::before, .rt-no-transition *::after { transition: none !important; animation-duration: 0s !important; }
+
+/* inputs that draw their own frame (search box) must not get the old mobile theme's pink focus box */
+.restaurant-theme .rt-bare:focus,
+.restaurant-theme .rt-bare:focus-visible { outline: none !important; box-shadow: none !important; border-color: transparent !important; }
+
+.rt-root .rt-icon-sun { transform: rotate(90deg) scale(0); opacity: 0; }
+.rt-root .rt-icon-moon { transform: rotate(0) scale(1); opacity: 1; }
+.rt-root.rt-dark .rt-icon-sun { transform: rotate(0) scale(1); opacity: 1; }
+.rt-root.rt-dark .rt-icon-moon { transform: rotate(-90deg) scale(0); opacity: 0; }

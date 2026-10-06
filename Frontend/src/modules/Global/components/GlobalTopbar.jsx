@@ -5,6 +5,7 @@ import { GLOBAL_ADMIN_HOME } from "@/shared/utils/activeModule.js"
 import { isPlatformAdmin, readAdminProfile } from "@/shared/utils/adminAccess.js"
 import { getGlobalPageTitle } from "../constants/globalMenu"
 import { signOutAdmin } from "../utils/adminSession"
+import AdminThemeToggle from "@/shared/components/AdminThemeToggle"
 
 export default function GlobalTopbar({ onMenuClick }) {
   const location = useLocation()
@@ -56,6 +57,8 @@ export default function GlobalTopbar({ onMenuClick }) {
         </div>
       </div>
 
+      <div className="flex items-center gap-2">
+      <AdminThemeToggle scope="global" />
       <div className="relative" ref={menuRef}>
         <button
           type="button"
@@ -101,6 +104,7 @@ export default function GlobalTopbar({ onMenuClick }) {
             </button>
           </div>
         )}
+      </div>
       </div>
     </header>
   )

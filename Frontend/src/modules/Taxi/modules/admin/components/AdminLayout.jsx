@@ -62,6 +62,7 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { DEFAULT_BRAND_LOGO } from '@/shared/constants/brandLogo';
+import AdminThemeToggle from '@/shared/components/AdminThemeToggle';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -1743,6 +1744,7 @@ const AdminLayout = () => {
 
           <div className="flex items-center gap-3">
             <ModeSwitcher mode={mode} setMode={setMode} />
+            <AdminThemeToggle scope="taxi" />
 
             <div className="mr-1 flex items-center gap-1 border-r border-gray-100 pr-4 leading-none">
               <button
