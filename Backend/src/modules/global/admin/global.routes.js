@@ -5,6 +5,8 @@ import * as customerController from './globalCustomer.controller.js';
 import * as otherServiceController from '../landing/otherService.controller.js';
 import * as pageContentController from './globalPageContent.controller.js';
 import * as customizationController from './globalCustomization.controller.js';
+import * as businessSettingsController from '../../food/admin/controllers/businessSettings.controller.js';
+import { upload } from '../../../middleware/upload.js';
 
 const router = express.Router();
 
@@ -39,6 +41,15 @@ router.patch('/customization/app-switches', requireGlobalAccess({ section: 'cust
 router.patch('/customization/referral', requireGlobalAccess({ section: 'customization', action: 'edit' }), customizationController.updateReferral);
 
 // Landing page "Other Service" cards (public site content, admin-managed).
+// Business Setup (company name, logo, favicon, contact) — shared by Food and Taxi
+router.get('/business-setup', requireGlobalAccess({ section: 'businessSetup', action: 'view' }), businessSettingsController.getBusinessSettings);
+router.patch(
+  '/business-setup',
+  requireGlobalAccess({ section: 'businessSetup', action: 'edit' }),
+  upload.fields([{ name: 'logo', maxCount: 1 }, { name: 'favicon', maxCount: 1 }]),
+  businessSettingsController.updateBusinessSettings
+);
+
 router.get('/landing/other-services', requireGlobalAccess({ section: 'landing', action: 'view' }), otherServiceController.listOtherServices);
 router.post('/landing/other-services', requireGlobalAccess({ section: 'landing', action: 'create' }), otherServiceController.createOtherService);
 router.patch('/landing/other-services/:id', requireGlobalAccess({ section: 'landing', action: 'edit' }), otherServiceController.updateOtherService);

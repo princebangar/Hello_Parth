@@ -12,6 +12,7 @@ export const GLOBAL_PERMISSION_SECTIONS = [
   { key: 'pagesSocialMedia', label: 'Pages & Social Media', path: '/admin/global/pages-social-media' },
   { key: 'referrals', label: 'Referral Management', path: '/admin/global/referrals' },
   { key: 'customization', label: 'Customization Settings', path: '/admin/global/customization' },
+  { key: 'businessSetup', label: 'Business Setup', path: '/admin/global/business-setup' },
 ];
 
 export const GLOBAL_SECTION_KEYS = GLOBAL_PERMISSION_SECTIONS.map((section) => section.key);

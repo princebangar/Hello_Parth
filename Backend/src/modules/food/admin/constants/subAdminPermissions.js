@@ -55,7 +55,6 @@ export const SUB_ADMIN_PERMISSION_MODULES = [
   { key: 'dining_list', label: 'Dining List', pathPrefixes: ['/admin/food/dining-list'] },
   { key: 'dining_category_request', label: 'Dining Category Request', pathPrefixes: ['/admin/food/dining-requests'] },
   { key: 'broadcast_notification', label: 'Broadcast Notification', pathPrefixes: ['/admin/food/broadcast-notification'] },
-  { key: 'business_setup', label: 'Business Setup', pathPrefixes: ['/admin/food/business-setup'] },
   { key: 'customization_settings', label: 'Customization Settings', pathPrefixes: ['/admin/food/customization-settings'] },
   { key: 'archived_accounts', label: 'Archived Accounts', pathPrefixes: ['/admin/food/archived-accounts'] },
   { key: 'about_us', label: 'About Us', pathPrefixes: ['/admin/food/pages-social-media/about'] },

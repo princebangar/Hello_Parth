@@ -112,7 +112,7 @@ const EmployeeRole = lazy(() => import("@food/pages/admin/employees/EmployeeRole
 const AddEmployee = lazy(() => import("@food/pages/admin/employees/AddEmployee"));
 const EmployeeList = lazy(() => import("@food/pages/admin/employees/EmployeeList"));
 // Business Settings
-const BusinessSetup = lazy(() => import("@food/pages/admin/settings/BusinessSetup"));
+const GlobalBusinessSetup = lazy(() => import("@/modules/Global/pages/GlobalBusinessSetup"));
 const EmailTemplate = lazy(() => import("@food/pages/admin/settings/EmailTemplate"));
 const ThemeSettings = lazy(() => import("@food/pages/admin/settings/ThemeSettings"));
 const Gallery = lazy(() => import("@food/pages/admin/settings/Gallery"));
@@ -182,6 +182,7 @@ export default function AdminRouter() {
           <Route path="referrals/driver-settings" element={<GlobalSectionRoute section="referrals"><GlobalDriverReferralSettings /></GlobalSectionRoute>} />
           <Route path="referrals/translation" element={<GlobalSectionRoute section="referrals"><GlobalReferralTranslation /></GlobalSectionRoute>} />
           <Route path="customization" element={<GlobalSectionRoute section="customization"><GlobalCustomizationSettings /></GlobalSectionRoute>} />
+          <Route path="business-setup" element={<GlobalSectionRoute section="businessSetup"><GlobalBusinessSetup /></GlobalSectionRoute>} />
           <Route path="sub-admins" element={<GlobalSectionRoute platformOnly><GlobalSubAdmins /></GlobalSectionRoute>} />
           <Route path="sub-admins/:id/access" element={<GlobalSectionRoute platformOnly><GlobalSubAdminAccess /></GlobalSectionRoute>} />
           <Route path="profile" element={<AdminProfile />} />
@@ -313,7 +314,6 @@ export default function AdminRouter() {
             <Route path="employees/add" element={<AddEmployee />} />
 
             {/* SYSTEM & BUSINESS SETTINGS */}
-            <Route path="business-setup" element={<BusinessSetup />} />
             <Route path="email-template" element={<EmailTemplate />} />
             <Route path="theme-settings" element={<ThemeSettings />} />
             <Route path="gallery" element={<Gallery />} />

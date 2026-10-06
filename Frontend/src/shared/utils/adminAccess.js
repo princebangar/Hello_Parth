@@ -44,6 +44,13 @@ export const GLOBAL_SECTIONS = [
     actions: ['view', 'edit'],
     hint: 'Edit = turn Razorpay / PhonePe and the customer Referral system on or off for Food and Taxi',
   },
+  {
+    key: 'businessSetup',
+    label: 'Business Setup',
+    path: `${GLOBAL_ADMIN_HOME}/business-setup`,
+    actions: ['view', 'edit'],
+    hint: 'Edit = change company name, logo, favicon and contact details shown in Food and Taxi',
+  },
 ]
 
 export function readAdminProfile() {

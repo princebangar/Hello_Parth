@@ -491,7 +491,7 @@ function UserLayoutContent() {
             <BrandToastIcon />
             <div className="flex-1 pr-2">
               <p className="text-[14px] font-bold text-gray-800 leading-tight">
-                Restaurants are unavailable here right now.
+                Our services are unavailable here right now.
               </p>
               <p className="text-[13px] font-medium text-gray-500 mt-1">
                 Please choose a different location

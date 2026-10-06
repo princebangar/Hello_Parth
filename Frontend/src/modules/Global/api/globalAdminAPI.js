@@ -1,4 +1,5 @@
 import apiClient from "@food/api/axios"
+import { prepareUploadFile } from "@/shared/utils/imageCompressor.js"
 import { getPageCache, setPageCache } from "@/shared/utils/pageCache.js"
 
 const admin = { contextModule: "admin" }
@@ -27,6 +28,18 @@ export const globalAdminAPI = {
   updatePaymentGateways: (body) => apiClient.patch("/admin/global/customization/payment-gateways", body, admin),
   updateAppSwitches: (body) => apiClient.patch("/admin/global/customization/app-switches", body, admin),
   updateReferral: (enabled) => apiClient.patch("/admin/global/customization/referral", { enabled }, admin),
+
+  getBusinessSettings: () => apiClient.get("/admin/global/business-setup", admin),
+  updateBusinessSettings: async (data, files = {}) => {
+    const formData = new FormData()
+    formData.append("data", JSON.stringify(data))
+    if (files.logo) formData.append("logo", await prepareUploadFile(files.logo))
+    if (files.favicon) formData.append("favicon", await prepareUploadFile(files.favicon))
+    return apiClient.patch("/admin/global/business-setup", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      ...admin,
+    })
+  },
 
   getOtherServices: () => apiClient.get("/admin/global/landing/other-services", admin),
   createOtherService: (body) => apiClient.post("/admin/global/landing/other-services", body, admin),

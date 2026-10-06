@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Info, Phone, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { adminAPI } from "@food/api";
+import { globalAdminAPI } from "../api/globalAdminAPI";
 import { setCachedSettings, updateFavicon, updateTitle } from "@food/utils/businessSettings";
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation";
 const debugLog = (...args) => {}
@@ -30,7 +30,7 @@ const settingsToForm = (settings) => ({
   region: settings?.region || "India",
 });
 
-export default function BusinessSetup() {
+export default function GlobalBusinessSetup() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -92,7 +92,7 @@ export default function BusinessSetup() {
   const fetchBusinessSettings = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.getBusinessSettings();
+      const response = await globalAdminAPI.getBusinessSettings();
       const settings = response?.data?.data || response?.data;
 
       if (settings) {
@@ -174,7 +174,7 @@ export default function BusinessSetup() {
         files.favicon = faviconFile;
       }
 
-      const response = await adminAPI.updateBusinessSettings(dataToSend, files);
+      const response = await globalAdminAPI.updateBusinessSettings(dataToSend, files);
       const updatedSettings = response?.data?.data || response?.data;
 
       if (updatedSettings) {

@@ -105,6 +105,9 @@ const PromoBannerImage = ({ promo, fallbackImage }) => {
 import { getLocalUserToken, clearLocalUserSession } from '../services/authService';
 import { getSavedLocation, LOCATION_UPDATED_EVENT } from '../services/locationStore';
 import { hasPersistentMap } from '../utils/persistentMap';
+import useTaxiZoneGate from '../utils/useTaxiZoneGate';
+import { showHelloParthBrandedToast } from '@/shared/utils/customToasts';
+import OutOfZoneScreen from '@food/components/user/OutOfZoneScreen';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
   getCurrentRide,
@@ -386,6 +389,18 @@ const RecentLocationsList = ({ routePrefix }) => {
 
 const Home = () => {
   const unreadNotifications = useTaxiNotificationUnread();
+  const outOfZone = useTaxiZoneGate();
+  useEffect(() => {
+    if (!outOfZone) return undefined;
+    const timer = setTimeout(() => {
+      showHelloParthBrandedToast({
+        id: 'out-of-zone-toast',
+        title: 'Our services are unavailable here right now.',
+        message: 'Please choose a different location',
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [outOfZone]);
   const navigate = useNavigate();
   const location = useLocation();
   const { settings, loading: settingsLoading } = useSettings();
@@ -1199,6 +1214,18 @@ const Home = () => {
   const goPlacesSection = useMemo(() => {
     return renderGoPlacesSection();
   }, [uiSettings?.goPlaces, uiSettings?.homeSections?.enableGoPlaces, isDark, settingsLoading]);
+
+  if (outOfZone) {
+    const saved = getSavedLocation();
+    return (
+      <OutOfZoneScreen
+        service="taxi"
+        isGuest={!getLocalUserToken()}
+        location={{ area: saved?.area || saved?.address, city: saved?.address }}
+        handleLocationClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'pickup', flow: 'ride' } })}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen w-full lg:max-w-7xl mx-auto relative font-sans no-scrollbar overflow-x-clip transition-colors duration-300 user-app-theme shadow-2xl">

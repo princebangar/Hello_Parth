@@ -149,7 +149,7 @@ const buildFaviconHref = (faviconUrl = '') => {
     return '';
   }
 
-  if (faviconUrl.startsWith('data:')) {
+  if (faviconUrl.startsWith('data:') || faviconUrl === '/hello-parth-icon.png') {
     return faviconUrl;
   }
 
@@ -294,24 +294,10 @@ export const SettingsProvider = ({ children }) => {
     const appName = settings.general?.app_name || 'Hello Parth Taxi';
     document.title = appName;
 
-    const favicon = settings.general?.favicon || settings.customization?.favicon;
-    if (favicon) {
-      const href = buildFaviconHref(favicon);
-      const type = getFaviconType(favicon);
-
-      const iconLink = ensureHeadLink("link[rel='icon']", 'icon');
-      const shortcutIconLink = ensureHeadLink("link[rel='shortcut icon']", 'shortcut icon');
-      const appleTouchIconLink = ensureHeadLink("link[rel='apple-touch-icon']", 'apple-touch-icon');
-
-      [iconLink, shortcutIconLink, appleTouchIconLink].forEach((link) => {
-        link.href = href;
-        link.type = type;
-        link.sizes = '64x64';
-      });
-    }
+    // Favicon comes from Global admin > Business Setup (applied app-wide by businessSettings.js, with the Hello Parth icon as fallback).
 
     return () => { };
-  }, [settings.general?.app_name, settings.general?.favicon, settings.customization?.favicon]);
+  }, [settings.general?.app_name]);
 
   useEffect(() => {
     const root = document.documentElement;

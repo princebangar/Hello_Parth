@@ -1264,7 +1264,7 @@ function showForegroundNotification(payload = {}) {
           if (registration) {
             registration.showNotification(title, {
               body,
-              icon: "/hello-parth-logo.png",
+              icon: "/hello-parth-icon.png",
               image,
               tag: notificationKey || undefined,
               renotify: false,
@@ -1275,7 +1275,7 @@ function showForegroundNotification(payload = {}) {
           } else {
             new Notification(title, {
               body,
-              icon: "/hello-parth-logo.png",
+              icon: "/hello-parth-icon.png",
               image,
               tag: notificationKey || undefined,
               requireInteraction: true,
@@ -1284,7 +1284,7 @@ function showForegroundNotification(payload = {}) {
         }).catch(() => {
           new Notification(title, {
             body,
-            icon: "/hello-parth-logo.png",
+            icon: "/hello-parth-icon.png",
             image,
             tag: notificationKey || undefined,
           });
@@ -1292,7 +1292,7 @@ function showForegroundNotification(payload = {}) {
       } else {
         new Notification(title, {
           body,
-          icon: "/hello-parth-logo.png",
+          icon: "/hello-parth-icon.png",
           image,
           tag: notificationKey || undefined,
         });

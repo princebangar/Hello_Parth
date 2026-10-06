@@ -9,13 +9,15 @@ import outOfZoneBg from '@food/assets/Outofzone_bg.jpg';
 // Same avatar as the home header (shared/components/SuperAppHomeHeader.jsx): the user's photo, else the default one.
 const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
 
-const OutOfZoneScreen = ({ location, handleLocationClick }) => {
+// service="taxi" reuses this screen on the Taxi home: same look, Taxi profile/wallet links, Taxi login state.
+const OutOfZoneScreen = ({ location, handleLocationClick, service = "food", isGuest: isGuestProp }) => {
   const { userProfile } = useProfile();
   const BRAND_NAME = "Hello Parth";
 
   const routerLocation = useLocation();
   const navigate = useNavigate();
-  const isGuest = !isModuleAuthenticated('user');
+  const isGuest = typeof isGuestProp === 'boolean' ? isGuestProp : !isModuleAuthenticated('user');
+  const base = service === 'taxi' ? '/taxi/user' : '/food/user';
   const [avatarBroken, setAvatarBroken] = React.useState(false);
   const profileImage = isGuest ? '' : userProfile?.profileImage || '';
 
@@ -25,7 +27,7 @@ const OutOfZoneScreen = ({ location, handleLocationClick }) => {
       window.dispatchEvent(new CustomEvent('show-login-required', { detail: { intent: 'general' } }));
       return;
     }
-    navigate('/food/user/profile', { state: { from: routerLocation.pathname } });
+    navigate(`${base}/profile`, { state: { from: routerLocation.pathname } });
   };
 
   return (
@@ -64,7 +66,7 @@ const OutOfZoneScreen = ({ location, handleLocationClick }) => {
           <div className="flex items-center gap-3 shrink-0">
             {!isGuest && (
               <Link
-                to="/food/user/wallet"
+                to={`${base}/wallet`}
                 state={{ from: routerLocation.pathname }}
                 aria-label="Wallet"
                 className="h-9 w-9 flex items-center justify-center rounded-full active:scale-90 transition-all"
@@ -107,7 +109,7 @@ const OutOfZoneScreen = ({ location, handleLocationClick }) => {
             We'll be there soon –<br />hang tight!
           </h2>
           <p className="text-[16px] font-medium text-white/90 leading-[1.5] max-w-[320px] mx-auto drop-shadow-sm">
-            Looks like online ordering isn't available<br />at your location yet.
+            Looks like our services aren't available<br />at your location yet.
           </p>
         </div>
       </div>

@@ -72,7 +72,6 @@ const STABLE_KEYS_BY_PATH = {
   "/admin/food/dining-list": "dining_list",
   "/admin/food/dining-requests": "dining_category_request",
   "/admin/food/broadcast-notification": "broadcast_notification",
-  "/admin/food/business-setup": "business_setup",
   "/admin/food/customization-settings": "customization_settings",
   "/admin/food/archived-accounts": "archived_accounts",
   "/admin/food/pages-social-media/about": "about_us",
