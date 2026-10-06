@@ -16,6 +16,7 @@ import {
 } from '../../utils/nearbyPlaces';
 import { getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
+import { saveParcelPickerResult } from '../../utils/parcelPickerResult';
 
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
 const getLatLngCacheKey = (coords, precision = 5) =>
@@ -242,6 +243,16 @@ const SelectLocation = () => {
   const navigate = useNavigate();
   const routePrefix = getAppRoutePath().startsWith('/taxi/user') ? '/taxi/user' : '';
   const parcelReturnPath = routeState.returnTo || `${routePrefix}/parcel/details`;
+  // Parcel: this screen was opened on top of the details screen, so returning is one step back - pushing the details
+  // screen again stacked an entry per location change and Android back had to be pressed that many times.
+  const goBackToParcel = ({ state }) => {
+    saveParcelPickerResult(state);
+    if (routeState.returnTo && Number(window.history.state?.idx) > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(parcelReturnPath, { replace: true, state });
+  };
 
   const zoneBounds = useMemo(() => getBoundsFromPaths(zonePaths), [zonePaths]);
 
@@ -912,7 +923,7 @@ const SelectLocation = () => {
     setTripError('');
 
     if (isParcelFlow) {
-      navigate(parcelReturnPath, {
+      goBackToParcel({
         state: {
           ...routeState,
           pickup: finalPickup,
@@ -956,7 +967,7 @@ const SelectLocation = () => {
   };
 
   const returnParcelSelection = (targetInput, address, coords) => {
-    navigate(parcelReturnPath, {
+    goBackToParcel({
       state: {
         ...routeState,
         pickup: targetInput === 'pickup' ? address : pickup,
@@ -971,7 +982,7 @@ const SelectLocation = () => {
   };
 
   const handleParcelBack = (keepMapPicker = false) => {
-    navigate(parcelReturnPath, {
+    goBackToParcel({
       state: {
         ...routeState,
         pickup,

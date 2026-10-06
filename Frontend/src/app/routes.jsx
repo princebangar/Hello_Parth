@@ -13,6 +13,7 @@ import {
 } from '../shared/utils/activeModule.js'
 import AdminModulesKeepAlive, { AdminKeepAliveSlot } from './AdminModulesKeepAlive.jsx'
 import AppRouteFallback from '@/shared/components/AppRouteFallback'
+import PolicyPageLoader from '@/shared/components/PolicyPageLoader'
 import { loadAuthApp, preloadAuthAppWhenIdle } from '@/shared/utils/preloadLogin.js'
 import { FoodApp, TaxiApp } from '@/shared/utils/appChunks.js'
 import { whenAppSettled } from '@/shared/utils/whenSettled.js'
@@ -26,6 +27,8 @@ const PlatformLanding = lazy(() => import('../modules/Landing/pages/PlatformLand
 // after a wallet top-up. The backend URLs point here, so these must stay top-level routes.
 const RazorpayStatusPage = lazy(() => import('../modules/Taxi/modules/shared/pages/RazorpayStatusPage'))
 const PhonePeStatusPage = lazy(() => import('../modules/Taxi/modules/shared/pages/PhonePeStatusPage'))
+// Customer Terms / Privacy / Support (Food and Taxi share them; these are the Play Store links).
+const UserPolicyPage = lazy(() => import('@/shared/pages/UserPolicyPage'))
 
 // Auth only — Food and Taxi get a real skeleton below instead (see
 // FoodAppWrapper/TaxiAppWrapper).
@@ -180,6 +183,13 @@ const AppRoutes = () => {
         <Route path="/login/*" element={<Suspense fallback={<SoftFallback />}><AuthApp /></Suspense>} />
         <Route path="/razorpay/status" element={<Suspense fallback={<SoftFallback />}><RazorpayStatusPage /></Suspense>} />
         <Route path="/phonepe/status" element={<Suspense fallback={<SoftFallback />}><PhonePeStatusPage /></Suspense>} />
+        <Route path="/user/terms" element={<Suspense fallback={<PolicyPageLoader />}><UserPolicyPage type="terms" /></Suspense>} />
+        <Route path="/user/privacy" element={<Suspense fallback={<PolicyPageLoader />}><UserPolicyPage type="privacy" /></Suspense>} />
+        <Route path="/user/support" element={<Suspense fallback={<PolicyPageLoader />}><UserPolicyPage type="support" /></Suspense>} />
+        {/* Old customer policy links (shared before) -> the new ones, before /food/* so the Food app never loads. */}
+        <Route path="/food/user/profile/terms" element={<Navigate to="/user/terms" replace />} />
+        <Route path="/food/user/profile/privacy" element={<Navigate to="/user/privacy" replace />} />
+        <Route path="/food/user/profile/support-info" element={<Navigate to="/user/support" replace />} />
         <Route path="/food/*" element={<FoodAppWrapper />} />
         {/* More specific than /taxi/* — UI comes from AdminModulesKeepAlive. */}
         <Route path="/taxi/admin/*" element={<AdminKeepAliveSlot />} />

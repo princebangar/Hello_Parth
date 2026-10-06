@@ -440,8 +440,11 @@ const settleDriverCancellationFee = async (ride, session) => {
   };
 };
 
-export const getUserRoom = (userId) => `user:${userId}`;
-export const getDriverRoom = (driverId) => `driver:${driverId}`;
+// A populated ride hands over the whole user / driver document: the room is named after its id
+// (`user:${doc}` built a room nobody is in, so the customer never got "N captains notified").
+const toRoomId = (value) => String(value?._id || value || '');
+export const getUserRoom = (userId) => `user:${toRoomId(userId)}`;
+export const getDriverRoom = (driverId) => `driver:${toRoomId(driverId)}`;
 export const getAdminRoom = () => 'admin:broadcast';
 
 export const setSocketServer = (io) => {

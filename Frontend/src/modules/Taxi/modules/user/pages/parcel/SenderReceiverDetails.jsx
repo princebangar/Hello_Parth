@@ -24,6 +24,7 @@ import { userAuthService } from '../../services/authService';
 import api from '../../../../shared/api/axiosInstance';
 import { computeDrivingRoute, sumComputedRouteLegs } from '../../../../shared/utils/googleRoutes';
 import { useUserTheme } from '../../../../shared/context/UserThemeContext';
+import { clearParcelPickerResult, peekParcelPickerResult } from '../../utils/parcelPickerResult';
 import {
   dedupePlaces,
   formatDistance,
@@ -447,9 +448,13 @@ const SenderReceiverDetails = () => {
   );
   const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
   const storedParcelDraft = useMemo(() => readParcelBookingDraft(), []);
+  // The place picker comes back with one history step, so this screen gets its old router state again:
+  // the place just picked is handed over separately and wins over that state.
+  const pickerResult = useMemo(() => peekParcelPickerResult() || {}, []);
+  useEffect(() => { clearParcelPickerResult(); }, []);
   const parcelState = useMemo(
-    () => ({ ...storedParcelDraft, ...(location.state || {}) }),
-    [location.state, storedParcelDraft],
+    () => ({ ...storedParcelDraft, ...(location.state || {}), ...pickerResult }),
+    [location.state, storedParcelDraft, pickerResult],
   );
   const storedUser = useMemo(() => readStoredUserInfo(), []);
   const [senderName, setSenderName] = useState(() => parcelState.senderName || storedUser?.name || '');
@@ -473,7 +478,8 @@ const SenderReceiverDetails = () => {
   const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || null);
   const [dropCoords, setDropCoords] = useState(() => parcelState.dropCoords || null);
   const [activeInput, setActiveInput] = useState(() => {
-    if (location.state?.activeInput === 'pickup' || location.state?.editPickup) {
+    const seed = { ...(location.state || {}), ...pickerResult };
+    if (seed.activeInput === 'pickup' || seed.editPickup) {
       return 'pickup';
     }
     return 'drop';

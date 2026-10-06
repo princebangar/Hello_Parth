@@ -295,6 +295,61 @@ const flushPendingRegistration = async () => {
   }
 };
 
+// The Food apps ask the Flutter shell for its FCM token; the Taxi apps only waited for the shell to hand it over,
+// and the captain app never did - its drivers had no push token, so a ride request reached them only while the app
+// was open in front (a background WebView drops its socket). Ask the shell the same way the Food apps do.
+const NATIVE_TOKEN_HANDLERS = ['getFcmToken', 'getFCMToken', 'getPushToken', 'getFirebaseToken'];
+const NATIVE_PERMISSION_HANDLERS = ['requestNotificationPermission', 'requestPushPermission', 'enableNotifications'];
+const NATIVE_TOKEN_REQUEST_GAP_MS = 10 * 60 * 1000;
+let lastNativeTokenRequest = { role: '', at: 0 };
+let nativeTokenRequestInFlight = null;
+
+const callNativeHandler = async (names, payload) => {
+  for (const name of names) {
+    try {
+      const value = await window.flutter_inappwebview.callHandler(name, payload);
+      if (value !== undefined) return value;
+    } catch {
+      // try the next name
+    }
+  }
+  return undefined;
+};
+
+const requestTokenFromNativeShell = async ({ force = false } = {}) => {
+  if (typeof window === 'undefined' || typeof window.flutter_inappwebview?.callHandler !== 'function') return null;
+
+  const role = getActivePortalRole() || inferRole('');
+  if (!role || !hasRoleSession(role)) return null;
+  if (!force && lastNativeTokenRequest.role === role && Date.now() - lastNativeTokenRequest.at < NATIVE_TOKEN_REQUEST_GAP_MS) return null;
+  if (nativeTokenRequestInFlight) return nativeTokenRequestInFlight;
+
+  lastNativeTokenRequest = { role, at: Date.now() };
+  const module = role === 'user' ? 'user' : 'driver';
+  nativeTokenRequestInFlight = (async () => {
+    await callNativeHandler(NATIVE_PERMISSION_HANDLERS, { module });
+    // the shell's bridge is often not ready on the first call
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const payload = normalizeBridgePayload(await callNativeHandler(NATIVE_TOKEN_HANDLERS, { module }), 'mobile');
+      if (payload?.token && payload.token.length >= 20) {
+        return submitFcmToken({ token: payload.token, role, platform: 'mobile' });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    persistDebugState({ ok: false, reason: 'native-shell-gave-no-token', role, platform: 'mobile' });
+    return null;
+  })()
+    .catch((error) => {
+      persistDebugState({ ok: false, reason: error?.message || 'native-token-request-failed', role, platform: 'mobile' });
+      return null;
+    })
+    .finally(() => {
+      nativeTokenRequestInFlight = null;
+    });
+
+  return nativeTokenRequestInFlight;
+};
+
 export const installNativeFcmBridge = () => {
   const processQueuedCalls = async (queuedCalls = []) => {
     for (const queuedCall of queuedCalls) {
@@ -421,14 +476,18 @@ export const installNativeFcmBridge = () => {
   window.addEventListener('focus', retryPending);
   window.addEventListener('pageshow', retryPending);
   window.addEventListener('app:auth-ready', retryPending);
+  // just logged in: ask the shell for the token right away
+  window.addEventListener('app:auth-ready', () => { requestTokenFromNativeShell({ force: true }).catch(() => { }); });
   window.addEventListener('message', handleMessageEvent);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       retryPending();
+      requestTokenFromNativeShell().catch(() => { });
     }
   });
 
   drainQueuedCalls().catch(() => { });
+  window.setTimeout(() => { requestTokenFromNativeShell().catch(() => { }); }, 1200);
   window.setTimeout(retryPending, 1500);
   window.setInterval(retryPending, 15000);
 };

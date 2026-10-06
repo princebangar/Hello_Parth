@@ -966,11 +966,11 @@ export default function UnifiedOTPFastLogin() {
                   By continuing, you agree to our
                 </p>
                 <div className="mt-1.5 flex items-center justify-center gap-2.5 text-[12px] font-bold uppercase tracking-[0.08em] text-[#6B7280]">
-                  <Link to="/food/user/profile/terms" onPointerDown={() => warmPolicyPage(USER_POLICY_ENDPOINTS.terms)} className="hover:text-[#1A1A1A] transition-colors">Terms</Link>
+                  <Link to="/user/terms" onPointerDown={() => warmPolicyPage(USER_POLICY_ENDPOINTS.terms)} className="hover:text-[#1A1A1A] transition-colors">Terms</Link>
                   <span className="w-1 h-1 rounded-full bg-gray-400" />
-                  <Link to="/food/user/profile/privacy" onPointerDown={() => warmPolicyPage(USER_POLICY_ENDPOINTS.privacy)} className="hover:text-[#1A1A1A] transition-colors">Privacy</Link>
+                  <Link to="/user/privacy" onPointerDown={() => warmPolicyPage(USER_POLICY_ENDPOINTS.privacy)} className="hover:text-[#1A1A1A] transition-colors">Privacy</Link>
                   <span className="w-1 h-1 rounded-full bg-gray-400" />
-                  <Link to="/food/user/profile/support-info" onPointerDown={() => warmPolicyPage(USER_POLICY_ENDPOINTS.support)} className="hover:text-[#1A1A1A] transition-colors">Support</Link>
+                  <Link to="/user/support" onPointerDown={() => warmPolicyPage(USER_POLICY_ENDPOINTS.support)} className="hover:text-[#1A1A1A] transition-colors">Support</Link>
                 </div>
               </>
             )}

@@ -90,10 +90,7 @@ const POLICY_WARMUP = {
     endpoints: [ADMIN.TERMS_PUBLIC, ADMIN.PRIVACY_PUBLIC, ADMIN.SUPPORT_USER_PUBLIC],
     // Same specifiers as the lazy() imports in the routers, so the browser reuses the downloaded chunks.
     chunks: [
-      () => import("@food/components/user/UserRouter"),
-      () => import("@food/pages/user/profile/Terms"),
-      () => import("@food/pages/user/profile/Privacy"),
-      () => import("@food/pages/user/profile/UserCMSHelpSupportPage"),
+      () => import("@/shared/pages/UserPolicyPage"),
     ],
   },
   restaurant: {

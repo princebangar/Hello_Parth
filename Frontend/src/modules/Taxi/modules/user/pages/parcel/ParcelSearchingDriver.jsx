@@ -150,76 +150,6 @@ const getOverlayCenterOffset = (width, height) => ({
   y: -(height / 2),
 });
 
-const clampVehicleCount = (value) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return 4;
-  }
-  return Math.max(3, Math.min(8, Math.round(numeric)));
-};
-
-const buildAvailableVehicleMarkers = (center, count) => {
-  const safeCount = clampVehicleCount(count);
-  const lat = Number(center?.lat || 0);
-  const lng = Number(center?.lng || 0);
-
-  return Array.from({ length: safeCount }, (_, index) => {
-    const angle = ((Math.PI * 2) / safeCount) * index + (index % 2 ? 0.28 : -0.12);
-    const radius = 0.0022 + (index % 3) * 0.00045;
-
-    return {
-      id: `available-delivery-${index}`,
-      position: {
-        lat: lat + Math.sin(angle) * radius,
-        lng: lng + Math.cos(angle) * radius,
-      },
-      heading: (angle * 180) / Math.PI + 90,
-      delay: index * 0.18,
-    };
-  });
-};
-
-const BlinkingVehicleMarker = ({ marker, iconUrl }) => (
-  <OverlayView
-    position={marker.position}
-    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-    getPixelPositionOffset={getOverlayCenterOffset}
-  >
-    <div className="pointer-events-none relative flex h-14 w-14 items-center justify-center">
-      {[0, 1].map((ring) => (
-        <motion.span
-          key={ring}
-          className="absolute h-10 w-10 rounded-full border border-emerald-500/45 bg-emerald-400/10"
-          animate={{ scale: [0.65, 1.7], opacity: [0.55, 0] }}
-          transition={{
-            repeat: Infinity,
-            duration: 1.8,
-            delay: marker.delay + ring * 0.55,
-            ease: 'easeOut',
-          }}
-        />
-      ))}
-      <motion.img
-        src={iconUrl || BikeIcon}
-        alt="Available vehicle"
-        draggable={false}
-        className="relative h-9 w-9 object-contain drop-shadow-[0_6px_8px_rgba(15,23,42,0.34)]"
-        style={{ rotate: `${marker.heading}deg` }}
-        animate={{
-          scale: [1, 1.16, 1],
-          opacity: [0.78, 1, 0.78],
-        }}
-        transition={{
-          repeat: Infinity,
-          duration: 1.35,
-          delay: marker.delay,
-          ease: 'easeInOut',
-        }}
-      />
-    </div>
-  </OverlayView>
-);
-
 const normalizeDriver = (driver = {}) => ({
   name: driver.name || 'Delivery Captain',
   rating: driver.rating || '',
@@ -376,7 +306,6 @@ const ParcelSearchingDriver = () => {
   const [driver, setDriver] = useState(DRIVER_PLACEHOLDER);
   const [searchStatus, setSearchStatus] = useState('Preparing dispatch...');
   const [bookingError, setBookingError] = useState('');
-  const [nearbyVehicleCount, setNearbyVehicleCount] = useState(4);
   const activeRidePollRef = useRef(null);
   const activeRidePollStartTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
@@ -425,10 +354,6 @@ const ParcelSearchingDriver = () => {
     [preferredVehicleType, routeState.vehicle, routeState.vehicleIconType, routeState.vehicleIconUrl],
   );
 
-  const availableVehicleMarkers = useMemo(
-    () => buildAvailableVehicleMarkers(pickupPos, nearbyVehicleCount),
-    [nearbyVehicleCount, pickupPos],
-  );
   const expectedFareLabel = useMemo(
     () => formatParcelFareLabel(routeState.estimatedFare, routeState.fare),
     [routeState.estimatedFare, routeState.fare],
@@ -574,7 +499,6 @@ const ParcelSearchingDriver = () => {
     };
 
     const onRideSearchUpdate = ({ matchedDrivers, radius }) => {
-      setNearbyVehicleCount(clampVehicleCount(matchedDrivers));
       const radiusKm = radius ? (Number(radius) / 1000).toFixed(1) : '';
       setSearchStatus(
         matchedDrivers > 0
@@ -765,7 +689,6 @@ const ParcelSearchingDriver = () => {
         );
         if (!disposed) {
           setSearchStatus('Booking created. Notifying nearby captains...');
-          setNearbyVehicleCount(clampVehicleCount(selectedVehicleTypeIds.length));
         }
 
         searchTimeoutRef.current = setTimeout(async () => {
@@ -843,13 +766,6 @@ const ParcelSearchingDriver = () => {
 
             {isSearching && (
               <>
-                {availableVehicleMarkers.map((marker) => (
-                  <BlinkingVehicleMarker
-                    key={marker.id}
-                    marker={marker}
-                    iconUrl={availableVehicleIcon}
-                  />
-                ))}
                 <OverlayView
                   position={pickupPos}
                   mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}

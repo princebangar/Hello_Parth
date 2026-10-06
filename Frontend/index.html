@@ -64,7 +64,7 @@
           // in step with shared/utils/policyPaths.js); login, admin and the partner portals show nothing but the
           // page colour instead of a skeleton of a screen they will never show.
           var signedIn = !!(localStorage.getItem('userToken') || localStorage.getItem('user_accessToken'));
-          var policy = /^\/(?:food\/user\/profile\/(?:terms|privacy|support-info|refund|shipping|cancellation)|food\/restaurant\/(?:terms|privacy|help-content|help-centre\/support)|food\/delivery\/(?:terms|privacy|profile\/terms|profile\/privacy|help\/content)|taxi\/(?:driver|owner)\/legal\/(?:terms|privacy|support)|taxi\/(?:terms|terms-and-conditions|privacy|privacy-policy|refund|cancellation))\/?$/.test(path);
+          var policy = /^\/(?:user\/(?:terms|privacy|support)|food\/user\/profile\/(?:terms|privacy|support-info|refund|shipping|cancellation)|food\/restaurant\/(?:terms|privacy|help-content|help-centre\/support)|food\/delivery\/(?:terms|privacy|profile\/terms|profile\/privacy|help\/content)|taxi\/(?:driver|owner)\/legal\/(?:terms|privacy|support)|taxi\/(?:terms|terms-and-conditions|privacy|privacy-policy|refund|cancellation))\/?$/.test(path);
           var partnerPortal = /^\/food\/(?:restaurant|delivery|admin)(?:\/|$)/.test(path);
           var consumerApp = (path === '/' && signedIn) || path.indexOf('/taxi/user') === 0 || (/^\/food(?:\/|$)/.test(path) && !partnerPortal);
           // The home screens (Taxi / Food home and Food's other browse tabs) get the home skeleton. A Taxi screen

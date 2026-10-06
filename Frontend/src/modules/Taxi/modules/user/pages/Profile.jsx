@@ -79,9 +79,9 @@ const menuSections = [
       { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50 dark:bg-purple-950/30', color: 'text-purple-600 dark:text-purple-400' },
       { icon: Shield, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos', bg: 'bg-sky-50 dark:bg-sky-950/30', color: 'text-sky-600 dark:text-sky-400' },
       { icon: HelpCircle, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets', bg: 'bg-slate-50 dark:bg-slate-800/50', color: 'text-slate-600 dark:text-slate-400' },
-      { icon: FileText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/terms', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-600 dark:text-orange-400' },
-      { icon: Shield, title: 'Privacy Policy', sub: 'How your data is handled', path: '/privacy', bg: 'bg-emerald-50 dark:bg-emerald-950/30', color: 'text-emerald-600 dark:text-emerald-400' },
-      { icon: CreditCard, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/refund', bg: 'bg-indigo-50 dark:bg-indigo-950/30', color: 'text-indigo-600 dark:text-indigo-400' },
+      { icon: FileText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/user/terms', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-600 dark:text-orange-400' },
+      { icon: Shield, title: 'Privacy Policy', sub: 'How your data is handled', path: '/user/privacy', bg: 'bg-emerald-50 dark:bg-emerald-950/30', color: 'text-emerald-600 dark:text-emerald-400' },
+      { icon: CreditCard, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/food/user/profile/refund', bg: 'bg-indigo-50 dark:bg-indigo-950/30', color: 'text-indigo-600 dark:text-indigo-400' },
       // Settings hub (Edit Profile + Delete Account) — same spot Food puts
       // it: directly above Log out.
       { icon: Settings, title: 'Settings', sub: 'Edit profile & account', path: '/taxi/user/profile/settings', bg: 'bg-slate-50 dark:bg-slate-800/50', color: 'text-slate-600 dark:text-slate-400' },

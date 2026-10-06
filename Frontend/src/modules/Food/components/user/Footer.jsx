@@ -53,8 +53,8 @@ export default function Footer() {
     support: [
       { name: "Help Center", href: "/user/help" },
       { name: "Contact Us", href: "/user/help" },
-      { name: "Privacy Policy", href: "/user/profile/privacy" },
-      { name: "Terms of Service", href: "/user/profile/terms" },
+      { name: "Privacy Policy", href: "/user/privacy" },
+      { name: "Terms of Service", href: "/user/terms" },
     ],
     user: [
       { name: "My Account", href: "/user/profile" },

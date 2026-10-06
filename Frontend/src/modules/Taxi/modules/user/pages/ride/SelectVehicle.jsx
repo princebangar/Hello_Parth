@@ -202,6 +202,7 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
   const [routeError, setRouteError] = useState('');
   const [isMapInteracting, setIsMapInteracting] = useState(false);
   const [mapZoom, setMapZoom] = useState(13);
+  const [mapReady, setMapReady] = useState(false);
   const routeCacheRef = useRef(new Map());
   const waypointRequests = useMemo(
     () =>
@@ -264,6 +265,15 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
     };
   }, [center, dropPosition, isLoaded, waypointRequests]);
 
+  // The map is only a strip above the vehicle list: show the whole trip in it instead of a fixed zoom on the pickup.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || !dropPosition || !window.google?.maps?.LatLngBounds) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    [center, dropPosition, ...routePath].forEach((point) => point && bounds.extend(point));
+    map.fitBounds(bounds, { top: 36, right: 36, bottom: 44, left: 36 });
+  }, [mapReady, center, dropPosition, routePath]);
+
   if (!HAS_VALID_GOOGLE_MAPS_KEY) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-slate-200 px-6 text-center">
@@ -307,9 +317,11 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
         onLoad={(map) => {
           mapRef.current = map;
           setMapZoom(map.getZoom?.() || 13);
+          setMapReady(true);
         }}
         onUnmount={() => {
           mapRef.current = null;
+          setMapReady(false);
         }}
         onDragStart={() => setIsMapInteracting(true)}
         onZoomChanged={() => {
@@ -355,12 +367,8 @@ const VehicleMapPreview = React.memo(({ center, dropPosition, stops = [], driver
         ))}
       </GoogleMap>
 
-      <div className="pointer-events-none absolute bottom-24 left-4 rounded-[12px] border border-white/70 bg-white/90 px-3 py-2 shadow-sm">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pickup</p>
-        <p className="text-[11px] font-bold text-slate-800">{center.lat.toFixed(4)}, {center.lng.toFixed(4)}</p>
-      </div>
       {routeError && (
-        <div className="pointer-events-none absolute bottom-10 left-4 rounded-[12px] border border-amber-100 bg-white/90 px-3 py-2 shadow-sm">
+        <div className="pointer-events-none absolute bottom-8 left-4 rounded-[12px] border border-amber-100 bg-white/90 px-3 py-2 shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-widest text-amber-500">Route</p>
           <p className="text-[11px] font-bold text-slate-700">Using fallback path while directions load.</p>
         </div>
@@ -1644,6 +1652,8 @@ const SelectVehicle = () => {
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const canProceed = Boolean(selectedVehicle) && !isFarePending;
+  // Every car (SUV, Sedan, ...) is booked as a "Car Taxi"; bike / auto keep their own name.
+  const bookButtonName = selectedVehicle?.category === 'car' ? 'Car Taxi' : selectedVehicle?.name;
   const hasBookableVehicles = useMemo(
     () => displayedVehicles.length > 0,
     [displayedVehicles],
@@ -2179,10 +2189,23 @@ const SelectVehicle = () => {
   }
 
   return (
-    <div className="h-[100dvh] bg-slate-50 w-full lg:max-w-7xl mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden lg:grid lg:grid-cols-12 lg:bg-white lg:shadow-xl">
-      
-      {/* MAP BACKGROUND (Mobile) / RIGHT COLUMN (Desktop) */}
-      <div className="absolute inset-0 w-full bg-gray-200 lg:relative lg:col-span-7 lg:col-start-6 lg:h-full lg:rounded-r-3xl lg:overflow-hidden lg:z-0">
+    <div className="h-[100dvh] bg-slate-50 w-full lg:max-w-7xl mx-auto relative font-['Plus_Jakarta_Sans'] overflow-hidden flex flex-col lg:grid lg:grid-cols-12 lg:bg-white lg:shadow-xl">
+
+      {/* Header (Mobile) - a real bar instead of a button floating on the map, so it sits below the phone's status bar */}
+      <header className="relative z-50 shrink-0 bg-white pt-[env(safe-area-inset-top)] border-b border-slate-100 shadow-[0_10px_20px_rgba(15,23,42,0.05)] lg:hidden">
+        <div className="px-5 py-3.5 flex items-center gap-3">
+          <button type="button" onClick={() => navigate(-1)} aria-label="Back" className="p-2 -ml-2 active:scale-95 transition-all rounded-full">
+            <ArrowLeft size={22} className="text-slate-900" strokeWidth={3} />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ride</p>
+            <h1 className="mt-0.5 text-[20px] font-bold text-slate-900 tracking-tight leading-none truncate">Select Vehicle</h1>
+          </div>
+        </div>
+      </header>
+
+      {/* MAP STRIP (Mobile) / RIGHT COLUMN (Desktop) */}
+      <div className="relative h-[30dvh] min-h-[180px] w-full shrink-0 bg-gray-200 lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:h-full lg:min-h-0 lg:rounded-r-3xl lg:overflow-hidden lg:z-0">
         <VehicleMapPreview
           center={pickupPosition}
           dropPosition={dropPosition}
@@ -2192,20 +2215,10 @@ const SelectVehicle = () => {
           isLoaded={isMapLoaded}
           loadError={mapLoadError}
         />
-
-        <div className="absolute top-6 left-4 right-4 z-20 flex items-center gap-2.5 lg:hidden">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(-1)}
-            className="w-10 h-10 bg-white/95 rounded-[14px] shadow-[0_4px_14px_rgba(15,23,42,0.12)] flex items-center justify-center shrink-0"
-          >
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
-          </motion.button>
-        </div>
       </div>
 
       {/* BOTTOM SHEET (Mobile) / LEFT COLUMN (Desktop) */}
-      <div className="absolute bottom-0 left-0 right-0 z-40 flex max-h-[69dvh] min-h-[360px] min-w-0 flex-col overflow-hidden rounded-t-[26px] bg-white shadow-[0_-12px_44px_rgba(15,23,42,0.16)] lg:relative lg:col-span-5 lg:col-start-1 lg:row-start-1 lg:h-full lg:max-h-none lg:rounded-none lg:shadow-none lg:border-r lg:border-slate-200 lg:z-10">
+      <div className="relative z-40 -mt-5 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-t-[26px] bg-white lg:mt-0 shadow-[0_-12px_44px_rgba(15,23,42,0.16)] lg:relative lg:col-span-5 lg:col-start-1 lg:row-start-1 lg:h-full lg:max-h-none lg:rounded-none lg:shadow-none lg:border-r lg:border-slate-200 lg:z-10">
         
         {/* Desktop Header */}
         <div className="hidden lg:flex items-center gap-3 px-4 pt-6 pb-2 border-b border-slate-100">
@@ -2527,10 +2540,10 @@ const SelectVehicle = () => {
               ? isFarePending
                 ? 'Calculating fare...'
                 : selectedVehicle.supportsBidding && shouldUseDriverBidding
-                  ? `Request Bid for ${selectedVehicle.name}`
+                  ? `Request Bid for ${bookButtonName}`
                   : rideMode === 'schedule'
-                    ? `Schedule ${selectedVehicle.name}`
-                    : `Book ${selectedVehicle.name}`
+                    ? `Schedule ${bookButtonName}`
+                    : `Book ${bookButtonName}`
               : 'Select Vehicle'}
           </motion.button>
 
