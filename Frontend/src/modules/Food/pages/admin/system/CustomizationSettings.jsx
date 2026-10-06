@@ -206,7 +206,7 @@ export default function CustomizationSettings() {
             Customization Settings
           </h1>
         </div>
-        <p className="text-neutral-600 dark:text-neutral-400 mt-1">Food-only toggles. App-wide switches (maintenance for all apps, default location, customer payment methods) are in Global > Customization Settings.</p>
+        <p className="text-neutral-600 dark:text-neutral-400 mt-1">Food-only toggles. App-wide switches (maintenance for all apps, default location, customer payment methods) are in Global → Customization Settings.</p>
       </div>
 
       <Card className="dark:bg-[#1a1a1a] dark:border-neutral-800">
