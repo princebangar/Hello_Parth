@@ -3,6 +3,7 @@ import { persistFoodUserLocation } from "@/shared/utils/sharedUserLocation"
 import { useProfile } from "@food/context/ProfileContext"
 import apiClient from "@food/api/axios"
 import { geocodeAPI } from "@food/api"
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -1863,7 +1864,7 @@ export function useLocation() {
   /* ===================== INIT ===================== */
   useEffect(() => {
     // Check if location should be suppressed on the current path/auth state
-    const pathname = window.location.pathname.toLowerCase();
+    const pathname = getAppRoutePath().toLowerCase();
     const isSuppressedPath = 
       pathname.includes('terms') ||
       pathname.includes('privacy') ||
@@ -1984,7 +1985,7 @@ export function useLocation() {
           // "manual_location_update" is what makes Food's screen show the blocking "Fetching Location..." cover.
           // This hook also runs while the user is on a Taxi screen (it is mounted at the app root), where that flag
           // would just sit there and pop the cover up the moment they switch to Food - so only raise it on Food.
-          if (window.location.pathname.startsWith("/food")) {
+          if (getAppRoutePath().startsWith("/food")) {
             sessionStorage.setItem("manual_location_update", "true")
           }
           localStorage.setItem("deliveryAddressMode", "current")

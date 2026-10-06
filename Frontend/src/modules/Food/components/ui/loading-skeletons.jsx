@@ -1,6 +1,7 @@
 import { Skeleton } from "@food/components/ui/skeleton"
 import { cn } from "@food/utils/utils"
 import { BootShellBody, BootShellHeader, shouldShowBootShell } from "@/shared/components/BootShell"
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 
 const DEFAULT_CARD_COUNT = 4
 
@@ -327,7 +328,7 @@ function RestaurantDetailSkeleton({ className }) {
 // so the generic skeleton is used instead of the home-shaped one (index.html does the same on a refresh).
 const isCachedOutOfZoneOnFood = () => {
   try {
-    return window.location.pathname.startsWith("/food") && localStorage.getItem("userZoneStatus") === "OUT_OF_SERVICE" && !!localStorage.getItem("userLocation")
+    return getAppRoutePath().startsWith("/food") && localStorage.getItem("userZoneStatus") === "OUT_OF_SERVICE" && !!localStorage.getItem("userLocation")
   } catch {
     return false
   }

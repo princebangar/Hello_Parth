@@ -29,6 +29,34 @@ export function getAppRoutePath() {
   return String(window.location?.pathname || '/')
 }
 
+/** The screen's "?a=1" part: inside the app's WebView it sits in the "#/...?a=1" address, so location.search is empty. */
+export function getAppRouteSearch() {
+  if (typeof window === 'undefined') return ''
+
+  const hash = String(window.location?.hash || '')
+  if (hash.startsWith('#/') && isNativeLikeShell()) {
+    const q = hash.indexOf('?')
+    return q >= 0 ? hash.slice(q) : ''
+  }
+  return String(window.location?.search || '')
+}
+
+/**
+ * Full page load of an app screen. Inside the WebView `location.href = "/food/..."` only changes the fixed start page
+ * and drops the "#/..." part, so the app reopened whatever screen it was on last - the route has to go into the hash.
+ */
+export function hardNavigate(route, { replace = true } = {}) {
+  if (typeof window === 'undefined') return
+
+  if (isNativeLikeShell()) {
+    window.history[replace ? 'replaceState' : 'pushState'](null, '', `${window.location.pathname}#${route}`)
+    window.location.reload()
+    return
+  }
+  if (replace) window.location.replace(route)
+  else window.location.assign(route)
+}
+
 // sessionStorage lives exactly as long as the WebView page session: it survives a pull-to-refresh (reload) but is empty
 // again after the app has been closed and opened anew. That is the difference between "the app was just launched" and
 // "the person refreshed the screen they were on".

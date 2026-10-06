@@ -13,6 +13,7 @@ import {
   syncNativeAppPushToken,
   syncPendingPartnerFcmQuick,
 } from "@food/utils/firebaseMessaging"
+import { hardNavigate } from '@/shared/utils/nativeShell'
 
 const DELIVERY_PRIMARY_BTN =
   "h-12 w-full rounded-full text-base font-semibold bg-gradient-to-r from-[#0E4B9C] to-[#021024] hover:from-[#1157b5] hover:to-[#041630] text-white shadow-[0_8px_20px_rgba(14,75,156,0.25)] active:scale-[0.98] transition-all duration-300"
@@ -64,7 +65,7 @@ export default function VerificationPending() {
           sessionStorage.removeItem("delivery_pendingMessage")
           sessionStorage.removeItem("delivery_pendingRejectionReason")
           toast.success("Your account is approved! 🎉")
-          window.location.replace("/food/delivery")
+          hardNavigate("/food/delivery")
         } else if (status === "rejected") {
           const msg = data.rejectionReason
             ? `Your delivery partner application has been rejected. Reason: ${data.rejectionReason}`

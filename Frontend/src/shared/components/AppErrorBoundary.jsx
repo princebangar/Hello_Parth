@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { isChunkLoadError, reloadForNewVersion } from '@/shared/utils/chunkReload'
+import { hardNavigate } from '@/shared/utils/nativeShell'
 
 /**
  * Last line of defence. Without one, any error while a screen renders removes the whole app and leaves a blank page.
@@ -30,7 +31,7 @@ export default class AppErrorBoundary extends Component {
         <p style={{ margin: 0, fontSize: 14, opacity: 0.7 }}>Please try again.</p>
         <button
           type="button"
-          onClick={() => { window.location.href = '/' }}
+          onClick={() => hardNavigate('/', { replace: false })}
           style={{ marginTop: 8, padding: '12px 24px', borderRadius: 999, border: 0, background: '#ffc400', fontWeight: 700, fontSize: 15 }}
         >
           Go to home

@@ -25,6 +25,7 @@ import {
 import { authAPI, restaurantAPI } from "@food/api"
 import { toast } from "sonner"
 import { clearModuleAuth } from "@food/utils/auth"
+import { hardNavigate } from '@/shared/utils/nativeShell'
 
 export default function MenuOverlay({ showMenu, setShowMenu }) {
   const navigate = useNavigate()
@@ -389,7 +390,7 @@ export default function MenuOverlay({ showMenu, setShowMenu }) {
                     localStorage.removeItem("restaurant_user");
                     setIsAuthenticated(false);
                     window.dispatchEvent(new Event('restaurantAuthChanged'));
-                    window.location.href = "/food/restaurant/login";
+                    hardNavigate("/food/restaurant/login", { replace: false });
                   } catch (err) {
                     toast.error(err?.response?.data?.message || "Failed to delete account");
                   } finally {

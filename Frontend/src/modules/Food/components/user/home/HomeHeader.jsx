@@ -10,6 +10,7 @@ import { useVoiceSearch } from "@food/hooks/useVoiceSearch";
 import { isModuleAuthenticated } from "@food/utils/auth";
 import { prefetchWallet } from "@/shared/utils/walletPrefetch.js";
 import SuperAppHomeHeader from "@/shared/components/SuperAppHomeHeader";
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 // Images for banner - exactly as in FestBanner.jsx
 const bannerImages = {
@@ -151,7 +152,7 @@ export default function HomeHeader({
           {/* Left: Location Selector */}
           <Link
             to="/food/user/address-selector"
-            state={{ from: window.location.pathname }}
+            state={{ from: getAppRoutePath() }}
             className="flex items-center gap-2 cursor-pointer group min-w-0 flex-1 relative z-50 text-left no-underline"
           >
             <div className="bg-white/10 p-1.5 rounded-xl group-active:scale-95 transition-all">

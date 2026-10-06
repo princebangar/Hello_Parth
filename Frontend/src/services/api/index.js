@@ -10,6 +10,7 @@ import {
   prepareUploadFile,
   prepareUploadFiles,
 } from "../../shared/utils/imageCompressor.js";
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const stub = () =>
   Promise.resolve({
@@ -2902,7 +2903,7 @@ export const diningAPI = {
   }),
   getRestaurantBookings: (restaurantRef) => {
     const idOrSlug = restaurantRef?._id || restaurantRef?.id || restaurantRef?.restaurantId || (typeof restaurantRef === 'string' ? restaurantRef : '');
-    const isRestaurantPortal = typeof window !== 'undefined' && window.location.pathname.includes('/restaurant');
+    const isRestaurantPortal = typeof window !== 'undefined' && getAppRoutePath().includes('/restaurant');
     return apiClient.get(`/food/dining/bookings/by-restaurant/${idOrSlug}`, {
       contextModule: isRestaurantPortal ? 'restaurant' : 'user'
     });

@@ -9,6 +9,7 @@ import {
   shouldSkipDuplicateOsNotification,
 } from '@food/utils/firebaseMessaging';
 import { normalizeRestaurantOrderView } from '@food/utils/restaurantOrderPricing';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const alertSound = '/assets/media/restaurant_alert.mp3';
 const debugLog = (...args) => {};
@@ -775,7 +776,7 @@ export const useRestaurantNotifications = () => {
     const pollOrders = async () => {
       try {
         const token = localStorage.getItem('restaurant_accessToken') || localStorage.getItem('accessToken');
-        const isAuthPage = window.location.pathname.includes('/login') || window.location.pathname.includes('/otp') || window.location.pathname.includes('/signup');
+        const isAuthPage = getAppRoutePath().includes('/login') || getAppRoutePath().includes('/otp') || getAppRoutePath().includes('/signup');
         
         if (!token || isAuthPage) {
           if (globalActiveOrder) {

@@ -23,6 +23,7 @@ import {
   syncNativeAppPushToken,
   syncPendingPartnerFcmQuick,
 } from "@food/utils/firebaseMessaging"
+import { hardNavigate } from '@/shared/utils/nativeShell'
 
 export default function VerificationPending() {
   const navigate = useNavigate()
@@ -175,7 +176,7 @@ export default function VerificationPending() {
           localStorage.removeItem("restaurant_pendingStatus")
           localStorage.removeItem("restaurant_pendingMessage")
           toast.success("Your restaurant is approved! 🎉")
-          window.location.replace("/food/restaurant")
+          hardNavigate("/food/restaurant")
         } else if (status === "rejected") {
           const msg = data.rejectionReason
             ? `Your restaurant registration has been rejected. Reason: ${data.rejectionReason}`

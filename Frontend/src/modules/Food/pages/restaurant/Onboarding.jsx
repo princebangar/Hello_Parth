@@ -32,6 +32,7 @@ import { OnboardingSkeleton } from "@food/components/ui/loading-skeletons"
 import OnboardingExitModal from "@/shared/components/OnboardingExitModal"
 import useOnboardingExitGuard from "@/shared/hooks/useOnboardingExitGuard"
 import { collectFcmTokenForSignup, persistModuleFcmToken, syncPendingPartnerFcmQuick, clearOnboardingFcmLocal, prefetchModuleFcmToken } from "@food/utils/firebaseMessaging"
+import { getAppRouteSearch } from '@/shared/utils/nativeShell'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -974,7 +975,7 @@ export default function RestaurantOnboarding() {
     isHydratingRef.current = true;
     
     // Check if step is specified in URL (from OTP login redirect)
-    const stepParam = new URLSearchParams(window.location.search).get("step")
+    const stepParam = new URLSearchParams(getAppRouteSearch()).get("step")
 
     const loadData = async () => {
       try {

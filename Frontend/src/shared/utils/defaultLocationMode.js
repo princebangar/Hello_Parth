@@ -1,3 +1,4 @@
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 /**
  * Default Location Mode (Global admin > Customization Settings > Default Location Mode).
  * When ON, every customer gets Indore as their location instead of the device GPS, in Food and Taxi — meant for the
@@ -27,7 +28,7 @@ const isDefaultLocationOn = () => {
   }
 }
 
-const isCustomerPath = () => /^(\/|\/login(\/.*)?|\/taxi\/user(\/.*)?|\/food\/user(\/.*)?)$/.test(window.location.pathname || "")
+const isCustomerPath = () => /^(\/|\/login(\/.*)?|\/taxi\/user(\/.*)?|\/food\/user(\/.*)?)$/.test(getAppRoutePath() || "")
 
 const shouldOverride = () => isCustomerPath() && isDefaultLocationOn()
 

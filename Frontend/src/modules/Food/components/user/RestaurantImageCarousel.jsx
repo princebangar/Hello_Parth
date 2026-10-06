@@ -6,6 +6,7 @@ import { isVegMenuItem } from "@food/utils/vegMode";
 import { saveBrowseScroll, saveCategoryBrowseClick } from "@food/utils/browseScrollMemory";
 import dishFallbackImage from "@food/assets/dish_fallback.webp";
 import { toFoodUserPath, getRestaurantRouteId } from "@food/utils/mainTabRoutes";
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const WEBVIEW_SESSION_CACHE_BUSTER = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -240,7 +241,7 @@ const RestaurantImageCarousel = React.memo(
       if (!targetId) return;
       const fromPath =
         backFrom ||
-        (typeof window !== "undefined" ? window.location.pathname : "");
+        (typeof window !== "undefined" ? getAppRoutePath() : "");
       const browseFocusId =
         focusId || restaurant?.id || restaurant?.restaurantId || restaurant?.mongoId || "";
 

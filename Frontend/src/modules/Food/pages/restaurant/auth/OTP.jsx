@@ -11,6 +11,7 @@ import {
 import { checkOnboardingStatus, isRestaurantOnboardingComplete } from "@food/utils/onboardingUtils"
 import { collectFcmTokenFast, persistModuleFcmToken, syncPendingPartnerFcmQuick } from "@food/utils/firebaseMessaging"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
+import { hardNavigate } from '@/shared/utils/nativeShell'
 
 export default function RestaurantOTP() {
   const navigate = useNavigate()
@@ -224,7 +225,7 @@ export default function RestaurantOTP() {
         sessionStorage.removeItem(getBlockKey())
         sessionStorage.removeItem(getResendKey())
         setShowRestorePopup(false)
-        window.location.replace("/food/restaurant/onboarding")
+        hardNavigate("/food/restaurant/onboarding")
       } else {
         isSuccessRef.current = true
         const accessToken = data.accessToken
@@ -272,17 +273,17 @@ export default function RestaurantOTP() {
         setShowRestorePopup(false)
 
         if (authData?.isSignUp) {
-          window.location.replace("/food/restaurant/onboarding")
+          hardNavigate("/food/restaurant/onboarding")
         } else {
           const onboardingComplete = isRestaurantOnboardingComplete(restaurant)
           if (!onboardingComplete) {
             const incompleteStep = await checkOnboardingStatus()
             if (incompleteStep) {
-              window.location.replace(`/food/restaurant/onboarding?step=${incompleteStep}`)
+              hardNavigate(`/food/restaurant/onboarding?step=${incompleteStep}`)
               return
             }
           }
-          window.location.replace("/food/restaurant")
+          hardNavigate("/food/restaurant")
         }
       }
     } catch (err) {

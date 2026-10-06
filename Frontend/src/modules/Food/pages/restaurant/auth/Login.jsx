@@ -14,6 +14,7 @@ import { clearOnboardingFromLocalStorage, clearAllFilesFromDB, checkOnboardingSt
 import { collectFcmTokenFast, persistModuleFcmToken } from "@food/utils/firebaseMessaging"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { prefetchPolicyContentWhenIdle } from "@/shared/utils/policyPages"
+import { hardNavigate } from '@/shared/utils/nativeShell'
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -344,7 +345,7 @@ export default function RestaurantLogin() {
         sessionStorage.removeItem(getBlockKey(phoneVal))
         sessionStorage.removeItem(getResendKey(phoneVal))
         setShowRestorePopup(false)
-        window.location.replace("/food/restaurant/onboarding")
+        hardNavigate("/food/restaurant/onboarding")
       } else {
         isSuccessRef.current = true
         const accessToken = data.accessToken
@@ -394,17 +395,17 @@ export default function RestaurantLogin() {
         setShowRestorePopup(false)
 
         if (authData?.isSignUp) {
-          window.location.replace("/food/restaurant/onboarding")
+          hardNavigate("/food/restaurant/onboarding")
         } else {
           const onboardingComplete = isRestaurantOnboardingComplete(restaurant)
           if (!onboardingComplete) {
             const incompleteStep = await checkOnboardingStatus()
             if (incompleteStep) {
-              window.location.replace(`/food/restaurant/onboarding?step=${incompleteStep}`)
+              hardNavigate(`/food/restaurant/onboarding?step=${incompleteStep}`)
               return
             }
           }
-          window.location.replace("/food/restaurant")
+          hardNavigate("/food/restaurant")
         }
       }
     } catch (err) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -276,7 +277,7 @@ export function useLocationSimple() {
   // Initialize: Load cached location; only fetch if missing.
   useEffect(() => {
     // Check if location prompt should be suppressed
-    const pathname = window.location.pathname.toLowerCase();
+    const pathname = getAppRoutePath().toLowerCase();
     const isSuppressedPath = 
       pathname.includes('terms') ||
       pathname.includes('privacy') ||

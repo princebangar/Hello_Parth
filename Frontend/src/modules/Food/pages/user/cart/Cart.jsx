@@ -27,6 +27,7 @@ import dishFallbackImage from "@food/assets/dish_fallback.webp"
 import NumberSkeleton from "@/shared/components/NumberSkeleton"
 import { recallLastKnown, rememberLastKnown } from "@/shared/utils/lastKnown"
 import { networkErrorMessage } from "@/shared/utils/networkError"
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 const zoopSound = "/assets/media/zomato_sms.mp3"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
@@ -416,7 +417,7 @@ export default function Cart() {
 
     if (error_code) {
         toast.error("Payment failed: " + (searchParams.get('error[description]') || "Unknown error"));
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     } else if (razorpay_payment_id && razorpay_order_id && razorpay_signature) {
         const processRedirectPayment = async () => {
             const savedPayloadRaw = window.localStorage.getItem('pendingOrderPayload');
@@ -455,7 +456,7 @@ export default function Cart() {
                     alert(errorMessage);
                 } finally {
                     setIsPlacingOrder(false);
-                    window.history.replaceState({}, '', window.location.pathname);
+                    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
                 }
             }
         };
@@ -3016,7 +3017,7 @@ export default function Cart() {
                                     } else {
                                       // No saved address of this type yet → add one with this label.
                                       navigate("/food/user/address-selector", {
-                                        state: { from: window.location.pathname, addLabel: label },
+                                        state: { from: getAppRoutePath(), addLabel: label },
                                       })
                                     }
                                   }}

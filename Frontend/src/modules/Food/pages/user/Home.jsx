@@ -74,6 +74,7 @@ import {
   useLocationSelector,
 } from "@food/components/user/UserLayout";
 import PageNavbar from "@food/components/user/PageNavbar";
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const debugLog = (...args) => { };
 const debugWarn = (...args) => { };
@@ -541,7 +542,7 @@ export default function Home({ homeMode = null, isTabActive = true }) {
   const RESTAURANTS_BATCH_SIZE = 9;
   const [visibleRestaurantCount, setVisibleRestaurantCount] = useState(() => {
     if (typeof window === "undefined") return RESTAURANTS_BATCH_SIZE;
-    const pending = peekBrowseScroll(window.location.pathname);
+    const pending = peekBrowseScroll(getAppRoutePath());
     const n = Number(pending?.visibleCount);
     if (Number.isFinite(n) && n > RESTAURANTS_BATCH_SIZE) {
       return Math.floor(n);

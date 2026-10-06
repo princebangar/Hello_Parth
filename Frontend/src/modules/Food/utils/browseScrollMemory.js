@@ -1,3 +1,4 @@
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 const STORAGE_KEY = "food_browse_scroll_v1";
 const CATEGORY_BACKUP_KEY = "food_category_browse_backup_v1";
 
@@ -42,7 +43,7 @@ export const trackCategoryWindowScrollY = (scrollY) => {
 export const saveBrowseScroll = ({ path, scrollY, focusId, visibleCount } = {}) => {
   if (typeof window === "undefined") return;
   try {
-    const normalizedPath = normalizeBrowsePath(path || window.location.pathname);
+    const normalizedPath = normalizeBrowsePath(path || getAppRoutePath());
     const isCategory = normalizedPath.includes("/category/");
     const payload = {
       path: normalizedPath,

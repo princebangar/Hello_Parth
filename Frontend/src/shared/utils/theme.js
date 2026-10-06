@@ -1,3 +1,4 @@
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 // `USER_THEME_KEY` is the single source of truth for the Food+Taxi user
 // app's theme — one user, one preference, one key. The other three used to
 // each get written on every save; now they're kept only as read fallbacks
@@ -254,7 +255,7 @@ export function scheduleFoodThemeReassert(pathname) {
 
   const path =
     pathname ??
-    (typeof window !== "undefined" ? window.location.pathname : "");
+    (typeof window !== "undefined" ? getAppRoutePath() : "");
 
   if (!isUserAppPath(path)) return;
 
@@ -263,7 +264,7 @@ export function scheduleFoodThemeReassert(pathname) {
 
   const runIfValid = () => {
     if (generation !== reassertGeneration) return;
-    if (!isUserAppPath(window.location.pathname)) return;
+    if (!isUserAppPath(getAppRoutePath())) return;
     reassertFoodUserTheme();
   };
 

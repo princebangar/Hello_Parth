@@ -1,3 +1,4 @@
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 /** Main bottom-nav / desktop-nav tab routes — exact paths only (no sub-routes). */
 
 export const MAIN_TAB_IDS = ["delivery", "takeaway", "dining", "under250", "profile"];
@@ -158,12 +159,12 @@ export function toFoodUserPath(path = "/user") {
   if (p.startsWith("/food/")) {
     result = p;
   } else if (p.startsWith("/user/") || p === "/user") {
-    if (typeof window !== "undefined" && window.location.pathname.startsWith("/food")) {
+    if (typeof window !== "undefined" && getAppRoutePath().startsWith("/food")) {
       result = `/food${p}`;
     } else {
       result = p;
     }
-  } else if (typeof window !== "undefined" && window.location.pathname.startsWith("/food")) {
+  } else if (typeof window !== "undefined" && getAppRoutePath().startsWith("/food")) {
     result = `/food/user${p}`;
   } else {
     result = `/user${p}`;

@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders";
 import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar";
+import { hardNavigate } from '@/shared/utils/nativeShell';
 const notificationSound = "/assets/media/restaurant_alert.mp3";
 import { restaurantAPI, diningAPI } from "@food/api";
 import { useRestaurantNotifications } from "@food/hooks/useRestaurantNotifications";
@@ -1731,7 +1732,7 @@ function OrdersMainInner() {
         if (!error.response?.data?.message?.includes("inactive")) {
           // Only redirect if it's not an "inactive" error (which we handle differently)
           setTimeout(() => {
-            window.location.href = "/food/restaurant/login";
+            hardNavigate("/food/restaurant/login", { replace: false });
           }, 1500);
         }
       } else {
@@ -5019,7 +5020,7 @@ function EmptyState({ message = "Temporarily closed" }) {
         onClick={() => {
           // If message is related to rejection/offline, go to status page, otherwise refresh orders
           if (message?.toLowerCase().includes("rejected") || message?.toLowerCase().includes("closed")) {
-            window.location.href = "/food/restaurant/status";
+            hardNavigate("/food/restaurant/status", { replace: false });
           } else {
             window.location.reload();
           }

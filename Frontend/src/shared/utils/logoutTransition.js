@@ -5,6 +5,7 @@
 // in between. So a dim "Logging out..." cover (same look as the log-out popup) is put straight onto <body> - outside
 // React, so it survives the page being replaced - and is faded out once the login screen is really showing.
 import { preloadAuthApp } from './preloadLogin.js';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const COVER_ID = 'logout-transition-cover';
 const FADE_MS = 220;
@@ -63,7 +64,7 @@ export function hideLogoutCoverWhenLoginShown() {
   if (typeof document === 'undefined') return;
   const started = Date.now();
   const check = () => {
-    const onLogin = window.location.pathname.startsWith('/login');
+    const onLogin = getAppRoutePath().startsWith('/login');
     const formShown = onLogin && Boolean(document.querySelector('input'));
     if (formShown || Date.now() - started > MAX_COVER_MS - 500) {
       // one more frame so the login page has painted under the cover before it fades

@@ -35,6 +35,7 @@ import { getHaversineDistance, calculateETA, calculateHeading } from '@/modules/
 import { useCompanyName } from "@food/hooks/useCompanyName";
 import { useNavigate } from 'react-router-dom';
 import useNotificationInbox from "@food/hooks/useNotificationInbox";
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 /** Minimal bottom-sheet popup (Restored from legacy FeedNavbar) */
 function BottomPopup({ isOpen, onClose, title, children }) {
@@ -190,7 +191,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
 
     // Optional: Full refresh after delay ONLY if we're not already on login
     setTimeout(() => {
-       if (!window.location.pathname.includes('/login')) {
+       if (!getAppRoutePath().includes('/login')) {
           window.location.reload();
        }
     }, 1500);

@@ -3,6 +3,7 @@ import { showNotificationToast } from "@/shared/utils/customToasts";
 import apiClient, { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/api";
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { buildMessagingServiceWorkerUrl } from "@/shared/utils/firebaseServiceWorkerUrl";
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 const fallbackNotificationSound = "/assets/media/alert.mp3";
 
 const pushNotificationSoundPath = "/assets/media/zomato_sms.mp3";
@@ -42,7 +43,7 @@ const pushDebugWarn = (prefix, message, data = {}) => {
   }
 };
 
-function normalizeModuleFromPath(pathname = window.location.pathname) {
+function normalizeModuleFromPath(pathname = getAppRoutePath()) {
   if (pathname.includes("/restaurant") && !pathname.includes("/restaurants")) return "restaurant";
   if (pathname.includes("/delivery")) return "delivery";
   if (pathname.includes("/admin")) return "admin";
@@ -527,7 +528,7 @@ function setupFcmTokenRefreshOnVisibility(moduleName) {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    const activeModule = normalizeModuleFromPath(window.location.pathname);
+    const activeModule = normalizeModuleFromPath(getAppRoutePath());
 
     const accessToken = localStorage.getItem(`${activeModule}_accessToken`);
     if (accessToken) {
@@ -545,7 +546,7 @@ function setupFcmTokenRefreshOnVisibility(moduleName) {
     if (
       pendingPhone &&
       (activeModule === "delivery" || activeModule === "restaurant") &&
-      window.location.pathname.includes("/pending-verification")
+      getAppRoutePath().includes("/pending-verification")
     ) {
       void persistPendingModuleFcmToken(activeModule, pendingPhone, {
         requestPermission: true,
@@ -1374,9 +1375,9 @@ function scheduleForegroundNotification(payload) {
 
 export function initPushNotificationClient() {
   if (typeof window === "undefined") return;
-  const moduleName = normalizeModuleFromPath(window.location.pathname);
+  const moduleName = normalizeModuleFromPath(getAppRoutePath());
   pushDebugLog(PUSH_DEBUG_PREFIX, "Initializing push notification client", {
-    path: window.location.pathname,
+    path: getAppRoutePath(),
     moduleName,
     soundEnabled: isPushSoundEnabled(),
   });
@@ -1487,7 +1488,7 @@ async function attachForegroundListener(firebaseAppInstance) {
   foregroundListenerAttached = true;
 }
 
-export async function registerWebPushForCurrentModule(pathname = window.location.pathname) {
+export async function registerWebPushForCurrentModule(pathname = getAppRoutePath()) {
   const moduleName = normalizeModuleFromPath(pathname);
 
   initPushNotificationClient();

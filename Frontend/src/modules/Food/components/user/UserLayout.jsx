@@ -5,6 +5,7 @@ import { BrandToastIcon } from "@/shared/utils/customToasts"
 import { ProfileProvider } from "@food/context/ProfileContext"
 import { CartProvider } from "@food/context/CartContext"
 import { OrdersProvider } from "@food/context/OrdersContext"
+import { getAppRoutePath } from '@/shared/utils/nativeShell'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -159,8 +160,7 @@ function LocationSelectorProvider({ children }) {
 
   const openLocationSelector = useCallback(() => {
     // Navigate to the standalone address selector page
-    // Using window.location.pathname to avoid hook issues in some contexts
-    navigate("/food/user/address-selector", { state: { from: window.location.pathname } })
+    navigate("/food/user/address-selector", { state: { from: getAppRoutePath() } })
   }, [navigate])
 
   const closeLocationSelector = useCallback(() => { }, [])
