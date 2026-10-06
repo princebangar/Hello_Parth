@@ -1,4 +1,5 @@
 import { createElement, lazy } from 'react';
+import { isChunkLoadError, reloadForNewVersion } from './chunkReload.js';
 
 /**
  * Drop-in for React.lazy() that can be loaded BEFORE it is first rendered.
@@ -24,6 +25,8 @@ export default function lazyPreloaded(loader) {
         })
         .catch((error) => {
           loading = null; // let a later attempt retry (e.g. the network came back)
+          // the file is gone from the server = a new version was published: load the new page
+          if (isChunkLoadError(error)) reloadForNewVersion();
           throw error;
         });
     }

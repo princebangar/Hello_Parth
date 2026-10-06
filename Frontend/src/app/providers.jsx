@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { StrictMode } from 'react'
 import { Provider as ReduxProvider } from 'react-redux'
 import { store } from './store'
+import AppErrorBoundary from '@/shared/components/AppErrorBoundary'
 
 function shouldUseHashRouter() {
   if (typeof window === 'undefined') return false
@@ -25,8 +26,8 @@ export function AppProviders({ children }) {
   return (
     <StrictMode>
       <ReduxProvider store={store}>
-        <Router>
-          {children}
+        <Router unstable_useTransitions={false}>
+          <AppErrorBoundary>{children}</AppErrorBoundary>
           <Toaster position="top-center" richColors offset="80px" closeButton />
         </Router>
       </ReduxProvider>

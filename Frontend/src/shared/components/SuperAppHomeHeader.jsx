@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, startTransition } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSwitcherPill, slideSwitcherPills } from '@/shared/utils/useSwitcherIndex.js';
+import { SWITCH_VERTICAL_EVENT, hasVisitedVertical } from '@/shared/components/VerticalSwitchOverlay';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MapPin, ChevronDown, Bell, Wallet } from 'lucide-react';
 import { getVerticalTheme } from '@/shared/constants/superAppVerticalTheme';
@@ -115,6 +117,9 @@ function readStoredProfileImage() {
   }
 }
 
+// the highlight slide is 260 ms; the next screen is put in just before it ends
+const SLIDE_BEFORE_NAVIGATE_MS = 220;
+
 export default function SuperAppHomeHeader({
   activeVertical: activeVerticalProp,
   location: locationProp,
@@ -154,13 +159,36 @@ export default function SuperAppHomeHeader({
     prefetchWallet(activeVertical);
   }, [activeVertical]);
 
+  // First time on a phone: put the destination's header + skeleton up first and let it paint, THEN start building the
+  // other app (that work is one long block - the old screen used to stay frozen until it finished). The highlight
+  // slides in that skeleton.
+  // Opened before: the highlight slides on this screen (the slide itself runs on the GPU, it stays smooth while the
+  // other screen builds) and the new screen is put in just as the slide ends - so the switch and the content arrive
+  // together, and the new header already has the highlight in its place (no jump).
+  const goToVertical = useCallback((verticalId, path) => {
+    if (!window.matchMedia('(max-width: 767px)').matches) {
+      navigate(path);
+      return;
+    }
+    if (hasVisitedVertical(verticalId)) {
+      slideSwitcherPills(verticalId);
+      window.setTimeout(() => navigate(path), SLIDE_BEFORE_NAVIGATE_MS);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(SWITCH_VERTICAL_EVENT, { detail: { to: verticalId } }));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => navigate(path));
+    });
+  }, [navigate]);
+
   const handleVerticalTabClick = useCallback((verticalId) => {
+    if (verticalId === activeVertical) return;
     if (verticalId === 'food') {
       ensureFoodGuestSession();
       prefetchFoodUser();
-      startTransition(() => {
-        navigate('/food/user');
-      });
+      // No transition wrapper: React would keep the old screen up until Food's code and data were ready (a 1-2 s
+      // freeze). Navigating at once shows Food's own loading skeleton, with the header, straight away.
+      goToVertical('food', '/food/user');
       return;
     }
     if (verticalId === 'taxi') {
@@ -173,11 +201,9 @@ export default function SuperAppHomeHeader({
       }
       prefetchTaxiUser();
       syncThemeForPath('/taxi/user');
-      startTransition(() => {
-        navigate('/taxi/user');
-      });
+      goToVertical('taxi', '/taxi/user');
     }
-  }, [navigate]);
+  }, [navigate, goToVertical, activeVertical]);
 
   // Warm the sibling vertical after first paint so Food ↔ Taxi feels instant.
   useEffect(() => {
@@ -252,12 +278,22 @@ export default function SuperAppHomeHeader({
     }
   }, [handleLocationClick, isTaxi, navigate]);
 
+  const pillRef = useSwitcherPill(activeVertical);
   const tabsRow = (
     <div className={`relative z-20 px-4 ${tabsOnly && !embedded ? 'pt-1 pb-3' : 'pb-3'}`}>
       <div className="relative flex w-full items-center gap-0.5 rounded-full bg-black/25 p-1 backdrop-blur-md ring-1 ring-white/10">
+        {/* the highlight: one pill that slides between the two tabs */}
+        <span
+          ref={pillRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1 top-1 bottom-1 rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)]"
+          style={{
+            width: 'calc((100% - 10px) / 2)',
+            backgroundColor: getVerticalTheme(activeVertical).activeTab,
+          }}
+        />
         {VERTICALS.map((vertical) => {
           const isActive = vertical.id === activeVertical;
-          const tabTheme = getVerticalTheme(vertical.id);
           return (
             <button
               key={vertical.id}
@@ -273,11 +309,6 @@ export default function SuperAppHomeHeader({
               }}
               className="relative z-10 flex h-12 flex-1 items-center justify-center gap-2 rounded-full transition-colors duration-150"
             >
-              <span
-                aria-hidden="true"
-                className={`absolute inset-0 rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-opacity duration-150 ${isActive ? 'opacity-100' : 'opacity-0'}`}
-                style={{ backgroundColor: tabTheme.activeTab }}
-              />
               <span className="relative z-10 flex items-center gap-2">
                 {vertical.id === 'food' ? (
                   <BurgerIcon className="w-6 h-6" />

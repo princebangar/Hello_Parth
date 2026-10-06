@@ -1,3 +1,4 @@
+import { clearUserLocalData, prepareForSignIn } from '@/shared/utils/userLocalData.js'
 import api from '../../../shared/api/axiosInstance';
 import { clearSharedUserLocation } from '@/shared/utils/sharedUserLocation.js';
 
@@ -83,6 +84,7 @@ export const clearLocalUserSession = () => {
   } catch {
     /* ignore */
   }
+  clearUserLocalData();
 };
 
 export const withUserAuth = (config = {}) => {

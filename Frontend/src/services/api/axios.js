@@ -1,3 +1,4 @@
+import { clearUserLocalData, prepareForSignIn } from '@/shared/utils/userLocalData.js'
 /**
  * Central API client for backend (auth and future APIs).
  * - baseURL from VITE_API_BASE_URL (e.g. http://localhost:5000/api/v1)
@@ -95,6 +96,7 @@ function getRefreshToken(module) {
 
 function clearModuleAuth(module) {
   try {
+    if (module === "user") clearUserLocalData();
     localStorage.removeItem(`${module}_accessToken`);
     localStorage.removeItem(`${module}_refreshToken`);
     localStorage.removeItem(`${module}_authenticated`);

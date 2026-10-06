@@ -194,6 +194,12 @@ console.error = (...args) => {
   originalError.apply(console, args)
 }
 
+// A screen's file that the server no longer has (new version published): load the new page instead of going blank.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+  reloadForNewVersion()
+})
+
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason || event
   const errorMsg = error?.message || String(error) || ''
@@ -212,6 +218,7 @@ window.addEventListener('unhandledrejection', (event) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { AppProviders } from './app/providers.jsx'
+import { reloadForNewVersion } from './shared/utils/chunkReload.js'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element not found')

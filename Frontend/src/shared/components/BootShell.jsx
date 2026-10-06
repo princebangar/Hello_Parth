@@ -1,5 +1,6 @@
 import { getFoodStyleLocationParts, getLocationSubtitle, readSharedFoodLocation, readTaxiLocation } from '@/shared/utils/sharedUserLocation'
 import { getAppRoutePath } from '@/shared/utils/nativeShell'
+import { useSwitcherPill } from '@/shared/utils/useSwitcherIndex'
 
 /**
  * The real top of the Taxi / Food home - the person's saved location, the Taxi | Food switch and the icons, in the
@@ -55,6 +56,7 @@ export function BootShellHeader({ vertical }) {
   const theme = THEME[vertical]
   if (!theme) return null
   const { title, subtitle } = readTitleAndSubtitle()
+  const pillRef = useSwitcherPill(vertical)
   const tab = (id, label) => ({
     flex: 1,
     height: 48,
@@ -65,7 +67,7 @@ export function BootShellHeader({ vertical }) {
     fontSize: 15,
     fontWeight: 700,
     color: id === vertical ? '#fff' : 'rgba(255,255,255,.85)',
-    background: id === vertical ? theme.activeTab : 'transparent',
+    position: 'relative',
   })
 
   return (
@@ -112,7 +114,14 @@ export function BootShellHeader({ vertical }) {
           </div>
         </div>
         <div style={{ padding: '0 16px 12px', boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', gap: 2, padding: 4, borderRadius: 999, background: 'rgba(0,0,0,.25)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.1)', boxSizing: 'border-box' }}>
+          <div style={{ position: 'relative', display: 'flex', gap: 2, padding: 4, borderRadius: 999, background: 'rgba(0,0,0,.25)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.1)', boxSizing: 'border-box' }}>
+            <span
+              ref={pillRef}
+              style={{
+                position: 'absolute', left: 4, top: 4, bottom: 4, width: 'calc((100% - 10px) / 2)', borderRadius: 999,
+                background: theme.activeTab,
+              }}
+            />
             <span style={tab('taxi')}>Taxi</span>
             <span style={tab('food')}>Food</span>
           </div>

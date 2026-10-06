@@ -1,3 +1,4 @@
+import { clearUserLocalData, prepareForSignIn } from '@/shared/utils/userLocalData.js'
 /**
  * JWT Token Utilities
  * Decode and extract information from JWT tokens
@@ -222,6 +223,7 @@ export function clearUserSession() {
     "app:isOnline"
   ];
   keys.forEach((k) => localStorage.removeItem(k));
+  clearUserLocalData();
   // Next login should fetch current GPS like a fresh app open — a shared
   // device shouldn't hand the next person the previous one's last address.
   try {
@@ -303,6 +305,7 @@ export function clearAuthData() {
  * @throws {Error} If localStorage is not available or quota exceeded
  */
 export function setAuthData(module, token, user, refreshToken = null) {
+  if (module === 'user') prepareForSignIn(user);
   try {
     // Check if localStorage is available
     if (typeof Storage === 'undefined' || !localStorage) {

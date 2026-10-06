@@ -16,6 +16,8 @@ import AppRouteFallback from '@/shared/components/AppRouteFallback'
 import { loadAuthApp, preloadAuthAppWhenIdle } from '@/shared/utils/preloadLogin.js'
 import { FoodApp, TaxiApp } from '@/shared/utils/appChunks.js'
 import { whenAppSettled } from '@/shared/utils/whenSettled.js'
+import VerticalSwitchOverlay from '@/shared/components/VerticalSwitchOverlay'
+import { clearUserLocalData } from '@/shared/utils/userLocalData.js'
 
 // Lazy load the Food service module (Quick-spicy app)
 const AuthApp = lazy(loadAuthApp)
@@ -102,6 +104,12 @@ const AppRoutes = () => {
     if (!/^\/login(\/|$)/.test(location.pathname)) document.getElementById('boot-login')?.remove()
   }, [location.pathname])
 
+  // The login screen is open and nobody is signed in: whatever a watcher wrote after the logout (the last address ...)
+  // must not be left for the next person.
+  useEffect(() => {
+    if (/^\/login(\/|$)/.test(location.pathname) && !isConsumerLoggedIn()) clearUserLocalData({ session: false })
+  }, [location.pathname])
+
   // Warm sibling modules on idle so Food ↔ Taxi (user + admin) switches stay smooth.
   useEffect(() => {
     const path = location.pathname || ''
@@ -145,7 +153,10 @@ const AppRoutes = () => {
     const isTransient = TRANSIENT_ROUTE_SEGMENTS.some(seg => route.includes(seg))
     if (isTransient) {
       // Still remember module so cold start opens Taxi/Food home correctly.
-      if (route.includes('/taxi/')) {
+      if (route.includes('/ride/select-location') || route.includes('/ride/select-vehicle')) {
+        // A reload in the middle of booking (new version, pull to refresh) resumes at the place picker, not at home.
+        localStorage.setItem(NATIVE_LAST_ROUTE_KEY, '/taxi/user/ride/select-location')
+      } else if (route.includes('/taxi/')) {
         localStorage.setItem(NATIVE_LAST_ROUTE_KEY, '/taxi/user')
       } else if (route.includes('/food/user')) {
         localStorage.setItem(NATIVE_LAST_ROUTE_KEY, '/food/user')
@@ -162,6 +173,7 @@ const AppRoutes = () => {
     <>
       {/* Food ↔ Taxi admin: keep both shells mounted after first visit (instant hide/show). */}
       <AdminModulesKeepAlive />
+      <VerticalSwitchOverlay />
 
       <Routes>
         <Route path="/" element={<RootGate />} />

@@ -1,3 +1,4 @@
+import { clearUserLocalData, prepareForSignIn } from './userLocalData.js'
 /**
  * JWT Token Utilities
  * Decode and extract information from JWT tokens
@@ -146,6 +147,7 @@ export function isModuleAuthenticated(module) {
  * @param {string} module - Module name (admin, restaurant, delivery, user)
  */
 export function clearModuleAuth(module) {
+  if (module === "user") clearUserLocalData();
   localStorage.removeItem(`${module}_accessToken`);
   localStorage.removeItem(`${module}_refreshToken`);
   localStorage.removeItem(`${module}_authenticated`);
@@ -228,6 +230,7 @@ export function clearAuthData() {
  * @throws {Error} If localStorage is not available or quota exceeded
  */
 export function setAuthData(module, token, user, refreshToken = null) {
+  if (module === 'user') prepareForSignIn(user);
   try {
     // Check if localStorage is available
     if (typeof Storage === 'undefined' || !localStorage) {
