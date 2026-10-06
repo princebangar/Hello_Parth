@@ -12,7 +12,7 @@ const WORDMARK_SIZES = {
  *  leading icon of branded toasts. */
 export const BrandToastIcon = ({ size = "lg" }) => (
   <div
-    className={`${WORDMARK_SIZES[size] || WORDMARK_SIZES.lg} flex-shrink-0 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] shadow-lg flex flex-col items-center justify-center text-white`}
+    className={`brand-toast-icon ${WORDMARK_SIZES[size] || WORDMARK_SIZES.lg} flex-shrink-0 rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#991B1B] shadow-lg flex flex-col items-center justify-center text-white`}
     style={{ fontFamily: "'Pacifico', cursive", lineHeight: 0.95, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}
     aria-label="Hello Parth"
   >

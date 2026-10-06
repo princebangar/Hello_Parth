@@ -14,10 +14,12 @@ import {
   loadPopularPlaces,
   nearbyAutocompleteRequest,
 } from '../../utils/nearbyPlaces';
+import { getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
 
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
 const getLatLngCacheKey = (coords, precision = 5) =>
   `${Number(coords?.lat || 0).toFixed(precision)},${Number(coords?.lng || 0).toFixed(precision)}`;
+const formatRoadDistance = (meters) => (meters < 1000 ? `${Math.max(10, Math.round(meters / 10) * 10)} m` : `${(meters / 1000).toFixed(1)} km`);
 const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '').replace(/\s{2,}/g, ' ');
 // Pickups saved from this screen are stamped "now" so they count as fresh for a while.
 const savePickup = (location) => saveLocation({ ...location, updatedAt: Date.now() });
@@ -196,12 +198,15 @@ const SelectLocation = () => {
   const savedIsFresh = Boolean(savedLocation?.updatedAt) && (Date.now() - savedLocation.updatedAt) <= SAVED_PICKUP_MAX_AGE_MS;
   const savedPickupLabel = savedIsFresh ? String(savedLocation?.address || '').trim() : '';
   const savedPickupCoords = savedIsFresh ? getSavedLocationCoords() : null;
-  const [pickup, setPickup] = useState(() => routeState.pickup || savedPickupLabel || '');
+  // Coming from the out-of-zone screen the saved place is the one that is NOT served: start with an empty pickup,
+  // which fills itself with the device's current location (or lets the user type another one).
+  const fromOutOfZone = Boolean(routeState.fromOutOfZone);
+  const [pickup, setPickup] = useState(() => routeState.pickup || (fromOutOfZone ? '' : savedPickupLabel) || '');
   // True once the user has typed in the active field. A prefilled address that was never edited must not
   // be searched as if it were a query (that gave "No results for <the whole address>").
   const [userTyped, setUserTyped] = useState(false);
   const [drop, setDrop] = useState(() => routeState.drop || '');
-  const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || savedPickupCoords || null);
+  const [pickupCoords, setPickupCoords] = useState(() => routeState.pickupCoords || (fromOutOfZone ? null : savedPickupCoords) || null);
   const [locationError, setLocationError] = useState('');
   const [tripError, setTripError] = useState('');
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
@@ -375,8 +380,9 @@ const SelectLocation = () => {
         if (cancelled) return;
         setIsResolvingCurrentLocation(false);
 
-        if (status === 'OK' && results?.[0]?.formatted_address) {
-          const addr = results[0].formatted_address;
+        const best = status === 'OK' ? pickBestGeocodeResult(results) : null;
+        if (best) {
+          const addr = best.formatted_address;
           setPickup(addr);
           setPickupCoords(coords);
           savePickup({ address: addr, lat: latitude, lon: longitude });
@@ -393,10 +399,8 @@ const SelectLocation = () => {
       setLocationError('Could not access your current location. Please allow location access or select manually.');
     };
 
-    navigator.geolocation.getCurrentPosition(handleSuccess, handleFailure, {
-      enableHighAccuracy: true,
-      timeout: 8000,
-    });
+    // Waits (a few seconds at most) for a tight GPS fix, so the pickup is the building the user stands in.
+    getBestPosition({ maxWaitMs: 7000 }).then(handleSuccess, handleFailure);
 
     return () => {
       cancelled = true;
@@ -708,6 +712,40 @@ const SelectLocation = () => {
     [localSearchResults, remoteResults],
   );
 
+  // The distance on each row is the road distance from the pickup (what Google Maps shows), not the straight line.
+  const [roadMeters, setRoadMeters] = useState({});
+  const placeKey = (place) => String(place?.placeId || (Array.isArray(place?.coords) ? place.coords.join(',') : place?.title || ''));
+  const roadOrigin = Array.isArray(pickupCoords) && pickupCoords.length === 2 ? pickupCoords : savedPickupCoords;
+  useEffect(() => {
+    if (!isLoaded || !window.google?.maps || !Array.isArray(roadOrigin) || roadOrigin.length !== 2) return undefined;
+    const wanted = searchResults
+      .filter((place) => (Array.isArray(place.coords) || place.placeId) && roadMeters[placeKey(place)] === undefined)
+      .slice(0, 10);
+    if (wanted.length === 0) return undefined;
+    let cancelled = false;
+    loadRoadDistances(window.google, roadOrigin, wanted).then((meters) => {
+      if (cancelled) return;
+      setRoadMeters((prev) => {
+        const next = { ...prev };
+        wanted.forEach((place, index) => {
+          // null = Google has no road route / the service is off: remembered so it is not asked again
+          next[placeKey(place)] = meters && Number.isFinite(meters[index]) ? meters[index] : null;
+        });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchResults, isLoaded, roadOrigin?.[0], roadOrigin?.[1]]);
+  // A new pickup means new distances.
+  useEffect(() => { setRoadMeters({}); }, [roadOrigin?.[0], roadOrigin?.[1]]);
+  const distanceTextFor = (place) => {
+    const meters = roadMeters[placeKey(place)];
+    if (Number.isFinite(meters)) return formatRoadDistance(meters);
+    // not known (yet): no number at all rather than a straight-line one - unless Google could not route it
+    return meters === null ? place.distanceLabel || '' : '';
+  };
+
   const getMapStartCoord = () => {
     const activeCoords = activeInput === 'drop' ? dropCoords : pickupCoords;
 
@@ -847,19 +885,7 @@ const SelectLocation = () => {
       }
     };
 
-    navigator.geolocation.getCurrentPosition(
-      handleSuccess,
-      () => {
-        navigator.geolocation.getCurrentPosition(
-          handleSuccess,
-          () => {
-            setIsLocating(false);
-          },
-          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-        );
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
+    getBestPosition({ maxWaitMs: 7000 }).then(handleSuccess, () => setIsLocating(false));
   };
 
   const handleConfirmNavigate = async (optionalDrop, optionalDropCoords = null) => {
@@ -1018,8 +1044,9 @@ const SelectLocation = () => {
       const { latitude, longitude } = pos.coords;
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
-        if (status === 'OK' && results[0]) {
-          const addr = results[0].formatted_address;
+        const best = status === 'OK' ? pickBestGeocodeResult(results) : null;
+        if (best) {
+          const addr = best.formatted_address;
           const coords = [longitude, latitude];
           if (isParcelFlow) {
             returnParcelSelection(activeInput, addr, coords);
@@ -1050,19 +1077,7 @@ const SelectLocation = () => {
       });
     };
 
-    navigator.geolocation.getCurrentPosition(
-      handleSuccess,
-      () => {
-        navigator.geolocation.getCurrentPosition(
-          handleSuccess,
-          () => {
-            setIsLocating(false);
-          },
-          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-        );
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
+    getBestPosition({ maxWaitMs: 7000 }).then(handleSuccess, () => setIsLocating(false));
   };
 
 
@@ -1324,7 +1339,7 @@ const SelectLocation = () => {
                       e.target.select();
                     }}
                     placeholder={isResolvingCurrentLocation ? 'Detecting your location...' : 'Your pickup location'}
-                    className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
+                    className="bare-input w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
                   />
                   {isResolvingCurrentLocation && (
                     <LoaderCircle size={16} className="ml-2 shrink-0 animate-spin text-slate-300" />
@@ -1377,7 +1392,7 @@ const SelectLocation = () => {
                           placeholder={`Stop ${idx + 1} location...`}
                           onFocus={() => setActiveInput(idx)}
                           onChange={(e) => { setUserTyped(true); updateStop(idx, sanitizeLocationInput(e.target.value)); }}
-                          className={`w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none ${stop.trim().length > 0 ? 'placeholder:text-slate-300' : 'placeholder:text-indigo-300'
+                          className={`bare-input w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none ${stop.trim().length > 0 ? 'placeholder:text-slate-300' : 'placeholder:text-indigo-300'
                             }`}
                         />
                         {stop.length > 0 && (
@@ -1413,11 +1428,10 @@ const SelectLocation = () => {
                   <input
                     type="text"
                     value={drop}
-                    autoFocus={activeInput === 'drop'}
                     placeholder="Enter drop location..."
                     onFocus={() => setActiveInput('drop')}
                     onChange={(e) => { setUserTyped(true); setDrop(sanitizeLocationInput(e.target.value)); }}
-                    className="w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
+                    className="bare-input w-full bg-transparent border-none text-[15px] font-medium text-slate-900 focus:outline-none placeholder:text-slate-300"
                   />
                   {drop.length > 0 && (
                     <button onClick={() => setDrop('')} className="ml-2 shrink-0">
@@ -1516,7 +1530,7 @@ const SelectLocation = () => {
                 <div className="min-w-0">
                   <h4 className="text-[15px] font-semibold text-slate-900 leading-tight">{result.title}</h4>
                   <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">
-                    {result.distanceLabel ? `${result.distanceLabel} • ` : ''}{result.address}
+                    {distanceTextFor(result) ? `${distanceTextFor(result)} • ` : ''}{result.address}
                   </p>
                 </div>
               </motion.button>

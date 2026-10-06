@@ -501,6 +501,18 @@
   color: var(--user-text-primary) !important;
 }
 
+/* The out-of-zone screen is always dark purple: its white text must not take the light theme's dark text colour. */
+.user-app-theme .oz-screen .text-white {
+  color: #ffffff !important;
+}
+
+/* The inner field of a search row sits inside its own bordered box; the theme's gold focus ring must not draw a second box in it. */
+.user-app-theme input.bare-input:focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 /* Text Secondary overrides */
 .user-app-theme .text-slate-700,
 .user-app-theme .text-slate-600,
@@ -1148,22 +1160,21 @@ html, body, #root {
   z-index: 9998 !important;
 }
 
-/* Sizes to its content (a handful of services used to float in an 85vh white slab), capped so a
-   long list still scrolls inside the sheet. */
+/* A dialog in the middle of the screen. Sizes to its content, capped so a long list still scrolls inside it. */
 .all-services-sheet {
   position: fixed !important;
   left: 50% !important;
-  bottom: 0 !important;
-  transform: translateX(-50%) !important;
-  width: 100% !important;
-  max-width: 430px !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: calc(100% - 32px) !important;
+  max-width: 400px !important;
   height: auto !important;
-  max-height: 85vh !important;
+  max-height: 80vh !important;
   background: var(--user-card-bg) !important;
-  border-radius: 28px 28px 0 0 !important;
+  border-radius: 24px !important;
   z-index: 9999 !important;
   overflow-y: auto !important;
-  padding: 12px 20px calc(28px + env(safe-area-inset-bottom)) !important;
+  padding: 18px 20px 22px !important;
 }
 
 /* Centrally force all max-w-lg page wrapper elements to be mobile responsive */
@@ -1184,6 +1195,12 @@ html, body, #root {
 .redigo-app,
 .redigo-app * {
   font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
+}
+
+/* The toast wordmark keeps its own lettering; the rule above would turn it into Outfit. */
+html .brand-toast-icon,
+html .brand-toast-icon * {
+  font-family: 'Pacifico', cursive !important;
 }
 
 /* Custom Utility overrides to force dark text on light elements (like yellow cards) inside dark mode */
@@ -1318,12 +1335,14 @@ html, body, #root {
 .everything-card {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
-  height: 96px;
-  padding: 12px 12px 12px 16px;
-  text-align: left;
+  width: 100%;
+  height: 114px;
+  padding: 12px 12px;
+  text-align: center;
   border-radius: 20px;
   background: var(--user-card-bg) !important;
   border: 1px solid var(--user-border);
@@ -1338,16 +1357,19 @@ html, body, #root {
 }
 .everything-card-content {
   min-width: 0;
-  flex: 1 1 auto;
+  max-width: 100%;
+  align-items: center;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 .everything-card-content span {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11.5px;
   font-weight: 500;
   line-height: 1.25;
@@ -1355,20 +1377,26 @@ html, body, #root {
 }
 .everything-card-content h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--user-text-primary) !important;
 }
+/* Picture on top-left, text under it: icon and text share one left edge, and the titles of a row sit on one line
+   (the text block is pushed to the bottom). The tile is only ~155px wide, so the text keeps the whole width. */
 .everything-card-art {
+  order: -1;
   flex: 0 0 auto;
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
 }
 .everything-card-art img {
-  padding: 6px;
+  padding: 4px;
 }
 
 /* Splash screen specific styles */
@@ -1429,9 +1457,8 @@ body.splash-active {
   .user-app-theme,
   .user-home,
   .user-app,
-  .mobile-app-shell,
-  .all-services-sheet {
-    max-width: 100% !important;
+  .mobile-app-shell {
+    max-width: calc(100% - 32px) !important;
   }
 }
 

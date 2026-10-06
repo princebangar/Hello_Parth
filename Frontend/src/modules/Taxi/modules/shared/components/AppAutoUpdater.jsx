@@ -31,7 +31,9 @@ const isOnCriticalFlow = () => {
     return false;
   }
 
-  const path = String(window.location?.pathname || '');
+  // The phone app (WebView) keeps the real screen in the #hash and its path stays the fixed start page, so the
+  // hash has to be checked too - otherwise a booking flow there was never seen as "critical" and got reloaded.
+  const path = `${window.location?.pathname || ''}${window.location?.hash || ''}`;
   return CRITICAL_FLOW_SEGMENTS.some((segment) => path.includes(segment));
 };
 

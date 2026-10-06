@@ -352,7 +352,7 @@ const defaultSettings = {
   everything: [
     { id: '1', title: 'Parcel', subtitle: 'Send anything', image: '', route: '/taxi/user/parcel/type', order: 1, status: 'active' },
     { id: '2', title: 'Bike Taxi', subtitle: 'Beat the traffic', image: '', route: '/taxi/user/ride/select-location', order: 2, status: 'active' },
-    { id: '3', title: 'Book now', subtitle: 'Your everyday rides', image: '', route: '/taxi/user/ride/select-location', order: 3, status: 'active' },
+    { id: '3', title: 'Book now', subtitle: 'Everyday rides', image: '', route: '/taxi/user/ride/select-location', order: 3, status: 'active' },
     { id: '4', title: 'All Services', subtitle: 'All Services', image: '', route: '', order: 4, status: 'active' }
   ]
 };
@@ -668,7 +668,7 @@ const ServiceGrid = ({
         {loading ? (
           <div className="grid grid-cols-2 gap-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="w-full animate-pulse rounded-[20px] h-[96px]" style={{ background: 'var(--user-card-soft)' }} />
+              <div key={i} className="w-full animate-pulse rounded-[20px] h-[114px]" style={{ background: 'var(--user-card-soft)' }} />
             ))}
           </div>
         ) : (() => {

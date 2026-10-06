@@ -5,6 +5,7 @@ import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../admin/
 import { getSavedLocation, saveLocation, LOCATION_UPDATED_EVENT } from '../services/locationStore';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import { markLocationSessionFetched, hasLocationSessionFetched, locationPartsFromGoogleResult } from '@/shared/utils/sharedUserLocation';
+import { watchBestPosition, pickBestGeocodeResult } from '../utils/preciseLocation';
 import { acquirePersistentMap, hasPersistentMap, releasePersistentMap } from '../utils/persistentMap';
 
 const DEFAULT_CENTER = { lat: 17.385, lon: 78.4867 };
@@ -242,9 +243,10 @@ const LocationMapSection = () => {
       if (window.google?.maps?.Geocoder) {
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ location: { lat: next.lat, lng: next.lon } }, (results, geocodeStatus) => {
-          if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
+          const best = geocodeStatus === 'OK' ? pickBestGeocodeResult(results) : null;
+          if (best) {
             try {
-              persistAddress(results[0]);
+              persistAddress(best);
             } catch {
               // ignore
             }
@@ -253,29 +255,28 @@ const LocationMapSection = () => {
       }
     };
 
-    navigator.geolocation.getCurrentPosition(
-      handleSuccess,
-      (error) => {
-        if (error?.code === 1) {
-          // Permission denied: do not ask again on every return to this screen.
+    // The first fix shows at once; the pin and the address are then refined while the GPS settles (a few seconds at
+    // most) - so inside an office block the pin ends up on the building, not on a Wi-Fi guess 200 m away.
+    const reportFailure = (error) => {
+      if (error?.code === 1) {
+        // Permission denied: do not ask again on every return to this screen.
+        if (silent) markLocationSessionFetched();
+        if (!silent) setStatus('denied');
+        return;
+      }
+      // Fall back to a coarse (network) fix before giving up.
+      navigator.geolocation.getCurrentPosition(
+        handleSuccess,
+        () => {
+          // A silent background refresh failing shouldn't blow away an
+          // already-good "ready" state with an error one (and is not retried on every return either).
           if (silent) markLocationSessionFetched();
-          if (!silent) setStatus('denied');
-          return;
-        }
-        // Try fallback with low-accuracy for fast IP-based tracking
-        navigator.geolocation.getCurrentPosition(
-          handleSuccess,
-          () => {
-            // A silent background refresh failing shouldn't blow away an
-            // already-good "ready" state with an error one (and is not retried on every return either).
-            if (silent) markLocationSessionFetched();
-            if (!silent) setStatus('error');
-          },
-          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-        );
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 },
-    );
+          if (!silent) setStatus('error');
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+      );
+    };
+    watchBestPosition(handleSuccess, reportFailure, { maxWaitMs: 10000 });
   };
 
   const helperText = (() => {

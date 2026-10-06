@@ -8,6 +8,8 @@ const POPULAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const POPULAR_PLACE_TYPES = ['shopping_mall', 'tourist_attraction', 'train_station', 'bus_station', 'airport', 'hindu_temple', 'park'];
 const POPULAR_PER_TYPE = 3;
 export const POPULAR_MAX_RESULTS = 10;
+// The list on screen stays short: a handful of well-known places, not a scroll of every nearby shop.
+const POPULAR_SHOWN = 6;
 // Below this the list looks broken, so it is topped up with the nearest places of any kind.
 export const POPULAR_MIN_RESULTS = 4;
 // Ratings a place needs to count as "popular"; the bar drops only when too few places clear it.
@@ -138,7 +140,7 @@ export const rankPopularPlaces = (places, originCoords) => {
     ranked = dedupePlaces([...ranked, ...nearest]).slice(0, POPULAR_MIN_RESULTS);
   }
 
-  return ranked.map((place) => ({ ...place, distanceLabel: formatDistance(place.distanceKm) }));
+  return ranked.slice(0, POPULAR_SHOWN).map((place) => ({ ...place, distanceLabel: formatDistance(place.distanceKm) }));
 };
 
 /**

@@ -71,6 +71,23 @@ export function getFoodStyleLocationParts(foodLoc = {}) {
   return { title, subtitle, city, state, pincode }
 }
 
+// "208", "HO-406", "B2/4": a house / plot number on its own says nothing under a heading.
+const isHouseNumberPart = (part) => part.length <= 8 && /\d/.test(part) && !/\s/.test(part)
+
+/**
+ * The line under the location heading. When the heading is the first part of the address (a building or place name:
+ * "Corporate House, 208, 169, RNT Marg, Near ..."), it is the rest of the address - without bare house numbers -
+ * so it reads "RNT Marg, Near ...". Otherwise (the heading is the area) it is "State, pincode".
+ */
+export function getLocationSubtitle({ address, title, state, pincode } = {}) {
+  const parts = String(address || "").split(",").map((p) => p.trim()).filter(Boolean)
+  if (parts.length > 1 && parts[0].toLowerCase() === String(title || "").trim().toLowerCase()) {
+    const rest = parts.slice(1).filter((p) => !isHouseNumberPart(p))
+    if (rest.length) return rest.slice(0, 2).join(", ")
+  }
+  return [state, pincode].filter(Boolean).join(", ")
+}
+
 export function readSharedFoodLocation() {
   if (typeof window === "undefined") return null
   try {
@@ -165,6 +182,15 @@ function mirrorTaxiLocationToFood(taxiLoc) {
   const existingFood = parseJson(localStorage.getItem(FOOD_USER_LOCATION_KEY)) || {}
   const address = String(taxiLoc.address || "").trim()
   const foodPayload = { ...existingFood, latitude: lat, longitude: lon }
+  const foodLat = toFiniteNumber(existingFood.latitude ?? existingFood.lat)
+  const foodLon = toFiniteNumber(existingFood.longitude ?? existingFood.lng ?? existingFood.lon)
+  if (foodLat == null || foodLon == null || Math.abs(foodLat - lat) > MOVED_THRESHOLD || Math.abs(foodLon - lon) > MOVED_THRESHOLD) {
+    // another place: the old place's area / city / state / pincode no longer apply
+    delete foodPayload.area
+    delete foodPayload.city
+    delete foodPayload.state
+    delete foodPayload.pincode
+  }
   if (address) {
     const area = String(taxiLoc.area || "").trim() || getFoodStyleLocationParts({ address }).title
     foodPayload.address = address
@@ -184,7 +210,16 @@ function mirrorTaxiLocationToFood(taxiLoc) {
  */
 export function saveTaxiLocation(partial = {}) {
   if (typeof window === "undefined") return null
-  const next = { ...readTaxiLocation(), ...partial }
+  const previous = readTaxiLocation()
+  const next = { ...previous, ...partial }
+  // A new place saved with only an address / coordinates must not keep the old place's area, state and pincode
+  // (the header showed the old neighbourhood above the newly picked address).
+  const movedTo = partial.lat !== undefined || partial.lon !== undefined || partial.address !== undefined
+  if (movedTo) {
+    if (partial.area === undefined) next.area = ""
+    if (partial.state === undefined) next.state = ""
+    if (partial.pincode === undefined) next.pincode = ""
+  }
   try {
     localStorage.setItem(TAXI_LOCATION_STORAGE_KEY, JSON.stringify(next))
   } catch {}
@@ -199,9 +234,14 @@ export function persistFoodUserLocation(foodLoc, { touch = true } = {}) {
   const lat = toFiniteNumber(foodLoc.latitude ?? foodLoc.lat)
   const lon = toFiniteNumber(foodLoc.longitude ?? foodLoc.lng ?? foodLoc.lon)
   const parts = getFoodStyleLocationParts(foodLoc)
-  const address = parts.title && parts.title !== "Select Location"
-    ? [parts.title, parts.subtitle].filter(Boolean).join(", ")
-    : String(foodLoc.formattedAddress || foodLoc.address || foodLoc.area || "").trim()
+  // The full address is kept as it is. It used to be rebuilt as "<area>, <state>, <pincode>", which cut a place such
+  // as "Corporate House, 208, 169, RNT Marg, ..." down to just "Corporate House" in Taxi's pickup line.
+  const fullAddress = String(foodLoc.formattedAddress || foodLoc.address || "").trim()
+  const address = fullAddress && fullAddress.toLowerCase() !== "select location"
+    ? fullAddress
+    : parts.title && parts.title !== "Select Location"
+      ? [parts.title, parts.subtitle].filter(Boolean).join(", ")
+      : String(foodLoc.area || "").trim()
   const foodPayload = {
     ...foodLoc,
     ...(lat != null ? { latitude: lat } : {}),

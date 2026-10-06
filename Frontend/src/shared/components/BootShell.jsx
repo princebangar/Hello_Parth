@@ -1,4 +1,4 @@
-import { getFoodStyleLocationParts, readSharedFoodLocation, readTaxiLocation } from '@/shared/utils/sharedUserLocation'
+import { getFoodStyleLocationParts, getLocationSubtitle, readSharedFoodLocation, readTaxiLocation } from '@/shared/utils/sharedUserLocation'
 import { getAppRoutePath } from '@/shared/utils/nativeShell'
 
 /**
@@ -30,15 +30,16 @@ const readTitleAndSubtitle = () => {
   const food = readSharedFoodLocation()
   if (food && (food.area || food.address || food.formattedAddress)) {
     const parts = getFoodStyleLocationParts(food)
-    return { title: parts.title || 'Select Location', subtitle: [parts.state, parts.pincode].filter(Boolean).join(', ') }
+    return {
+      title: parts.title || 'Select Location',
+      subtitle: getLocationSubtitle({ address: food.address || food.formattedAddress, title: parts.title, state: parts.state, pincode: parts.pincode }),
+    }
   }
   const taxi = readTaxiLocation()
   const address = String(taxi?.address || taxi?.area || '').trim()
   if (address) {
-    return {
-      title: String(taxi.area || address.split(',')[0] || '').trim() || 'Select Location',
-      subtitle: [taxi.state, taxi.pincode].filter(Boolean).join(', '),
-    }
+    const title = String(taxi.area || address.split(',')[0] || '').trim() || 'Select Location'
+    return { title, subtitle: getLocationSubtitle({ address, title, state: taxi.state, pincode: taxi.pincode }) }
   }
   return { title: 'Select Location', subtitle: '' }
 }

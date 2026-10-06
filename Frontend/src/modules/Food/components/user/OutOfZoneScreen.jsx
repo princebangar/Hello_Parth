@@ -31,7 +31,7 @@ const OutOfZoneScreen = ({ location, handleLocationClick, service = "food", isGu
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-[#2a1c3d] overflow-hidden fixed inset-0 z-40">
+    <div className="oz-screen flex flex-col h-[100dvh] bg-[#2a1c3d] overflow-hidden fixed inset-0 z-40">
       {/* Navbar Overlay */}
       <div className="absolute top-0 left-0 right-0 pt-6 pb-4 px-4 z-50 bg-transparent">
         <div className="flex items-start gap-3">

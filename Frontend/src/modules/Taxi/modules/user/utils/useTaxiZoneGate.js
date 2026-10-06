@@ -7,7 +7,19 @@ import { getSavedLocation, LOCATION_UPDATED_EVENT } from '../services/locationSt
  * "out of zone" screen as Food. No active Taxi zone configured at all = out of zone everywhere.
  */
 const ZONES_TTL_MS = 60 * 1000;
+// The last zone list is kept on the device too, so the very first render already knows whether the saved location is
+// served and the out-of-zone screen shows at once instead of the home flashing first.
+const ZONES_STORAGE_KEY = 'taxi_zone_paths_v1';
 let zonesCache = { ts: 0, paths: null };
+
+const readStoredPaths = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ZONES_STORAGE_KEY) || 'null');
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+};
 let zonesInFlight = null;
 
 const toPoint = (point) => {
@@ -56,6 +68,11 @@ const loadZonePaths = async () => {
           .map(toPath)
           .filter((path) => path.length >= 3);
         zonesCache = { ts: Date.now(), paths };
+        try {
+          localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(paths));
+        } catch {
+          // storage full / blocked - the live list still works
+        }
         return paths;
       })
       .finally(() => { zonesInFlight = null; });
@@ -63,8 +80,14 @@ const loadZonePaths = async () => {
   return zonesInFlight;
 };
 
+const isOutsideAll = (saved, paths) => !paths.some((path) => isInside({ lat: saved.lat, lng: saved.lon }, path));
+
 export default function useTaxiZoneGate() {
-  const [outOfZone, setOutOfZone] = useState(false);
+  const [outOfZone, setOutOfZone] = useState(() => {
+    const saved = getSavedLocation();
+    const stored = readStoredPaths();
+    return Number.isFinite(saved?.lat) && Number.isFinite(saved?.lon) && stored ? isOutsideAll(saved, stored) : false;
+  });
 
   useEffect(() => {
     let active = true;
@@ -78,8 +101,7 @@ export default function useTaxiZoneGate() {
       try {
         const paths = await loadZonePaths();
         if (!active) return;
-        const point = { lat: saved.lat, lng: saved.lon };
-        setOutOfZone(!paths.some((path) => isInside(point, path))); // no active zone at all = Taxi not live yet
+        setOutOfZone(isOutsideAll(saved, paths)); // no active zone at all = Taxi not live yet
       } catch {
         if (active) setOutOfZone(false); // can't tell → don't block
       }

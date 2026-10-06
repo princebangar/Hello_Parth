@@ -107,6 +107,11 @@ import { getSavedLocation, LOCATION_UPDATED_EVENT } from '../services/locationSt
 import { hasPersistentMap } from '../utils/persistentMap';
 import useTaxiZoneGate from '../utils/useTaxiZoneGate';
 import { showHelloParthBrandedToast } from '@/shared/utils/customToasts';
+import { getFoodStyleLocationParts } from '@/shared/utils/sharedUserLocation';
+import { loadRoadDistances } from '../utils/preciseLocation';
+import { distanceBetweenKm } from '../utils/nearbyPlaces';
+
+const RECENT_MAX_DISTANCE_KM = 50;
 import OutOfZoneScreen from '@food/components/user/OutOfZoneScreen';
 import {
   CURRENT_RIDE_UPDATED_EVENT,
@@ -171,7 +176,7 @@ const defaultSettings = {
   everything: [
     { id: '1', title: 'Parcel', subtitle: 'Send anything', image: '', route: '/taxi/user/parcel/type', order: 1, status: 'active' },
     { id: '2', title: 'Bike Taxi', subtitle: 'Beat the traffic', image: '', route: '/taxi/user/ride/select-location', order: 2, status: 'active' },
-    { id: '3', title: 'Book now', subtitle: 'Your everyday rides', image: '', route: '/taxi/user/ride/select-location', order: 3, status: 'active' },
+    { id: '3', title: 'Book now', subtitle: 'Everyday rides', image: '', route: '/taxi/user/ride/select-location', order: 3, status: 'active' },
     { id: '4', title: 'All Services', subtitle: 'All Services', image: '', route: '', order: 4, status: 'active' }
   ],
   explore: [
@@ -240,28 +245,6 @@ const getScheduledCountdownLabel = (value, now = Date.now()) => {
   return `Starts in ${minutes}m`;
 };
 
-const calculateDistanceKm = (fromCoords, toCoords) => {
-  const [fromLng, fromLat] = fromCoords;
-  const [toLng, toLat] = toCoords;
-
-  if (![fromLng, fromLat, toLng, toLat].every((value) => Number.isFinite(Number(value)))) {
-    return null;
-  }
-
-  const toRadians = (value) => (Number(value) * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-  const latDelta = toRadians(toLat - fromLat);
-  const lngDelta = toRadians(toLng - fromLng);
-  const startLat = toRadians(fromLat);
-  const endLat = toRadians(toLat);
-  const a =
-    Math.sin(latDelta / 2) ** 2 +
-    Math.cos(startLat) * Math.cos(endLat) * Math.sin(lngDelta / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return (earthRadiusKm * c).toFixed(1);
-};
-
 const RecentLocationsList = ({ routePrefix }) => {
   const navigate = useNavigate();
   const { theme } = useUserTheme();
@@ -309,22 +292,60 @@ const RecentLocationsList = ({ routePrefix }) => {
     };
   }, []);
 
-  const recentList = useMemo(() => {
-    const currentCoords = getSavedLocationCoords();
-    return recentLocations.map((item) => {
-      let distanceLabel = item.distance;
-      if (currentCoords && item.lat && item.lon) {
-        const distKm = calculateDistanceKm(currentCoords, [item.lon, item.lat]);
-        if (distKm !== null) {
-          distanceLabel = `${distKm} km`;
-        }
+  // Distances are the road distance from the current location (what Google Maps shows), not the straight line.
+  const [recentRoadMeters, setRecentRoadMeters] = useState({});
+  const recentOriginKey = (getSavedLocationCoords() || []).join(',');
+  // Only places near the person's current location are suggested here - a trip once searched in another city
+  // (Mumbai, 385 km away) is not a "recent place" for someone standing in Indore.
+  const nearbyRecents = useMemo(() => {
+    const origin = getSavedLocationCoords();
+    if (!origin) return recentLocations;
+    return recentLocations.filter((item) => {
+      if (!item.lat || !item.lon) return false;
+      const km = distanceBetweenKm(origin, [Number(item.lon), Number(item.lat)]);
+      return Number.isFinite(km) && km <= RECENT_MAX_DISTANCE_KM;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentLocations, recentOriginKey]);
+  useEffect(() => {
+    const origin = getSavedLocationCoords();
+    const items = nearbyRecents.slice(0, 3).filter((item) => item.lat && item.lon);
+    if (!origin || items.length === 0) return undefined;
+    let cancelled = false;
+    let timer = null;
+    let tries = 0;
+    const run = () => {
+      if (cancelled) return;
+      if (!window.google?.maps) {
+        // the map on this screen is still loading the Google library
+        if (tries++ < 30) timer = setTimeout(run, 500);
+        return;
       }
+      loadRoadDistances(window.google, origin, items.map((item) => ({ coords: [item.lon, item.lat] }))).then((meters) => {
+        if (cancelled || !meters) return;
+        const next = {};
+        items.forEach((item, index) => {
+          if (Number.isFinite(meters[index])) next[`${item.lat},${item.lon}`] = meters[index];
+        });
+        setRecentRoadMeters(next);
+      });
+    };
+    run();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [nearbyRecents, recentOriginKey]);
+
+  const recentList = useMemo(() => {
+    return nearbyRecents.map((item) => {
+      const meters = recentRoadMeters[`${item.lat},${item.lon}`];
+      const distanceLabel = Number.isFinite(meters)
+        ? (meters < 1000 ? `${Math.max(10, Math.round(meters / 10) * 10)} m` : `${(meters / 1000).toFixed(1)} km`)
+        : '';
       return {
         ...item,
         distance: distanceLabel || 'Recent',
       };
     }).slice(0, 3);
-  }, [recentLocations]);
+  }, [nearbyRecents, recentRoadMeters]);
 
   return (
     <div className="space-y-1 mt-2">
@@ -1221,8 +1242,8 @@ const Home = () => {
       <OutOfZoneScreen
         service="taxi"
         isGuest={!getLocalUserToken()}
-        location={{ area: saved?.area || saved?.address, city: saved?.address }}
-        handleLocationClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'pickup', flow: 'ride' } })}
+        location={{ area: saved?.area || getFoodStyleLocationParts({ address: saved?.address }).title, city: saved?.address }}
+        handleLocationClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'pickup', flow: 'ride', fromOutOfZone: true } })}
       />
     );
   }
@@ -1560,21 +1581,16 @@ const AllServicesBottomSheet = ({ services, onClose, onServiceClick }) => {
   };
 
   return (
-    <div className="all-services-backdrop flex items-end justify-center animate-fade-in" onClick={onClose}>
+    <div className="all-services-backdrop flex items-center justify-center animate-fade-in" onClick={onClose}>
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 26, stiffness: 240 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
         onClick={(e) => e.stopPropagation()}
         className="all-services-sheet flex flex-col"
-        style={{ color: 'var(--user-text-primary)', boxShadow: '0 -16px 48px rgba(8,12,20,0.35)' }}
+        style={{ color: 'var(--user-text-primary)', boxShadow: '0 20px 56px rgba(8,12,20,0.4)' }}
       >
-        {/* Pull indicator */}
-        <div className="w-full flex justify-center pb-3 cursor-pointer" onClick={onClose}>
-          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--user-text-muted)', opacity: 0.35 }} />
-        </div>
-
         {/* Header */}
         <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--user-border)' }}>
           <span className="text-[18px] font-bold tracking-tight">All Services</span>

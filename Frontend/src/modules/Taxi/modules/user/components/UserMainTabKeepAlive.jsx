@@ -9,6 +9,7 @@ import { Activity, Profile, Support, BusHome, preloadTaxiMainTabs } from './tabP
 // TaxiApp's own chunk skips a second chunk-fetch + Suspense flash on first
 // visit, instead of waiting on its own separate lazy import.
 import UserHome from '../pages/Home';
+import useTaxiZoneGate from '../utils/useTaxiZoneGate';
 
 // The tab screens and how they are loaded ahead of time live in ./tabPages. While a tab's code is still on its way it
 // shows a Taxi-shaped placeholder for THAT tab (this used to be Food's restaurant-list skeleton for every tab).
@@ -38,6 +39,8 @@ const resolveMainTab = (pathname = '') => {
 export default function UserMainTabKeepAlive() {
   const { pathname } = useLocation();
   const activeTab = useMemo(() => resolveMainTab(pathname), [pathname]);
+  // The out-of-zone screen is full screen: no bottom bar on it.
+  const outOfZone = useTaxiZoneGate();
 
   // Warm the *other* three tabs' chunks on idle, once, so tapping any
   // bottom-nav tab for the first time is instant instead of waiting on a
@@ -96,7 +99,7 @@ export default function UserMainTabKeepAlive() {
         </div>
       )}
 
-      <BottomNavbar />
+      {!(activeTab === 'ride' && outOfZone) && <BottomNavbar />}
     </div>
   );
 }

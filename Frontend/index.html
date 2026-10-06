@@ -150,6 +150,12 @@
               }
               if (!title) title = area || String(loc.city || '');
               sub = [loc.state, loc.pincode || loc.zipCode || loc.postalCode].filter(Boolean).join(', ');
+              // heading = first part of the address (a building name): the line under it is the rest of the address
+              var addrParts = String(loc.address || loc.formattedAddress || '').split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+              if (addrParts.length > 1 && addrParts[0].toLowerCase() === title.toLowerCase()) {
+                var rest = addrParts.slice(1).filter(function (p) { return !(p.length <= 8 && /\d/.test(p) && !/\s/.test(p)); });
+                if (rest.length) sub = rest.slice(0, 2).join(', ');
+              }
             } else if (taxiLoc && (taxiLoc.address || taxiLoc.area)) {
               var chunks = String(taxiLoc.address || taxiLoc.area).split(',');
               title = String(taxiLoc.area || chunks[0] || '').trim();
