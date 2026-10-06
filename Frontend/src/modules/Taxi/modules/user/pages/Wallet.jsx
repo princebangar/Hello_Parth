@@ -11,6 +11,7 @@ import useReferralEnabled from '@/shared/hooks/useReferralEnabled';
 import { getPageCache, setPageCache, userScopedCacheKey } from '@/shared/utils/pageCache';
 import { recallLastKnown, rememberLastKnown } from '@/shared/utils/lastKnown';
 import NumberSkeleton from '@/shared/components/NumberSkeleton';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const PHONEPE_USER_WALLET_FLOW_KEY = 'user-wallet-topup';
 
@@ -37,7 +38,7 @@ const Wallet = () => {
   const [showAllTransactions, setShowAllTransactions] = React.useState(false);
 
   const basePath = useMemo(
-    () => (window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : ''),
+    () => (getAppRoutePath().startsWith('/taxi/user') ? '/taxi/user' : ''),
     [],
   );
 

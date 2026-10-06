@@ -15,6 +15,7 @@ import {
   nearbyAutocompleteRequest,
 } from '../../utils/nearbyPlaces';
 import { getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
 const getLatLngCacheKey = (coords, precision = 5) =>
@@ -239,7 +240,7 @@ const SelectLocation = () => {
   const reverseGeocodeCacheRef = useRef(new Map());
   const { isLoaded, loadError } = useAppGoogleMapsLoader();
   const navigate = useNavigate();
-  const routePrefix = window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
+  const routePrefix = getAppRoutePath().startsWith('/taxi/user') ? '/taxi/user' : '';
   const parcelReturnPath = routeState.returnTo || `${routePrefix}/parcel/details`;
 
   const zoneBounds = useMemo(() => getBoundsFromPaths(zonePaths), [zonePaths]);

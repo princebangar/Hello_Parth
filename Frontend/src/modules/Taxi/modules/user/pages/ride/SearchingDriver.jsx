@@ -11,6 +11,7 @@ import { useBaseGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../adm
 import { scheduleScheduledRideReminders } from '../../utils/upcomingRideReminderService';
 import { toHistorySafeState } from '../../../../shared/utils/historyState';
 import { getUnpaidRideFromError, openUnpaidRidePayment } from '../../utils/unpaidRide';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -797,7 +798,7 @@ const SearchingDriver = () => {
         const unpaidRide = getUnpaidRideFromError(error);
         if (!disposed && unpaidRide) {
           setSearchStatus(unpaidRide.message);
-          setTimeout(() => { if (!disposed) openUnpaidRidePayment(navigate, window.location.pathname, unpaidRide); }, 1500);
+          setTimeout(() => { if (!disposed) openUnpaidRidePayment(navigate, getAppRoutePath(), unpaidRide); }, 1500);
           return;
         }
         if (!disposed) {

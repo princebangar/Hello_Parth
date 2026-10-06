@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Calendar, CheckCircle2, Clock3, LoaderCircle, Navigation } from 'lucide-react';
 import api from '../../../../shared/api/axiosInstance';
 import { getUnpaidRideFromError, openUnpaidRidePayment } from '../../utils/unpaidRide';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const generateIntercityBookingId = () =>
   'IC-' + Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6).padEnd(6, '0');
@@ -104,7 +105,7 @@ const IntercityConfirm = () => {
       } catch (requestError) {
         const unpaidRide = getUnpaidRideFromError(requestError);
         if (unpaidRide) {
-          openUnpaidRidePayment(navigate, window.location.pathname, unpaidRide);
+          openUnpaidRidePayment(navigate, getAppRoutePath(), unpaidRide);
           return;
         }
         setStatus('error');

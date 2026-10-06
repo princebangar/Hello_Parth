@@ -5,6 +5,7 @@ import { openCamera } from '@food/utils/imageUploadUtils';
 import { userAuthService } from '../../services/authService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
 import toast from 'react-hot-toast';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const ProfileSettings = () => {
   const [name, setName] = useState('');
@@ -81,7 +82,7 @@ const ProfileSettings = () => {
       const user = response?.data?.user || {};
       localStorage.setItem('userInfo', JSON.stringify(user));
       toast.success('Profile updated successfully');
-      const basePath = window.location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
+      const basePath = getAppRoutePath().startsWith('/taxi/user') ? '/taxi/user' : '';
       navigate(`${basePath}/profile`);
     } catch (err) {
       setSaveError(err?.message || 'Save failed');

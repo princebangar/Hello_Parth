@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Loader2, Send } from 'lucide-react';
 import { supportTicketService } from '../../../shared/services/supportTicketService';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const STATUS_STYLES = {
   pending: 'bg-orange-50 text-orange-600 border-orange-100',
@@ -14,7 +15,7 @@ const SupportTicketDetail = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: ticketCode } = useParams();
-  const pathRole = window.location.pathname.includes('/taxi/driver') ? 'driver' : 'user';
+  const pathRole = getAppRoutePath().includes('/taxi/driver') ? 'driver' : 'user';
   const ticketFromState = location.state?.ticket || null;
 
   const [ticket, setTicket] = useState(ticketFromState);

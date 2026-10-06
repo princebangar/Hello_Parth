@@ -4,6 +4,7 @@ import { getLocalDriverToken, saveDriverFcmToken } from '../../modules/driver/se
 import { getLocalUserToken, userAuthService } from '../../modules/user/services/authService';
 import { buildMessagingServiceWorkerUrl } from '../../../../shared/utils/firebaseServiceWorkerUrl';
 import { whenAppSettled } from '../../../../shared/utils/whenSettled';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const LAST_BROWSER_FCM_KEY = 'lastBrowserFcmRegistration';
 const FIREBASE_CONFIG = {
@@ -70,7 +71,7 @@ const getRoleFromPathname = () => {
     return '';
   }
 
-  const pathname = String(window.location.pathname || '').toLowerCase();
+  const pathname = String(getAppRoutePath() || '').toLowerCase();
 
   if (pathname.includes('/taxi/owner')) {
     return 'driver';

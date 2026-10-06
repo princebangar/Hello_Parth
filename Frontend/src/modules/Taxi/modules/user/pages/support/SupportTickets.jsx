@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, ChevronRight, Headset, X, AlertCircle, Loader2 } from 'lucide-react';
 import { supportTicketService } from '../../../shared/services/supportTicketService';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const STATUS_STYLES = {
   pending: 'bg-orange-50 text-orange-600 border-orange-100',
@@ -26,7 +27,7 @@ const SupportTickets = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const rolePrefix = window.location.pathname.includes('/taxi/driver') ? '/taxi/driver' : '/taxi/user';
+  const rolePrefix = getAppRoutePath().includes('/taxi/driver') ? '/taxi/driver' : '/taxi/user';
   const requesterType = rolePrefix.includes('/driver') ? 'driver' : 'user';
 
   const loadData = async () => {

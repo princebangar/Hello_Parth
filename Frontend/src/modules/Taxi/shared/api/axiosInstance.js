@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { API_BASE_URL } from './runtimeConfig';
 import { isBackgroundGet, runInBackground } from '../../../../shared/utils/backgroundRequests';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -233,7 +234,7 @@ const getRoleFromPathname = () => {
     return '';
   }
 
-  const pathname = String(window.location.pathname || '').toLowerCase();
+  const pathname = String(getAppRoutePath() || '').toLowerCase();
 
   if (pathname.includes('/admin')) {
     return 'admin';

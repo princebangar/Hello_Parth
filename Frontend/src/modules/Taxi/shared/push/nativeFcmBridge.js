@@ -1,5 +1,6 @@
 import { saveDriverFcmToken, getLocalDriverToken } from '../../modules/driver/services/registrationService';
 import { userAuthService, getLocalUserToken } from '../../modules/user/services/authService';
+import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
 const PENDING_NATIVE_FCM_KEY = 'pendingNativeFcmRegistration';
 const LAST_NATIVE_FCM_KEY = 'lastNativeFcmRegistration';
@@ -58,7 +59,7 @@ const inferRole = (explicitRole) => {
     return normalizedRole;
   }
 
-  const pathname = String(window.location.pathname || '').toLowerCase();
+  const pathname = String(getAppRoutePath() || '').toLowerCase();
   if (pathname.includes('/taxi/owner')) {
     return 'owner';
   }
@@ -85,7 +86,7 @@ const inferRole = (explicitRole) => {
 };
 
 const getActivePortalRole = () => {
-  const pathname = String(window.location.pathname || '').toLowerCase();
+  const pathname = String(getAppRoutePath() || '').toLowerCase();
 
   if (pathname.includes('/taxi/owner')) {
     return 'owner';
