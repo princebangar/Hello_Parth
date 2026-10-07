@@ -1817,6 +1817,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
   // (today's summary, wallet settlement, referral rewards) must only run on the first one.
   const isFirstCompletion =
     nextStatus === RIDE_LIVE_STATUS.COMPLETED && ride.liveStatus !== RIDE_LIVE_STATUS.COMPLETED;
+  const previousLiveStatus = ride.liveStatus;
 
   ride.liveStatus = nextStatus;
   ride.status = config.persistedStatus;
@@ -1844,6 +1845,46 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
   await ride.save();
   await syncDeliveryWithRide(ride);
+
+  // The rider may have the app in the background: tell them about the trip milestones by push too (best effort).
+  if (previousLiveStatus !== nextStatus) {
+    const isParcelRide = ride.serviceType === 'parcel';
+    const riderMessage = nextStatus === RIDE_LIVE_STATUS.ARRIVING
+      ? {
+          type: 'ride_driver_arrived',
+          title: isParcelRide ? 'Your delivery partner has arrived' : 'Your driver has arrived',
+          body: isParcelRide ? 'Your delivery partner is at the pickup point.' : 'Your driver is at the pickup point. Share your PIN to start the trip.',
+        }
+      : nextStatus === RIDE_LIVE_STATUS.STARTED
+        ? {
+            type: 'ride_started',
+            title: isParcelRide ? 'Delivery started' : 'Your trip has started',
+            body: isParcelRide ? 'Your parcel is on its way.' : 'Have a safe trip!',
+          }
+        : isFirstCompletion
+          ? {
+              type: 'ride_completed',
+              title: isParcelRide ? 'Delivery completed' : 'Trip completed',
+              body: `Fare: Rs ${Number(ride.fare || 0).toFixed(2)}. Thank you for riding with Hello Parth.`,
+            }
+          : null;
+
+    if (riderMessage) {
+      sendPushNotificationToEntities({
+        userIds: [String(ride.userId)],
+        title: riderMessage.title,
+        body: riderMessage.body,
+        data: {
+          type: riderMessage.type,
+          rideId: String(ride._id),
+          serviceType: ride.serviceType || 'ride',
+          targetUrl: '/taxi/user/ride/tracking',
+        },
+      }).catch((error) => {
+        console.error(`Failed to send rider ${riderMessage.type} push notification`, error);
+      });
+    }
+  }
 
   let walletUpdate = null;
 

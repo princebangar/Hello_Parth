@@ -175,6 +175,9 @@ const sendPushToTargets = async ({
         priority: 'high',
         ...(safeData.notificationId ? { collapseKey: safeData.notificationId } : {}),
         notification: {
+          // same channel + sound as the Food pushes (without a channel_id Android uses its silent fallback channel)
+          channelId: 'default',
+          sound: 'default',
           ...(image ? { imageUrl: image } : {}),
           ...(safeData.notificationId ? { tag: safeData.notificationId } : {}),
         },
@@ -324,6 +327,8 @@ export const sendPushNotificationToAudience = async ({
         priority: 'high',
         ...(notificationId ? { collapseKey: String(notificationId) } : {}),
         notification: {
+          channelId: 'default',
+          sound: 'default',
           ...(image ? { imageUrl: image } : {}),
           ...(notificationId ? { tag: String(notificationId) } : {}),
         },

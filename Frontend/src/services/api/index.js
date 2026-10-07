@@ -150,7 +150,9 @@ export const authAPI = {
       platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
       path,
-      { token: String(token), platform },
+      // the mobile endpoint refuses a `platform` field (the path already says it is mobile) - sending it got every
+      // app token rejected with 400, so restaurant / delivery / user pushes never reached the phone
+      platform === "mobile" ? { token: String(token) } : { token: String(token), platform },
       { contextModule: "user" },
     );
   },
@@ -1299,7 +1301,9 @@ export const restaurantAPI = {
       platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
       path,
-      { token: String(token), platform },
+      // the mobile endpoint refuses a `platform` field (the path already says it is mobile) - sending it got every
+      // app token rejected with 400, so restaurant / delivery / user pushes never reached the phone
+      platform === "mobile" ? { token: String(token) } : { token: String(token), platform },
       { contextModule: "restaurant" },
     );
   },
@@ -2023,7 +2027,9 @@ export const deliveryAPI = {
       platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
       path,
-      { token: String(token), platform },
+      // the mobile endpoint refuses a `platform` field (the path already says it is mobile) - sending it got every
+      // app token rejected with 400, so restaurant / delivery / user pushes never reached the phone
+      platform === "mobile" ? { token: String(token) } : { token: String(token), platform },
       { contextModule: "delivery" },
     );
   },
@@ -2502,7 +2508,9 @@ export const userAPI = {
       platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
     return apiClient.post(
       path,
-      { token: String(token), platform },
+      // the mobile endpoint refuses a `platform` field (the path already says it is mobile) - sending it got every
+      // app token rejected with 400, so restaurant / delivery / user pushes never reached the phone
+      platform === "mobile" ? { token: String(token) } : { token: String(token), platform },
       { contextModule: "user" },
     );
   },

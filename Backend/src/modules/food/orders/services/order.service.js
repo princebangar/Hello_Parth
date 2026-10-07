@@ -1258,6 +1258,25 @@ export async function cancelOrder(orderId, userId, reason, refundDestination = "
     },
   );
 
+  // A delivery partner who already took the order has to be told too, or they keep heading to the restaurant.
+  const cancelledOrderRiderId = order.dispatch?.deliveryPartnerId;
+  if (cancelledOrderRiderId) {
+    await notifyOwnerSafely(
+      { ownerType: "DELIVERY_PARTNER", ownerId: cancelledOrderRiderId },
+      {
+        title: "Order Cancelled ❌",
+        body: `Order #${order.order_id || order._id} has been cancelled. Please stop your current task.`,
+        data: {
+          type: "order_status_update",
+          orderId: String(order.order_id || order._id),
+          orderMongoId: String(order._id),
+          orderStatus: "cancelled_by_user",
+          link: "/food/delivery",
+        },
+      },
+    );
+  }
+
   // Real-time: status update via socket
   try {
     const io = getIO();

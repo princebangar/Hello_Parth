@@ -878,6 +878,20 @@ export const cancelRideByAdmin = async (rideId) => {
     reason: 'Ride was deleted by admin',
   });
 
+  sendPushNotificationToEntities({
+    userIds: [String(ride.userId)],
+    ...(ride.driverId ? { driverIds: [String(ride.driverId)] } : {}),
+    title: ride.serviceType === 'parcel' ? 'Delivery cancelled' : 'Ride cancelled',
+    body: 'This booking was cancelled by Hello Parth support.',
+    data: {
+      type: 'ride_cancelled_by_admin',
+      rideId: String(ride._id),
+      serviceType: ride.serviceType || 'ride',
+    },
+  }).catch((error) => {
+    console.error('Failed to send admin ride-cancelled push notification', error);
+  });
+
   if (ride.driverId) {
     emitToRoom(getDriverRoom(ride.driverId), 'rideRequestClosed', {
       rideId: String(ride._id),
@@ -999,6 +1013,23 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
     status: ride.status,
     liveStatus: ride.liveStatus,
   });
+
+  // The assigned driver may be in another app / screen locked: a push is the only thing that tells them the trip is off.
+  if (ride.driverId) {
+    sendPushNotificationToEntities({
+      driverIds: [String(ride.driverId)],
+      title: ride.serviceType === 'parcel' ? 'Delivery cancelled' : 'Ride cancelled',
+      body: 'The rider cancelled this booking.',
+      data: {
+        type: 'ride_cancelled_by_user',
+        rideId: String(ride._id),
+        serviceType: ride.serviceType || 'ride',
+        targetUrl: '/taxi/driver/home',
+      },
+    }).catch((error) => {
+      console.error('Failed to send driver ride-cancelled push notification', error);
+    });
+  }
 
   if (cancellationSettlement?.driverWalletResult?.transaction) {
     emitToDriver(ride.driverId, 'driver:wallet:updated', {

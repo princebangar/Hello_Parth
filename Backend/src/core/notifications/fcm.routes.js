@@ -237,7 +237,11 @@ router.post('/mobile/save', unifiedAuthMiddleware, async (req, res, next) => {
             return sendError(res, 401, 'Authentication required');
         }
 
-        if (req.body?.platform !== undefined) {
+        // The path already says "mobile", so a platform field is only wrong when it says something else (web).
+        // Rejecting any platform value made every app that sent platform="mobile" fail with 400 (hundreds of
+        // rejections in the prod log), i.e. no token was saved and no push ever reached the phone.
+        const bodyPlatform = req.body?.platform === undefined ? '' : String(req.body.platform).trim().toLowerCase();
+        if (bodyPlatform && !['mobile', 'android', 'ios'].includes(bodyPlatform)) {
             logger.warn(`[FCM Route] /mobile/save rejected because platform was provided (${String(req.body?.platform)})`);
             return sendError(res, 400, 'platform is not allowed on this endpoint');
         }
