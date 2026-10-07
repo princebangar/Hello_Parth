@@ -94,6 +94,44 @@ const PinLocationMarker = ({ position, title, color, size = 34, zIndex = 1 }) =>
   </OverlayView>
 );
 
+// A real online driver around the pickup (same vehicle type the rider booked) - one marker per driver.
+const NearbyDriverMarker = React.memo(({ driver, iconUrl }) => {
+  const [lng, lat] = driver?.location?.coordinates || [];
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+    return null;
+  }
+
+  return (
+    <OverlayView
+      position={{ lat: Number(lat), lng: Number(lng) }}
+      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      zIndex={50}
+      getPixelPositionOffset={() => getOverlayCenterOffset(44, 44)}
+    >
+      <div className="pointer-events-none relative flex h-11 w-11 items-center justify-center" title={driver?.name || 'Nearby driver'}>
+        <motion.span
+          className="absolute h-11 w-11 rounded-full bg-emerald-400/25"
+          animate={{ scale: [0.85, 1.25, 0.85], opacity: [0.5, 0.1, 0.5] }}
+          transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+        />
+        <div className="relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-white shadow-[0_6px_14px_rgba(15,23,42,0.28)]">
+          <img
+            src={iconUrl || CarIcon}
+            alt=""
+            draggable={false}
+            className="h-6 w-6 object-contain"
+            onError={(e) => { e.target.onerror = null; e.target.src = CarIcon; }}
+          />
+          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-white bg-emerald-500" />
+        </div>
+      </div>
+    </OverlayView>
+  );
+});
+
+const NEARBY_DRIVERS_POLL_MS = 8000;
+const NEARBY_DRIVERS_RADIUS_METERS = 5000;
+
 const DRIVER_PLACEHOLDER = { name: 'Captain', rating: '', vehicle: 'Taxi', plate: 'Assigned', phone: '', eta: 2 };
 const STAGES = { SEARCHING: 'searching', ACCEPTED: 'accepted', COMPLETING: 'completing' };
 const CONSUMED_SEARCH_NONCE_PREFIX = 'helloparth_consumed_search_nonce:';
@@ -252,6 +290,48 @@ const SearchingDriver = () => {
     () => formatScheduledDateTime(routeState.scheduledAt),
     [routeState.scheduledAt],
   );
+
+  // While searching, show the drivers who are really online near the pickup (1 driver = 1 marker, none = no markers).
+  const [nearbyDrivers, setNearbyDrivers] = useState([]);
+  const pickupLng = routeState.pickupCoords?.[0];
+  const pickupLat = routeState.pickupCoords?.[1];
+  const nearbyServiceLocationId = routeState.service_location_id || routeState.serviceLocationId || '';
+  const nearbyTransportType = routeState.transport_type || routeState.transportType || routeState.vehicle?.transportType || 'taxi';
+  useEffect(() => {
+    if (!isSearching || !selectedVehicleTypeId || !Number.isFinite(Number(pickupLng)) || !Number.isFinite(Number(pickupLat))) {
+      setNearbyDrivers([]);
+      return undefined;
+    }
+
+    let active = true;
+    const loadNearbyDrivers = async () => {
+      try {
+        const response = await api.get('/rides/available-drivers', {
+          params: {
+            vehicleTypeId: selectedVehicleTypeId,
+            lng: pickupLng,
+            lat: pickupLat,
+            maxDistance: NEARBY_DRIVERS_RADIUS_METERS,
+            service_location_id: nearbyServiceLocationId || undefined,
+            transport_type: nearbyTransportType,
+          },
+        });
+        const payload = unwrap(response);
+        if (active) {
+          setNearbyDrivers(Array.isArray(payload?.drivers) ? payload.drivers : []);
+        }
+      } catch {
+        // the markers are decoration - keep whatever was last shown
+      }
+    };
+
+    loadNearbyDrivers();
+    const timer = window.setInterval(loadNearbyDrivers, NEARBY_DRIVERS_POLL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isSearching, selectedVehicleTypeId, pickupLng, pickupLat, nearbyServiceLocationId, nearbyTransportType]);
 
   const loadRideBids = async (rideId) => {
     const response = await userAuthService.getRideBids(rideId);
@@ -944,6 +1024,14 @@ const SearchingDriver = () => {
             {dropPos && (
               <PinLocationMarker position={dropPos} title="Drop" color="#f97316" />
             )}
+
+            {isSearching && nearbyDrivers.map((nearbyDriver, index) => (
+              <NearbyDriverMarker
+                key={String(nearbyDriver.id || nearbyDriver._id || index)}
+                driver={nearbyDriver}
+                iconUrl={availableVehicleIcon}
+              />
+            ))}
 
             {isSearching && (
               <>

@@ -103,9 +103,9 @@ const PromoBanners = () => {
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: 'easeOut' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
         className={`relative overflow-hidden rounded-2xl border p-4 shadow-[0_18px_44px_rgba(0,0,0,0.15)] transition-all duration-300 ${
           isDark 
             ? 'bg-gradient-to-br from-slate-900 to-slate-800 border-slate-800' 

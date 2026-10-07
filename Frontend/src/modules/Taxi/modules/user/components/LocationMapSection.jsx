@@ -410,9 +410,9 @@ const LocationMapSection = () => {
 
   return (
     <motion.section
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: 'easeOut' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       className="w-full lg:px-5"
     >
       {/* Search Header for Desktop */}

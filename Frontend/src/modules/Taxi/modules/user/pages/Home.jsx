@@ -1287,9 +1287,9 @@ const Home = () => {
           <div className="home-sheet space-y-3">
             {/* Sticky Search Bar */}
             <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.05 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               className="user-search-bar"
             >
               <motion.button
@@ -1310,9 +1310,9 @@ const Home = () => {
 
             {/* Recent Locations List */}
             <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.08 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
             >
               <RecentLocationsList routePrefix={routePrefix} />
             </motion.div>
@@ -1320,9 +1320,9 @@ const Home = () => {
             {/* Compact Active Ride/Booking Banner */}
             {currentRide && String(currentRide?.status || '').toLowerCase() !== 'end_requested' && (
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.12 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="pt-1"
               >
                 <motion.button
@@ -1353,9 +1353,9 @@ const Home = () => {
             {/* Everything In Minutes Grid */}
             {(!uiSettings?.homeSections || uiSettings.homeSections.enableEverything !== false) && (
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.16 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="everything-section"
               >
                 <ServiceGrid
@@ -1369,9 +1369,9 @@ const Home = () => {
             {/* Explore Horizontal List */}
             {exploreSection && (
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.2 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="explore-section"
               >
                 {exploreSection}
@@ -1381,9 +1381,9 @@ const Home = () => {
             {/* Promo Banner */}
             {promoBanner && (
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.24 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="promo-section"
               >
                 {promoBanner}
@@ -1393,9 +1393,9 @@ const Home = () => {
             {/* Go Places */}
             {goPlacesSection && (
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.21, 1.02, 0.43, 1.01], delay: 0.28 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="go-places-section"
               >
                 {goPlacesSection}

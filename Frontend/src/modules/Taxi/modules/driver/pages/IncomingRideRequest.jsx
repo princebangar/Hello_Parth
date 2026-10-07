@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Banknote,
   Bike,
+  Car,
   Clock,
   CreditCard,
   MapPin,
@@ -185,6 +186,9 @@ const IncomingRideRequest = ({
   const estimatedEarning = requestFare > 0 && !isBidding
     ? Math.max(0, Math.round((requestGrossFare - requestCommission) * 100) / 100)
     : null;
+  const vehicleIconType = String(data.raw?.vehicleIconType || '').toLowerCase();
+  const RideVehicleIcon = /bike|scooty|scooter/.test(vehicleIconType) ? Bike : Car;
+  const tripMinutes = Math.round(Number(data.raw?.estimatedDurationMinutes || 0));
   const scheduledCountdown = getScheduledRideCountdown(scheduledAt, previewNow);
   const bidOptions = isBidding
     ? Array.from({ length: Math.max(1, Math.floor((bidMaxFare - bidFloorFare) / bidStepAmount) + 1) }, (_, index) => bidFloorFare + (index * bidStepAmount))
@@ -195,6 +199,7 @@ const IncomingRideRequest = ({
     : isIntercity 
       ? 'from-teal-50/90 to-white' 
       : 'from-emerald-50/95 to-white';
+  const heroGradient = isParcel ? 'from-orange-400 to-orange-600' : isIntercity ? 'from-teal-500 to-teal-700' : 'from-emerald-500 to-emerald-700';
   const accentBg = isParcel ? 'bg-orange-500' : isIntercity ? 'bg-teal-500' : 'bg-emerald-500';
   const accentText = isParcel ? 'text-orange-600' : isIntercity ? 'text-teal-600' : 'text-emerald-600';
   const accentHoverBg = isParcel ? 'hover:bg-orange-600' : isIntercity ? 'hover:bg-teal-600' : 'hover:bg-emerald-600';
@@ -212,7 +217,7 @@ const IncomingRideRequest = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 px-3 pb-4 sm:pb-8 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/45 px-3 pb-[calc(env(safe-area-inset-bottom)+2.75rem)] backdrop-blur-[3px] sm:pb-12"
         onClick={(event) => {
           if (isPreviewMode && event.target === event.currentTarget) {
             (onClose || onDecline)?.();
@@ -224,7 +229,7 @@ const IncomingRideRequest = ({
           animate={{ y: 0, scale: 1 }}
           exit={{ y: 80, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-          className="relative w-full max-w-[430px] max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-[28px] bg-white shadow-[0_30px_90px_rgba(0,0,0,0.22)]"
+          className="relative w-full max-w-[430px] max-h-[calc(100dvh-5.5rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-[30px] bg-white shadow-[0_30px_90px_rgba(0,0,0,0.3)] ring-1 ring-white/60"
         >
           {!isPreviewMode ? (
             <div className="absolute inset-x-0 top-0 h-[3px] bg-slate-100">
@@ -236,7 +241,7 @@ const IncomingRideRequest = ({
             <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] ${accentBg} text-white shadow-[0_10px_20px_rgba(0,0,0,0.1)]`}>
-                  {isParcel ? <Package size={26} /> : isIntercity ? <Navigation size={26} /> : <Bike size={26} />}
+                  {isParcel ? <Package size={26} /> : isIntercity ? <Navigation size={26} /> : <RideVehicleIcon size={26} />}
                 </div>
                 <div className="min-w-0">
                   <span className={`inline-flex rounded-full ${lightBg} ${accentText} px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider`}>
@@ -299,16 +304,22 @@ const IncomingRideRequest = ({
                   <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Distance</p>
                 </div>
                 <p className="text-[15px] font-black text-slate-800">{data.distance || 'Nearby'}</p>
+                {tripMinutes > 0 ? (
+                  <p className="mt-1 flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                    <Clock size={10} />
+                    ~{tripMinutes} min
+                  </p>
+                ) : null}
               </div>
-              
-              <div className={`flex flex-col items-center justify-center border-x border-slate-100 ${lightBg} p-3 text-center`}>
-                <div className="mb-1 flex items-center gap-1">
-                  <Banknote size={14} className={accentText} />
-                  <p className={`text-[9px] font-extrabold uppercase tracking-wider ${accentText}`}>{estimatedEarning !== null ? 'You earn' : 'Fare'}</p>
+
+              <div className={`flex flex-col items-center justify-center bg-gradient-to-b ${heroGradient} p-3 text-center text-white`}>
+                <div className="mb-1 flex items-center gap-1 text-white/85">
+                  <Banknote size={14} />
+                  <p className="text-[9px] font-extrabold uppercase tracking-wider">{estimatedEarning !== null ? 'You earn' : 'Fare'}</p>
                 </div>
-                <p className={`text-[21px] font-black leading-none ${accentText}`}>{estimatedEarning !== null ? `Rs ${estimatedEarning}` : (data.fare || 'Rs 0')}</p>
+                <p className="text-[24px] font-black leading-none drop-shadow-sm">{estimatedEarning !== null ? `Rs ${estimatedEarning}` : (data.fare || 'Rs 0')}</p>
                 {estimatedEarning !== null ? (
-                  <p className="mt-1 text-[9px] font-bold text-slate-400">Fare Rs {requestFare}</p>
+                  <p className="mt-1 text-[9px] font-bold text-white/80">Fare Rs {requestFare}</p>
                 ) : null}
               </div>
 

@@ -111,12 +111,17 @@ const getAreaName = (address, fallback) => {
         return fallback;
     }
 
-    return cleanAddress
+    const parts = cleanAddress
         .split(',')
         .map((part) => part.trim())
-        .filter(Boolean)
-        .slice(0, 2)
-        .join(', ') || fallback;
+        .filter(Boolean);
+    // "Block, 3rd floor, Corporate House, 307 B, Regal Cir, ..." - the first parts are the rider's unit / floor / plot
+    // number, which tells a driver nothing about where to go. Skip those and show the building / street / area instead.
+    const isUnitPart = (part) => /^\d/.test(part)
+        || /\b(floor|flat|plot|shop|room|unit|wing|block|tower|suite|office|house\s*no|h\.?\s*no)\b/i.test(part);
+    const placeParts = parts.filter((part) => !isUnitPart(part));
+
+    return (placeParts.length ? placeParts : parts).slice(0, 2).join(', ') || fallback;
 };
 
 const formatAddressFromPoint = (point, fallback) => {
@@ -2355,7 +2360,9 @@ const ActiveTrip = () => {
                         <img src={vehicleIconUrl} alt="Vehicle" className="h-7 w-7 object-contain" />
                     </div>
                     <div className="flex-1 space-y-0.5 overflow-hidden">
-                        <h4 className="text-[9px] font-semibold uppercase tracking-wide leading-none flex items-center gap-2" style={{ color: routeStrokeColor }}>
+                        {/* The card is dark; routeStrokeColor is black, so the label used to disappear into it. */}
+                        <h4 className="text-[9px] font-bold uppercase tracking-wider leading-none flex items-center gap-1.5 text-emerald-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             Driver Live
                             <ArrowUpRight size={12} strokeWidth={3} />
                         </h4>
@@ -2376,7 +2383,7 @@ const ActiveTrip = () => {
                         <p className="text-[8px] font-black uppercase tracking-[0.22em] text-slate-400">ETA</p>
                         <div className="flex items-center gap-1.5 mt-1">
                             <Clock3 size={12} style={{ color: routeStrokeColor }} />
-                            <p className="text-[11px] font-black text-slate-900 truncate">{phase === 'to_pickup' ? '2 mins' : '12 mins'}</p>
+                            <p className="text-[11px] font-black text-slate-900 truncate">{Number(liveRaw?.estimatedDurationMinutes) > 0 && phase !== 'to_pickup' ? `${Math.round(Number(liveRaw.estimatedDurationMinutes))} mins` : '--'}</p>
                         </div>
                     </div>
                     <div className="min-w-0 rounded-2xl bg-white/92 border border-white/80 shadow-lg px-3 py-2">

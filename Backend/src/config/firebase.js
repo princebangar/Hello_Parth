@@ -100,6 +100,9 @@ export const getFirebaseMessaging = () => {
 };
 
 export const getFirebaseDatabase = getFirebaseDB;
-export const firebaseServerTimestamp = admin.database.ServerValue.TIMESTAMP;
+// Called as firebaseServerTimestamp() by the ride / driver-route sync. It used to be exported as the bare
+// ServerValue.TIMESTAMP object, so every call threw "firebaseServerTimestamp is not a function" - inside a
+// setImmediate that was an uncaught exception, and in production that restarts the whole API.
+export const firebaseServerTimestamp = () => admin.database.ServerValue.TIMESTAMP;
 
 export default admin;

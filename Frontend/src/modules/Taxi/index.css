@@ -926,8 +926,8 @@
   --user-nav-border: rgba(255,255,255,0.10);
   --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
   --user-nav-idle: #9CA3AF;
-  --user-nav-active-bg: rgba(255,196,0,0.12);
-  --user-nav-active-fg: #FFC400;
+  --user-nav-active-bg: rgba(37,99,235,0.20);
+  --user-nav-active-fg: #60A5FA;
   --user-profile-header-bg: #0a0a0a;
   --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
 }
@@ -949,8 +949,8 @@
   --user-nav-border: #F3F4F6;
   --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
   --user-nav-idle: #4B5563;
-  --user-nav-active-bg: #FFF6D6;
-  --user-nav-active-fg: #9A6B00;
+  --user-nav-active-bg: #EAF1FF;
+  --user-nav-active-fg: #2563EB;
   --user-profile-header-bg: #FFFFFF;
   --user-profile-header-gradient: linear-gradient(180deg, rgba(238, 242, 255, 0.5) 0%, rgba(241, 244, 249, 0) 100%);
 }
@@ -972,8 +972,8 @@
   --user-nav-border: rgba(255,255,255,0.10);
   --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
   --user-nav-idle: #9CA3AF;
-  --user-nav-active-bg: rgba(255,196,0,0.12);
-  --user-nav-active-fg: #FFC400;
+  --user-nav-active-bg: rgba(37,99,235,0.20);
+  --user-nav-active-fg: #60A5FA;
   --user-profile-header-bg: #0a0a0a;
   --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
 }
@@ -1021,11 +1021,12 @@
 .user-bottom-nav {
   position: fixed !important;
   left: 50% !important;
-  bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+  /* Exactly Food's nav position (fixed bottom-6, px-6, max-w-md) so switching Taxi <-> Food does not make the bar jump. */
+  bottom: 24px !important;
   transform: translateX(-50%) !important;
   z-index: 9997 !important;
   width: calc(100% - 48px) !important;
-  max-width: 382px !important;
+  max-width: 448px !important;
   pointer-events: auto !important;
 }
 
@@ -1037,6 +1038,7 @@
   height: 72px;
   padding: 0 8px;
   border-radius: 2rem;
+  overflow: hidden;
   background: var(--user-nav-bg);
   border: 1px solid var(--user-nav-border);
   box-shadow: var(--user-nav-shadow);
@@ -1054,19 +1056,19 @@
   gap: 4px;
   border-radius: 1.5rem;
   color: var(--user-nav-idle);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
-  line-height: 1;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  /* No colour transition: the bar's background switches with the theme at once, so a 0.3s colour fade made the
+     icons / labels visibly "fade in" from the default (dark) palette on every refresh and Food -> Taxi switch. */
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Active = tinted fill + coloured icon/label (like Food's red-on-light-red), not a solid block. */
+/* Active tab, same recipe as Food's nav (light red pill + red icon/label): a soft tint of the Taxi blue (#2563EB, the
+   header's Taxi tab) behind a blue icon + label. The pill slides between tabs (.user-bottom-nav-pill). */
 .user-bottom-nav-item.is-active {
-  background: var(--user-nav-active-bg);
   color: var(--user-nav-active-fg);
+}
+
+.user-bottom-nav-pill {
+  background: var(--user-nav-active-bg);
 }
 
 .user-home-scroll {

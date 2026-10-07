@@ -146,9 +146,9 @@ const HeaderGreeting = ({ floating = false, hideSearch = false }) => {
 
           {!hideSearch && (
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.05, ease: 'easeOut' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               className="mt-3 space-y-2.5"
             >
               <motion.button
