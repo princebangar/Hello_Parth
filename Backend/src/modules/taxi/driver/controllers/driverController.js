@@ -55,7 +55,7 @@ import {
 import { verifyAccessToken } from "../../services/tokenService.js";
 import { clearDriverActiveRideIfStale } from "../../services/rideService.js";
 import { getWalletSettings } from "../../services/appSettingsService.js";
-import { RIDE_LIVE_STATUS, RIDE_STATUS } from "../../constants/index.js";
+import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from "../../constants/index.js";
 import {
   createBusService,
   deleteBusService,
@@ -5992,6 +5992,24 @@ export const updateOwnerFleetVehicle = async (req, res) => {
     .populate("vehicle_type_id", "name type_name transport_type icon_types")
     .lean();
 
+  // The driver this vehicle is assigned to rides with it: carry the edit over, or ride matching (vehicleTypeId) and
+  // the driver's app kept the old type - e.g. a car changed to an auto still got car requests only.
+  const syncedPlainType = String(populated.vehicle_type_id?.icon_types || "").trim().toLowerCase();
+  await Driver.updateMany(
+    { assignedFleetVehicleId: vehicle._id, owner_id: owner._id },
+    {
+      $set: {
+        vehicleTypeId: populated.vehicle_type_id?._id || null,
+        vehicleIconType: populated.vehicle_type_id?.icon_types || "car",
+        vehicleType: VEHICLE_TYPES.includes(syncedPlainType) ? syncedPlainType : "car",
+        vehicleMake: populated.car_brand || "",
+        vehicleModel: populated.car_model || "",
+        vehicleNumber: populated.license_plate_number || "",
+        vehicleColor: populated.car_color || "",
+      },
+    },
+  );
+
   res.json({
     success: true,
     message:
@@ -7371,6 +7389,12 @@ const applyOwnerFleetAssignment = (driver, { assignedVehicle, assignedZone }) =>
     driver.vehicleColor = assignedVehicle.car_color || "";
     driver.vehicleIconType =
       assignedVehicle.vehicle_type_id?.icon_types || driver.vehicleIconType || "car";
+    // The plain type ("auto", "car", "bike" ...) must follow the assigned vehicle too. It used to keep the driver's
+    // old value, so an Auto fleet driver still showed "car": testers booked a car for them and no request arrived
+    // (matching goes by vehicleTypeId, which was Auto).
+    // (the field only takes bike / auto / car: SUV, luxury etc. are cars)
+    const plainType = String(assignedVehicle.vehicle_type_id?.icon_types || "").trim().toLowerCase();
+    driver.vehicleType = VEHICLE_TYPES.includes(plainType) ? plainType : "car";
   } else {
     driver.vehicleTypeId = null;
     driver.vehicleMake = "";

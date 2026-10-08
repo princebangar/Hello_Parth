@@ -2158,13 +2158,23 @@ const BusServiceManager = ({
               </div>
               <div>
                 <label className={labelClassName}>{typeof api.getDrivers === 'function' ? 'Assigned Driver Phone' : 'Bus Driver Phone'}</label>
+                {/* Owner flow: the phone comes from the fleet driver picked above and cannot be typed. It looked like a
+                    normal empty field ("Enter Phone Number"), so testers tapped it and nothing happened - now it reads as
+                    filled-in-for-you and says where to tap. */}
                 <input
-                  className={fieldClassName}
+                  className={typeof api.getDrivers === 'function'
+                    ? 'w-full cursor-not-allowed rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none'
+                    : fieldClassName}
                   value={draft.driverPhone || ''}
                   onChange={(event) => updateDraft('driverPhone', event.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="Enter Phone Number"
+                  placeholder={typeof api.getDrivers === 'function' ? 'Fills in when you pick a driver above' : 'Enter Phone Number'}
                   readOnly={typeof api.getDrivers === 'function'}
                 />
+                {typeof api.getDrivers === 'function' && !draft.driverPhone ? (
+                  <p className="mt-1.5 text-[11px] font-semibold text-amber-600">
+                    Tap a driver card under &quot;Assign Fleet Driver&quot; to fill this.
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className={labelClassName}>Operator Name</label>

@@ -1090,6 +1090,9 @@ const DriverHome = () => {
     // One map for Home that outlives the screen: leaving Home only detaches it, coming back from History / Wallet /
     // Profile puts the same map (tiles, zoom) back at once instead of building a new one (that took 1-2 s).
     const mapHostRef = useRef(null);
+    // true once the map has drawn its tiles; until then the "Loading map..." placeholder stays on top of it (a
+    // bare grey map showed in between)
+    const [mapPainted, setMapPainted] = useState(false);
     const mapsReady = HAS_VALID_GOOGLE_MAPS_KEY
         && !mapLoadError
         && Boolean(window.google?.maps)
@@ -1100,13 +1103,20 @@ const DriverHome = () => {
             return undefined;
         }
         const host = mapHostRef.current;
-        const { map: persistentMap } = acquirePersistentMap(
+        const { map: persistentMap, ready } = acquirePersistentMap(
             host,
             { center: driverPosition, zoom: 15, options: mapOptions },
             DRIVER_MAP_NAME,
         );
         setMap(persistentMap);
+        let tilesListener = null;
+        if (ready) {
+            setMapPainted(true);
+        } else {
+            tilesListener = window.google.maps.event.addListenerOnce(persistentMap, 'tilesloaded', () => setMapPainted(true));
+        }
         return () => {
+            tilesListener?.remove();
             setMap(null);
             releasePersistentMap(host, DRIVER_MAP_NAME);
         };
@@ -2538,16 +2548,16 @@ const DriverHome = () => {
 
             {/* --- MAP BACKGROUND --- */}
             <div className="absolute inset-0 z-0 w-full h-full">
-                {mapsReady ? (
-                    <div ref={mapHostRef} className="h-full w-full" />
-                ) : (
-                    <div className="w-full h-full bg-slate-200 flex items-center justify-center">
+                {mapsReady ? <div ref={mapHostRef} className="h-full w-full" /> : null}
+                {/* stays on top until the map has drawn its tiles (no bare grey map in between) */}
+                {!mapsReady || !mapPainted ? (
+                    <div className="absolute inset-0 w-full h-full bg-slate-200 flex items-center justify-center">
                         <div className="text-center px-10">
                             <div className="w-16 h-16 bg-slate-300 rounded-full animate-pulse mx-auto mb-4" />
                             <p className="text-slate-500 font-medium text-sm">{!HAS_VALID_GOOGLE_MAPS_KEY ? 'Map unavailable. Configure Google Maps key.' : mapLoadError ? 'Map could not load. Check your internet connection.' : 'Loading map...'}</p>
                         </div>
                     </div>
-                )}
+                ) : null}
             </div>
 
             <div className="absolute right-5 top-1/2 z-30 -translate-y-1/2">
@@ -2562,10 +2572,10 @@ const DriverHome = () => {
             </div>
 
             {/* --- BOTTOM FLOATING UI --- */}
-            {/* Sits exactly on top of the bottom bar (68px + 8px top padding + safe-area bottom padding). */}
+            {/* Sits just above the floating bottom bar (24px from the edge + 72px tall + safe area). */}
             <div
                 className="fixed left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto"
-                style={{ bottom: 'calc(76px + max(env(safe-area-inset-bottom), 8px))' }}
+                style={{ bottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}
             >
                 <AnimatePresence>
                     {statusMessage ? (

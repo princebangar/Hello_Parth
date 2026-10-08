@@ -65,6 +65,12 @@ const rideSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+      // One entry per dispatch attempt (last 20), NOT cleared on cancel/accept like the fields above: which drivers
+      // matched, who got the request and whether their app had a live connection. Answers "the driver got no request".
+      log: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: [],
+      },
     },
     vehicleIconType: {
       type: String,

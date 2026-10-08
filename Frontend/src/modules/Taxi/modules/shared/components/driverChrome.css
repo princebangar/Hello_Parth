@@ -49,14 +49,17 @@
   color: rgba(255, 255, 255, 0.78);
 }
 
-/* Floating bottom bar: white, a little above the screen edge; the active tab is filled with the Taxi blue. */
+/* Floating bottom bar: white, the same 24px above the screen edge and the same size as the customer Food / Taxi bar;
+   the active tab is filled with the Taxi blue. */
 .driver-nav {
   position: fixed !important;
-  left: 50% !important;
-  bottom: 16px !important;
-  transform: translateX(-50%) !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 24px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   z-index: 9997 !important;
-  width: calc(100% - 32px) !important;
+  width: calc(100% - 48px) !important;
   max-width: 448px !important;
   margin-bottom: env(safe-area-inset-bottom, 0px);
   pointer-events: none;
@@ -68,12 +71,11 @@
   display: flex;
   align-items: center;
   justify-content: space-around;
-  height: 68px;
+  height: 72px;
   padding: 0 8px;
   border-radius: 2rem;
-  background: rgba(255, 255, 255, 0.94);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  backdrop-filter: blur(18px) saturate(160%);
+  /* solid, no backdrop blur: blurring the live map under the bar was repainted on every frame and slowed tab switches */
+  background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.06);
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18);
 }
@@ -84,7 +86,7 @@
   transition: color 0.2s ease;
   flex: 1 1 0;
   min-width: 0;
-  height: 54px;
+  height: 56px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -104,8 +106,8 @@
 /* One solid blue (the shaded gradient made the white label look blurred, "MILESTONE" most of all). */
 .driver-nav-pill {
   position: absolute;
-  top: 7px;
-  bottom: 7px;
+  top: 8px;
+  bottom: 8px;
   left: 8px;
   border-radius: 1.5rem;
   background: #2563eb;

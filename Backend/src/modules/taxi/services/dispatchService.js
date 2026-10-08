@@ -565,6 +565,76 @@ const persistDispatchTrackingProgress = async ({
   await Ride.updateOne({ _id: rideId }, update);
 };
 
+// Writes one dispatch attempt into ride.dispatchTracking.log (kept after cancel). Never throws, never blocks dispatch.
+const recordDispatchLog = async ({
+  rideId,
+  attemptIndex = 0,
+  radius = 0,
+  zone = null,
+  drivers = [],
+  targetDrivers = [],
+  dispatchVehicleTypeIds = [],
+}) => {
+  try {
+    const notified = await Promise.all(
+      targetDrivers.map(async (driver) => {
+        let sockets = null;
+        try {
+          if (ioInstance) {
+            sockets = (await ioInstance.in(getDriverRoom(driver._id)).fetchSockets()).length;
+          }
+        } catch {
+          sockets = null;
+        }
+        return { driverId: String(driver._id), sockets };
+      }),
+    );
+
+    // Nobody matched: which drivers of this vehicle type were online at all (to tell "too far / other zone" from
+    // "nobody online").
+    const typeIds = (dispatchVehicleTypeIds || []).map(String).filter((id) => mongoose.isValidObjectId(id));
+    const onlineSameType = drivers.length
+      ? []
+      : (
+          await Driver.find({
+            isOnline: true,
+            ...(typeIds.length ? { vehicleTypeId: { $in: typeIds } } : {}),
+          })
+            .select('_id zoneId isOnRide')
+            .limit(10)
+            .lean()
+        ).map((driver) => ({
+          driverId: String(driver._id),
+          zoneId: driver.zoneId ? String(driver.zoneId) : null,
+          isOnRide: Boolean(driver.isOnRide),
+        }));
+
+    await Ride.updateOne(
+      { _id: rideId },
+      {
+        $push: {
+          'dispatchTracking.log': {
+            $each: [
+              {
+                at: new Date(),
+                attempt: attemptIndex + 1,
+                radiusMeters: radius,
+                zoneId: zone?._id ? String(zone._id) : null,
+                matchedDriverIds: drivers.slice(0, 10).map((driver) => String(driver._id)),
+                notified,
+                ...(onlineSameType.length || !drivers.length ? { onlineSameType } : {}),
+              },
+            ],
+            $slice: -20,
+          },
+        },
+      },
+    );
+  } catch (error) {
+    console.error('[dispatch] could not record dispatch log', error?.message || error);
+  }
+};
+
 const emitToSocket = (socketId, event, payload) => {
   if (ioInstance && socketId) {
     ioInstance.to(socketId).emit(event, payload);
@@ -1267,6 +1337,16 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       rideId,
       notifiedDriverIds: targetDrivers.map((driver) => String(driver._id)),
     }).catch(() => null);
+    // not awaited: the log must never slow the request down
+    recordDispatchLog({
+      rideId,
+      attemptIndex,
+      radius: effectiveRadius,
+      zone,
+      drivers,
+      targetDrivers,
+      dispatchVehicleTypeIds,
+    });
 
     emitToRoom(getUserRoom(ride.userId), 'rideSearchUpdate', {
       rideId: String(ride._id),

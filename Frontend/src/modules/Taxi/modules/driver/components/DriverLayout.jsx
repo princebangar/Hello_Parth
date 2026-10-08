@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     clearDriverAuthState,
@@ -181,6 +181,14 @@ const isPendingAllowedRoute = (pathname = '') =>
         '/taxi/owner/support/tickets',
         '/taxi/driver/pooling/status',
     ].includes(pathname);
+
+// Sits next to the screen inside the Suspense boundary, so its effect runs only once the screen itself is on the page.
+const ScreenShown = ({ onShown }) => {
+    useEffect(() => {
+        onShown();
+    }, [onShown]);
+    return null;
+};
 
 const DriverLayout = () => {
     // Forms (registration, KYC, add driver/vehicle, bus desk) keep the field being typed in above the keyboard.
@@ -387,13 +395,14 @@ const DriverLayout = () => {
         };
     }, [isAllowed, location.pathname, location.state, navigate, retryKey]);
 
-    // index.html keeps a copy of the start-up skeleton over driver screens until real content is drawn. Once the
-    // layout shows a screen it is drawn (Home's "Loading map..." text used to keep that copy up, half covering Home).
-    useEffect(() => {
-        if (!isChecking && !connectionError) {
-            window.__bootKeepDone?.();
-        }
-    }, [isChecking, connectionError]);
+    // index.html keeps a copy of the start-up skeleton over driver screens until real content is drawn. It goes when
+    // the first screen is really on the page - not when the layout is, or a refresh showed a second (page) skeleton
+    // under the bottom bar before Home. Until then the bar waits too, so a refresh is: one skeleton, then the screen.
+    const [screenShown, setScreenShown] = useState(false);
+    const handleScreenShown = useCallback(() => {
+        setScreenShown(true);
+        window.__bootKeepDone?.();
+    }, []);
 
     // Shortly after the first screen is drawn: load the other bottom-bar screens of this role, so a tab tap shows its
     // screen at once. Scheduled once - switching tabs must not cancel it (it did with the settle helper, so quick
@@ -461,10 +470,11 @@ const DriverLayout = () => {
             ) : (
                 <>
                     {/* A screen whose code is not here yet shows a skeleton in its own place; the bottom bar stays. */}
-                    <Suspense fallback={<div className="min-h-screen"><TaxiPageSkeleton variant="page" /></div>}>
+                    <Suspense fallback={screenShown ? <div className="min-h-screen"><TaxiPageSkeleton variant="page" /></div> : null}>
+                        <ScreenShown onShown={handleScreenShown} />
                         <Outlet context={{ isAllowed }} />
                     </Suspense>
-                    {isAllowed && BOTTOM_NAV_PATH.test(location.pathname.replace(/\/+$/, '')) && <DriverBottomNav />}
+                    {screenShown && isAllowed && BOTTOM_NAV_PATH.test(location.pathname.replace(/\/+$/, '')) && <DriverBottomNav />}
                     {isAllowed && getStoredRole() === 'driver' && <DriverRideRequestListener />}
                 </>
             )}

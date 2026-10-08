@@ -41,7 +41,7 @@ export function acquirePersistentMap(host, { center, zoom, options }, name = DEF
     maps.event.trigger(shared.map, 'resize');
     shared.map.setOptions(options);
   }
-  return { map: shared.map, reused };
+  return { map: shared.map, reused, ready: Boolean(shared.ready) };
 }
 
 /** Takes the map out of the page (it keeps living for the next visit). */

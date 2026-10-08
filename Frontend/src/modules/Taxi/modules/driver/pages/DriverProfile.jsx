@@ -119,6 +119,19 @@ const DriverProfile = () => {
     const navigate = useNavigate();
     const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
     const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+    // The top of the page (photo, details, first list) is drawn first; the rest of the list follows a frame later,
+    // so opening Profile does not wait for the whole long page.
+    const [showFullList, setShowFullList] = useState(false);
+    useEffect(() => {
+        let timer = null;
+        const frame = window.requestAnimationFrame(() => {
+            timer = window.setTimeout(() => setShowFullList(true), 0);
+        });
+        return () => {
+            window.cancelAnimationFrame(frame);
+            window.clearTimeout(timer);
+        };
+    }, []);
     const [legalModal, setLegalModal] = useState(null);
     // The page behind the policy sheet must not scroll while it is open.
     useBodyScrollLock(Boolean(legalModal));
@@ -484,7 +497,7 @@ Processing Time: Refunds are typically credited back to the original payment met
 
             {/* List Menu */}
             <main className="space-y-1">
-                {sections.map((section, sIdx) => (
+                {(showFullList ? sections : sections.slice(0, 1)).map((section, sIdx) => (
                     <div key={sIdx} className="pt-6">
                         <h3 className="px-6 text-[12px] font-bold uppercase tracking-[0.16em] text-[#5a6b8f] mb-1">{section.title}</h3>
                         <div>
@@ -529,48 +542,52 @@ Processing Time: Refunds are typically credited back to the original payment met
                 ))}
             </main>
 
-            {/* Owner Support Section */}
-            <div className="px-6 py-4 mt-6">
-                <div className="rounded-[28px] border border-slate-100 bg-slate-50/50 p-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        <h3 className="text-[13px] font-bold text-slate-900 uppercase tracking-wider">Owner Support</h3>
-                    </div>
+            {showFullList ? (
+                <>
+                {/* Owner Support Section */}
+                <div className="px-6 py-4 mt-6">
+                    <div className="rounded-[28px] border border-slate-100 bg-slate-50/50 p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <h3 className="text-[13px] font-bold text-slate-900 uppercase tracking-wider">Owner Support</h3>
+                        </div>
 
-                    <div className="space-y-5">
-                        <a href="mailto:helloparthg@gmail.com" className="flex items-center gap-4 group">
-                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
-                                <Mail size={18} />
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Support</p>
-                                <p className="text-[14px] font-bold text-slate-800">helloparthg@gmail.com</p>
-                            </div>
-                        </a>
+                        <div className="space-y-5">
+                            <a href="mailto:helloparthg@gmail.com" className="flex items-center gap-4 group">
+                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
+                                    <Mail size={18} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Support</p>
+                                    <p className="text-[14px] font-bold text-slate-800">helloparthg@gmail.com</p>
+                                </div>
+                            </a>
 
-                        <a href="tel:9193911911" className="flex items-center gap-4 group">
-                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-sky-500 transition-colors shadow-sm">
-                                <Phone size={18} />
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Call Support</p>
-                                <p className="text-[14px] font-bold text-slate-800">91-93-911-911</p>
-                            </div>
-                        </a>
+                            <a href="tel:9193911911" className="flex items-center gap-4 group">
+                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-sky-500 transition-colors shadow-sm">
+                                    <Phone size={18} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Call Support</p>
+                                    <p className="text-[14px] font-bold text-slate-800">91-93-911-911</p>
+                                </div>
+                            </a>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Sign Out Section */}
-            <div className="px-6 py-6">
-                <button
-                    onClick={() => setIsLogoutOpen(true)}
-                    className="flex items-center gap-3 text-rose-500 font-bold text-[13px] active:translate-x-1 transition-transform"
-                >
-                    <LogOut size={16} strokeWidth={2.5} />
-                    Logout from Account
-                </button>
-            </div>
+                {/* Sign Out Section */}
+                <div className="px-6 py-6">
+                    <button
+                        onClick={() => setIsLogoutOpen(true)}
+                        className="flex items-center gap-3 text-rose-500 font-bold text-[13px] active:translate-x-1 transition-transform"
+                    >
+                        <LogOut size={16} strokeWidth={2.5} />
+                        Logout from Account
+                    </button>
+                </div>
+                </>
+            ) : null}
 
 
             <AnimatePresence>
