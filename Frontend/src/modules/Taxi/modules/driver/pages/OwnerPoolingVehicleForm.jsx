@@ -19,6 +19,7 @@ const OwnerPoolingVehicleForm = () => (
       backLabel="Back to Pooling Vehicles"
       pageLabel="Add Pooling Vehicle"
       hidePricingFields
+      placeCreateActionAtEnd
     />
   </>
 );

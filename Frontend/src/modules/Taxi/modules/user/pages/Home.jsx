@@ -108,7 +108,7 @@ import { hasPersistentMap } from '../utils/persistentMap';
 import useTaxiZoneGate from '../utils/useTaxiZoneGate';
 import { showHelloParthBrandedToast } from '@/shared/utils/customToasts';
 import { getFoodStyleLocationParts } from '@/shared/utils/sharedUserLocation';
-import { loadRoadDistances } from '../utils/preciseLocation';
+import { cleanRecentPlace, loadRoadDistances } from '../utils/preciseLocation';
 import { distanceBetweenKm } from '../utils/nearbyPlaces';
 
 const RECENT_MAX_DISTANCE_KM = 50;
@@ -299,12 +299,12 @@ const RecentLocationsList = ({ routePrefix }) => {
   // (Mumbai, 385 km away) is not a "recent place" for someone standing in Indore.
   const nearbyRecents = useMemo(() => {
     const origin = getSavedLocationCoords();
-    if (!origin) return recentLocations;
+    if (!origin) return recentLocations.map(cleanRecentPlace);
     return recentLocations.filter((item) => {
       if (!item.lat || !item.lon) return false;
       const km = distanceBetweenKm(origin, [Number(item.lon), Number(item.lat)]);
       return Number.isFinite(km) && km <= RECENT_MAX_DISTANCE_KM;
-    });
+    }).map(cleanRecentPlace);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recentLocations, recentOriginKey]);
   useEffect(() => {

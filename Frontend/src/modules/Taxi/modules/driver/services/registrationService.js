@@ -526,6 +526,21 @@ export const getCurrentDriver = () =>
 export const getPoolingDriverBookings = () =>
   api.get("/drivers/pooling/bookings", withDriverAuth());
 
+export const getPoolingDriverDashboard = () =>
+  api.get("/drivers/pooling/dashboard", withDriverAuth());
+
+export const getPoolingDriverRoutes = () =>
+  api.get("/drivers/pooling/routes", withDriverAuth());
+
+export const setPoolingDriverRoute = (routeId, assigned) =>
+  api.patch(`/drivers/pooling/routes/${routeId}`, { assigned: Boolean(assigned) }, withDriverAuth());
+
+export const setPoolingDriverOnline = (online, location = null) =>
+  api.patch("/drivers/pooling/online", { online: Boolean(online), ...(location ? { location } : {}) }, withDriverAuth());
+
+export const sendPoolingDriverLocation = (location, heading = null) =>
+  api.post("/drivers/pooling/location", { location, heading }, withDriverAuth());
+
 export const getDriverRideHistory = (params = {}) =>
   api.get("/rides", withDriverAuth({ params }));
 

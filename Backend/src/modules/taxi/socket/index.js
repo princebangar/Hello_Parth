@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import { env } from '../../../config/env.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { Driver } from '../driver/models/Driver.js';
+import { Ride } from '../user/models/Ride.js';
 import {
   broadcastSupportMessage,
   createSupportMessage,
@@ -77,6 +78,24 @@ const onAsync = (socket, handler) => async (payload = {}) => {
   }
 };
 
+const rejoinActiveRideRoom = async (socket, identity) => {
+  if (identity.role !== 'user' && identity.role !== 'driver') {
+    return;
+  }
+
+  const ride = await Ride.findOne({
+    ...(identity.role === 'user' ? { userId: identity.sub } : { driverId: identity.sub }),
+    status: { $in: ['searching', 'accepted', 'ongoing'] },
+  })
+    .sort({ updatedAt: -1 })
+    .select('_id')
+    .lean();
+
+  if (ride?._id) {
+    joinRideRoom(socket, ride._id);
+  }
+};
+
 const registerTaxiSocketConnectionHandlers = (io) => {
   io.on('connection', async (socket) => {
     const identity = socket.auth;
@@ -97,6 +116,10 @@ const registerTaxiSocketConnectionHandlers = (io) => {
         console.error('Failed to notify late-available driver on socket connect', error);
       });
     }
+
+    // A reconnect gives a brand-new server socket with no rooms: put it back in its live ride room, so ride chat,
+    // status and location events keep arriving without the open screen having to re-join by hand.
+    rejoinActiveRideRoom(socket, identity).catch(() => {});
 
     socket.on('chat:join', ({ conversationKey }) => {
       if (conversationKey) {

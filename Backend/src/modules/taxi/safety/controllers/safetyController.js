@@ -33,6 +33,18 @@ const normalizeCoordinates = (value) => {
   return null;
 };
 
+const toContactList = (list) =>
+  (Array.isArray(list) ? list : [])
+    .map((entry) => ({ name: cleanString(entry?.name), phone: cleanString(entry?.phone) }))
+    .filter((entry) => entry.phone);
+
+const buildVehicleLabel = (driver = {}) =>
+  [
+    [cleanString(driver?.vehicleMake), cleanString(driver?.vehicleModel)].filter(Boolean).join(' '),
+    cleanString(driver?.vehicleColor),
+    cleanString(driver?.vehicleNumber),
+  ].filter(Boolean).join(' - ');
+
 const serializeSafetyAlert = (alert = {}) => {
   const coordinates = Array.isArray(alert?.location?.coordinates) ? alert.location.coordinates : [];
   const [lng, lat] = coordinates;
@@ -48,6 +60,8 @@ const serializeSafetyAlert = (alert = {}) => {
     driverName: cleanString(alert?.driverName),
     driverPhone: cleanString(alert?.driverPhone),
     vehicleLabel: cleanString(alert?.vehicleLabel),
+    vehicleNumber: cleanString(alert?.vehicleNumber),
+    emergencyContacts: toContactList(alert?.emergencyContacts),
     tripCode: cleanString(alert?.tripCode),
     pickupAddress: cleanString(alert?.pickupAddress),
     dropAddress: cleanString(alert?.dropAddress),
@@ -86,28 +100,28 @@ const readRideContext = async ({ rideId, deliveryId }) => {
   if (rideId) {
     ride = await Ride.findById(rideId)
       .populate('userId', 'name phone')
-      .populate('driverId', 'name phone vehicle')
+      .populate('driverId', 'name phone vehicleMake vehicleModel vehicleNumber vehicleColor')
       .lean();
   }
 
   if (deliveryId) {
     delivery = await Delivery.findById(deliveryId)
       .populate('userId', 'name phone')
-      .populate('driverId', 'name phone vehicle')
+      .populate('driverId', 'name phone vehicleMake vehicleModel vehicleNumber vehicleColor')
       .lean();
   }
 
   if (!delivery && ride?.deliveryId) {
     delivery = await Delivery.findById(ride.deliveryId)
       .populate('userId', 'name phone')
-      .populate('driverId', 'name phone vehicle')
+      .populate('driverId', 'name phone vehicleMake vehicleModel vehicleNumber vehicleColor')
       .lean();
   }
 
   if (!ride && delivery?.rideId) {
     ride = await Ride.findById(delivery.rideId)
       .populate('userId', 'name phone')
-      .populate('driverId', 'name phone vehicle')
+      .populate('driverId', 'name phone vehicleMake vehicleModel vehicleNumber vehicleColor')
       .lean();
   }
 
@@ -146,13 +160,24 @@ const createAlertRecord = async ({
   tripCode,
   vehicleLabel,
 }) => {
-  const { ride, delivery } = await readRideContext({ rideId, deliveryId });
+  let effectiveRideId = rideId;
+  let sosUser = null;
+  if (sourceApp === 'user') {
+    sosUser = await User.findById(authId).select('name phone currentRideId emergencyContacts').lean();
+    // The app may not know the ride (page opened outside the trip): use the one the rider is on right now.
+    if (!effectiveRideId && !deliveryId && sosUser?.currentRideId) {
+      effectiveRideId = String(sosUser.currentRideId);
+    }
+  }
+  const { ride, delivery } = await readRideContext({ rideId: effectiveRideId, deliveryId });
   const actorUser = sourceApp === 'user'
-    ? await User.findById(authId).select('name phone').lean()
+    ? sosUser
     : ride?.userId || delivery?.userId || null;
-  const actorDriver = sourceApp === 'driver'
-    ? await Driver.findById(authId).select('name phone vehicle').lean()
-    : ride?.driverId || delivery?.driverId || null;
+  const sosDriver = sourceApp === 'driver'
+    ? await Driver.findById(authId).select('name phone vehicleMake vehicleModel vehicleNumber vehicleColor emergencyContacts').lean()
+    : null;
+  const actorDriver = sosDriver || ride?.driverId || delivery?.driverId || null;
+  const contactsSource = sourceApp === 'driver' ? sosDriver : sosUser;
   const coords =
     normalizeCoordinates(location)
     || normalizeCoordinates(delivery?.pickupLocation)
@@ -163,13 +188,15 @@ const createAlertRecord = async ({
     serviceType: deriveServiceType({ requestedServiceType: serviceType, ride, delivery }),
     userId: sourceApp === 'user' ? authId : actorUser?._id || null,
     driverId: sourceApp === 'driver' ? authId : actorDriver?._id || null,
-    rideId: ride?._id || rideId || null,
+    rideId: ride?._id || effectiveRideId || null,
     deliveryId: delivery?._id || deliveryId || null,
     riderName: cleanString(actorUser?.name),
     riderPhone: cleanString(actorUser?.phone),
     driverName: cleanString(actorDriver?.name),
     driverPhone: cleanString(actorDriver?.phone),
-    vehicleLabel: cleanString(vehicleLabel) || cleanString(actorDriver?.vehicle),
+    vehicleLabel: cleanString(vehicleLabel) || buildVehicleLabel(actorDriver),
+    vehicleNumber: cleanString(actorDriver?.vehicleNumber),
+    emergencyContacts: toContactList(contactsSource?.emergencyContacts),
     tripCode:
       cleanString(tripCode)
       || cleanString(ride?.bookingId)

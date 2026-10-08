@@ -326,6 +326,7 @@ export const completePoolingDriverOnboarding = async ({ registrationId, phone })
     approve: false,
     status: 'pending',
     poolingEnabled: true,
+    isOnline: false,
   });
 
   session.status = 'submitted';

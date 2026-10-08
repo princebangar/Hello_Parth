@@ -447,7 +447,13 @@ api.interceptors.response.use(
         }));
       }
 
-      return Promise.reject({ ...error.response.data, status: error.response.status });
+      // `response` is kept on the rejected value too: ~40 screens read error.response.data.message, and without it
+      // they all fell back to a generic "check your connection" text for every server answer.
+      return Promise.reject({
+        ...error.response.data,
+        status: error.response.status,
+        response: { status: error.response.status, data: error.response.data },
+      });
     }
 
     return Promise.reject({ message: 'Network error or server down.' });

@@ -374,6 +374,7 @@ const Wallet = () => {
           whileTap={{ scale: 0.98 }}
           transition={{ type: 'spring', stiffness: 400, damping: 20 }}
           onClick={() => navigate(`${basePath}/referral`)}
+          data-card
           className={`w-full border rounded-3xl p-5 flex items-center gap-4 shadow-md group cursor-pointer relative overflow-hidden text-left ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-100/30 border-yellow-250'}`}
         >
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shrink-0 group-hover:scale-110 group-hover:rotate-6 duration-300 ${isDark ? 'bg-slate-950 text-white group-hover:bg-white group-hover:text-slate-950' : 'bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-md shadow-indigo-500/20'}`}>

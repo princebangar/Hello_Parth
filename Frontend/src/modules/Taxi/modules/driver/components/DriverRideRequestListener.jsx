@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import IncomingRideRequest from '../pages/IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
 import { socketService } from '../../../shared/api/socket';
@@ -235,6 +236,12 @@ const DriverRideRequestListener = () => {
         };
 
         const onSocketError = ({ message } = {}) => {
+            if (acceptingRideIdRef.current) {
+                // a refused accept must say why (it used to just close the spinner)
+                toast.error(message || 'Could not accept this ride.');
+                stopRideRequestAlertSound();
+                setCurrentRequest(null);
+            }
             if (String(message || '').toLowerCase().includes('no longer available')) {
                 stopRideRequestAlertSound();
                 setCurrentRequest(null);

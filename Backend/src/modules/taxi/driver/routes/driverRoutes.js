@@ -1,3 +1,10 @@
+import {
+  getPoolingDriverDashboard,
+  getPoolingDriverRoutes,
+  setPoolingDriverOnline,
+  setPoolingDriverRoute,
+  updatePoolingDriverLocation,
+} from "../controllers/poolingDriverController.js";
 import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
@@ -145,6 +152,31 @@ driverRouter.get(
   "/me",
   authenticate(["driver", "owner", "pooling_driver", "bus_driver"], { allowPending: true }),
   asyncHandler(getCurrentDriver),
+);
+driverRouter.get(
+  "/pooling/dashboard",
+  authenticate(["pooling_driver"]),
+  asyncHandler(getPoolingDriverDashboard),
+);
+driverRouter.get(
+  "/pooling/routes",
+  authenticate(["pooling_driver"]),
+  asyncHandler(getPoolingDriverRoutes),
+);
+driverRouter.patch(
+  "/pooling/routes/:routeId",
+  authenticate(["pooling_driver"]),
+  asyncHandler(setPoolingDriverRoute),
+);
+driverRouter.patch(
+  "/pooling/online",
+  authenticate(["pooling_driver"]),
+  asyncHandler(setPoolingDriverOnline),
+);
+driverRouter.post(
+  "/pooling/location",
+  authenticate(["pooling_driver"]),
+  asyncHandler(updatePoolingDriverLocation),
 );
 driverRouter.get(
   "/pooling/bookings",

@@ -83,15 +83,46 @@ export const getBestPosition = (options = {}) => new Promise((resolve, reject) =
 });
 
 /**
- * From a Geocoder response, the first readable address. Google lists the most specific result first; the only one
- * skipped is a bare plus code ("J675+HJ6, ...") which says nothing a person can recognise. Picking by place type
- * instead gave short business names ("Corporate House") with no area / state / pincode behind them.
+ * Drops the part of an address that only says where inside a building ("Block, 3rd floor, Corporate House, 307 B,
+ * Regal Circle" -> "Corporate House, 307 B, Regal Circle"): floor / room / suite / unit parts and a lone
+ * "Block" / "Tower" / "Wing" word. A driver or rider needs the ground location, not the storey.
+ */
+export const cleanGroundAddress = (address) => {
+  const text = String(address || '').trim();
+  if (!text) return text;
+  const parts = text.split(',').map((part) => part.trim()).filter(Boolean);
+  const isInsideBuildingPart = (part) =>
+    /\b(floor|flr|basement|mezzanine)\b/i.test(part)
+    || /^(room|suite|unit|flat|office|shop|cabin)\b/i.test(part)
+    || /^(block|tower|wing)$/i.test(part);
+  const kept = parts.filter((part) => !isInsideBuildingPart(part));
+  return (kept.length ? kept : parts).join(', ');
+};
+
+/** A saved "recent place" with its floor / unit words removed (its short name follows the cleaned address). */
+export const cleanRecentPlace = (item = {}) => {
+  const address = cleanGroundAddress(item.address);
+  const oldFirst = String(item.address || '').split(',')[0].trim();
+  const name = !item.name || item.name === oldFirst ? address.split(',')[0].trim() : cleanGroundAddress(item.name);
+  return { ...item, address, name };
+};
+
+const INSIDE_BUILDING_TYPES = ['subpremise', 'floor', 'room'];
+
+/**
+ * From a Geocoder response, the first readable address. Google lists the most specific result first; skipped are a
+ * bare plus code ("J675+HJ6, ...") and results that point to a spot inside a building (subpremise / floor / room).
+ * The address that comes back never names a floor.
  */
 export const pickBestGeocodeResult = (results) => {
   const list = Array.isArray(results) ? results.filter((result) => result?.formatted_address) : [];
   if (list.length === 0) return null;
-  const readable = list.find((result) => !(result.types || []).includes('plus_code') && !/^[A-Z0-9]{4}\+[A-Z0-9]{2,}/.test(result.formatted_address));
-  return readable || list[0];
+  const isPlusCode = (result) => (result.types || []).includes('plus_code') || /^[A-Z0-9]{4}\+[A-Z0-9]{2,}/.test(result.formatted_address);
+  const isInside = (result) => (result.types || []).some((type) => INSIDE_BUILDING_TYPES.includes(type));
+  const best = list.find((result) => !isPlusCode(result) && !isInside(result))
+    || list.find((result) => !isPlusCode(result))
+    || list[0];
+  return { ...best, formatted_address: cleanGroundAddress(best.formatted_address) };
 };
 
 const toLatLng = (coords) => {

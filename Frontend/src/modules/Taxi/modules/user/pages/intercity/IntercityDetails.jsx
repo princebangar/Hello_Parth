@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { cleanGroundAddress } from '../../utils/preciseLocation';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, MapPin, Navigation, ChevronRight, LoaderCircle, AlertTriangle, X, Check, ShieldCheck, MapPinned, Search } from 'lucide-react';
@@ -350,7 +351,7 @@ const IntercityDetails = () => {
             if (status === 'OK' && location) {
               const resolvedResult = {
                 title: result.title || place.name || place.formatted_address,
-                address: place.formatted_address || result.address || result.title || '',
+                address: cleanGroundAddress(place.formatted_address) || result.address || result.title || '',
                 coords: [location.lng(), location.lat()],
               };
               if (cacheKey) {
@@ -372,7 +373,7 @@ const IntercityDetails = () => {
               if (geocodeStatus === 'OK' && geocodedLocation) {
                 const resolvedResult = {
                   title: result.title || geocodedPlace.formatted_address,
-                  address: geocodedPlace.formatted_address || result.address || result.title || '',
+                  address: cleanGroundAddress(geocodedPlace.formatted_address) || result.address || result.title || '',
                   coords: [geocodedLocation.lng(), geocodedLocation.lat()],
                 };
                 if (cacheKey) {
@@ -401,7 +402,7 @@ const IntercityDetails = () => {
         if (status === 'OK' && location) {
           const resolvedResult = {
             title: result.title || place.formatted_address,
-            address: place.formatted_address || result.address || result.title || '',
+            address: cleanGroundAddress(place.formatted_address) || result.address || result.title || '',
             coords: [location.lng(), location.lat()],
           };
           if (cacheKey) {
@@ -471,8 +472,8 @@ const IntercityDetails = () => {
       geocoder.geocode({ location: { lat, lng } }, (results, status) => {
         setIsGeocoding(false);
         if (status === 'OK' && results?.[0]) {
-          reverseGeocodeCacheRef.current.set(cacheKey, results[0].formatted_address);
-          setPickedAddress(results[0].formatted_address);
+          reverseGeocodeCacheRef.current.set(cacheKey, cleanGroundAddress(results[0].formatted_address));
+          setPickedAddress(cleanGroundAddress(results[0].formatted_address));
           return;
         }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { localDateKey } from '../../../../shared/utils/localDate';
 import { 
   MapPin, 
   ArrowLeftRight, 
@@ -72,7 +73,7 @@ const PoolingHome = () => {
   const [search, setSearch] = useState({
     from: '',
     to: '',
-    date: new Date().toISOString().split('T')[0]
+    date: localDateKey(0)
   });
   const [popularRoutes, setPopularRoutes] = useState([]);
   const [showPopularRoutes, setShowPopularRoutes] = useState(true);

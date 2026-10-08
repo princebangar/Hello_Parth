@@ -164,7 +164,8 @@ const getWalletSnapshot = async (driver) => {
 
 export const serializeDriverWallet = async (driver) => {
   const wallet = await getWalletSnapshot(driver);
-  const isBelowMinimumBalance = wallet.balance < wallet.minimumBalanceForOrders;
+  const isFleetDriver = Boolean(driver?.owner_id);
+  const isBelowMinimumBalance = !isFleetDriver && wallet.balance < wallet.minimumBalanceForOrders;
 
   return {
     balance: wallet.balance,
@@ -175,7 +176,7 @@ export const serializeDriverWallet = async (driver) => {
     isTransferEnabled: wallet.rules.isTransferEnabled,
     minimumTopUpAmount: wallet.rules.minimumTopUpAmount,
     minimumTransferAmount: wallet.rules.minimumTransferAmount,
-    isBlocked: wallet.isBlocked || !wallet.rules.isWalletEnabled || isBelowMinimumBalance,
+    isBlocked: isFleetDriver ? false : wallet.isBlocked || !wallet.rules.isWalletEnabled || isBelowMinimumBalance,
   };
 };
 
@@ -190,6 +191,15 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
   }
 
   const wallet = await getWalletSnapshot(driver);
+
+  // A fleet captain works on the owner's account: their own wallet (always 0) never blocks a ride.
+  if (driver.owner_id) {
+    if (driver?.wallet?.isBlocked) {
+      await Driver.findByIdAndUpdate(driver._id, { 'wallet.isBlocked': false });
+    }
+    return wallet;
+  }
+
   const isBelowMinimumBalance = wallet.balance < wallet.minimumBalanceForOrders;
   const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || isBelowMinimumBalance;
 
@@ -236,7 +246,7 @@ export const applyDriverWalletAdjustment = async ({
 
   const before = await getWalletSnapshot(driver);
   const balanceAfter = Math.round((before.balance + normalizedAmount) * 100) / 100;
-  const isBlockedAfter = !before.rules.isWalletEnabled || balanceAfter < before.minimumBalanceForOrders;
+  const isBlockedAfter = !driver.owner_id && (!before.rules.isWalletEnabled || balanceAfter < before.minimumBalanceForOrders);
 
   const updatedDriver = await Driver.findByIdAndUpdate(
     driverId,

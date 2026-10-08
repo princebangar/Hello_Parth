@@ -108,11 +108,13 @@ const ensureUserWallet = async (userId) => {
   );
 };
 
+// Credits made by the shared (Food) wallet code - the sign-up referral reward - are stored as type / description:
+// show them with the same kind / title as a Taxi credit (they used to read as a bare "Credit").
 const serializeUserWalletTransaction = (entry = {}) => ({
   id: entry._id,
-  kind: entry.kind,
+  kind: entry.kind || (entry.type === 'addition' ? 'credit' : entry.type === 'deduction' ? 'debit' : entry.kind),
   amount: Number(entry.amount || 0),
-  title: entry.title || '',
+  title: entry.title || entry.description || '',
   counterpartyPhone: entry.counterpartyPhone || '',
   createdAt: entry.createdAt || null,
 });
@@ -1436,6 +1438,12 @@ const serializeUserNotification = (item = {}) => ({
   sentAt: item.sent_at || item.createdAt || null,
   serviceLocationId: item.service_location_id || null,
 });
+
+// Refer & Earn screen: code, friends who joined, what was earned, the reward rule (Global admin settings).
+export const getMyReferrals = async (req, res) => {
+  const { getUserReferralOverview } = await import('../../../../core/users/referralOverview.service.js');
+  res.json({ success: true, data: await getUserReferralOverview(req.auth.sub) });
+};
 
 export const getUserNotifications = async (req, res) => {
   const user = await User.findById(req.auth.sub).lean();

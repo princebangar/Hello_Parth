@@ -231,8 +231,10 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
 
   socket.on(
     SOCKET_EVENTS.RIDE_MESSAGE_SEND,
-    onAsync(socket, async ({ rideId, message }) => {
+    onAsync(socket, async ({ rideId, message, clientId }) => {
       await authorizeRideRoomAccess({ socket, rideId });
+      // The sender may have lost the room on a reconnect: it must get its own message back to show it as sent.
+      socket.join(getRideRoom(rideId));
 
       const savedMessage = await appendRideMessage({
         rideId,
@@ -241,7 +243,10 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         message,
       });
 
-      io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_MESSAGE_NEW, savedMessage);
+      io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_MESSAGE_NEW, {
+        ...savedMessage,
+        ...(clientId ? { clientId: String(clientId).slice(0, 64) } : {}),
+      });
     }),
   );
 };

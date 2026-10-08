@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Send, Phone, Smile, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Phone, Loader2 } from 'lucide-react';
 import UserSupportChatPanel from '../../../shared/components/UserSupportChatPanel';
 import { socketService } from '../../../../shared/api/socket';
 import { getCurrentRide } from '../../services/currentRideService';
 
-// Quick emoji tray for the ride chat (the device keyboard still has every emoji).
-const QUICK_EMOJIS = ['👍', '🙏', '😊', '😂', '👋', '🚗', '📍', '⏳', '✅', '❌', '🙂', '😅', '👌', '🙌', '❤️', '🎉'];
+// Ride chat is plain text: emojis (typed or pasted) are stripped.
+const EMOJI_PATTERN = /[\p{Extended_Pictographic}‍️⃣]/gu;
+const stripEmojis = (value) => String(value || '').replace(EMOJI_PATTERN, '');
+
+// Give up waiting for the first ride state after this long and open the chat anyway (sent messages are queued).
+const JOIN_GIVE_UP_MS = 7000;
+const JOIN_RETRY_MS = 2500;
 
 const RIDE_EVENTS = {
   joined: 'ride:joined',
@@ -29,8 +34,8 @@ const toClock = (value) => {
   return date.toLocaleTimeString('en-IN', {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
-  });
+    hour12: true,
+  }).toUpperCase();
 };
 
 const normalizeMessage = (message, fallbackRole) => ({
@@ -39,6 +44,7 @@ const normalizeMessage = (message, fallbackRole) => ({
   senderId: String(message?.senderId || ''),
   message: String(message?.message || '').trim(),
   sentAt: message?.sentAt || new Date().toISOString(),
+  clientId: String(message?.clientId || ''),
 });
 
 const buildPeerFromRideState = (ride, chatRole, fallbackPeer = {}) => {
@@ -66,7 +72,9 @@ const Chat = () => {
       ? 'driver'
       : 'user';
 
-  const peerFromState = location.state?.peer || location.state?.driver || {};
+  // Kept in a ref: a fresh {} on every render used to restart the join effect (and re-join the ride) in a loop.
+  const peerFromStateRef = useRef(location.state?.peer || location.state?.driver || {});
+  const peerFromState = peerFromStateRef.current;
   const initialDraft = String(location.state?.initialDraft || '').trim();
   const rideId = location.state?.rideId || getCurrentRide()?.rideId || '';
   const hasLiveToken = Boolean(
@@ -81,8 +89,8 @@ const Chat = () => {
       : []
   ));
   const [input, setInput] = useState('');
-  const [showEmojis, setShowEmojis] = useState(false);
   const inputRef = useRef(null);
+  const scrollRef = useRef(null);
   const [chatError, setChatError] = useState('');
   const [isJoiningRide, setIsJoiningRide] = useState(!isAdminChat);
   const [resolvedPeer, setResolvedPeer] = useState({
@@ -91,11 +99,13 @@ const Chat = () => {
     subtitle: peerFromState.subtitle || (chatRole === 'driver' ? 'Passenger - Active now' : 'Driver - Active now'),
   });
 
-  const bottomRef = useRef(null);
-
+  // Scroll only the message list: the header and the input bar stay where they are.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const list = scrollRef.current;
+    if (list) {
+      list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, isJoiningRide, chatError]);
 
   const quickReplies = isAdminChat
     ? ['Payment Issue', 'Ride Cancelled', 'Lost Item', 'Safety']
@@ -119,25 +129,29 @@ const Chat = () => {
       return undefined;
     }
 
+    const toEntry = (message) => ({
+      id: message.id,
+      clientId: message.clientId,
+      sender: message.senderRole === chatRole ? 'user' : 'other',
+      text: message.message,
+      time: toClock(message.sentAt),
+      at: new Date(message.sentAt).getTime() || Date.now(),
+    });
+
     const onRideState = (ride) => {
       if (!ride || String(ride.rideId || ride._id || '') !== String(rideId)) {
         return;
       }
 
       setResolvedPeer(buildPeerFromRideState(ride, chatRole, peerFromState));
-      setMessages(
-        Array.isArray(ride.messages)
-          ? ride.messages
-              .map((message) => normalizeMessage(message, chatRole))
-              .filter((message) => message.message)
-              .map((message) => ({
-                id: message.id,
-                sender: message.senderRole === chatRole ? 'user' : 'other',
-                text: message.message,
-                time: toClock(message.sentAt),
-              }))
-          : [],
-      );
+      const saved = Array.isArray(ride.messages)
+        ? ride.messages
+            .map((message) => normalizeMessage(message, chatRole))
+            .filter((message) => message.message)
+            .map(toEntry)
+        : [];
+      // Messages still on their way (not in the server list yet) stay on screen.
+      setMessages((prev) => [...saved, ...prev.filter((entry) => entry.pending && !saved.some((item) => item.text === entry.text && item.sender === 'user'))].sort((a, b) => a.at - b.at));
       setChatError('');
       setIsJoiningRide(false);
     };
@@ -145,6 +159,7 @@ const Chat = () => {
     const onRideJoined = (payload) => {
       if (String(payload?.rideId || '') === String(rideId)) {
         setChatError('');
+        setIsJoiningRide(false);
       }
     };
 
@@ -159,15 +174,16 @@ const Chat = () => {
           return prev;
         }
 
-        return [
-          ...prev,
-          {
-            id: normalized.id,
-            sender: normalized.senderRole === chatRole ? 'user' : 'other',
-            text: normalized.message,
-            time: toClock(normalized.sentAt),
-          },
-        ];
+        const entry = toEntry(normalized);
+        // Our own message coming back from the server replaces the "sending" copy.
+        const pendingIndex = normalized.clientId ? prev.findIndex((item) => item.clientId === normalized.clientId) : -1;
+        if (pendingIndex >= 0) {
+          const next = [...prev];
+          next[pendingIndex] = entry;
+          return next.sort((a, b) => a.at - b.at);
+        }
+
+        return [...prev, entry].sort((a, b) => a.at - b.at);
       });
     };
 
@@ -175,60 +191,75 @@ const Chat = () => {
       const nextMessage = payload?.message || 'Could not load ride chat.';
       setChatError(nextMessage);
       setIsJoiningRide(false);
+      setMessages((prev) => prev.map((entry) => (entry.pending ? { ...entry, pending: false, failed: true } : entry)));
+    };
+
+    const joinRide = () => {
+      socketService.emit('ride:join', { rideId });
     };
 
     socketService.on(RIDE_EVENTS.state, onRideState);
     socketService.on(RIDE_EVENTS.joined, onRideJoined);
     socketService.on(RIDE_EVENTS.incoming, onRideMessage);
     socketService.on('errorMessage', onSocketError);
+    // A dropped and restored connection starts a new server socket: join again and pull the missed messages.
+    socketService.on('connect', joinRide);
 
-    socketService.emit('joinRide', { rideId });
-    socketService.emit('ride:join', { rideId });
+    joinRide();
+    const retryTimer = window.setTimeout(joinRide, JOIN_RETRY_MS);
+    const giveUpTimer = window.setTimeout(() => setIsJoiningRide(false), JOIN_GIVE_UP_MS);
 
     return () => {
+      window.clearTimeout(retryTimer);
+      window.clearTimeout(giveUpTimer);
       socketService.off(RIDE_EVENTS.state, onRideState);
       socketService.off(RIDE_EVENTS.joined, onRideJoined);
       socketService.off(RIDE_EVENTS.incoming, onRideMessage);
       socketService.off('errorMessage', onSocketError);
+      socketService.off('connect', joinRide);
     };
   }, [chatRole, hasLiveToken, isAdminChat, peerFromState, rideId]);
 
   if (isAdminChat && hasLiveToken) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] w-full lg:max-w-3xl mx-auto flex flex-col font-sans relative overflow-hidden p-4 lg:min-h-[85vh] lg:my-6 lg:rounded-3xl lg:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] lg:border lg:border-white/50">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center">
-            <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
+      <div className="user-app-theme mx-auto flex h-[100dvh] w-full flex-col overflow-hidden font-sans lg:my-6 lg:h-[85vh] lg:max-w-3xl lg:rounded-3xl lg:border" style={{ background: 'var(--user-bg, #F1F4F9)', borderColor: 'var(--user-border)' }}>
+        <div className="flex shrink-0 items-center gap-3 px-4 py-3" style={{ background: 'var(--user-card-bg, #fff)', borderBottom: '1px solid var(--user-border)' }}>
+          <button onClick={() => navigate(-1)} aria-label="Back" className="-ml-2 rounded-full p-2 active:scale-95" style={{ color: 'var(--user-text-primary, #0B1220)' }}>
+            <ArrowLeft size={22} strokeWidth={2.4} />
           </button>
-          <div className="text-right">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Support</p>
-            <h1 className="text-[16px] font-black text-slate-900">
-              {chatRole === 'driver' ? 'Driver Chat' : 'User Chat'}
-            </h1>
-          </div>
+          <h1 className="text-[17px] font-bold" style={{ color: 'var(--user-text-primary, #0B1220)' }}>
+            {chatRole === 'driver' ? 'Captain support' : 'Live chat'}
+          </h1>
         </div>
         <UserSupportChatPanel
           mode="participant"
-          title={chatRole === 'driver' ? 'Driver Support' : 'User Support'}
-          subtitle="Connected to the support desk"
+          title={chatRole === 'driver' ? 'Captain support' : 'Hello Parth support'}
           preferredRole={chatRole}
           initialDraft={initialDraft}
+          className="flex-1"
         />
       </div>
     );
   }
 
   const send = (text) => {
-    const outgoing = String(text || input).trim();
+    const outgoing = stripEmojis(text || input).trim();
     if (!outgoing || !rideId) {
       return;
     }
 
+    const clientId = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     setInput('');
     setChatError('');
+    // Shows at once as "sending"; the server copy (same clientId) replaces it with the real time.
+    setMessages((prev) => [
+      ...prev,
+      { id: clientId, clientId, sender: 'user', text: outgoing, time: toClock(new Date()), at: Date.now(), pending: true },
+    ]);
     socketService.emit(RIDE_EVENTS.send, {
       rideId,
       message: outgoing,
+      clientId,
     });
   };
 
@@ -238,10 +269,10 @@ const Chat = () => {
   const avatarName = encodeURIComponent(otherName);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] w-full lg:max-w-3xl mx-auto flex flex-col font-sans relative overflow-hidden lg:min-h-[85vh] lg:my-6 lg:rounded-3xl lg:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] lg:border lg:border-white/50">
+    <div className="h-[100dvh] bg-[linear-gradient(180deg,#F8FAFC_0%,#F3F4F6_60%,#EEF2F7_100%)] w-full lg:max-w-3xl mx-auto flex flex-col font-sans relative overflow-hidden lg:h-[85vh] lg:my-6 lg:rounded-3xl lg:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] lg:border lg:border-white/50">
       <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-orange-100/50 blur-3xl pointer-events-none" />
 
-      <motion.header initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white/90 backdrop-blur-md px-4 py-3.5 flex items-center gap-3 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)] sticky top-0 z-20">
+      <motion.header initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white/90 backdrop-blur-md px-4 py-3.5 flex items-center gap-3 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)] shrink-0 z-20">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate(-1)} className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-[0_4px_12px_rgba(15,23,42,0.07)] shrink-0">
           <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />
         </motion.button>
@@ -273,7 +304,7 @@ const Chat = () => {
         </motion.button>
       </motion.header>
 
-      <div className="flex-1 px-4 py-4 space-y-3 overflow-y-auto no-scrollbar">
+      <div ref={scrollRef} className="flex-1 min-h-0 px-4 py-4 space-y-3 overflow-y-auto overscroll-contain no-scrollbar">
         {isJoiningRide ? (
           <div className="h-full flex items-center justify-center">
             <div className="flex items-center gap-3 rounded-2xl bg-white/90 border border-slate-100 px-4 py-3 shadow-sm">
@@ -314,8 +345,8 @@ const Chat = () => {
                       }`}
                     >
                       <p className="text-[14px] font-bold leading-relaxed">{m.text}</p>
-                      <span className={`text-[9px] font-black mt-1 block uppercase tracking-wider ${isUser ? 'text-white/50' : 'text-slate-400'}`}>
-                        {m.time}
+                      <span className={`text-[10px] font-bold mt-1 flex items-center justify-end gap-1 tracking-wide ${isUser ? 'text-white/80' : 'text-slate-500'}`}>
+                        {m.pending ? 'Sending...' : m.failed ? 'Not sent' : m.time}
                       </span>
                     </div>
                   </motion.div>
@@ -324,10 +355,9 @@ const Chat = () => {
             </AnimatePresence>
           </>
         )}
-        <div ref={bottomRef} />
       </div>
 
-      <div className="bg-white/90 backdrop-blur-md border-t border-white/80 px-4 pt-3 pb-6 space-y-2.5 shadow-[0_-4px_20px_rgba(15,23,42,0.05)]">
+      <div className="shrink-0 bg-white/90 backdrop-blur-md border-t border-white/80 px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-2.5 shadow-[0_-4px_20px_rgba(15,23,42,0.05)]">
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5">
           {quickReplies.map((r) => (
             <motion.button key={r} whileTap={{ scale: 0.95 }} onClick={() => send(r)} className="shrink-0 px-3.5 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-black text-slate-600 active:bg-slate-100 transition-all">
@@ -336,53 +366,26 @@ const Chat = () => {
           ))}
         </div>
 
-        {showEmojis ? (
-          <div className="flex flex-wrap gap-1 rounded-[16px] border border-slate-100 bg-white p-2">
-            {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => {
-                  setInput((current) => `${current}${emoji}`);
-                  inputRef.current?.focus();
-                }}
-                className="h-9 w-9 rounded-xl text-[20px] leading-none hover:bg-slate-100 active:scale-90 transition-transform"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
         <div className="flex items-center gap-2 bg-slate-50/80 rounded-[16px] px-3 py-2 border border-slate-100">
-          <button
-            type="button"
-            onClick={() => setShowEmojis((current) => !current)}
-            disabled={!rideId || isJoiningRide}
-            aria-label="Add emoji"
-            className="shrink-0 rounded-lg p-0.5 disabled:opacity-50"
-          >
-            <Smile size={18} className={showEmojis ? 'text-slate-900' : 'text-slate-400'} strokeWidth={2} />
-          </button>
           <input
             ref={inputRef}
             type="text"
             placeholder={rideId ? 'Type a message...' : 'Ride chat unavailable'}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => setInput(stripEmojis(e.target.value))}
             onKeyDown={(e) => e.key === 'Enter' && send()}
-            disabled={!rideId || isJoiningRide}
+            disabled={!rideId}
             className="flex-1 bg-transparent border-none text-[14px] font-bold text-slate-900 focus:outline-none placeholder:text-slate-300 disabled:text-slate-400"
           />
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => send()}
-            disabled={!input.trim() || !rideId || isJoiningRide}
+            disabled={!input.trim() || !rideId}
             className={`w-8 h-8 rounded-[10px] flex items-center justify-center transition-all shrink-0 ${
-              input.trim() && rideId && !isJoiningRide ? 'bg-slate-900 shadow-[0_4px_10px_rgba(15,23,42,0.2)]' : 'bg-slate-200'
+              input.trim() && rideId ? 'bg-slate-900 shadow-[0_4px_10px_rgba(15,23,42,0.2)]' : 'bg-slate-200'
             }`}
           >
-            <Send size={14} className={input.trim() && rideId && !isJoiningRide ? 'text-white' : 'text-slate-400'} strokeWidth={2.5} />
+            <Send size={14} className={input.trim() && rideId ? 'text-white' : 'text-slate-400'} strokeWidth={2.5} />
           </motion.button>
         </div>
       </div>

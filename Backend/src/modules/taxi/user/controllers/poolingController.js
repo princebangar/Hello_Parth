@@ -8,6 +8,8 @@ import { PoolingSeatReservation } from '../../admin/models/PoolingSeatReservatio
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
+import { getDriverRoom, getSocketServer } from '../../services/dispatchService.js';
+import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 
 const ok = (res, data, message) => res.status(200).json({ success: true, data, message });
 const created = (res, data, message) => res.status(201).json({ success: true, data, message });
@@ -127,6 +129,19 @@ const computePoolingFareBreakdown = ({ route = {}, vehicle = {}, seatCount = 0 }
     ownerCommissionPercentage,
     ownerCommissionAmount,
     totalFare,
+  };
+};
+
+// A car is open for booking unless its driver switched it off (cars without the switch - admin / owner panels - always are).
+const isVehicleBookable = (vehicle) => vehicle?.isOnline !== false;
+
+// Keeps only the bookable cars of a route (populated document or plain object).
+const withBookableVehicles = (route) => {
+  const routeObject = typeof route?.toObject === 'function' ? route.toObject() : route;
+  const vehicles = Array.isArray(routeObject?.assignedVehicleTypeIds) ? routeObject.assignedVehicleTypeIds : [];
+  return {
+    ...routeObject,
+    assignedVehicleTypeIds: vehicles.filter((vehicle) => (vehicle && typeof vehicle === 'object' ? isVehicleBookable(vehicle) : true)),
   };
 };
 
@@ -273,6 +288,10 @@ const loadBookingContext = async ({ routeId, vehicleId, scheduleId, travelDate, 
     throw new ApiError(404, 'Pooling vehicle not found');
   }
 
+  if (!isVehicleBookable(vehicle)) {
+    throw new ApiError(409, 'This car is offline right now. Please pick another car or time.');
+  }
+
   const allowedVehicleIds = (Array.isArray(route.assignedVehicleTypeIds) ? route.assignedVehicleTypeIds : []).map((item) => String(item));
   if (allowedVehicleIds.length > 0 && !allowedVehicleIds.includes(String(vehicleId))) {
     throw new ApiError(400, 'Selected vehicle is not assigned to this route');
@@ -294,6 +313,35 @@ const loadBookingContext = async ({ routeId, vehicleId, scheduleId, travelDate, 
   }
 
   return { route, vehicle, schedule, pickupStop, dropStop };
+};
+
+// A paid booking reaches the car's driver at once: live (the open app) and by push (app closed).
+const notifyPoolingDriverOfBooking = ({ booking, route, seats, pickupLabel }) => {
+  const vehicleId = String(booking?.vehicle || '');
+  if (!vehicleId) return;
+
+  const label = route?.routeName || [route?.originLabel, route?.destinationLabel].filter(Boolean).join(' to ') || 'your route';
+  const text = `${seats} seat${seats > 1 ? 's' : ''} booked on ${label}${pickupLabel ? ` from ${pickupLabel}` : ''}`;
+
+  try {
+    getSocketServer()?.to(getDriverRoom(vehicleId)).emit('pooling:booking:new', {
+      bookingId: booking.bookingId || '',
+      seatsBooked: seats,
+      routeName: label,
+      pickupLabel: pickupLabel || '',
+      travelDate: booking.travelDate || null,
+      message: text,
+    });
+  } catch {
+    // live notice is best effort
+  }
+
+  sendPushNotificationToEntities({
+    poolingDriverIds: [vehicleId],
+    title: 'New pooling booking',
+    body: text,
+    data: { type: 'pooling_booking', targetUrl: '/taxi/driver/pooling/bookings' },
+  }).catch(() => {});
 };
 
 const populateBooking = (query) =>
@@ -339,7 +387,13 @@ export const searchPoolingRoutes = asyncHandler(async (req, res) => {
     });
   }
 
-  return ok(res, routes.map(withPrimaryVehicleDriver), 'Routes fetched successfully');
+  // Cars whose driver is offline are not shown; a route with no open car left is not shown either (nothing to book).
+  const openRoutes = routes
+    .map((route) => ({ route: withBookableVehicles(route), hadCars: (route.assignedVehicleTypeIds || []).length }))
+    .filter(({ route, hadCars }) => hadCars === 0 || (route.assignedVehicleTypeIds || []).length > 0)
+    .map(({ route }) => route);
+
+  return ok(res, openRoutes.map(withPrimaryVehicleDriver), 'Routes fetched successfully');
 });
 
 export const getPoolingRouteDetails = asyncHandler(async (req, res) => {
@@ -384,7 +438,7 @@ export const getPoolingRouteDetails = asyncHandler(async (req, res) => {
   return ok(
     res,
     {
-      ...route.toObject(),
+      ...withBookableVehicles(route),
       seatAvailability,
     },
     'Route details fetched successfully',
@@ -627,6 +681,8 @@ export const verifyPoolingBookingPayment = asyncHandler(async (req, res) => {
   );
 
   const hydratedBooking = await populateBooking(PoolingBooking.findById(booking._id));
+
+  notifyPoolingDriverOfBooking({ booking, route, seats: selectedSeats.length, pickupLabel: booking.pickupLabel });
 
   return created(res, serializePoolingBooking(hydratedBooking), 'Pooling booking confirmed successfully');
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { localDateKey } from '../../../../shared/utils/localDate';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -29,11 +30,7 @@ const isEnabledFlag = (value) => {
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
-const getDateOffset = (offset = 1) => {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().split('T')[0];
-};
+const getDateOffset = (offset = 1) => localDateKey(offset);
 
 const getTodayDate = () => getDateOffset(0);
 
@@ -97,7 +94,8 @@ const getRouteKey = (route, index) => {
   const fromCity = String(route?.fromCity || '').trim();
   const toCity = String(route?.toCity || '').trim();
   const operatorName = String(route?.operatorName || '').trim();
-  return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || index}`;
+  // the index keeps keys unique when one operator runs the same route twice (React warned about duplicate keys)
+  return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || 'op'}-${index}`;
 };
 
 // The route list (and so the Routes / Cities counts and Popular Routes) is remembered: a later visit shows it at once and

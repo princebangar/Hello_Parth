@@ -23,6 +23,7 @@ import mongoose from "mongoose";
 import { creditReferralReward } from "../../modules/food/user/services/userWallet.service.js";
 import { ensureUserReferralCode, findUserIdByReferralCode, needsFreshReferralCode } from "../users/referralCode.util.js";
 import { isReferralEnabled } from "../platform/referralSwitch.service.js";
+import { getGlobalUserReferralProgram } from "../platform/userReferralProgram.service.js";
 import {
   PARTNER_TYPE_RESTAURANT,
   PARTNER_TYPE_STORE,
@@ -247,14 +248,49 @@ export const verifyUserOtpAndLogin = async (
       if (referrerIdValue) {
         const referrerId = new mongoose.Types.ObjectId(referrerIdValue);
         if (String(referrerId) !== String(userDoc._id)) {
-          const [referrer, settingsDoc] = await Promise.all([
+          const [referrer, settingsDoc, globalProgram] = await Promise.all([
             FoodUser.findById(referrerId).select("_id referralCount").lean(),
             FoodReferralSettings.findOne({ isActive: true })
               .sort({ createdAt: -1 })
               .lean(),
+            getGlobalUserReferralProgram(),
           ]);
 
-          if (referrer && settingsDoc) {
+          if (referrer && globalProgram.usable) {
+            // The reward the Global admin set (Referral Management) rules the common sign-up. (It used to read only the
+            // old Food settings, which are empty, so nobody who shared a code ever got paid.)
+            userDoc.referredBy = referrerId;
+            if (globalProgram.isInstant && globalProgram.paysNewUser) {
+              userDoc.referralRewardGrantedAt = new Date();
+            }
+            await userDoc.save();
+
+            await FoodUser.updateOne({ _id: referrerId }, { $inc: { referralCount: 1 } });
+
+            if (globalProgram.isInstant) {
+              const log = await FoodReferralLog.create({
+                referrerId,
+                refereeId: userDoc._id,
+                role: "USER",
+                rewardAmount: globalProgram.amount,
+                status: "credited",
+              });
+              await creditReferralReward(referrerId, globalProgram.amount, {
+                role: "USER",
+                refereeId: String(userDoc._id),
+                referralLogId: String(log._id),
+              });
+              if (globalProgram.paysNewUser) {
+                await creditReferralReward(userDoc._id, globalProgram.amount, {
+                  role: "USER",
+                  welcomeReward: true,
+                  referrerId: String(referrerId),
+                  referralLogId: String(log._id),
+                });
+              }
+            }
+            // conditional_*: only "who invited whom" is saved here; the Taxi ride-completion code pays later.
+          } else if (referrer && settingsDoc) {
             const reward = Math.max(
               0,
               Number(settingsDoc.referralRewardUser) || 0,

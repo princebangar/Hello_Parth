@@ -4179,6 +4179,21 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
     update.onboarding = payload.onboarding;
   }
 
+  // A fleet captain is only as approved as the vehicle the owner gave them: approving the driver while the fleet
+  // vehicle is still pending / rejected would put an unchecked vehicle on the road.
+  if (update.approve === true) {
+    const fleetDriver = await Driver.findById(id).select('assignedFleetVehicleId owner_id').lean();
+    if (fleetDriver?.assignedFleetVehicleId) {
+      const fleetVehicle = await FleetVehicle.findById(fleetDriver.assignedFleetVehicleId).select('status license_plate_number').lean();
+      if (fleetVehicle && String(fleetVehicle.status || '').toLowerCase() !== 'approved') {
+        throw new ApiError(
+          409,
+          `Approve the fleet vehicle first: ${fleetVehicle.license_plate_number || 'the assigned vehicle'} is ${String(fleetVehicle.status || 'pending').toLowerCase()}. The driver can be approved after it.`,
+        );
+      }
+    }
+  }
+
   const wasApproved = update.approve === true
     ? Boolean((await Driver.findById(id).select('approve').lean())?.approve)
     : true;

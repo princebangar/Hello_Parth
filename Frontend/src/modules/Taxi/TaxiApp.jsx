@@ -268,6 +268,7 @@ const AdminOwnerBookings = lazy(() => import('./modules/admin/pages/owners/Owner
 const AdminGeoFencing = lazy(() => import('./modules/admin/pages/geo/GeoFencing'));
 const AdminHeatMap = lazy(() => import('./modules/admin/pages/geo/HeatMap'));
 const AdminGodsEye = lazy(() => import('./modules/admin/pages/geo/GodsEye'));
+const PublicRideTrack = lazy(() => import('./modules/user/pages/ride/PublicRideTrack'));
 const AdminSafetyCenter = lazy(() => import('./modules/admin/pages/safety/SafetyCenter'));
 const AdminGlobalSettings = lazy(() => import('./modules/admin/pages/settings/GlobalSettings'));
 const AdminGeneralSettings = lazy(() => import('./modules/admin/pages/settings/GeneralSettings'));
@@ -778,6 +779,8 @@ function TaxiApp() {
               <Route path="services" element={<Navigate to="/" replace />} />
               <Route path="blog" element={<Navigate to="/" replace />} />
               <Route path="links" element={<Navigate to="/" replace />} />
+              {/* Secret "share my ride" link: anyone with it sees the live trip, no login. */}
+              <Route path="track/:token" element={<PublicRideTrack />} />
               <Route path="terms" element={<LegalPage />} />
               <Route path="terms-and-conditions" element={<LegalPage />} />
               <Route path="privacy" element={<LegalPage />} />
@@ -1474,6 +1477,8 @@ function TaxiApp() {
                   />
                 </Route>
                 <Route path="safety" element={<AdminSafetyCenter />} />
+                <Route path="safety/user" element={<AdminSafetyCenter />} />
+                <Route path="safety/driver" element={<AdminSafetyCenter />} />
                 <Route
                   path="support/ticket-title"
                   element={<AdminSupportTicketTitle />}

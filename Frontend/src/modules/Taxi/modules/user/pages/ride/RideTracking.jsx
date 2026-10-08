@@ -211,8 +211,8 @@ const resolveAssetUrl = (value = '') => {
   return `${BACKEND_ORIGIN}/${raw.replace(/^\/+/, '')}`;
 };
 
-const buildRideShareText = ({ appName, driverName, vehicleNumber, pickupLabel, dropLabel }) =>
-  `I'm riding with ${appName}!\nDriver: ${driverName} (${vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}`;
+const buildRideShareText = ({ appName, driverName, vehicleNumber, pickupLabel, dropLabel, trackUrl }) =>
+  `I'm riding with ${appName}!\nDriver: ${driverName} (${vehicleNumber || 'Assigned'})\nFrom: ${pickupLabel}\nTo: ${dropLabel}${trackUrl ? `\nTrack my ride live: ${trackUrl}` : ''}`;
 
 const buildShareLinks = (text) => ({
   whatsapp: `https://wa.me/?text=${encodeURIComponent(text)}`,
@@ -1294,13 +1294,35 @@ const RideTracking = () => {
     lastMapPanPositionRef.current = driverPosition;
   }, [activeDestination, driverPosition, map, routePath, tripStatus]);
 
+  // One secret link per ride (made on the server the first time); it opens a public live map of this trip.
+  const shareTrackUrlRef = useRef('');
+  const [shareTrackUrl, setShareTrackUrl] = useState('');
+  const getShareTrackUrl = async () => {
+    if (shareTrackUrlRef.current) return shareTrackUrlRef.current;
+    const shareRideId = rideId || getCurrentRide()?.rideId;
+    if (!shareRideId) return '';
+    try {
+      const response = await api.post(`/rides/${shareRideId}/share`);
+      const token = response?.data?.token || response?.token;
+      if (!token) return '';
+      const origin = /^https?:/i.test(window.location.origin) ? window.location.origin : 'https://helloparth.in';
+      shareTrackUrlRef.current = `${origin}/taxi/track/${token}`;
+      setShareTrackUrl(shareTrackUrlRef.current);
+    } catch {
+      shareTrackUrlRef.current = '';
+    }
+    return shareTrackUrlRef.current;
+  };
+
   const handleShare = async () => {
+    const trackUrl = await getShareTrackUrl();
     const text = buildRideShareText({
       appName,
       driverName: driver.name,
       vehicleNumber: driver.plate || driver.vehicleNumber,
       pickupLabel,
       dropLabel,
+      trackUrl,
     });
 
     if (navigator.share) {
@@ -1316,13 +1338,15 @@ const RideTracking = () => {
     setShareSheetOpen(true);
   };
 
-  const handleCopyShareText = () => {
+  const handleCopyShareText = async () => {
+    const trackUrl = await getShareTrackUrl();
     const text = buildRideShareText({
       appName,
       driverName: driver.name,
       vehicleNumber: driver.plate || driver.vehicleNumber,
       pickupLabel,
       dropLabel,
+      trackUrl,
     });
 
     navigator.clipboard?.writeText(text).then(() => {
@@ -1421,6 +1445,7 @@ const RideTracking = () => {
                     vehicleNumber: driver.plate || driver.vehicleNumber,
                     pickupLabel,
                     dropLabel,
+                    trackUrl: shareTrackUrl,
                   })).whatsapp}
                   target="_blank"
                   rel="noreferrer"
@@ -1436,6 +1461,7 @@ const RideTracking = () => {
                     vehicleNumber: driver.plate || driver.vehicleNumber,
                     pickupLabel,
                     dropLabel,
+                    trackUrl: shareTrackUrl,
                   })).sms}
                   className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4 text-left"
                 >

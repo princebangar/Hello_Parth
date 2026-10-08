@@ -6,6 +6,7 @@ import { FoodReferralSettings } from '../../admin/models/referralSettings.model.
 import { FoodReferralLog } from '../../admin/models/referralLog.model.js';
 import { ensureUserReferralCode } from '../../../../core/users/referralCode.util.js';
 import { isReferralEnabled } from '../../../../core/platform/referralSwitch.service.js';
+import { getGlobalUserReferralProgram } from '../../../../core/platform/userReferralProgram.service.js';
 
 export const getUserReferralStats = async (userId) => {
     const id = String(userId || '');
@@ -13,11 +14,12 @@ export const getUserReferralStats = async (userId) => {
         throw new ValidationError('User not found');
     }
     const oid = new mongoose.Types.ObjectId(id);
-    const [user, wallet, settingsDoc, enabled] = await Promise.all([
+    const [user, wallet, settingsDoc, enabled, globalProgram] = await Promise.all([
         FoodUser.findById(oid).select('_id referralCount referralCode').lean(),
         FoodUserWallet.findOne({ userId: oid }).select('referralEarnings').lean(),
         FoodReferralSettings.findOne({ isActive: true }).sort({ createdAt: -1 }).lean(),
-        isReferralEnabled()
+        isReferralEnabled(),
+        getGlobalUserReferralProgram()
     ]);
 
     return {
@@ -25,7 +27,8 @@ export const getUserReferralStats = async (userId) => {
         referralCode: await ensureUserReferralCode(oid, user?.referralCode),
         referralCount: Number(user?.referralCount) || 0,
         totalReferralEarnings: Number(wallet?.referralEarnings) || 0,
-        rewardAmount: Math.max(0, Number(settingsDoc?.referralRewardUser) || 0)
+        // the reward the Global admin set wins (it is what sign-up pays); old Food settings only when that is not set
+        rewardAmount: globalProgram.usable ? globalProgram.amount : Math.max(0, Number(settingsDoc?.referralRewardUser) || 0)
     };
 };
 
@@ -36,6 +39,7 @@ export const getUserReferralDetails = async (userId) => {
     }
 
     const oid = new mongoose.Types.ObjectId(id);
+    const globalProgram = await getGlobalUserReferralProgram();
     const [user, wallet, settingsDoc, logs, enabled] = await Promise.all([
         FoodUser.findById(oid).select('_id referralCount referralCode').lean(),
         FoodUserWallet.findOne({ userId: oid }).select('referralEarnings').lean(),
@@ -97,7 +101,7 @@ export const getUserReferralDetails = async (userId) => {
         stats: {
             referralCount: Number(user?.referralCount) || 0,
             totalReferralEarnings: Number(wallet?.referralEarnings) || 0,
-            rewardAmount: Math.max(0, Number(settingsDoc?.referralRewardUser) || 0),
+            rewardAmount: globalProgram.usable ? globalProgram.amount : Math.max(0, Number(settingsDoc?.referralRewardUser) || 0),
             totalInvited,
             creditedCount,
             pendingCount,

@@ -14,6 +14,9 @@ import {
   getStoredReferralLanguageCode,
 } from '../../../shared/utils/referralTranslationFields';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import useAppLinks from '@/shared/hooks/useAppLinks';
+import ShareSheet, { shareMessage } from '@/shared/components/ShareSheet';
+import { getPublicAppOrigin } from '@/shared/utils/shareLinks';
 
 const readStoredDriverInfo = () => {
   try {
@@ -140,7 +143,7 @@ const DriverReferral = () => {
     DRIVER_REFERRAL_TRANSLATION_FIELDS,
   );
   const referralShareLink = referralCode
-    ? `${window.location.origin}/taxi/driver/reg-phone?ref=${encodeURIComponent(referralCode)}`
+    ? `${getPublicAppOrigin()}/taxi/driver/reg-phone?ref=${encodeURIComponent(referralCode)}`
     : '';
 
   const handleCopy = async () => {
@@ -157,39 +160,30 @@ const DriverReferral = () => {
     }
   };
 
+  const appLinks = useAppLinks();
+  const [shareSheet, setShareSheet] = useState({ open: false, text: '' });
+
   const handleShare = async () => {
     if (!referralCode) {
       return;
     }
-    // Optional download link for the app (set VITE_DRIVER_APP_URL in Frontend/.env once the store link exists).
-    const appDownloadUrl = String(import.meta.env.VITE_DRIVER_APP_URL || '').trim();
-    const shareText = [
-      bannerText,
-      `Join as a driver with my referral code ${referralCode}.`,
-      `Sign up: ${referralShareLink}`,
-      appDownloadUrl ? `Get the app: ${appDownloadUrl}` : '',
-    ].filter(Boolean).join('\n');
+    // The captain app link when one is set (Backend/.env APP_LINK_CAPTAIN, or VITE_DRIVER_APP_URL); else the website sign-up link.
+    const appDownloadUrl = appLinks.captain || String(import.meta.env.VITE_DRIVER_APP_URL || '').trim();
+    const shareText = appDownloadUrl
+      ? [
+        bannerText,
+        `Join as a driver: download the app and use my referral code ${referralCode} when you sign up.`,
+        appDownloadUrl,
+      ].join('\n')
+      : [
+        bannerText,
+        `Join as a driver with my referral code ${referralCode}.`,
+        `Sign up: ${referralShareLink}`,
+      ].join('\n');
 
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: bannerText,
-          text: shareText,
-          url: referralShareLink,
-        });
-        return;
-      }
-    } catch {
-      // Fall through to desktop-friendly sharing options.
-    }
-
-    // No share sheet on this device (desktop browser): just copy the message, do not jump to WhatsApp.
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // Clipboard blocked: nothing else to do.
+    const result = await shareMessage({ title: bannerText, text: shareText });
+    if (result === 'unsupported') {
+      setShareSheet({ open: true, text: shareText });
     }
   };
 
@@ -313,6 +307,12 @@ const DriverReferral = () => {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      <ShareSheet
+        open={shareSheet.open}
+        text={shareSheet.text}
+        onClose={() => setShareSheet({ open: false, text: '' })}
+        onCopied={() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }}
+      />
     </div>
   );
 };

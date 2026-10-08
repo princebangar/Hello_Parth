@@ -88,7 +88,7 @@ const hasActiveChild = (pathname, items = []) =>
 // permissions, sub-items); this only decides which section heading each top-level item sits under, in order.
 const ADMIN_SECTION_LAYOUT = [
   { title: 'Home', labels: ['Dashboard', 'Admin Earnings', 'Chat'] },
-  { title: 'Operations', labels: ['Trip Requests', 'Ongoing Requests', 'Delivery Requests', 'Cancellation Analytics', 'Geofencing', 'Bus Service', 'Car Pooling'] },
+  { title: 'Operations', labels: ['Trip Requests', 'Ongoing Requests', 'User SOS', 'Driver SOS', 'Delivery Requests', 'Cancellation Analytics', 'Geofencing', 'Bus Service', 'Car Pooling'] },
   { title: 'People', labels: ['Customer Management', 'Driver Management', 'Owner Management'] },
   { title: 'Pricing & Services', labels: ['Price Management'] },
   { title: 'Marketing', labels: ['Broadcast Notifications', 'Promotions Management'] },
@@ -245,6 +245,29 @@ const getNotificationEntryId = (tab, item = {}) => {
   }
 
   return String(item.id || '').trim();
+};
+
+// Short two-beep tone for live admin alerts (SOS, new chat). Silent where the browser blocks audio before a click.
+const playAdminAlertTone = () => {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    [0, 0.22].forEach((offset) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.18);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + offset);
+      osc.stop(ctx.currentTime + offset + 0.2);
+    });
+    window.setTimeout(() => ctx.close().catch(() => {}), 800);
+  } catch {
+    // no sound is fine
+  }
 };
 
 const dedupeAdminChatNotifications = (items = []) => {
@@ -704,6 +727,7 @@ const AdminLayout = () => {
   });
   const [bookingsFeed, setBookingsFeed] = useState([]);
   const [chatNotifications, setChatNotifications] = useState([]);
+  const seenChatNotificationIdsRef = useRef(new Set());
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   // Things waiting for the admin (driver/owner sign-ups, open tickets, re-uploaded documents). They leave the
   // list once handled, so they are not dismissable like the activity feeds.
@@ -923,6 +947,8 @@ const AdminLayout = () => {
           { icon: Ban, label: 'Cancellation Analytics', path: '/taxi/admin/cancellation-analytics', permission: 'dashboard.view' },
           { icon: Package, label: 'Delivery Requests', path: '/taxi/admin/deliveries', permission: 'deliveries.view' },
           { icon: Clock, label: 'Ongoing Requests', path: '/taxi/admin/ongoing', permission: 'ongoing.view' },
+          { icon: ShieldCheck, label: 'User SOS', path: '/taxi/admin/safety/user', permission: 'ongoing.view' },
+          { icon: ShieldCheck, label: 'Driver SOS', path: '/taxi/admin/safety/driver', permission: 'ongoing.view' },
         ],
       },
       {
@@ -1447,10 +1473,18 @@ const AdminLayout = () => {
     if (!token) return undefined;
 
     socketService.connect({ role: 'admin', token });
+    const seenChatNotificationIds = seenChatNotificationIdsRef.current;
 
-    socketService.on('new_sos', (data) => {
-      console.log('SOS ALERT RECEIVED:', data);
-      alert(`SOS ALERT: Driver ${data.driver_name} is in trouble!`);
+    socketService.on('new_sos', (data = {}) => {
+      const fromDriver = data.sourceApp === 'driver';
+      const who = fromDriver ? (data.driverName || 'A driver') : (data.riderName || 'A passenger');
+      toast.error(`${fromDriver ? 'DRIVER' : 'PASSENGER'} SOS: ${who} needs help${data.locationLabel ? ` - ${data.locationLabel}` : ''}`, {
+        duration: 15000,
+        id: `sos-${data.id || Date.now()}`,
+        className: 'font-bold text-[13px] rounded-2xl shadow-xl',
+        style: { background: '#dc2626', color: '#fff' },
+      });
+      playAdminAlertTone();
     });
 
     socketService.on('new_driver_registration', (data) => {
@@ -1500,21 +1534,20 @@ const AdminLayout = () => {
         createdAt: payload.createdAt || new Date().toISOString(),
       };
 
-      let wasAdded = false;
-
-      setChatNotifications((current) => {
-        const next = dedupeAdminChatNotifications([nextItem, ...current]).slice(0, 25);
-        wasAdded = next.some((item) => item.id === nextItem.id) && !current.some((item) => item.id === nextItem.id);
-        return next;
-      });
-
-      if (wasAdded) {
-        setChatUnreadCount((current) => current + 1);
-        toast(nextItem.body, {
-          duration: 4500,
-          className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
-        });
+      // (A state updater runs later, so "was it new?" cannot be read back from it: that is why admins never got the toast.)
+      if (seenChatNotificationIds.has(nextItem.id)) {
+        return;
       }
+      seenChatNotificationIds.add(nextItem.id);
+
+      setChatNotifications((current) => dedupeAdminChatNotifications([nextItem, ...current]).slice(0, 25));
+      setChatUnreadCount((current) => current + 1);
+      toast(`${senderName}: ${nextItem.body}`, {
+        duration: 6000,
+        icon: '💬',
+        className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
+      });
+      playAdminAlertTone();
     };
 
     socketService.on('chat:message', handleSupportChatNotification);

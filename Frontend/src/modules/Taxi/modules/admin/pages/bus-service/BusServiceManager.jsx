@@ -150,6 +150,14 @@ const getRouteCacheKey = (origin, destination) => {
 
   return `${serializePoint(origin)}|${serializePoint(destination)}`;
 };
+const CURRENCY_LABELS = {
+  INR: 'INR - Indian Rupee',
+  USD: 'USD - US Dollar',
+  EUR: 'EUR - Euro',
+  GBP: 'GBP - British Pound',
+  AED: 'AED - UAE Dirham',
+};
+
 const getCreateFlowStepIndex = (searchParams) => {
   const rawValue = Number(searchParams.get('step') || 1);
   if (!Number.isFinite(rawValue)) {
@@ -452,6 +460,8 @@ const BusServiceManager = ({
   const [routePath, setRoutePath] = useState([]);
   const autocompleteRefs = useRef({});
   const routeMapRef = useRef(null);
+  // The create / edit form block: the screen scrolls to its top on "New Bus" and on every step change.
+  const formAnchorRef = useRef(null);
   const routePreviewCacheRef = useRef(new Map());
   const cityGeocodeCacheRef = useRef(new Map());
   const { isLoaded: isGoogleMapsLoaded } = useAppGoogleMapsLoader();
@@ -765,6 +775,16 @@ const BusServiceManager = ({
     routeMapRef.current.fitBounds(bounds, 60);
   }, [routePolylinePath, routePreviewPoints.length]);
 
+  // New Bus / Edit / Next / Previous: bring the form (its step header) to the top of the screen, never leave the
+  // person looking at the page header or at the previous step's scroll position.
+  useEffect(() => {
+    if (!isCreateFlowMode) return undefined;
+    const timer = window.setTimeout(() => {
+      formAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [isCreateFlowMode, currentFormStepIndex, currentMode]);
+
   const openListView = () => {
     setDetailBusId(null);
     navigate(basePath);
@@ -804,6 +824,9 @@ const BusServiceManager = ({
   const openDetailView = (busId) => {
     navigate(`${basePath}/${busId}`);
   };
+
+  // "0" + typing 10 used to read "010": leading zeros go away as you type (0.5 stays 0.5).
+  const cleanNumberInput = (value) => String(value ?? '').replace(/^0+(?=\d)/, '');
 
   const updateDraft = (field, value) => {
     setDraft((current) => {
@@ -1139,8 +1162,13 @@ const BusServiceManager = ({
   };
 
   const addStop = () => {
+    const newStopId = blankStop().id;
+    // the new card is drawn on the next render: scroll to it then, so the person sees what was added
+    window.setTimeout(() => {
+      document.getElementById(`bus-stop-${newStopId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
     setDraft((current) => {
-      const nextStop = blankStop();
+      const nextStop = { ...blankStop(), id: newStopId };
       const nextStops = [...current.route.stops, nextStop];
       return {
         ...current,
@@ -1301,11 +1329,17 @@ const BusServiceManager = ({
       setSelectedBusId(nextBus.id);
       setDraft(nextBus);
       resetBaseline(nextBus);
-      navigate({
-        pathname: `${basePath}/edit/${nextBus.id}`,
-        search: currentFormStepIndex > 0 ? `?step=${currentFormStepIndex + 1}` : '',
-      });
-      toast.success('Bus service saved');
+      if (isLastFormStep) {
+        // The last step is "finish": go back to the bus page (list) instead of staying inside the form.
+        navigate(basePath);
+        toast.success('Bus service saved');
+      } else {
+        navigate({
+          pathname: `${basePath}/edit/${nextBus.id}`,
+          search: currentFormStepIndex > 0 ? `?step=${currentFormStepIndex + 1}` : '',
+        });
+        toast.success('Draft saved');
+      }
     } catch (error) {
       toast.error(error?.message || 'Failed to save bus service');
     } finally {
@@ -1830,7 +1864,7 @@ const BusServiceManager = ({
       ) : null}
 
       {currentMode === 'edit' || currentMode === 'create' ? (
-      <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:gap-6">
+      <section ref={formAnchorRef} className="grid scroll-mt-4 gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:gap-6">
         <div className="space-y-4">
           <div className="hidden rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
@@ -2161,6 +2195,14 @@ const BusServiceManager = ({
                 {/* Owner flow: the phone comes from the fleet driver picked above and cannot be typed. It looked like a
                     normal empty field ("Enter Phone Number"), so testers tapped it and nothing happened - now it reads as
                     filled-in-for-you and says where to tap. */}
+                {typeof api.getDrivers === 'function' && draft.driverPhone ? (
+                  <a
+                    href={`tel:${draft.driverPhone}`}
+                    className="block w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-bold text-blue-700 underline-offset-2 hover:underline"
+                  >
+                    {draft.driverPhone}
+                  </a>
+                ) : (
                 <input
                   className={typeof api.getDrivers === 'function'
                     ? 'w-full cursor-not-allowed rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none'
@@ -2170,6 +2212,7 @@ const BusServiceManager = ({
                   placeholder={typeof api.getDrivers === 'function' ? 'Fills in when you pick a driver above' : 'Enter Phone Number'}
                   readOnly={typeof api.getDrivers === 'function'}
                 />
+                )}
                 {typeof api.getDrivers === 'function' && !draft.driverPhone ? (
                   <p className="mt-1.5 text-[11px] font-semibold text-amber-600">
                     Tap a driver card under &quot;Assign Fleet Driver&quot; to fill this.
@@ -2236,7 +2279,7 @@ const BusServiceManager = ({
                   max="100"
                   step="0.01"
                   value={draft.adminCommissionPercentage}
-                  onChange={(event) => updateDraft('adminCommissionPercentage', event.target.value)}
+                  onChange={(event) => updateDraft('adminCommissionPercentage', cleanNumberInput(event.target.value))}
                   placeholder="10"
                 />
               </div>
@@ -2249,13 +2292,17 @@ const BusServiceManager = ({
                   max="100"
                   step="0.01"
                   value={draft.serviceTaxPercentage}
-                  onChange={(event) => updateDraft('serviceTaxPercentage', event.target.value)}
+                  onChange={(event) => updateDraft('serviceTaxPercentage', cleanNumberInput(event.target.value))}
                   placeholder="5"
                 />
               </div>
               <div>
                 <label className={labelClassName}>Currency</label>
-                <input className={fieldClassName} value={draft.fareCurrency} onChange={(event) => updateDraft('fareCurrency', event.target.value.toUpperCase())} placeholder="INR" />
+                <select className={fieldClassName} value={draft.fareCurrency || 'INR'} onChange={(event) => updateDraft('fareCurrency', event.target.value)}>
+                  {[...new Set(['INR', 'USD', 'EUR', 'GBP', 'AED', draft.fareCurrency].filter(Boolean))].map((code) => (
+                    <option key={code} value={code}>{CURRENCY_LABELS[code] || code}</option>
+                  ))}
+                </select>
               </div>
               </>
               ) : null}
@@ -2553,14 +2600,6 @@ const BusServiceManager = ({
                 <h2 className="text-xl font-bold tracking-tight text-slate-900">Route Assignment</h2>
                 <p className="mt-1 text-xs font-medium text-slate-500">Manage stops, distance and route timings.</p>
               </div>
-              <button
-                type="button"
-                onClick={addStop}
-                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-md transition-all active:scale-95"
-              >
-                <Plus size={16} />
-                Add Stop
-              </button>
             </div>
 
             <div className="mb-6 rounded-[28px] border border-slate-200 bg-slate-50/70 p-5">
@@ -2781,7 +2820,7 @@ const BusServiceManager = ({
 
             <div className="mt-6 space-y-4">
               {draft.route.stops.map((stop, index) => (
-                <div key={stop.id} className="rounded-[26px] border border-slate-200 bg-slate-50/60 p-4">
+                <div key={stop.id} id={`bus-stop-${stop.id}`} className="scroll-mt-24 rounded-[26px] border border-slate-200 bg-slate-50/60 p-4">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
@@ -2812,6 +2851,14 @@ const BusServiceManager = ({
                   </div>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={addStop}
+                className="flex w-full items-center justify-center gap-2 rounded-[22px] border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-sm font-bold text-slate-800 transition active:scale-[0.99] hover:border-slate-400"
+              >
+                <Plus size={16} />
+                Add Stop
+              </button>
             </div>
           </section>
 

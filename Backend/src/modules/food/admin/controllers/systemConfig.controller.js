@@ -109,6 +109,12 @@ export async function getPublicCustomizationSettings(req, res) {
     data.user_online_enabled = appSwitches.user_online_enabled;
     // Global admin > Customization Settings > Referral System (Food + Taxi wallets)
     data.referral_enabled = referralEnabled;
+    // Where a shared referral sends people: the installable app (Play Store / App Store / smart link) instead of the website.
+    // Set APP_LINK_USER (customer app) and APP_LINK_CAPTAIN (captain app) in Backend/.env; empty = share the website link.
+    data.app_links = {
+        user: String(process.env.APP_LINK_USER || '').trim(),
+        captain: String(process.env.APP_LINK_CAPTAIN || '').trim(),
+    };
 
     res.json({ success: true, data });
 }

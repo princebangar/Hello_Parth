@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { localDateKey } from '../../../../shared/utils/localDate';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, ChevronRight, Clock3, Info, MapPin, Users } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
@@ -138,7 +139,7 @@ const IntercityVehicle = () => {
   const [travelDate, setTravelDate] = useState(
     initialRideMode === 'schedule' && initialDate && initialDate !== 'Ride Now'
       ? initialDate
-      : new Date().toISOString().split('T')[0]
+      : localDateKey(0)
   );
   const [scheduledAt, setScheduledAt] = useState(
     initialRideMode === 'schedule' && location.state?.scheduledAt

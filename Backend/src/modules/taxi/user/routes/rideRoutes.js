@@ -27,6 +27,8 @@ import {
   verifyRazorpayRideTip,
 } from '../controllers/rideController.js';
 
+import { createRideShareLink } from '../controllers/rideShareController.js';
+
 export const rideRouter = Router();
 
 rideRouter.post('/', authenticate(['user']), rideCreationRateLimit, asyncHandler(createRide));
@@ -36,6 +38,7 @@ rideRouter.get('/available-drivers', authenticate(['user']), availableDriversRat
 rideRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getMyActiveRide));
 rideRouter.get('/unpaid/me', authenticate(['user']), asyncHandler(getMyUnpaidRide));
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
+rideRouter.post('/:rideId/share', authenticate(['user']), asyncHandler(createRideShareLink));
 rideRouter.get('/:rideId/bids', authenticate(['user']), asyncHandler(getRideBids));
 rideRouter.patch('/:rideId/bids/ceiling', authenticate(['user']), asyncHandler(updateRideBidCeiling));
 rideRouter.post('/:rideId/bids/:bidId/accept', authenticate(['user']), asyncHandler(acceptRideBid));

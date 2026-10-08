@@ -6,6 +6,7 @@ import {
   Activity, Shield, Car, RefreshCw, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { socketService } from '../../../../shared/api/socket';
 import { adminService } from '../../services/adminService';
 import { HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER, useBaseGoogleMapsLoader } from '../../utils/googleMaps';
@@ -108,8 +109,8 @@ const IncidentCard = ({ alert, isActive, onClick }) => (
         <span className="font-bold text-gray-800 truncate block">{alert?.vehicleLabel || 'N/A'}</span>
       </div>
       <div className="bg-gray-50/80 p-1.5 rounded-lg border border-gray-100 overflow-hidden min-w-0">
-        <span className="block text-[9px] text-gray-500 font-semibold mb-0.5">Passenger</span>
-        <span className="font-bold text-gray-800 truncate block">{alert?.riderName || 'None'}</span>
+        <span className="block text-[9px] text-gray-500 font-semibold mb-0.5">{alert?.sourceApp === 'driver' ? 'Passenger' : 'Assigned driver'}</span>
+        <span className="font-bold text-gray-800 truncate block">{(alert?.sourceApp === 'driver' ? alert?.riderName : alert?.driverName) || 'None'}</span>
       </div>
     </div>
 
@@ -130,11 +131,23 @@ const IncidentCard = ({ alert, isActive, onClick }) => (
 
 const SafetyCenter = () => {
   const { isLoaded, loadError } = useBaseGoogleMapsLoader();
-  const [alerts, setAlerts] = useState([]);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // /taxi/admin/safety/user -> passenger SOS only,  /safety/driver -> captain SOS only,  /safety -> both
+  const sourceFilter = pathname.endsWith('/safety/user') ? 'user' : pathname.endsWith('/safety/driver') ? 'driver' : 'all';
+  const [allAlerts, setAllAlerts] = useState([]);
   const [selectedAlertId, setSelectedAlertId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isResolving, setIsResolving] = useState(false);
   const [dashboardStats, setDashboardStats] = useState({ resolved: 0 });
+
+  const alerts = useMemo(
+    () => (sourceFilter === 'all' ? allAlerts : allAlerts.filter((item) => item.sourceApp === sourceFilter)),
+    [allAlerts, sourceFilter],
+  );
+  const userSosCount = allAlerts.filter((item) => item.sourceApp === 'user').length;
+  const driverSosCount = allAlerts.filter((item) => item.sourceApp === 'driver').length;
+  const setAlerts = setAllAlerts;
 
   const selectedAlert = useMemo(
     () => alerts.find((entry) => entry.id === selectedAlertId) || alerts[0] || null,
@@ -174,7 +187,7 @@ const SafetyCenter = () => {
     const handleNewAlert = (payload = {}) => {
       setAlerts((current) => [payload, ...current.filter((item) => item.id !== payload.id)]);
       setSelectedAlertId((current) => current || payload.id || '');
-      toast.error(`Emergency: ${getParticipantTitle(payload)} triggered SOS`, { 
+      toast.error(`${payload.sourceApp === 'driver' ? 'Driver' : 'Passenger'} SOS: ${getParticipantTitle(payload)} needs help`, { 
         duration: 5000,
         style: { background: '#ef4444', color: '#fff', fontWeight: 'bold' } 
       });
@@ -245,7 +258,7 @@ const SafetyCenter = () => {
          {/* Left Sidebar: Incident List */}
          <div className="w-full lg:w-72 h-[450px] lg:h-auto flex-shrink-0 flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-               <div className="text-sm font-bold text-gray-900">Active Incidents</div>
+               <div className="text-sm font-bold text-gray-900">{sourceFilter === 'user' ? 'Passenger SOS' : sourceFilter === 'driver' ? 'Driver SOS' : 'Active Incidents'}</div>
                <div className="flex items-center gap-2">
                  <button onClick={loadAlerts} className="p-1 hover:bg-gray-200 rounded text-gray-500 transition-colors" title="Refresh">
                     <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
@@ -254,6 +267,26 @@ const SafetyCenter = () => {
                </div>
             </div>
             
+            <div className="flex gap-1 border-b border-gray-100 bg-white p-2">
+               {[
+                  { key: 'all', label: 'All', count: allAlerts.length },
+                  { key: 'user', label: 'User SOS', count: userSosCount },
+                  { key: 'driver', label: 'Driver SOS', count: driverSosCount },
+               ].map((tab) => (
+                  <button
+                     key={tab.key}
+                     type="button"
+                     onClick={() => {
+                        setSelectedAlertId('');
+                        navigate(tab.key === 'all' ? '/taxi/admin/safety' : `/taxi/admin/safety/${tab.key}`);
+                     }}
+                     className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors ${sourceFilter === tab.key ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                     {tab.label} ({tab.count})
+                  </button>
+               ))}
+            </div>
+
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
                {isLoading ? (
                   <div className="flex justify-center p-8">
@@ -286,7 +319,7 @@ const SafetyCenter = () => {
                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="min-w-0">
                      <div className="text-lg font-bold text-gray-900 mb-1.5">
-                        SOS Details
+                        {selectedAlert.sourceApp === 'driver' ? 'Driver SOS' : 'Passenger SOS'} - {getParticipantTitle(selectedAlert)}
                      </div>
                      <div className="flex flex-wrap items-center gap-2">
                         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100">
@@ -368,14 +401,43 @@ const SafetyCenter = () => {
                      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                         <div className="text-xs font-bold text-gray-900 mb-3 border-b border-gray-100 pb-2">Distress Context</div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                           <ContextItem label="Raised by" value={selectedAlert?.sourceApp === 'driver' ? 'Driver' : 'Passenger'} />
+                           <ContextItem label="Raised by" value={selectedAlert?.sourceApp === 'driver' ? 'Driver (captain)' : 'Passenger'} />
                            <ContextItem label="Trip" value={selectedAlert?.tripCode || (selectedAlert?.rideId ? `#${selectedAlert.rideId.slice(-6).toUpperCase()}` : '')} />
                            <ContextItem label="Driver" value={selectedAlert?.driverName} phone={selectedAlert?.driverPhone} />
                            <ContextItem label="Passenger" value={selectedAlert?.riderName} phone={selectedAlert?.riderPhone} />
-                           <ContextItem label="Vehicle" value={selectedAlert?.vehicleLabel} />
+                           <ContextItem label="Vehicle" value={[selectedAlert?.vehicleLabel, selectedAlert?.vehicleNumber].filter((v, i, a) => v && a.indexOf(v) === i && !(i === 1 && a[0].includes(v))).join(' - ')} />
                            <ContextItem label="Pickup" value={selectedAlert?.pickupAddress} />
                            <ContextItem label="Drop" value={selectedAlert?.dropAddress} />
                            {selectedAlert?.notes ? <ContextItem label="Notes" value={selectedAlert.notes} /> : null}
+                        </div>
+                        <div className="mt-3 border-t border-gray-100 pt-3">
+                           <p className="text-[9px] font-semibold text-gray-500 mb-1">
+                              Emergency contacts of the {selectedAlert?.sourceApp === 'driver' ? 'driver' : 'passenger'}
+                           </p>
+                           {(selectedAlert?.emergencyContacts || []).length === 0 ? (
+                              <p className="text-[11px] font-bold text-gray-500">No emergency contact saved</p>
+                           ) : (
+                              <div className="flex flex-col gap-1.5">
+                                 {selectedAlert.emergencyContacts.map((contact) => (
+                                    <div key={`${contact.phone}-${contact.name}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1.5">
+                                       <span className="text-[11px] font-bold text-gray-900 truncate">{contact.name || 'Contact'}</span>
+                                       <a href={`tel:${contact.phone}`} className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline shrink-0">
+                                          <PhoneCall size={11} /> {contact.phone}
+                                       </a>
+                                    </div>
+                                 ))}
+                              </div>
+                           )}
+                           {selectedAlert?.location ? (
+                              <a
+                                 href={`https://www.google.com/maps?q=${selectedAlert.location.lat},${selectedAlert.location.lng}`}
+                                 target="_blank"
+                                 rel="noreferrer"
+                                 className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline"
+                              >
+                                 <MapPin size={11} /> Open live location in Google Maps
+                              </a>
+                           ) : null}
                         </div>
                      </div>
 

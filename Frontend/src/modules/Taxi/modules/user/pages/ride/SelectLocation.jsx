@@ -14,7 +14,7 @@ import {
   loadPopularPlaces,
   nearbyAutocompleteRequest,
 } from '../../utils/nearbyPlaces';
-import { getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
+import { cleanGroundAddress, cleanRecentPlace, getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
 import { saveParcelPickerResult } from '../../utils/parcelPickerResult';
 
@@ -514,7 +514,7 @@ const SelectLocation = () => {
             if (status === 'OK' && location) {
               const resolvedSelection = {
                 title: result.title || place.name || place.formatted_address,
-                address: place.formatted_address || result.address || result.title || '',
+                address: cleanGroundAddress(place.formatted_address) || result.address || result.title || '',
                 coords: [location.lng(), location.lat()],
               };
               placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
@@ -530,7 +530,7 @@ const SelectLocation = () => {
                 if (geocodeStatus === 'OK' && geocodedLocation) {
                   const resolvedSelection = {
                     title: result.title || geocodedPlace.formatted_address,
-                    address: geocodedPlace.formatted_address || result.address || result.title || '',
+                    address: cleanGroundAddress(geocodedPlace.formatted_address) || result.address || result.title || '',
                     coords: [geocodedLocation.lng(), geocodedLocation.lat()],
                   };
                   placeSelectionCacheRef.current.set(cacheKey, resolvedSelection);
@@ -604,6 +604,7 @@ const SelectLocation = () => {
       const saved = JSON.parse(window.localStorage.getItem('helloparth:recentLocations') || '[]');
       return (Array.isArray(saved) ? saved : [])
         .filter((item) => item?.address && Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon)))
+        .map(cleanRecentPlace)
         .map((item) => ({
           title: item.name || String(item.address).split(',')[0],
           address: item.address,
@@ -801,9 +802,10 @@ const SelectLocation = () => {
       setIsGeocoding(false);
       lastReverseGeocodedCenterRef.current = nextCenter;
 
-      if (status === 'OK' && results?.[0]?.formatted_address) {
-        reverseGeocodeCacheRef.current.set(cacheKey, results[0].formatted_address);
-        setPickedAddress(results[0].formatted_address);
+      const pickedResult = status === 'OK' ? pickBestGeocodeResult(results) : null;
+      if (pickedResult?.formatted_address) {
+        reverseGeocodeCacheRef.current.set(cacheKey, pickedResult.formatted_address);
+        setPickedAddress(pickedResult.formatted_address);
         return;
       }
 

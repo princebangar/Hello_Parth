@@ -839,6 +839,8 @@ const ActiveTrip = () => {
         const hydrateTripState = async () => {
             let lastRestoreError = '';
             let restoredActiveTrip = false;
+            // true when the server itself answered "no active trip for you" (not a network failure)
+            let serverSaysNoTrip = false;
 
             try {
                 for (let attemptIndex = 0; attemptIndex < ACTIVE_TRIP_HYDRATION_RETRY_DELAYS_MS.length; attemptIndex += 1) {
@@ -874,6 +876,9 @@ const ActiveTrip = () => {
                             : null;
                     const currentRideId = getJobRideId(currentJob);
                     const currentStatus = String(currentJob?.liveStatus || currentJob?.status || '').toLowerCase();
+                    serverSaysNoTrip = !currentRideId
+                        && activeDelivery.status === 'fulfilled'
+                        && activeRide.status === 'fulfilled';
 
                     if (currentRideId && currentStatus !== 'cancelled' && currentStatus !== 'canceled') {
                         const restoredPhase = resolvePhaseFromJob(currentJob);
@@ -906,7 +911,11 @@ const ActiveTrip = () => {
                         return;
                     }
 
-                    if (matchingFallbackSnapshot) {
+                    if (serverSaysNoTrip && !lastRestoreError) {
+                        // The server has no active trip for this captain: the screen was only a saved copy (a ride that was
+                        // never really accepted, or already cancelled). Do not let it be "driven" and "dropped".
+                        exitToDriverHome('This ride is not assigned to you (it may have been taken or cancelled).');
+                    } else if (matchingFallbackSnapshot) {
                         setHydratedTripState(matchingFallbackSnapshot);
                         setPhase(resolvePhaseFromJob(matchingFallbackSnapshot?.request?.raw || matchingFallbackSnapshot));
                     } else if (lastRestoreError) {
@@ -1178,16 +1187,45 @@ const ActiveTrip = () => {
             }
         };
 
+        // The arrive / start / destination buttons move the screen first and tell the server through the socket. When the
+        // server refuses ("Ride cannot move from...", "Assigned ride not found", ...) the screen used to stay ahead of the
+        // ride. Now the captain sees the reason and the screen goes back to what the server has (or leaves a dead trip).
+        const handleStatusRefused = async ({ message } = {}) => {
+            if (!/cannot move|not found|assigned|unsupported ride status|no longer|invalid ride pin|not allowed/i.test(String(message || ''))) {
+                return;
+            }
+            toast.error(message);
+            try {
+                const driverToken = getLocalDriverToken();
+                const response = await api.get(
+                    isParcel ? '/deliveries/active/me' : '/rides/active/me',
+                    withDriverAuthorization(driverToken),
+                );
+                const job = unwrapApiPayload(response);
+                if (!getJobRideId(job)) {
+                    if (!tripFinishedRef.current) {
+                        exitToDriverHome(message);
+                    }
+                    return;
+                }
+                setPhase(resolvePhaseFromJob(job));
+            } catch {
+                // offline right now: leave the screen as it is
+            }
+        };
+
         socketService.on('rideRequestClosed', handleTripClosed);
         socketService.on('rideCancelled', handleTripClosed);
         socketService.on('ride:status:updated', handleRideStatusUpdated);
         socketService.on('ride:state', handleRideState);
+        socketService.on('errorMessage', handleStatusRefused);
 
         return () => {
             socketService.off('rideRequestClosed', handleTripClosed);
             socketService.off('rideCancelled', handleTripClosed);
             socketService.off('ride:status:updated', handleRideStatusUpdated);
             socketService.off('ride:state', handleRideState);
+            socketService.off('errorMessage', handleStatusRefused);
             if (socket) {
                 socket.off('connect', onSocketConnect);
             }
@@ -1579,8 +1617,13 @@ const ActiveTrip = () => {
                     withDriverAuthorization(driverToken),
                 );
             }
-        } catch {
-            // Keep going with the socket publish so the trip can still complete in transient API failure cases.
+        } catch (completeError) {
+            // The server ANSWERED with a refusal (not assigned to you / wrong state): say so and stay, do not close the trip
+            // on the captain's side while the rider's side never moved. Only a network failure falls through to the socket.
+            if (Number(completeError?.status) >= 400 && Number(completeError?.status) < 500) {
+                toast.error(completeError?.message || 'The server did not accept this - the trip is not closed.');
+                return;
+            }
         }
 
         publishRideStatus('completed', paymentMode);

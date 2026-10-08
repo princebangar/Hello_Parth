@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { cleanGroundAddress } from '../../utils/preciseLocation';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -171,7 +172,7 @@ const ParcelType = () => {
       }
 
       const nextAddress = status === 'OK' && results?.[0]?.formatted_address
-        ? results[0].formatted_address
+        ? cleanGroundAddress(results[0].formatted_address)
         : '';
 
       if (!nextAddress) {

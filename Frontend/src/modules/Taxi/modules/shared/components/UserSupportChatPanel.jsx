@@ -152,6 +152,7 @@ const SupportChatPanel = ({
   const [error, setError] = useState('');
   const [isConnected, setIsConnected] = useState(socketService.isConnected());
   const bottomRef = useRef(null);
+  const listRef = useRef(null);
   const appliedInitialDraftRef = useRef('');
 
   useEffect(() => {
@@ -535,9 +536,13 @@ const SupportChatPanel = ({
     }
   }, [selectedConversationKey]);
 
+  // Only the message list scrolls; the header and the typing bar stay put.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const list = listRef.current;
+    if (list) {
+      list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, loading]);
 
   useEffect(() => {
     const normalizedInitialDraft = String(initialDraft || '').trim();
@@ -653,6 +658,125 @@ const SupportChatPanel = ({
         <p className="mt-4 text-[13px] font-semibold leading-6 text-slate-500">
           Live chat will activate once the current session has a valid token.
         </p>
+      </div>
+    );
+  }
+
+  if (!isAdminPanel) {
+    // Rider / captain help chat: a phone-style thread. Header and typing bar are fixed, only the messages scroll.
+    const isDriverSide = session.role === 'driver';
+    const mineStyle = isDriverSide
+      ? { background: '#1d4ed8', color: '#ffffff' }
+      : { background: 'var(--user-accent, #FFC400)', color: 'var(--user-accent-ink, #0B1220)' };
+    const themeVars = isDriverSide
+      ? { '--chat-bg': '#F5F8FF', '--chat-card': '#ffffff', '--chat-text': '#0f1b4c', '--chat-muted': '#5a6b8f', '--chat-border': 'rgba(15,27,76,0.10)' }
+      : { '--chat-bg': 'var(--user-bg, #F1F4F9)', '--chat-card': 'var(--user-card-bg, #ffffff)', '--chat-text': 'var(--user-text-primary, #0B1220)', '--chat-muted': 'var(--user-text-muted, #64748B)', '--chat-border': 'var(--user-border, rgba(15,23,42,0.10))' };
+
+    return (
+      <div
+        className={`flex h-full min-h-0 flex-col overflow-hidden ${className}`}
+        style={{ ...themeVars, background: 'var(--chat-bg)', color: 'var(--chat-text)' }}
+      >
+        <div className="flex shrink-0 items-center gap-3 px-4 py-3" style={{ background: 'var(--chat-card)', borderBottom: '1px solid var(--chat-border)' }}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={mineStyle}>
+            <MessageCircle size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[15px] font-bold leading-tight" style={{ color: 'var(--chat-text)' }}>{title}</h2>
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: 'var(--chat-muted)' }}>
+              <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              {isConnected ? 'Support team - online' : 'Reconnecting...'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleClearChat}
+            disabled={!selectedConversationKey || messages.length === 0 || deleting}
+            aria-label="Clear chat"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rose-600 disabled:opacity-40"
+            style={{ border: '1px solid var(--chat-border)' }}
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+
+        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+          {loading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex items-center gap-3 rounded-full px-4 py-3 shadow-sm" style={{ background: 'var(--chat-card)', border: '1px solid var(--chat-border)' }}>
+                <Loader2 size={16} className="animate-spin" style={{ color: 'var(--chat-muted)' }} />
+                <span className="text-[12px] font-semibold" style={{ color: 'var(--chat-muted)' }}>Loading messages...</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {messages.length === 0 && (
+                <p className="py-10 text-center text-[13px] font-semibold" style={{ color: 'var(--chat-muted)' }}>
+                  Say hello - our support team will reply here.
+                </p>
+              )}
+              {messages.map((message) => {
+                const isMine =
+                  message.sender.id && session.id
+                    ? String(message.sender.id) === String(session.id)
+                    : message.sender.role === session.role;
+
+                return (
+                  <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 shadow-sm ${isMine ? 'rounded-br-md' : 'rounded-bl-md'}`}
+                      style={isMine ? mineStyle : { background: 'var(--chat-card)', color: 'var(--chat-text)', border: '1px solid var(--chat-border)' }}
+                    >
+                      <p className="whitespace-pre-wrap break-words text-[14px] font-medium leading-snug">{message.message}</p>
+                      <span className="mt-1 block text-right text-[10px] font-semibold opacity-70">{formatTime(message.createdAt)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" style={{ background: 'var(--chat-card)', borderTop: '1px solid var(--chat-border)' }}>
+          {error && <p className="mb-2 rounded-xl bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600">{error}</p>}
+          <div className="no-scrollbar mb-2 flex gap-2 overflow-x-auto">
+            {quickReplies.map((reply) => (
+              <button
+                type="button"
+                key={reply}
+                onClick={() => setDraft(reply)}
+                className="shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold"
+                style={{ border: '1px solid var(--chat-border)', color: 'var(--chat-muted)' }}
+              >
+                {reply}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--chat-bg)', border: '1px solid var(--chat-border)' }}>
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleSend();
+                }
+              }}
+              placeholder="Type a message"
+              className="min-w-0 flex-1 bg-transparent text-[14px] font-medium outline-none placeholder:opacity-60"
+              style={{ color: 'var(--chat-text)' }}
+            />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || !draft.trim()}
+              aria-label="Send"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-40"
+              style={mineStyle}
+            >
+              {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

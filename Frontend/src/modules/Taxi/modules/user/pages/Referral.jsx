@@ -18,6 +18,9 @@ import {
 import { useSettings } from '../../../shared/context/SettingsContext';
 import NumberSkeleton from '@/shared/components/NumberSkeleton';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
+import useAppLinks from '@/shared/hooks/useAppLinks';
+import ShareSheet, { shareMessage } from '@/shared/components/ShareSheet';
+import { getPublicAppOrigin } from '@/shared/utils/shareLinks';
 
 
 const readStoredUserInfo = () => {
@@ -42,6 +45,8 @@ const Referral = () => {
   const { theme } = useUserTheme();
   const isDark = theme === 'dark';
   const [activeTab, setActiveTab] = useState('refer');
+  // friends who joined with my code + what I earned (server: /users/referrals)
+  const [overview, setOverview] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(() => {
@@ -88,6 +93,7 @@ const Referral = () => {
           getReferralSettingsContent('user'),
         ]);
 
+        userAuthService.getReferralOverview().then((response) => setOverview(response?.data || null)).catch(() => {});
         const user = userResponse?.data?.user || {};
         const translationData = translationResponse?.data || {};
         const settingsData = settingsResponse?.data || {};
@@ -166,34 +172,23 @@ const Referral = () => {
     }
   };
 
+  const appLinks = useAppLinks();
+  const [shareSheet, setShareSheet] = useState({ open: false, text: '' });
+
   const handleShare = async () => {
     if (!referralCode) {
       return;
     }
-    const signupLink = `${window.location.origin}/login?ref=${encodeURIComponent(referralCode)}`;
-    const shareText = `${bannerText}\nUse my referral code ${referralCode} to sign up.\n${signupLink}`;
+    // The app link when one is set (Backend/.env APP_LINK_USER); until then the website sign-up link.
+    const webLink = `${getPublicAppOrigin()}/login?ref=${encodeURIComponent(referralCode)}`;
+    const shareText = appLinks.user
+      ? `${bannerText}\nDownload the app and use my referral code ${referralCode} when you sign up.\n${appLinks.user}`
+      : `${bannerText}\nUse my referral code ${referralCode} to sign up.\n${webLink}`;
 
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: bannerText,
-          text: shareText,
-        });
-        return;
-      }
-    } catch {
-      // Fall through to desktop-friendly sharing options.
+    const result = await shareMessage({ title: bannerText, text: shareText });
+    if (result === 'unsupported') {
+      setShareSheet({ open: true, text: shareText });
     }
-
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // Ignore clipboard failures and continue to WhatsApp fallback.
-    }
-
-    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
   };
 
   return (
@@ -306,10 +301,42 @@ const Referral = () => {
                 )}
               </div>
             ) : (
-              <div className={`rounded-2xl border border-dashed px-5 py-8 text-center transition-colors ${isDark ? 'border-slate-800 bg-slate-950/30' : 'border-gray-200 bg-gray-50'}`}>
-                <p className={`text-sm font-bold ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Successful referrals</p>
-                <p className={`text-4xl font-extrabold mt-2 ${isDark ? 'text-white' : 'text-slate-950'}`}>{profile.referralCount === null ? <NumberSkeleton /> : profile.referralCount}</p>
-                <p className="text-xs text-slate-400 mt-2">Detailed referral history is not available on this screen yet.</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`rounded-2xl border px-4 py-4 text-center ${isDark ? 'border-slate-800 bg-slate-950/30' : 'border-gray-200 bg-gray-50'}`}>
+                    <p className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Friends joined</p>
+                    <p className={`mt-1 text-3xl font-extrabold ${isDark ? 'text-white' : 'text-slate-950'}`}>{overview ? overview.referralCount : profile.referralCount === null ? <NumberSkeleton /> : profile.referralCount}</p>
+                  </div>
+                  <div className={`rounded-2xl border px-4 py-4 text-center ${isDark ? 'border-slate-800 bg-slate-950/30' : 'border-gray-200 bg-gray-50'}`}>
+                    <p className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>You earned</p>
+                    <p className={`mt-1 text-3xl font-extrabold ${isDark ? 'text-white' : 'text-slate-950'}`}>{overview ? `Rs ${Number(overview.totalEarnings || 0).toLocaleString('en-IN')}` : <NumberSkeleton />}</p>
+                  </div>
+                </div>
+                {overview?.reward?.amount > 0 ? (
+                  <p className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Reward: Rs {overview.reward.amount} per friend
+                    {overview.reward.ridesNeeded ? ` after they finish ${overview.reward.ridesNeeded} ride${overview.reward.ridesNeeded > 1 ? 's' : ''}` : ' as soon as they sign up'}
+                    {overview.reward.newUserAlsoGets ? ' (your friend gets it too)' : ''}.
+                  </p>
+                ) : null}
+                {overview && overview.friends.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">No friend has joined with your code yet.</p>
+                ) : null}
+                {(overview?.friends || []).map((friend) => (
+                  <div key={friend.id} className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${isDark ? 'border-slate-800 bg-slate-950/30' : 'border-gray-200 bg-white'}`}>
+                    <div className="min-w-0">
+                      <p className={`truncate text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{friend.name}</p>
+                      <p className="text-xs text-slate-400">{friend.phone}{friend.joinedAt ? ` - joined ${new Date(friend.joinedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {friend.status === 'credited' ? (
+                        <p className="text-sm font-extrabold text-emerald-600">+ Rs {friend.amount}</p>
+                      ) : (
+                        <p className="text-xs font-bold text-amber-600">Pending - {friend.ridesDone}/{friend.ridesNeeded} rides</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -338,6 +365,12 @@ const Referral = () => {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      <ShareSheet
+        open={shareSheet.open}
+        text={shareSheet.text}
+        onClose={() => setShareSheet({ open: false, text: '' })}
+        onCopied={() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }}
+      />
     </div>
   );
 };

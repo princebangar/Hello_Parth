@@ -324,7 +324,7 @@ const PoolingVehicleForm = ({
     <div
       className={isDriver
         ? 'min-h-screen overflow-x-clip bg-[linear-gradient(180deg,#f6efe4_0%,#fcfaf6_28%,#ffffff_100%)] px-5 pb-28 pt-8'
-        : 'min-h-screen bg-slate-50/50 p-4 lg:p-6'}
+        : 'min-h-screen bg-slate-50/50 p-4 pb-36 lg:p-6 lg:pb-6'}
       style={isDriver ? { fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" } : undefined}
     >
       <div className={isDriver ? 'mx-auto max-w-sm space-y-6' : 'mx-auto max-w-5xl'}>
@@ -748,7 +748,7 @@ const PoolingVehicleForm = ({
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl bg-black px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-black px-6 py-3.5 text-sm font-black text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50 sm:w-auto"
             >
               {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18} />}
               {createActionLabel}

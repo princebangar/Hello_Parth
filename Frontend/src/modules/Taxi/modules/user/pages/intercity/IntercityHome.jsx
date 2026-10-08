@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { cleanGroundAddress } from '../../utils/preciseLocation';
+import { localDateKey, localDateTimeMin } from '../../../../shared/utils/localDate';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -100,8 +102,7 @@ const IntercityHome = () => {
 
   // Date and Time State
   const [travelDate, setTravelDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+    return localDateKey(0);
   });
 
   const [travelTime, setTravelTime] = useState(() => {
@@ -211,7 +212,7 @@ const IntercityHome = () => {
     geocoder.geocode({ location: coords }, (results, status) => {
       setIsGeocoding(false);
       if (status === 'OK' && results?.[0]) {
-        const address = results[0].formatted_address;
+        const address = cleanGroundAddress(results[0].formatted_address);
         setPickupAddress(address);
 
         // Find city name to filter packages
@@ -282,7 +283,7 @@ const IntercityHome = () => {
 
             if (status === 'OK' && location) {
               const resolvedResult = {
-                address: place.formatted_address || result.address || result.title || '',
+                address: cleanGroundAddress(place.formatted_address) || result.address || result.title || '',
                 coords: { lat: location.lat(), lng: location.lng() },
               };
               if (cacheKey) {
@@ -303,7 +304,7 @@ const IntercityHome = () => {
 
                 if (geocodeStatus === 'OK' && geocodedLocation) {
                   const resolvedResult = {
-                    address: geocodedPlace.formatted_address || result.address || result.title || '',
+                    address: cleanGroundAddress(geocodedPlace.formatted_address) || result.address || result.title || '',
                     coords: { lat: geocodedLocation.lat(), lng: geocodedLocation.lng() },
                   };
                   if (cacheKey) {
@@ -951,7 +952,7 @@ const IntercityHome = () => {
             <input
               ref={dateTimeInputRef}
               type="datetime-local"
-              min={new Date().toISOString().slice(0, 16)}
+              min={localDateTimeMin()}
               value={`${travelDate}T${travelTime}`}
               onChange={handleDateTimeChange}
               className="absolute pointer-events-none opacity-0 inset-0 w-full h-full"

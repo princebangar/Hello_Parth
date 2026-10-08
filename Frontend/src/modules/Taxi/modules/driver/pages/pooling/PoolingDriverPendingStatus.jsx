@@ -31,10 +31,30 @@ const PoolingDriverPendingStatus = () => {
 
     loadProfile();
 
+    // Waiting for the admin: look again every few seconds (and when the app comes back to the front). The moment the
+    // car is approved the pooling dashboard opens by itself - no need to log out and in.
+    const checkApproval = async () => {
+      try {
+        const data = unwrap(await getCurrentDriver());
+        if (!active || !data) return;
+        setProfile(data);
+        if (data.approve !== false && String(data.status || '').toLowerCase() !== 'pending') {
+          navigate('/taxi/driver/pooling', { replace: true });
+        }
+      } catch {
+        // offline for a moment: try again on the next tick
+      }
+    };
+    const timer = window.setInterval(checkApproval, 6000);
+    const onVisible = () => { if (document.visibilityState === 'visible') checkApproval(); };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, []);
+  }, [navigate]);
 
   const handleLogout = () => {
     clearDriverAuthState();

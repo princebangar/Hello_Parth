@@ -829,6 +829,12 @@ const normalizeRideTransportType = (value = 'taxi') => {
   return normalized;
 };
 
+// Dispatch (matchingService) already treats a fleet captain (owner_id set) as never wallet-blocked: the owner carries the
+// money. Accepting / bidding must agree, otherwise the captain gets the request and then cannot accept it.
+const WALLET_NOT_BLOCKED_FILTER = {
+  $or: [{ owner_id: { $ne: null } }, { 'wallet.isBlocked': { $ne: true } }],
+};
+
 const buildDriverVehicleAcceptFilter = async (ride) => {
   const vehicleTypeIds = normalizeVehicleTypeIds(ride.dispatchVehicleTypeIds || [], ride.vehicleTypeId);
 
@@ -1690,8 +1696,7 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
         _id: driverId,
         isOnline: true,
         isOnRide: false,
-        'wallet.isBlocked': { $ne: true },
-        ...driverVehicleFilter,
+        $and: [WALLET_NOT_BLOCKED_FILTER, driverVehicleFilter],
       }).session(session);
 
       if (!driver) {
@@ -1928,25 +1933,26 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
 
   await ensureRideParticipantAccess({ rideId, role, entityId: senderId });
 
-  const ride = await Ride.findById(rideId);
+  // One atomic $push per message. (Load -> push -> save lost messages and mixed up their order when two were sent
+  // together: the chat looked stuck after a text or two.)
+  const newMessage = {
+    _id: new mongoose.Types.ObjectId(),
+    senderRole: role,
+    senderId,
+    message: trimmedMessage,
+    sentAt: new Date(),
+  };
+  const ride = await Ride.findByIdAndUpdate(
+    rideId,
+    { $push: { messages: { $each: [newMessage], $slice: -200 } } },
+    { new: true, projection: { userId: 1, driverId: 1 } },
+  );
 
   if (!ride) {
     throw new ApiError(404, 'Ride not found');
   }
 
-  ride.messages.push({
-    senderRole: role,
-    senderId,
-    message: trimmedMessage,
-  });
-
-  if (ride.messages.length > 200) {
-    ride.messages = ride.messages.slice(-200);
-  }
-
-  await ride.save();
-
-  const latestMessage = ride.messages[ride.messages.length - 1];
+  const latestMessage = newMessage;
 
   // Push the message to the other side, so a rider/driver whose app is in the background still sees it.
   const recipientIsUser = role === 'driver';
@@ -1958,6 +1964,8 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
       body: trimmedMessage.length > 120 ? `${trimmedMessage.slice(0, 117)}...` : trimmedMessage,
       data: {
         type: 'ride_chat',
+        // one id per message = one shared tag/collapse key: a phone holding several tokens shows the text once
+        notificationId: `ride_chat_${latestMessage._id}`,
         rideId: String(ride._id),
         targetUrl: recipientIsUser ? '/taxi/user/ride/tracking' : '/taxi/driver/active-trip',
       },
@@ -2053,8 +2061,7 @@ export const submitRideBid = async ({ rideId, driverId, bidFare }) => {
     _id: driverId,
     isOnline: true,
     isOnRide: false,
-    'wallet.isBlocked': { $ne: true },
-    ...driverVehicleFilter,
+    $and: [WALLET_NOT_BLOCKED_FILTER, driverVehicleFilter],
   }).select('name phone profileImage vehicleType vehicleNumber vehicleColor vehicleMake vehicleModel rating');
 
   if (!driver) {
@@ -2233,8 +2240,7 @@ export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {
         _id: bid.driverId,
         isOnline: true,
         isOnRide: false,
-        'wallet.isBlocked': { $ne: true },
-        ...driverVehicleFilter,
+        $and: [WALLET_NOT_BLOCKED_FILTER, driverVehicleFilter],
       }).session(session);
 
       if (!driver) {

@@ -23,6 +23,7 @@ import {
   addUserEmergencyContact,
   deleteUserEmergencyContact,
   getUserNotifications,
+  getMyReferrals,
   deleteUserNotification,
   getIntercityPackageCatalog,
   clearAllUserNotifications,
@@ -89,6 +90,7 @@ userRouter.get('/me/emergency-contacts', authenticate(['user']), asyncHandler(ge
 userRouter.post('/me/emergency-contacts', authenticate(['user']), asyncHandler(addUserEmergencyContact));
 userRouter.delete('/me/emergency-contacts/:contactId', authenticate(['user']), asyncHandler(deleteUserEmergencyContact));
 userRouter.get('/notifications', authenticate(['user']), asyncHandler(getUserNotifications));
+userRouter.get('/referrals', authenticate(['user']), asyncHandler(getMyReferrals));
 userRouter.delete('/notifications/:id', authenticate(['user']), asyncHandler(deleteUserNotification));
 userRouter.delete('/notifications', authenticate(['user']), asyncHandler(clearAllUserNotifications));
 userRouter.post('/sos', authenticate(['user']), asyncHandler(triggerUserSosAlert));

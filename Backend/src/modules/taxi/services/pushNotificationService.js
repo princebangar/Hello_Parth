@@ -1,6 +1,7 @@
 import { getFirebaseMessaging } from '../../../config/firebase.js';
 import { Driver } from '../driver/models/Driver.js';
 import { User } from '../user/models/User.js';
+import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 import { listEntityPushTokens } from './pushTokenService.js';
 
 const INVALID_TOKEN_CODES = new Set([
@@ -217,10 +218,27 @@ const sendPushToTargets = async ({
   };
 };
 
-const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
+const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDriverIds = [] }) => {
   const normalizedUserIds = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
+  const normalizedPoolingIds = [...new Set((Array.isArray(poolingDriverIds) ? poolingDriverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const targets = [];
+
+  if (normalizedPoolingIds.length) {
+    // a pooling driver account is its pooling vehicle: its push tokens live on that document
+    const vehicles = await PoolingVehicle.find({ _id: { $in: normalizedPoolingIds } })
+      .select('_id fcmTokenWeb fcmTokenMobile')
+      .lean();
+
+    vehicles.forEach((vehicle) => {
+      listEntityPushTokens(vehicle, 'driver').forEach((tokenEntry) => {
+        targets.push({
+          ...tokenEntry,
+          entityId: String(vehicle._id),
+        });
+      });
+    });
+  }
 
   if (normalizedUserIds.length) {
     const users = await User.find({ _id: { $in: normalizedUserIds } })
@@ -371,12 +389,13 @@ export const sendPushNotificationToAudience = async ({
 export const sendPushNotificationToEntities = async ({
   userIds = [],
   driverIds = [],
+  poolingDriverIds = [],
   title,
   body,
   image = '',
   data = {},
 }) => {
-  const targets = await collectDirectTargets({ userIds, driverIds });
+  const targets = await collectDirectTargets({ userIds, driverIds, poolingDriverIds });
   const results = [];
   for (const role of ['user', 'driver']) {
     const roleTargets = targets.filter((target) => target.role === role);

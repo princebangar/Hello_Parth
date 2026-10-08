@@ -143,6 +143,11 @@ const AddVehicle = () => {
     : "/taxi/driver";
 
   const [step, setStep] = useState(1);
+  // Every step opens from the top (the previous step's scroll position used to stay).
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [step]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   // The typed details survive a refresh (document photos do not - they are picked again).
   const DRAFT_KEY = "helloparth:addVehicleDraft";

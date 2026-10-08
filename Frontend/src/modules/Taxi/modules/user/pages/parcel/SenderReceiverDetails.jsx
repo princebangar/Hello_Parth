@@ -1,4 +1,5 @@
 import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { cleanGroundAddress } from '../../utils/preciseLocation';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -842,8 +843,8 @@ const SenderReceiverDetails = () => {
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: position }, (results, status) => {
         if (status === 'OK' && results?.[0]?.formatted_address) {
-          addressLookupCacheRef.current.set(cacheKey, results[0].formatted_address);
-          resolve(results[0].formatted_address);
+          addressLookupCacheRef.current.set(cacheKey, cleanGroundAddress(results[0].formatted_address));
+          resolve(cleanGroundAddress(results[0].formatted_address));
           return;
         }
         resolve(formatLatLngLabel(position));

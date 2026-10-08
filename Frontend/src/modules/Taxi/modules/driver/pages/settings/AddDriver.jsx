@@ -36,6 +36,10 @@ const AddDriver = () => {
     const [fleetVehicles, setFleetVehicles] = useState([]);
     const [fleetZones, setFleetZones] = useState([]);
     const [step, setStep] = useState(1); // 1: Details, 2: Documents, 3: Success
+    // Every step opens from the top (the previous step's scroll position used to stay).
+    useEffect(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }, [step]);
     // A half-filled "add driver" form survives a refresh (files cannot be stored, so they are picked again).
     const DRAFT_KEY = 'helloparth:addDriverDraft';
     const readDraft = () => {

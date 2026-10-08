@@ -184,8 +184,8 @@ const LocationMapSection = () => {
     addressLookupKeyRef.current = key;
 
     new window.google.maps.Geocoder().geocode({ location: { lat: coords.lat, lng: coords.lon } }, (results, geocodeStatus) => {
-      if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
-        persistAddress(results[0]);
+      if (geocodeStatus === 'OK' && pickBestGeocodeResult(results)) {
+        persistAddress(pickBestGeocodeResult(results));
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -322,8 +322,8 @@ const LocationMapSection = () => {
       geocoder.geocode(
         { location: { lat: center.lat(), lng: center.lng() } },
         (results, geocodeStatus) => {
-          if (geocodeStatus === 'OK' && results?.[0]?.formatted_address) {
-            persistAddress(results[0]);
+          if (geocodeStatus === 'OK' && pickBestGeocodeResult(results)) {
+            persistAddress(pickBestGeocodeResult(results));
           }
         },
       );

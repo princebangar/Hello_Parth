@@ -886,25 +886,18 @@ const OwnerVehicleFleet = () => {
                 </p>
               </div>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={handleAddFleetVehicle}
-              className="hidden sm:inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all"
-            >
-              <Plus size={16} />
-              Add Fleet
-            </motion.button>
+            {vehicles.length > 0 ? (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleAddFleetVehicle}
+                className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all"
+              >
+                <Plus size={16} />
+                Add Vehicle
+              </motion.button>
+            ) : null}
           </div>
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={handleAddFleetVehicle}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all sm:hidden"
-          >
-            <Plus size={16} />
-            Add Fleet Vehicle
-          </motion.button>
         </div>
       </div>
 
@@ -1141,20 +1134,6 @@ const OwnerVehicleFleet = () => {
             </>
           )}
         </AnimatePresence>
-      </div>
-
-      <div className="fixed inset-x-0 z-40 px-4 sm:hidden" style={{ bottom: 'calc(88px + max(env(safe-area-inset-bottom), 8px))' }}>
-        <div className="mx-auto max-w-lg">
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={handleAddFleetVehicle}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 px-4 py-3.5 text-sm font-bold text-white shadow-[0_16px_40px_rgba(15,23,42,0.18)]"
-          >
-            <Plus size={16} />
-            Add Fleet Vehicle
-          </motion.button>
-        </div>
       </div>
 
     </div>

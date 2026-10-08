@@ -87,6 +87,32 @@ const poolingVehicleSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Driver app switch: an online car is open for new seat bookings. Cars made in the admin / owner panels have no
+    // value (undefined) and stay bookable as before; a self-registered pooling driver starts offline.
+    isOnline: {
+      type: Boolean,
+      default: undefined,
+    },
+    onlineAt: {
+      type: Date,
+      default: null,
+    },
+    lastLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number],
+        default: undefined,
+      },
+      heading: { type: Number, default: null },
+      updatedAt: { type: Date, default: null },
+    },
+    // push tokens of the pooling driver app (saved by the shared "save FCM token" call)
+    fcmTokenWeb: { type: String, default: '' },
+    fcmTokenMobile: { type: String, default: '' },
   },
   { timestamps: true },
 );

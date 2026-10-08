@@ -74,9 +74,10 @@ const readBrowserLocation = () =>
 
 export const triggerUserSosAlert = async (extra = {}) => {
   const ride = getCurrentRide() || {};
+  // Where the rider is right now beats where the trip started.
   const location =
-    readCoordinatePair(ride?.pickupCoords, ride?.pickupLocation, ride?.dropCoords, ride?.dropLocation)
-    || await readBrowserLocation();
+    await readBrowserLocation()
+    || readCoordinatePair(ride?.pickupCoords, ride?.pickupLocation, ride?.dropCoords, ride?.dropLocation);
 
   const payload = {
     rideId: cleanString(ride?.rideId),
@@ -99,13 +100,14 @@ export const triggerDriverSosAlert = async (extra = {}) => {
   const snapshot = readDriverTripSnapshot() || {};
   const job = snapshot?.job || snapshot?.raw || snapshot || {};
   const location =
-    readCoordinatePair(
+    await readBrowserLocation()
+    || readCoordinatePair(
       snapshot?.driverCoords,
       job?.driverCoords,
       job?.driverLocation,
       job?.pickupLocation,
       job?.pickup,
-    ) || await readBrowserLocation();
+    );
 
   const payload = {
     rideId: cleanString(job?.rideId || job?.id || job?._id),

@@ -102,6 +102,22 @@ const safetyAlertSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    vehicleNumber: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    // Who raised it: their saved SOS contacts, shown to the admin so someone can be called.
+    emergencyContacts: {
+      type: [
+        {
+          name: { type: String, default: '', trim: true },
+          phone: { type: String, default: '', trim: true },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
     tripCode: {
       type: String,
       default: '',

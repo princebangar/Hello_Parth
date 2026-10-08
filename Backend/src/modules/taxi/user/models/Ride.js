@@ -575,6 +575,12 @@ const rideSchema = new mongoose.Schema(
         default: null,
       },
     },
+    // Secret token of the "share my ride" link (public live tracking page); empty until the rider shares.
+    shareToken: {
+      type: String,
+      default: '',
+      index: true,
+    },
     lastDriverLocation: {
       type: {
         type: String,

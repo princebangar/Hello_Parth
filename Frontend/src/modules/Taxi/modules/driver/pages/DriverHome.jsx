@@ -1854,6 +1854,12 @@ const DriverHome = () => {
             const onSocketError = ({ message }) => {
                 console.error('[driver-home] socket errorMessage received', message);
                 setStatusMessage(message || 'Socket error.');
+                if (acceptingRideIdRef.current) {
+                    toast.error(message || 'Could not accept this ride.');
+                    setShowRequest(false);
+                    setCurrentRequest(null);
+                    stopRideRequestAlertSound();
+                }
                 if (String(message || '').toLowerCase().includes('no longer available')) {
                     setShowRequest(false);
                     setCurrentRequest(null);
@@ -2135,26 +2141,22 @@ const DriverHome = () => {
         setAcceptingRideId(currentRequest.rideId);
         setStatusMessage('Accepting ride...');
         stopRideRequestAlertSound();
-        setShowRequest(false);
+        // The request stays on screen ("Accepting...") until the server confirms: 'rideAccepted' opens the trip, a refusal
+        // shows its reason. (It used to open the trip screen at once, so a refused accept - ride taken by someone else,
+        // wallet rule... - still let the captain "drive" and "drop" a ride the rider never saw.)
         socketService.emit('acceptRide', { rideId: currentRequest.rideId });
         scheduleAcceptRecovery(acceptedRequestType);
-        navigate('/taxi/driver/active-trip', {
-            state: {
-                type: acceptedRequestType,
-                rideId: currentRequest.rideId,
-                otp: currentRequest?.raw?.otp || currentRequest?.otp || '',
-                request: {
-                    ...currentRequest,
-                    requestId: currentRequest.requestId || currentRequest.rideId,
-                    rideId: currentRequest.rideId,
-                    raw: {
-                        ...(currentRequest.raw || {}),
-                        rideId: currentRequest.rideId,
-                    },
-                },
-                currentDriverCoords: driverCoordsRef.current || readStoredDriverCoords() || null,
-            },
-        });
+        const acceptedRideId = currentRequest.rideId;
+        window.setTimeout(() => {
+            if (acceptingRideIdRef.current && acceptingRideIdRef.current === acceptedRideId) {
+                acceptingRideIdRef.current = '';
+                setAcceptingRideId('');
+                setShowRequest(false);
+                setCurrentRequest(null);
+                setStatusMessage('Could not accept this ride. It may have been taken - wait for the next request.');
+                toast.error('Could not accept this ride. It may have been taken by another captain.');
+            }
+        }, 9000);
     };
 
     const handleDecline = () => {

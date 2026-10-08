@@ -532,6 +532,27 @@
   color: var(--user-text-muted) !important;
 }
 
+/* Yellow / amber badges and buttons keep dark text in the dark theme (text-slate-900 is remapped to white above, which was
+   white-on-yellow: "Confirm & Proceed", the rating badge, ...). */
+.user-app-theme [class*="bg-[#f8e001]"],
+.user-app-theme [class*="bg-[#FFC400]"],
+.user-app-theme [class*="bg-[#ffc400]"],
+.user-app-theme .bg-yellow-300,
+.user-app-theme .bg-yellow-400,
+.user-app-theme .bg-yellow-500,
+.user-app-theme .bg-amber-300,
+.user-app-theme .bg-amber-400,
+.user-app-theme [class*="bg-[#f8e001]"] *,
+.user-app-theme [class*="bg-[#FFC400]"] *,
+.user-app-theme [class*="bg-[#ffc400]"] *,
+.user-app-theme .bg-yellow-300 *,
+.user-app-theme .bg-yellow-400 *,
+.user-app-theme .bg-yellow-500 *,
+.user-app-theme .bg-amber-300 *,
+.user-app-theme .bg-amber-400 * {
+  color: #0b1220 !important;
+}
+
 /* Border overrides */
 .user-app-theme .border-white,
 .user-app-theme .border-white\/10,
@@ -664,6 +685,8 @@
 .user-app-theme .bg-yellow-50,
 .user-app-theme .bg-yellow-50\/60,
 .user-app-theme .bg-yellow-100,
+.user-app-theme [class*="bg-[#F2F7FA]"],
+.user-app-theme [class*="bg-[#EBF5FC]"],
 .user-app-theme .bg-slate-900\/60,
 .user-app-theme .bg-slate-950\/60,
 .user-app-theme .bg-slate-950\/75,
@@ -676,10 +699,12 @@
   color: var(--user-text-primary) !important;
 }
 
-.user-app-theme button.bg-slate-900,
-.user-app-theme button.bg-black,
-.user-app-theme a.bg-slate-900,
-.user-app-theme a.bg-black {
+/* Black buttons become the yellow accent button. A card that is only built as a <button> (data-card) is not a CTA:
+   it keeps the card colour, otherwise its white text sat on yellow. */
+.user-app-theme button.bg-slate-900:not([data-card]),
+.user-app-theme button.bg-black:not([data-card]),
+.user-app-theme a.bg-slate-900:not([data-card]),
+.user-app-theme a.bg-black:not([data-card]) {
   background-color: var(--user-accent) !important;
   color: #0b1220 !important;
 }
@@ -1028,6 +1053,21 @@
   width: calc(100% - 48px) !important;
   max-width: 448px !important;
   pointer-events: auto !important;
+}
+
+/* A solid strip (page colour) behind the floating bar, fading out above it: scrolled content no longer shows through
+   around / under the bar and never looks like it overlaps the footer. */
+.user-bottom-nav::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 100vw;
+  bottom: -24px;
+  height: 108px;
+  transform: translateX(-50%);
+  background: linear-gradient(to top, var(--user-bg) 0, var(--user-bg) 82%, transparent 100%);
+  pointer-events: none;
+  z-index: -1;
 }
 
 /* Same bar as Food's bottom navigation: white / #1a1a1a, 72px tall, big radius, soft drop shadow. */
