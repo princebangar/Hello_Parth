@@ -69,6 +69,10 @@ export function shouldPreserveMainTabsUnderPath(pathname) {
   if (n === "/user/wallet" || n === "/wallet") {
     return true;
   }
+  // My Store opens from Home: keep Home mounted underneath so Back is instant (it was rebuilt from scratch).
+  if (n === "/user/my-store" || n === "/my-store") {
+    return true;
+  }
   return false;
 }
 

@@ -1635,7 +1635,9 @@ export const listApprovedRestaurants = async (query = {}) => {
 
     // Delivery / takeaway lists: hide restaurants with no live dish (nothing to
     // order). Done before pagination so page sizes and totals stay right.
-    if (query.orderType !== 'dining') {
+    // Not for My Store: an approved brand store is listed even before its menu is live (its page says so) -
+    // a new store simply did not appear at all.
+    if (query.orderType !== 'dining' && !isStorePartnerType(query.partnerType)) {
         pipeline.push({
             $lookup: {
                 from: FoodItem.collection.name,

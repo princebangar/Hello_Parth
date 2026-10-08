@@ -110,6 +110,22 @@ export default function RestaurantsList() {
   const w = (t) => pw(t, partnerType)
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
+  // "" = all zones. The lists and the count cards above them follow it (the API filters by zone).
+  const [zoneFilter, setZoneFilter] = useState("")
+  const [zoneOptions, setZoneOptions] = useState([])
+  useEffect(() => {
+    let alive = true
+    adminAPI.getZones({ limit: 1000 })
+      .then((res) => {
+        const zoneData = res?.data?.data
+        const list = Array.isArray(zoneData?.zones) ? zoneData.zones : Array.isArray(zoneData) ? zoneData : []
+        if (alive) setZoneOptions(list)
+      })
+      .catch(() => alive && setZoneOptions([]))
+    return () => {
+      alive = false
+    }
+  }, [])
   const [restaurants, setRestaurants] = useState([])
   const [bannedRestaurants, setBannedRestaurants] = useState([])
   const [rejectedRestaurants, setRejectedRestaurants] = useState([])
@@ -262,11 +278,12 @@ export default function RestaurantsList() {
         }
 
         // APIs are paginated — pull a large page so list/stats are not truncated
+        const zoneParam = zoneFilter ? { zoneId: zoneFilter } : {}
         const [response, bannedResponse, pendingResponse, rejectedOnlyResponse] = await Promise.all([
-          adminAPI.getApprovedRestaurants({ status: "approved", limit: 1000, page: 1 }),
-          adminAPI.getApprovedRestaurants({ status: "banned", limit: 1000, page: 1 }).catch(() => null),
-          adminAPI.getPendingRestaurants({ limit: 1000, page: 1 }).catch(() => null),
-          adminAPI.getApprovedRestaurants({ status: "rejected", limit: 1000, page: 1 }).catch(() => null),
+          adminAPI.getApprovedRestaurants({ status: "approved", limit: 1000, page: 1, ...zoneParam }),
+          adminAPI.getApprovedRestaurants({ status: "banned", limit: 1000, page: 1, ...zoneParam }).catch(() => null),
+          adminAPI.getPendingRestaurants({ limit: 1000, page: 1, ...zoneParam }).catch(() => null),
+          adminAPI.getApprovedRestaurants({ status: "rejected", limit: 1000, page: 1, ...zoneParam }).catch(() => null),
         ])
 
         if (cancelled) return
@@ -385,7 +402,7 @@ export default function RestaurantsList() {
 
     fetchRestaurants()
     return () => { cancelled = true }
-  }, [])
+  }, [zoneFilter])
 
   const [searchParams] = useSearchParams()
   const restaurantIdFromUrl = searchParams.get("restaurantId")
@@ -1109,6 +1126,22 @@ export default function RestaurantsList() {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900">{w("Restaurants List")}</h1>
             </div>
+            {/* Zone filter: one zone at a time, or every zone */}
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <span className="whitespace-nowrap">Zone</span>
+              <select
+                value={zoneFilter}
+                onChange={(e) => setZoneFilter(e.target.value)}
+                className="min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All zones</option>
+                {zoneOptions.map((zone) => (
+                  <option key={zone?._id || zone?.id} value={zone?._id || zone?.id}>
+                    {zone?.name || zone?.zoneName || "Zone"}
+                  </option>
+                ))}
+              </select>
+            </label>
 
           </div>
         </div>

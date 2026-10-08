@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, Navigate } from "react-router-dom"
-import { ArrowLeft, Star, Store, Zap, MapPinOff } from "lucide-react"
+import { Bookmark, ChevronLeft, Star, Store, Zap, MapPinOff } from "lucide-react"
+import { toast } from "sonner"
 import { Card, CardContent } from "@food/components/ui/card"
 import { restaurantAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
@@ -28,7 +29,7 @@ export default function MyStore() {
   const goBack = useAppBackNavigation()
   const { location } = useLocation()
   const { zoneId, isOutOfService } = useZone(location)
-  const { vegMode, vegModeOption } = useProfile()
+  const { vegMode, vegModeOption, addFavorite, removeFavorite, isFavorite } = useProfile()
   const [stores, setStores] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -76,18 +77,33 @@ export default function MyStore() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
-      <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-[#0a0a0a]/95">
+      {/* Same red banner as the Food takeaway / home top bar, with room above the title */}
+      <div
+        className="sticky top-0 z-20 flex items-center gap-3.5 rounded-b-[2rem] bg-[#D91F3A] px-3 pb-4 shadow-lg"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+      >
         <button
           type="button"
           onClick={goBack}
           aria-label="Back"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 transition-all active:scale-90 dark:bg-zinc-800"
+          // glossy 3D red button (his reference): lit from the top-left, gloss on top, white rim to stand out on the red bar
+          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/85 transition-transform active:scale-90"
+          style={{
+            background: "radial-gradient(circle at 30% 25%, #ff6276 0%, #e8172f 48%, #a50b1d 100%)",
+            boxShadow: "0 4px 10px rgba(80, 0, 10, 0.45), inset 0 -3px 6px rgba(90, 0, 12, 0.45), inset 0 2px 3px rgba(255, 255, 255, 0.35)",
+          }}
         >
-          <ArrowLeft className="h-5 w-5 text-gray-800 dark:text-gray-100" />
+          <span className="pointer-events-none absolute left-1.5 right-1.5 top-0.5 h-3.5 rounded-full bg-gradient-to-b from-white/55 to-white/0" />
+          <ChevronLeft className="relative h-6 w-6 -translate-x-px text-[#f2f2f2] drop-shadow" strokeWidth={3.6} />
         </button>
         <div className="min-w-0">
-          <h1 className="text-lg font-bold leading-tight text-gray-900 dark:text-white">My Store</h1>
-          <p className="truncate text-xs text-gray-500 dark:text-gray-400">Hello Parth brand stores near you</p>
+          <h1 className="text-xl font-bold leading-tight text-white drop-shadow-md">My Store</h1>
+          <p
+            className="mt-0.5 truncate text-[13px] font-medium tracking-[0.01em] text-white/90 drop-shadow-md"
+            style={{ fontFamily: "'Outfit', sans-serif" }}
+          >
+            Hello Parth brand stores near you
+          </p>
         </div>
       </div>
 
@@ -125,6 +141,33 @@ export default function MyStore() {
             {visibleStores.map((store, index) => {
               const routeId = getRestaurantRouteId(store)
               const rating = Number(store.rating)
+              const storeName = String(store.name || store.restaurantName || "").trim()
+              const rawSlug = (typeof store.slug === "string" && store.slug.trim())
+                ? store.slug.trim()
+                : storeName || String(store.id || store._id || `store-${index}`)
+              const storeSlug = rawSlug.toLowerCase().replace(/[\s/]+/g, "-")
+              const saved = isFavorite(storeSlug)
+              // Same save button as the restaurant cards on the Food home.
+              const handleToggleSaved = (event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (saved) {
+                  removeFavorite(storeSlug)
+                  toast.success("Removed from bookmarks")
+                  return
+                }
+                addFavorite({
+                  slug: storeSlug,
+                  name: storeName,
+                  cuisine: Array.isArray(store.cuisines) ? store.cuisines.join(", ") : store.cuisine,
+                  rating: store.rating,
+                  deliveryTime: store.estimatedDeliveryTime,
+                  distance: store.distance,
+                  priceRange: store.priceRange,
+                  image: store.profileImage?.url || store.profileImage || store.coverImages?.[0]?.url || store.coverImages?.[0] || "",
+                })
+                toast.success("Saved to bookmarks")
+              }
               return (
                 <Link
                   key={store.id || store._id || routeId}
@@ -133,12 +176,22 @@ export default function MyStore() {
                   className="flex h-full"
                 >
                   <Card className="group relative flex h-full w-full cursor-pointer flex-col gap-0 overflow-hidden rounded-[28px] border border-gray-200/70 bg-white py-0 shadow-md transition-all duration-300 hover:shadow-xl active:scale-[0.99] dark:border-gray-800/80 dark:bg-[#1a1a1a]">
-                    <RestaurantImageCarousel
-                      restaurant={store}
-                      priority={index < 2}
-                      backendOrigin={BACKEND_ORIGIN}
-                      focusId={store.id || routeId}
-                    />
+                    <div className="relative">
+                      <RestaurantImageCarousel
+                        restaurant={store}
+                        priority={index < 2}
+                        backendOrigin={BACKEND_ORIGIN}
+                        focusId={store.id || routeId}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleToggleSaved}
+                        aria-label={saved ? "Remove from bookmarks" : "Save to bookmarks"}
+                        className={`absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-[20px] shadow-xl transition-all duration-300 active:scale-90 ${saved ? "bg-red-500 text-white" : "bg-white/90 text-gray-800 backdrop-blur-sm hover:bg-white"}`}
+                      >
+                        <Bookmark className={`h-5 w-5 transition-all duration-300 ${saved ? "fill-white" : ""}`} />
+                      </button>
+                    </div>
                     <CardContent className="flex flex-grow flex-col p-3 pt-3 sm:p-4 sm:pt-4">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">

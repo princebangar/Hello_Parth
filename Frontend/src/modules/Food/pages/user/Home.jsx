@@ -152,11 +152,10 @@ import exploreOffers from "@food/assets/explore more icons/offers.png";
 import exploreGourmet from "@food/assets/explore more icons/gourmet.png";
 import exploreTop10 from "@food/assets/explore more icons/top 10.png";
 import exploreCollection from "@food/assets/explore more icons/collection.png";
-import exploreMyStore from "@food/assets/explore more icons/my-store.svg";
 import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js";
 
 // Bundled Explore logos — warm browser cache as soon as Home module loads
-preloadImageUrls([exploreMyStore, exploreOffers, exploreGourmet, exploreTop10, exploreCollection]);
+preloadImageUrls([exploreOffers, exploreGourmet, exploreTop10, exploreCollection]);
 
 const CACHED_EXPLORE_BOOT = (() => {
   try {
@@ -686,8 +685,9 @@ export default function Home({ homeMode = null, isTabActive = true }) {
       {
         id: "my-store",
         label: "My Store",
-        image: exploreMyStore,
-        fallbackImage: exploreMyStore,
+        // No bundled icon: only the one uploaded in admin, with the skeleton until it has loaded
+        image: "",
+        fallbackImage: "",
         href: "/food/user/my-store",
       },
       {
@@ -3376,7 +3376,7 @@ export default function Home({ homeMode = null, isTabActive = true }) {
 
                             <ExploreIconImage
                               src={item.image}
-                              fallbackSrc={item.fallbackImage || exploreOffers}
+                              fallbackSrc={item.fallbackImage === "" ? "" : item.fallbackImage || exploreOffers}
                               className="relative z-10 transition-transform duration-500 group-hover:scale-110 drop-shadow-sm rounded-xl"
                             />
                           </div>

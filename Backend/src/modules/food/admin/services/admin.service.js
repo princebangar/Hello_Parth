@@ -3093,6 +3093,10 @@ export async function getPendingRestaurants(query = {}) {
     const skip = (page - 1) * limit;
 
     const filter = { status: { $in: ['pending', 'rejected'] } };
+    // zone filter of the admin Restaurants / My Store lists
+    if (query.zoneId && mongoose.Types.ObjectId.isValid(String(query.zoneId).trim())) {
+        filter.zoneId = new mongoose.Types.ObjectId(String(query.zoneId).trim());
+    }
     const pendingPartnerType = String(query.partnerType || '').trim().toLowerCase();
     if (pendingPartnerType === 'store' || pendingPartnerType === 'restaurant') {
         filter.partnerType = partnerTypeCondition(pendingPartnerType);

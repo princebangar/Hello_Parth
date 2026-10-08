@@ -26,6 +26,7 @@ import { AppShellSkeleton } from "@food/components/ui/loading-skeletons"
 import { markFirstScreenShown } from "@/shared/utils/firstScreen"
 import LoginRequiredModal from "./LoginRequiredModal"
 import MainTabKeepAlive from "./MainTabKeepAlive"
+import { whenAppSettled } from "@/shared/utils/whenSettled"
 import { getMainTabFromPath, isExactMainTabPath, rememberMainTabBeforeProfile, shouldPreserveMainTabsUnderPath, getCategorySlugFromPath, isRestaurantDetailPath, rememberCategoryKeepAliveSlug, peekCategoryKeepAliveSlug, clearCategoryKeepAliveSlug } from "@food/utils/mainTabRoutes"
 import { registerFoodPageCacheLifecycle } from "@food/utils/foodPageCache"
 import CategoryBrowseKeepAlive from "./CategoryBrowseKeepAlive"
@@ -411,6 +412,13 @@ function UserLayoutContent() {
       rememberMainTabBeforeProfile(pathMainTab);
     }
   }, [pathMainTab]);
+
+  // My Store opened directly (refresh / deep link): Home was never built, so Back had to build it from scratch
+  // (~1 s on My Store before Home showed). Build Home underneath once the page has settled; Back is then instant.
+  useEffect(() => {
+    if (mainTabsMounted || !/\/my-store\/?$/.test(location.pathname)) return undefined;
+    return whenAppSettled(() => setMainTabsMounted(true), { delay: 1200 });
+  }, [location.pathname, mainTabsMounted]);
 
   // Keep home/tabs alive under restaurant/category so back is instant (no remount/refetch).
   const preserveMainTabs =

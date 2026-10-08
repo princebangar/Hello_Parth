@@ -2444,7 +2444,7 @@ const DriverHome = () => {
                                 loadScheduledRides();
                                 setIsScheduleSheetOpen(true);
                             }}
-                            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
+                            className="driver-glass-btn relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-all active:scale-90"
                         >
                             <CalendarClock size={18} />
                             {scheduledRideCount > 0 ? (
@@ -2456,7 +2456,7 @@ const DriverHome = () => {
     
                         <button 
                             onClick={() => navigate('/taxi/driver/notifications')}
-                            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
+                            className="driver-glass-btn relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-all active:scale-90"
                         >
                             <Bell size={18} />
                             {notificationCount > 0 ? (
