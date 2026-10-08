@@ -196,8 +196,11 @@ console.error = (...args) => {
 
 // A screen's file that the server no longer has (new version published): load the new page instead of going blank.
 window.addEventListener('vite:preloadError', (event) => {
-  event.preventDefault()
-  reloadForNewVersion()
+  // Only swallow the error when the page really is being reloaded. Swallowing it ALWAYS made the failed import()
+  // resolve to undefined, and React.lazy then crashed with "Cannot read properties of undefined (reading 'default')"
+  // on the Intercity / Bus screens of a phone still running an older version. Not reloading (a reload just happened):
+  // let the real error through, the error screen handles it.
+  if (reloadForNewVersion()) event.preventDefault()
 })
 
 window.addEventListener('unhandledrejection', (event) => {

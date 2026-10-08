@@ -8,7 +8,7 @@ import { hardNavigate } from '@/shared/utils/nativeShell'
  * else shows a small screen with a way back, and the message so it can be reported.
  */
 export default class AppErrorBoundary extends Component {
-  state = { error: null }
+  state = { error: null, reloading: false }
 
   static getDerivedStateFromError(error) {
     return { error }
@@ -16,13 +16,14 @@ export default class AppErrorBoundary extends Component {
 
   componentDidCatch(error) {
     console.error('[AppErrorBoundary]', error)
-    if (isChunkLoadError(error)) reloadForNewVersion()
+    if (isChunkLoadError(error) && reloadForNewVersion()) this.setState({ reloading: true })
   }
 
   render() {
     const { error } = this.state
     if (!error) return this.props.children
-    if (isChunkLoadError(error)) {
+    // blank only while the new version is really loading; if no reload could start, show the way back instead
+    if (isChunkLoadError(error) && this.state.reloading) {
       return <div style={{ minHeight: '100dvh', background: '#fdfcf9' }} aria-busy="true" />
     }
     return (

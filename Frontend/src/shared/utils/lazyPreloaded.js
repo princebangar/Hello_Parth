@@ -20,6 +20,8 @@ export default function lazyPreloaded(loader) {
     if (!loading) {
       loading = loader()
         .then((mod) => {
+          // a swallowed preload error resolves import() to undefined: that is a missing file, not an empty screen
+          if (!mod) throw new Error('Failed to fetch dynamically imported module');
           loadedComponent = mod?.default ?? mod;
           return mod;
         })
