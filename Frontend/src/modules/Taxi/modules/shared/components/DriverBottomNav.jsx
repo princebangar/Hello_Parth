@@ -63,11 +63,24 @@ const DriverBottomNav = () => {
           { Icon: User, label: "Profile", path: `${routePrefix}/profile` },
         ];
 
+  // Screens that belong to a tab without being the tab itself light that tab (the owner's landing path is /home but its
+  // tab points at /dashboard; wallet / history open from the dashboard; bus bookings sit under Bus).
+  const currentPath = location.pathname.replace(/\/+$/, '');
+  const tabAlias = isOwner
+    ? {
+        [`${routePrefix}/home`]: `${routePrefix}/dashboard`,
+        [`${routePrefix}/wallet`]: `${routePrefix}/dashboard`,
+        [`${routePrefix}/history`]: `${routePrefix}/dashboard`,
+        [`${routePrefix}/bus-bookings`]: `${routePrefix}/bus-service`,
+      }
+    : {};
+  const litPath = tabAlias[currentPath] || currentPath;
+
   const items = navItems.map(({ Icon, label, path, exact }) => {
     const routeActive =
-      location.pathname === path ||
-      (!exact && location.pathname.startsWith(`${path}/`)) ||
-      (path === `${routePrefix}/home` && location.pathname === `${routePrefix}/dashboard`);
+      litPath === path ||
+      (!exact && litPath.startsWith(`${path}/`)) ||
+      (path === `${routePrefix}/home` && currentPath === `${routePrefix}/dashboard`);
     const active = pendingPath ? pendingPath === path : routeActive;
     return {
       key: path,
