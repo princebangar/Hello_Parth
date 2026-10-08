@@ -7,6 +7,7 @@ import { User } from '../models/User.js';
 import { UserWallet } from '../models/UserWallet.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
+import { dismissNotifications, getDismissedNotificationIds } from '../../admin/promotions/models/NotificationDismissal.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
@@ -1445,8 +1446,11 @@ export const getUserNotifications = async (req, res) => {
 
   // Users don't typically have a service_location_id in their profile like drivers do in this schema,
   // but if they did, we would use it. For now, we fetch all user-targeted notifications.
+  const dismissedIds = await getDismissedNotificationIds('user', user._id);
   const query = {
     status: 'sent',
+    // what this rider cleared stays cleared (on every device, after the app is reopened)
+    ...(dismissedIds.length ? { _id: { $nin: dismissedIds } } : {}),
     $or: [
       { send_to: { $in: ['all', 'users'] } },
       { send_to: 'custom', recipients: { $elemMatch: { role: 'user', id: user._id } } },
@@ -1467,11 +1471,8 @@ export const getUserNotifications = async (req, res) => {
 };
 
 export const deleteUserNotification = async (req, res) => {
-  // In a real multi-tenant app, you'd mark it as read/deleted for THIS user in a pivot table.
-  // However, the current driver implementation seems to imply a simpler model or global clear for the demo.
-  // For consistency with the user's request for "single clear", we'll just return success 
-  // as the frontend is already filtering its local state.
-  // If we wanted to persist this per user, we'd need a UserNotification model.
+  // Saved for THIS rider only (the broadcast itself is shared): it stays gone after the app is reopened.
+  await dismissNotifications('user', req.auth.sub, [req.params.id]);
   res.json({
     success: true,
     message: 'Notification removed',
@@ -1479,6 +1480,19 @@ export const deleteUserNotification = async (req, res) => {
 };
 
 export const clearAllUserNotifications = async (req, res) => {
+  const userId = req.auth.sub;
+  const dismissedIds = await getDismissedNotificationIds('user', userId);
+  const visible = await Notification.find({
+    status: 'sent',
+    ...(dismissedIds.length ? { _id: { $nin: dismissedIds } } : {}),
+    $or: [
+      { send_to: { $in: ['all', 'users'] } },
+      { send_to: 'custom', recipients: { $elemMatch: { role: 'user', id: userId } } },
+    ],
+  })
+    .select('_id')
+    .lean();
+  await dismissNotifications('user', userId, visible.map((item) => item._id));
   res.json({
     success: true,
     message: 'All notifications cleared',

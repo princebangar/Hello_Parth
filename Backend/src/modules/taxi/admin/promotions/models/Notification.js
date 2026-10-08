@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { NOTIFICATION_RETENTION_SECONDS } from '../../../../../core/notifications/retention.js';
 
 // "Particular persons" broadcast: the admin picks specific riders / drivers instead of an audience.
 const recipientSchema = new mongoose.Schema(
@@ -69,6 +70,8 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.index({ service_location_id: 1, send_to: 1, createdAt: -1 });
+// Gone from the database 3 days after it was sent (riders' and drivers' inbox).
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: NOTIFICATION_RETENTION_SECONDS });
 
 export const Notification =
   mongoose.models.TaxiNotification || mongoose.model('TaxiNotification', notificationSchema);

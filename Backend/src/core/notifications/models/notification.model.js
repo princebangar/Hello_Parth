@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { NOTIFICATION_RETENTION_SECONDS } from './../retention.js';
 
 const notificationSchema = new mongoose.Schema(
     {
@@ -71,6 +72,8 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.index({ ownerType: 1, ownerId: 1, createdAt: -1 });
+// Food user / restaurant / delivery inbox: gone from the database 3 days after it was created.
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: NOTIFICATION_RETENTION_SECONDS });
 notificationSchema.index({ ownerType: 1, ownerId: 1, isRead: 1, dismissedAt: 1 });
 // One copy of a broadcast per owner. Only broadcast rows take part: the old index was "unique + sparse", but a compound
 // sparse index still includes every row that has ownerType/ownerId, so the 2nd non-broadcast message to the same

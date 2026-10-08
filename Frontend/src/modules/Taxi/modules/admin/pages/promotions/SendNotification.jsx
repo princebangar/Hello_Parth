@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BellRing,
   History,
-  Image as ImageIcon,
   Loader2,
   Search,
   Send,
@@ -29,7 +28,6 @@ const createInitialForm = () => ({
   send_to: 'all',
   service_location_id: '',
   recipients: [],
-  image: null,
 });
 
 const formatSentAt = (value) => {
@@ -175,7 +173,6 @@ const SendNotification = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(createInitialForm);
-  const [imagePreview, setImagePreview] = useState(null);
   const [notice, setNotice] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [filterLocation, setFilterLocation] = useState('');
@@ -209,13 +206,6 @@ const SendNotification = () => {
 
   const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
-  const handleImageChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setForm((current) => ({ ...current, image: file }));
-    setImagePreview(URL.createObjectURL(file));
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
     setNotice(null);
@@ -236,16 +226,6 @@ const SendNotification = () => {
 
     setSubmitting(true);
     try {
-      let imageData = '';
-      if (form.image) {
-        imageData = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(form.image);
-        });
-      }
-
       const data = await adminService.sendNotification({
         service_location_id: isCustom ? undefined : form.service_location_id,
         send_to: form.send_to,
@@ -253,13 +233,11 @@ const SendNotification = () => {
         push_title: form.title.trim(),
         title: form.title.trim(),
         message: form.message.trim(),
-        image: imageData,
       });
 
       if (data?.success) {
         setNotice({ type: 'success', text: buildDeliveryMessage(data) });
         setForm((current) => ({ ...createInitialForm(), send_to: current.send_to }));
-        setImagePreview(null);
         await fetchData();
       } else {
         setNotice({ type: 'error', text: data?.message || 'Failed to send notification' });
@@ -374,35 +352,6 @@ const SendNotification = () => {
               className={`${inputClass} resize-y`}
             />
           </label>
-
-          <div>
-            <span className="text-sm font-semibold text-slate-700">Banner image (optional)</span>
-            <div className="mt-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
-              {imagePreview ? (
-                <div className="flex items-center gap-4">
-                  <img src={imagePreview} alt="Notification preview" className="h-24 w-24 rounded-xl object-cover border border-slate-200 bg-white" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImagePreview(null);
-                      setField('image', null);
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                  >
-                    Remove image
-                  </button>
-                </div>
-              ) : (
-                <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-500">
-                  <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-slate-200 text-yellow-600">
-                    <ImageIcon size={18} />
-                  </span>
-                  Upload a banner for the push notification
-                </label>
-              )}
-            </div>
-          </div>
 
           {form.send_to === 'custom' ? (
             <RecipientPicker recipients={form.recipients} onChange={(next) => setField('recipients', next)} />

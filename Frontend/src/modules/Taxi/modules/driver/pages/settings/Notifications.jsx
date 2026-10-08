@@ -14,7 +14,7 @@ import {
   Clock3,
   MapPin,
 } from 'lucide-react';
-import { getDriverNotifications, getDriverScheduledRides } from '../../services/registrationService';
+import { clearAllDriverNotifications, deleteDriverNotification, getDriverNotifications, getDriverScheduledRides } from '../../services/registrationService';
 import {
   getVisibleDriverNotifications,
   getMergedDriverNotifications,
@@ -149,6 +149,9 @@ const DriverNotifications = () => {
 
     setClearing(true);
     try {
+      // Saved on the server (per captain), so cleared items do not come back when the app is reopened.
+      // The local list is only a fast copy of the same thing.
+      await clearAllDriverNotifications();
       hideAllDriverNotifications(alertItems.map((notification) => notification.id || notification._id));
       setAlertItems([]);
       toast.success('All notifications cleared', {
@@ -164,6 +167,7 @@ const DriverNotifications = () => {
 
   const handleRemoveSingle = async (id) => {
     try {
+      await deleteDriverNotification(id).catch(() => null);
       hideDriverNotification(id);
       setAlertItems((prev) => prev.filter((notification) => String(notification.id || notification._id) !== String(id)));
       toast.success('Notification removed', {
@@ -253,7 +257,7 @@ const DriverNotifications = () => {
       <div className="absolute -top-16 right-[-40px] h-44 w-44 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
       <div className="absolute top-52 left-[-60px] h-52 w-52 rounded-full bg-slate-100/70 blur-3xl pointer-events-none" />
 
-      <header className="bg-white/90 backdrop-blur-md px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]">
+      <header className="bg-white/90 backdrop-blur-md px-5 pt-[37px] pb-4 sticky top-0 z-20 border-b border-white/80 shadow-[0_4px_20px_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(`${routePrefix}/${routePrefix === '/taxi/owner' ? 'dashboard' : 'home'}`)} className="w-9 h-9 rounded-[12px] border border-white/80 bg-white/90 flex items-center justify-center shadow-sm active:scale-95 transition-all">
             <ArrowLeft size={18} className="text-slate-900" strokeWidth={2.5} />

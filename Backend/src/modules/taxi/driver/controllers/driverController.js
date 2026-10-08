@@ -21,6 +21,7 @@ import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
 import { Notification } from "../../admin/promotions/models/Notification.js";
+import { dismissNotifications, getDismissedNotificationIds } from "../../admin/promotions/models/NotificationDismissal.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
 import { Zone } from "../models/Zone.js";
 import { uploadDataUrlToCloudinary } from "../../../../utils/cloudinaryUpload.js";
@@ -2243,8 +2244,11 @@ export const getDriverNotifications = async (req, res) => {
 
   // A captain only sees what was sent after the account exists: broadcasts from before sign-up are not for them.
   const joinedAt = account.createdAt ? new Date(account.createdAt) : null;
+  const dismissedIds = await getDismissedNotificationIds("driver", account._id);
   const query = {
     status: "sent",
+    // what this captain cleared stays cleared (on every device, after the app is reopened)
+    ...(dismissedIds.length ? { _id: { $nin: dismissedIds } } : {}),
     ...(joinedAt && !Number.isNaN(joinedAt.getTime()) ? { createdAt: { $gte: joinedAt } } : {}),
     $or: [
       { send_to: { $in: ["all", "drivers"] } },
@@ -7865,11 +7869,29 @@ export const claimDriverIncentiveReward = async (req, res) => {
 
 // Driver notifications are shared broadcast messages, so there is no per-driver row to delete.
 // The app hides dismissed items locally; these endpoints just acknowledge the request.
-export const deleteDriverNotification = async (_req, res) => {
+export const deleteDriverNotification = async (req, res) => {
+  await dismissNotifications("driver", req.auth.sub, [req.params.id]);
   res.json({ success: true, message: "Notification removed" });
 };
 
-export const clearAllDriverNotifications = async (_req, res) => {
+export const clearAllDriverNotifications = async (req, res) => {
+  const account = req.auth.role === "owner"
+    ? await resolveAuthenticatedOwner(req)
+    : await Driver.findById(req.auth.sub).select("createdAt").lean();
+  if (account?._id) {
+    const dismissedIds = await getDismissedNotificationIds("driver", account._id);
+    const visible = await Notification.find({
+      status: "sent",
+      ...(dismissedIds.length ? { _id: { $nin: dismissedIds } } : {}),
+      $or: [
+        { send_to: { $in: ["all", "drivers"] } },
+        { send_to: "custom", recipients: { $elemMatch: { role: "driver", id: account._id } } },
+      ],
+    })
+      .select("_id")
+      .lean();
+    await dismissNotifications("driver", account._id, visible.map((item) => item._id));
+  }
   res.json({ success: true, message: "All notifications cleared" });
 };
 
