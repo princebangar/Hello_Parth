@@ -3,6 +3,8 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodRestaurant } from '../models/restaurant.model.js';
+import { partnerTypeCondition } from '../../utils/partnerScope.js';
+import { isMyStoreEnabled } from '../../../../core/platform/appSwitches.service.js';
 import {
     backfillLegacyCategoryWorkflow,
     GLOBAL_CATEGORY_FILTER,
@@ -171,9 +173,11 @@ export async function listPublicCategories(query = {}) {
 
     let approvedCategoryIds = [];
     if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw)) {
+        const storesHidden = !(await isMyStoreEnabled());
         const zoneRestaurants = await FoodRestaurant.find({
             zoneId: new mongoose.Types.ObjectId(zoneIdRaw),
-            status: 'approved'
+            status: 'approved',
+            ...(storesHidden ? { partnerType: partnerTypeCondition() } : {})
         }).select('_id').lean();
         const zoneRestaurantIds = zoneRestaurants.map(r => r._id);
         

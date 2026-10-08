@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useRef, useEffect, useMemo } from "react"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { useNavigate } from "react-router-dom"
@@ -217,6 +219,8 @@ const clearAllFilesFromDB = async () => {
 }
 
 export default function AddRestaurant() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -671,10 +675,10 @@ export default function AddRestaurant() {
       const data = response?.data?.data ?? response?.data
       if (response?.data?.success !== false && data) {
         await clearPersistedFormData()
-        toast.success("Restaurant created successfully!")
+        toast.success(w("Restaurant created successfully!"))
         setShowSuccessDialog(true)
         setTimeout(() => {
-          navigate("/admin/food/restaurants")
+          navigate(partnerType === "store" ? "/admin/food/my-store" : "/admin/food/restaurants")
         }, 2000)
       } else {
         throw new Error(response?.data?.message || "Failed to create restaurant")
@@ -967,10 +971,10 @@ export default function AddRestaurant() {
   const renderStep1 = () => (
     <div className="space-y-6">
       <section className="bg-white p-4 sm:p-6 rounded-md">
-        <h2 className="text-lg font-semibold text-black mb-4">Restaurant information</h2>
+        <h2 className="text-lg font-semibold text-black mb-4">{w("Restaurant information")}</h2>
         <div className="space-y-4">
           <div>
-            <Label className="text-xs text-gray-700">Restaurant name*</Label>
+            <Label className="text-xs text-gray-700">{w("Restaurant name*")}</Label>
             <Input
               value={step1.restaurantName || ""}
               onChange={(e) => setStep1({ ...step1, restaurantName: e.target.value })}
@@ -979,7 +983,7 @@ export default function AddRestaurant() {
             />
           </div>
           <div>
-            <Label className="text-xs text-gray-700">Pure veg restaurant?*</Label>
+            <Label className="text-xs text-gray-700">{w("Pure veg restaurant?*")}</Label>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1005,7 +1009,7 @@ export default function AddRestaurant() {
               </button>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
-              This helps users filter restaurants by dietary preference.
+              {w("This helps users filter restaurants by dietary preference.")}
             </p>
           </div>
         </div>
@@ -1048,7 +1052,7 @@ export default function AddRestaurant() {
       </section>
 
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
-        <h2 className="text-lg font-semibold text-black">Restaurant contact & location</h2>
+        <h2 className="text-lg font-semibold text-black">{w("Restaurant contact & location")}</h2>
         <div className="relative">
           <Label className="text-xs text-gray-700">Search location</Label>
           <div className="relative">
@@ -1057,7 +1061,7 @@ export default function AddRestaurant() {
               value={locationSearchValue}
               onChange={(e) => setLocationSearchValue(e.target.value)}
               className="mt-1 bg-white text-sm"
-              placeholder="Search and select restaurant address..."
+              placeholder={w("Search and select restaurant address...")}
             />
             {isSearchingLocation && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1135,7 +1139,7 @@ export default function AddRestaurant() {
             value={step1.primaryContactNumber || ""}
             onChange={(e) => setStep1({ ...step1, primaryContactNumber: sanitizeDigits(e.target.value).slice(0, 10) })}
             className="mt-1 bg-white text-sm text-black placeholder-black"
-            placeholder="Restaurant's primary contact number"
+            placeholder={w("Restaurant's primary contact number")}
             inputMode="numeric"
             maxLength={10}
           />
@@ -1236,7 +1240,7 @@ export default function AddRestaurant() {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs font-medium text-gray-700">Restaurant profile image*</Label>
+          <Label className="text-xs font-medium text-gray-700">{w("Restaurant profile image*")}</Label>
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
               {step2.profileImage ? (
@@ -1427,7 +1431,7 @@ export default function AddRestaurant() {
               <span>Takeaway (Pickup)</span>
             </p>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              Allow customers to place orders online and pick them up from the restaurant.
+              {w("Allow customers to place orders online and pick them up from the restaurant.")}
             </p>
           </div>
           <Switch
@@ -1577,7 +1581,7 @@ export default function AddRestaurant() {
       <header className="px-4 py-4 sm:px-6 sm:py-5 bg-white flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Building2 className="w-5 h-5 text-blue-600" />
-          <div className="text-sm font-semibold text-black">Add New Restaurant</div>
+          <div className="text-sm font-semibold text-black">{w("Add New Restaurant")}</div>
         </div>
         <div className="text-xs text-gray-600">Step {step} of 3</div>
       </header>
@@ -1623,20 +1627,20 @@ export default function AddRestaurant() {
               </div>
             </div>
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">Restaurant Created Successfully!</DialogTitle>
+              <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">{w("Restaurant Created Successfully!")}</DialogTitle>
               <DialogDescription className="text-sm text-slate-600">
-                The restaurant has been created and is now pending approval.
+                {w("The restaurant has been created and is now pending approval.")}
               </DialogDescription>
             </DialogHeader>
             <div className="mt-8">
               <Button 
                 onClick={() => {
                   setShowSuccessDialog(false)
-                  navigate("/admin/restaurants")
+                  navigate(partnerType === "store" ? "/admin/food/my-store" : "/admin/food/restaurants")
                 }}
                 className="w-full bg-black text-white"
               >
-                Go to Restaurant List
+                {w("Go to Restaurant List")}
               </Button>
             </div>
           </div>

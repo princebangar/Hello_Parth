@@ -21,6 +21,8 @@ import {
 } from '../../dining/services/dining.service.js';
 import { validateRestaurantRegisterDto } from '../validators/restaurant.validator.js';
 import { sendResponse } from '../../../../utils/response.js';
+import mongoose from 'mongoose';
+import { isMyStoreEnabled } from '../../../../core/platform/appSwitches.service.js';
 
 export const registerRestaurantController = async (req, res, next) => {
     try {
@@ -34,8 +36,38 @@ export const registerRestaurantController = async (req, res, next) => {
 
 export const listApprovedRestaurantsController = async (req, res, next) => {
     try {
-        const data = await listApprovedRestaurants(req.query);
+        // partnerType is server-controlled: a client must not be able to pull My
+        // Store partners out of the normal list with ?partnerType=store.
+        const data = await listApprovedRestaurants({ ...req.query, partnerType: undefined });
         return sendResponse(res, 200, 'Restaurants fetched successfully', data);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Public: My Store partners of the user's zone (the only place they are listed). */
+export const listMyStoresController = async (req, res, next) => {
+    try {
+        // Stores are zone-wise: no valid zone means nothing is listed. Same when the Global admin switched My Store off.
+        if (
+            !mongoose.Types.ObjectId.isValid(String(req.query?.zoneId || '').trim()) ||
+            !(await isMyStoreEnabled())
+        ) {
+            const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 40, 1), 1000);
+            return sendResponse(res, 200, 'My Stores fetched successfully', {
+                restaurants: [],
+                total: 0,
+                page: 1,
+                limit,
+            });
+        }
+        const data = await listApprovedRestaurants({
+            ...req.query,
+            partnerType: 'store',
+            // A store never has takeaway/dining; ignore any order-type filter.
+            orderType: undefined,
+        });
+        return sendResponse(res, 200, 'My Stores fetched successfully', data);
     } catch (error) {
         next(error);
     }

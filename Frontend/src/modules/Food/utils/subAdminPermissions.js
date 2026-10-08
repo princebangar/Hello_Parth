@@ -26,6 +26,17 @@ const STABLE_KEYS_BY_PATH = {
   "/admin/food/restaurants/reviews": "restaurant_reviews",
   "/admin/food/restaurants/complaints": "restaurant_complaints",
   "/admin/food/restaurants/settings": "restaurant_settings",
+  "/admin/food/my-store": "my_store_list",
+  "/admin/food/my-store/joining-request": "my_store_joining_request",
+  "/admin/food/my-store/top-stores": "my_store_top_stores",
+  "/admin/food/my-store/commission": "my_store_commission",
+  "/admin/food/my-store/reviews": "my_store_reviews",
+  "/admin/food/my-store/complaints": "my_store_complaints",
+  "/admin/food/my-store/foods": "my_store_foods_list",
+  "/admin/food/my-store/addons": "my_store_addons_list",
+  "/admin/food/my-store/coupons": "my_store_coupons_offers",
+  "/admin/food/my-store/report": "my_store_report",
+  "/admin/food/my-store/withdraws": "my_store_withdraws",
   "/admin/food/orders": "orders",
   "/admin/food/orders/all": "orders",
   "/admin/food/orders/pending": "orders",
@@ -34,6 +45,7 @@ const STABLE_KEYS_BY_PATH = {
   "/admin/food/orders/delivered": "orders",
   "/admin/food/orders/canceled": "orders",
   "/admin/food/orders/restaurant-cancelled": "orders",
+  "/admin/food/orders/my-store-cancelled": "orders",
   "/admin/food/orders/payment-failed": "orders",
   "/admin/food/orders/refunded": "orders",
   "/admin/food/orders/offline-payments": "orders",
@@ -154,7 +166,7 @@ export function getSubAdminPermissionModules(menu = adminSidebarMenu) {
       } else if (sub.type === "expandable") {
         // Prefer leaf routes; for Orders group under one row
         for (const si of sub.subItems || []) {
-          pushModule(modules, seenKeys, si.label, si.path)
+          pushModule(modules, seenKeys, si.permissionLabel || si.label, si.path)
         }
       }
     }

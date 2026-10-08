@@ -16,7 +16,8 @@ const createOfferSchema = z.object({
     usageLimit: z.number().min(0).optional(),
     perUserLimit: z.number().min(0).optional(),
     isFirstOrderOnly: z.boolean().optional(),
-    couponType: z.enum(['delivery', 'takeaway', 'all']).default('all')
+    couponType: z.enum(['delivery', 'takeaway', 'all']).default('all'),
+    partnerType: z.enum(['restaurant', 'store']).default('restaurant')
 });
 
 export const validateCreateOfferDto = (body) => {
@@ -41,7 +42,8 @@ export const validateCreateOfferDto = (body) => {
         usageLimit: body?.usageLimit !== undefined ? Number(body.usageLimit) : undefined,
         perUserLimit: body?.perUserLimit !== undefined ? Number(body.perUserLimit) : undefined,
         isFirstOrderOnly: body?.isFirstOrderOnly !== undefined ? Boolean(body.isFirstOrderOnly) : undefined,
-        couponType: body?.couponType || 'all'
+        couponType: body?.couponType || 'all',
+        partnerType: body?.partnerType === 'store' ? 'store' : 'restaurant'
     };
 
     const result = createOfferSchema.safeParse(normalized);
@@ -94,7 +96,8 @@ export const validateCreateOfferDto = (body) => {
         usageLimit: result.data.usageLimit,
         perUserLimit: result.data.perUserLimit,
         isFirstOrderOnly: result.data.isFirstOrderOnly === true,
-        couponType: result.data.couponType
+        couponType: result.data.couponType,
+        partnerType: result.data.partnerType
     };
 };
 

@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../../shared/context/SettingsContext';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { getOwnerFleetDashboard } from '../services/registrationService';
 
 const isEnabledFlag = (value) => {
@@ -544,7 +543,6 @@ const OwnerDashboard = () => {
         </div>
       </div>
 
-      <DriverBottomNav />
     </div>
   );
 };

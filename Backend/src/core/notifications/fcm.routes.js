@@ -144,6 +144,7 @@ router.post('/pending-save', async (req, res, next) => {
         const token = readTokenFromBody(req);
         const platform = String(req.body?.platform || 'web').trim();
         const role = String(req.body?.role || '').trim();
+        const partnerType = String(req.body?.partnerType || '').trim() || null;
 
         if (!phone) {
             return sendError(res, 400, 'phone is required');
@@ -165,7 +166,8 @@ router.post('/pending-save', async (req, res, next) => {
             phone,
             token,
             platform,
-            role
+            role,
+            partnerType
         });
 
         return res.status(200).json({

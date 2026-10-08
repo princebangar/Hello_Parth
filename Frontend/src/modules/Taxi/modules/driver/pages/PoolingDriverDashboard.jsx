@@ -81,7 +81,7 @@ const PoolingDriverDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F8FC] px-5 py-8">
+    <div className="min-h-screen bg-[#F5F8FC] px-5 pb-32 pt-6">
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>

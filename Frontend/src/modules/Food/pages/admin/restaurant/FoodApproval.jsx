@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js"
 import { Search, CheckCircle2, XCircle, Eye, Clock, Loader2 } from "lucide-react"
 import { Card } from "@food/components/ui/card"
 import {
@@ -115,6 +116,11 @@ export default function FoodApproval() {
     }
   })
   const [totalItems, setTotalItems] = useState(0)
+  // "all" | "restaurant" | "store" — requests from My Store partners are listed with a Store Name header
+  const [chosenPartnerFilter, setPartnerFilter] = useState("all")
+  // Global admin can switch My Store off: then only Restaurant requests are listed and the My Store tab is gone
+  const myStoreEnabled = useMyStoreEnabled()
+  const partnerFilter = myStoreEnabled ? chosenPartnerFilter : "restaurant"
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
@@ -130,6 +136,7 @@ export default function FoodApproval() {
       }
       const response = await adminAPI.getPendingFoodApprovals({
         search: debouncedSearch || undefined,
+        partnerType: partnerFilter === "all" ? undefined : partnerFilter,
         page: currentPage,
         limit: pageSize,
       })
@@ -157,7 +164,7 @@ export default function FoodApproval() {
         setLoading(false)
       }
     }
-  }, [debouncedSearch, currentPage, pageSize])
+  }, [debouncedSearch, currentPage, pageSize, partnerFilter])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
@@ -166,9 +173,9 @@ export default function FoodApproval() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch])
+  }, [debouncedSearch, partnerFilter])
 
-  useAdminBadgeListRefresh("foodApprovals", fetchFoodRequests, [debouncedSearch, currentPage, pageSize])
+  useAdminBadgeListRefresh("foodApprovals", fetchFoodRequests, [debouncedSearch, currentPage, pageSize, partnerFilter])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -310,6 +317,28 @@ export default function FoodApproval() {
             </div>
           </div>
 
+          {/* Restaurants / My Store tabs */}
+          {myStoreEnabled && (
+          <div className="mb-4 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-sm">
+            {[
+              { id: "all", label: "All" },
+              { id: "restaurant", label: "Restaurants" },
+              { id: "store", label: "My Store" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setPartnerFilter(tab.id)}
+                className={`rounded-md px-4 py-1.5 font-medium transition-colors ${
+                  partnerFilter === tab.id ? "bg-white text-[#006fbd] shadow-sm" : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          )}
+
           {/* Search Bar */}
           <div className="mb-4">
             <div className="relative flex-1">
@@ -341,7 +370,7 @@ export default function FoodApproval() {
                         S.No
                       </th>
                       <th className="px-3 py-3 !text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Restaurant
+                        {partnerFilter === "store" ? "Store Name" : partnerFilter === "all" ? "Restaurant / Store" : "Restaurant"}
                       </th>
                       <th className="px-3 py-3 !text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                         Category
@@ -384,6 +413,11 @@ export default function FoodApproval() {
                           </td>
                           <td className="px-3 py-3 !text-center max-w-[200px]">
                             <div className="text-sm truncate" title={request.restaurantName}>
+                              {request.partnerType === 'store' && (
+                                <div className="mb-0.5 inline-flex items-center gap-1 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                                  My Store
+                                </div>
+                              )}
                               <div className="font-semibold text-gray-900 truncate">{request.restaurantName || '-'}</div>
                               <div className="text-gray-500 text-xs truncate" title={request.restaurantId}>{request.restaurantId || '-'}</div>
                             </div>

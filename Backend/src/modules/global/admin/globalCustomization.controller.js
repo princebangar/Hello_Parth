@@ -5,6 +5,7 @@ import {
 import { isReferralEnabled, setReferralEnabled } from '../../../core/platform/referralSwitch.service.js';
 import { getAppSwitches, setAppSwitches } from '../../../core/platform/appSwitches.service.js';
 import { ApiError } from '../../../utils/ApiError.js';
+import { invalidateFoodBrowseCaches } from '../../../middleware/cache.js';
 
 const respond = (res, message, data) => res.status(200).json({ success: true, message, data });
 
@@ -55,6 +56,10 @@ export async function updateReferral(req, res, next) {
 export async function updateAppSwitches(req, res, next) {
   try {
     const appSwitches = await setAppSwitches(req.body || {}, req.adminAccount?._id || null);
+    if (req.body && req.body.my_store_enabled !== undefined) {
+      // store lists / search / categories are cached for minutes: show the change straight away
+      await invalidateFoodBrowseCaches();
+    }
     respond(res, 'Settings updated', { appSwitches });
   } catch (error) {
     next(error);

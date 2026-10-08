@@ -445,7 +445,9 @@ function RestaurantDetailsContent() {
     const fetchOffers = async () => {
       setLoadingOffers(true)
       try {
-        const res = await restaurantAPI.getPublicOffers()
+        const res = await restaurantAPI.getPublicOffers(
+          restaurant?.partnerType === "store" ? { partnerType: "store" } : {},
+        )
         const list = res?.data?.data?.allOffers || res?.data?.allOffers || []
         setAllOffers(list)
       } catch (err) {
@@ -456,7 +458,7 @@ function RestaurantDetailsContent() {
     }
 
     fetchOffers()
-  }, [slug])
+  }, [slug, restaurant?.partnerType])
 
   const couponsKey = (coupons || []).map((c) => c.couponCode || "").join(",")
 

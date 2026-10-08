@@ -23,6 +23,13 @@ import mongoose from "mongoose";
 import { creditReferralReward } from "../../modules/food/user/services/userWallet.service.js";
 import { ensureUserReferralCode, findUserIdByReferralCode, needsFreshReferralCode } from "../users/referralCode.util.js";
 import { isReferralEnabled } from "../platform/referralSwitch.service.js";
+import {
+  PARTNER_TYPE_RESTAURANT,
+  PARTNER_TYPE_STORE,
+  normalizePartnerType,
+  partnerTypeCondition,
+} from "../../modules/food/utils/partnerScope.js";
+import { isMyStoreEnabled } from "../platform/appSwitches.service.js";
 
 const ROLES = {
   USER: "USER",
@@ -64,11 +71,11 @@ const verifyRecoveryToken = (token) => {
 const PENDING_TICKET_TTL = "30d";
 const PENDING_TICKET_PURPOSE = "pending_approval";
 
-const signPendingTicket = (kind, phone) => {
+const signPendingTicket = (kind, phone, partnerType = null) => {
   const last10 = String(phone || "").replace(/\D/g, "").slice(-10);
   if (last10.length !== 10) return null;
   return jwt.sign(
-    { kind, phone: last10, purpose: PENDING_TICKET_PURPOSE },
+    { kind, phone: last10, purpose: PENDING_TICKET_PURPOSE, ...(partnerType ? { partnerType } : {}) },
     config.jwtAccessSecret,
     { expiresIn: PENDING_TICKET_TTL },
   );
@@ -412,25 +419,9 @@ export const adminLogin = async (email, password) => {
   };
 };
 
-export const requestRestaurantOtp = async (phone) => {
-  if (!phone) {
-    throw new ValidationError("Phone is required");
-  }
-  const otp = await createOrUpdateOtp(phone, "restaurant");
-  // Only expose OTP in response when in default/dev mode — never in production with real SMS
-  const shouldExposeOtp =
-    config.nodeEnv !== "production" || config.useDefaultOtp;
-  return shouldExposeOtp ? { otp } : {};
-};
-
-export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform) => {
-  const result = await verifyOtp(phone, otp, "restaurant");
-  if (!result.valid) {
-    throw new AuthError(result.reason || "OTP verification failed");
-  }
-
-  // Restaurants may store ownerPhone with country code or formatting.
-  // Match by exact phone, last-10 digits, or suffix match to avoid false "needsRegistration".
+// Restaurants may store ownerPhone with country code or formatting.
+// Match by exact phone, last-10 digits, or suffix match to avoid false "needsRegistration".
+const findRestaurantByLoginPhone = (phone, partnerType) => {
   const digits = String(phone || "").replace(/\D/g, "");
   const last10 = digits.slice(-10);
   const phoneCandidates = [phone, digits, last10].filter(Boolean);
@@ -438,15 +429,72 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     { [field]: { $in: phoneCandidates } },
     ...(last10 ? [{ [field]: { $regex: new RegExp(last10 + "$") } }] : []),
   ];
-
-  const restaurant = await FoodRestaurant.findOne({
+  return FoodRestaurant.findOne({
+    partnerType: partnerTypeCondition(partnerType),
     $or: [
       ...phoneOrFields("ownerPhone"),
       ...phoneOrFields("primaryContactNumber"),
     ],
   });
+};
+
+/**
+ * One phone can hold a Restaurant Partner account AND a My Store account (separate accounts, like
+ * the roles in the driver app). If the number has no account of the chosen kind yet but has the
+ * other kind, no OTP is sent: the app first asks the person to confirm that a NEW account is being
+ * created (`requiresRoleConfirmation`), then calls again with `confirmNewRole`.
+ */
+export const requestRestaurantOtp = async (phone, partnerTypeRaw, confirmNewRole = false) => {
+  if (!phone) {
+    throw new ValidationError("Phone is required");
+  }
+  const partnerType = normalizePartnerType(partnerTypeRaw);
+  // Global admin can switch My Store off: then it doesn't exist for login / sign-up at all.
+  const myStoreOn = await isMyStoreEnabled();
+  if (partnerType === PARTNER_TYPE_STORE && !myStoreOn) {
+    throw new AuthError("My Store is not available right now.");
+  }
+  const existing = await findRestaurantByLoginPhone(phone, partnerType);
+  if (!existing) {
+    const otherType = partnerType === PARTNER_TYPE_STORE ? PARTNER_TYPE_RESTAURANT : PARTNER_TYPE_STORE;
+    // With My Store off, a My Store account on this number is invisible: no "other role" popup.
+    const other = otherType === PARTNER_TYPE_STORE && !myStoreOn ? null : await findRestaurantByLoginPhone(phone, otherType);
+    if (other && other.status !== "deleted" && !confirmNewRole) {
+      return { requiresRoleConfirmation: true, existingPartnerType: otherType };
+    }
+  }
+  // Separate OTP scope per kind so a code can't be replayed under the other role.
+  const otp = await createOrUpdateOtp(
+    phone,
+    partnerType === PARTNER_TYPE_STORE ? "store" : "restaurant",
+  );
+  // Only expose OTP in response when in default/dev mode — never in production with real SMS
+  const shouldExposeOtp =
+    config.nodeEnv !== "production" || config.useDefaultOtp;
+  return shouldExposeOtp ? { otp } : {};
+};
+
+export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform, partnerTypeRaw) => {
+  const partnerType = normalizePartnerType(partnerTypeRaw);
+  if (partnerType === PARTNER_TYPE_STORE && !(await isMyStoreEnabled())) {
+    throw new AuthError("My Store is not available right now.");
+  }
+  const result = await verifyOtp(
+    phone,
+    otp,
+    partnerType === PARTNER_TYPE_STORE ? "store" : "restaurant",
+  );
+  if (!result.valid) {
+    throw new AuthError(result.reason || "OTP verification failed");
+  }
+
+  const restaurant = await findRestaurantByLoginPhone(phone, partnerType);
   let restaurantDoc = restaurant;
-  if (!restaurantDoc && isDefaultPhone(phone, DEFAULT_CREDENTIALS.restaurantPhone)) {
+  if (
+    !restaurantDoc &&
+    partnerType === PARTNER_TYPE_RESTAURANT &&
+    isDefaultPhone(phone, DEFAULT_CREDENTIALS.restaurantPhone)
+  ) {
     // Auto-provision default restaurant account for configured default phone.
     restaurantDoc = await FoodRestaurant.create({
       restaurantName: "Hello Parth Demo Restaurant",
@@ -466,7 +514,8 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     return {
       needsRegistration: true,
       phone,
-      pendingTicket: signPendingTicket("restaurant", phone),
+      partnerType,
+      pendingTicket: signPendingTicket("restaurant", phone, partnerType),
     };
   }
 
@@ -508,7 +557,7 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
           ? `Your restaurant registration has been rejected. Reason: ${restaurantDoc.rejectionReason}`
           : "Your restaurant registration has been rejected. Please contact support."
         : "Your restaurant registration is pending approval.",
-      pendingTicket: signPendingTicket("restaurant", phone),
+      pendingTicket: signPendingTicket("restaurant", phone, partnerType),
     };
   }
 
@@ -674,7 +723,10 @@ export const checkPendingApproval = async (kind, ticket) => {
 
   const doc =
     kind === "restaurant"
-      ? await FoodRestaurant.findOne({ $or: [...phoneMatch("ownerPhone"), ...phoneMatch("primaryContactNumber")] })
+      ? await FoodRestaurant.findOne({
+          partnerType: partnerTypeCondition(payload.partnerType),
+          $or: [...phoneMatch("ownerPhone"), ...phoneMatch("primaryContactNumber")],
+        })
       : await FoodDeliveryPartner.findOne({ $or: phoneMatch("phone") });
 
   if (!doc) return { status: "not_registered" };
@@ -721,6 +773,32 @@ export const logout = async (refreshToken, fcmToken, platform) => {
   // 2. Invalidate the refresh token (standard logout procedure)
   const deleted = await FoodRefreshToken.deleteOne({ token: refreshToken });
   return { invalidated: deleted.deletedCount > 0 };
+};
+
+/**
+ * "Logout from all devices": drops every refresh token of this one account and its push tokens.
+ * Scoped by the account id from the token, so a phone that holds both a Restaurant Partner and a
+ * My Store account only signs out the account that asked (they are separate accounts).
+ * Access tokens already issued stay valid until they expire (short-lived).
+ */
+export const logoutFromAllDevices = async (userId, role) => {
+  if (!userId || !role) {
+    throw new AuthError("Invalid token payload");
+  }
+  const modelByRole = {
+    [ROLES.USER]: FoodUser,
+    [ROLES.RESTAURANT]: FoodRestaurant,
+    [ROLES.DELIVERY_PARTNER]: FoodDeliveryPartner,
+    [ROLES.ADMIN]: FoodAdmin,
+  };
+  const Model = modelByRole[String(role).toUpperCase()];
+  if (Model) {
+    await Model.updateOne({ _id: userId }, { $set: { fcmTokens: [], fcmTokenMobile: [] } }).catch((err) =>
+      logger.warn({ err }, "Failed to clear push tokens during logout from all devices"),
+    );
+  }
+  const deleted = await FoodRefreshToken.deleteMany({ userId });
+  return { invalidated: deleted.deletedCount || 0 };
 };
 
 export const getProfile = async (userId, role) => {

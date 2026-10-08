@@ -10,6 +10,7 @@ import {
   logout,
   getProfile,
   deleteAccount,
+  logoutFromAllDevices,
   checkAccountBalance,
   recoverAccount,
   startFreshAccount,
@@ -96,8 +97,8 @@ export const refreshTokenController = async (req, res, next) => {
 
 export const requestRestaurantOtpController = async (req, res, next) => {
   try {
-    const { phone } = validateRestaurantOtpRequestDto(req.body);
-    const result = await requestRestaurantOtp(phone);
+    const { phone, partnerType, confirmNewRole } = validateRestaurantOtpRequestDto(req.body);
+    const result = await requestRestaurantOtp(phone, partnerType, confirmNewRole);
     return sendResponse(res, 200, "OTP sent successfully", {
       phone,
       ...result,
@@ -109,8 +110,8 @@ export const requestRestaurantOtpController = async (req, res, next) => {
 
 export const verifyRestaurantOtpController = async (req, res, next) => {
   try {
-    const { phone, otp, fcmToken, platform } = validateRestaurantOtpVerifyDto(req.body);
-    const result = await verifyRestaurantOtpAndLogin(phone, otp, fcmToken, platform);
+    const { phone, otp, fcmToken, platform, partnerType } = validateRestaurantOtpVerifyDto(req.body);
+    const result = await verifyRestaurantOtpAndLogin(phone, otp, fcmToken, platform, partnerType);
     return sendResponse(res, 200, "Login successful", result);
   } catch (error) {
     next(error);
@@ -180,6 +181,16 @@ export const checkAccountBalanceController = async (req, res, next) => {
     const { userId, role } = req.user;
     const result = await checkAccountBalance(userId, role);
     return sendResponse(res, 200, "Balance fetched", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logoutAllController = async (req, res, next) => {
+  try {
+    const { userId, role } = req.user;
+    const result = await logoutFromAllDevices(userId, role);
+    return sendResponse(res, 200, "Logged out from all devices", result);
   } catch (error) {
     next(error);
   }

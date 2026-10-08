@@ -152,9 +152,11 @@ import exploreOffers from "@food/assets/explore more icons/offers.png";
 import exploreGourmet from "@food/assets/explore more icons/gourmet.png";
 import exploreTop10 from "@food/assets/explore more icons/top 10.png";
 import exploreCollection from "@food/assets/explore more icons/collection.png";
+import exploreMyStore from "@food/assets/explore more icons/my-store.svg";
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js";
 
 // Bundled Explore logos — warm browser cache as soon as Home module loads
-preloadImageUrls([exploreOffers, exploreGourmet, exploreTop10, exploreCollection]);
+preloadImageUrls([exploreMyStore, exploreOffers, exploreGourmet, exploreTop10, exploreCollection]);
 
 const CACHED_EXPLORE_BOOT = (() => {
   try {
@@ -675,9 +677,19 @@ export default function Home({ homeMode = null, isTabActive = true }) {
     };
   }, []);
 
+  // Global admin > Customization Settings > My Store
+  const myStoreEnabled = useMyStoreEnabled();
+
   // Merge API explore items with fallback to ensure all 4 cards are shown
   const finalExploreItems = useMemo(() => {
-    const fallback = [
+    const allItems = [
+      {
+        id: "my-store",
+        label: "My Store",
+        image: exploreMyStore,
+        fallbackImage: exploreMyStore,
+        href: "/food/user/my-store",
+      },
       {
         id: "under-250",
         label: "Under 250",
@@ -708,6 +720,9 @@ export default function Home({ homeMode = null, isTabActive = true }) {
         href: "/food/user/profile/favorites",
       },
     ];
+
+    // Global admin can switch My Store off: then Explore More is the original four icons.
+    const fallback = myStoreEnabled ? allItems : allItems.filter((item) => item.id !== "my-store");
 
     if (!landingExploreMore || landingExploreMore.length === 0) return fallback;
 
@@ -749,7 +764,9 @@ export default function Home({ homeMode = null, isTabActive = true }) {
       }
       return item;
     });
-  }, [landingExploreMore, normalizeImageUrl]);
+  }, [landingExploreMore, normalizeImageUrl, myStoreEnabled]);
+  // More than four icons don't fit in one row on a phone: the row slides sideways instead.
+  const exploreSlides = finalExploreItems.length > 4;
 
   // Warm Explore thumbs as soon as URLs are known
   useEffect(() => {
@@ -3335,14 +3352,18 @@ export default function Home({ homeMode = null, isTabActive = true }) {
               <div className="h-[1px] bg-gray-100 dark:bg-gray-800 flex-1"></div>
             </div>
             <div className="px-4.5 pb-4 lg:pb-6">
-              <div className="grid grid-cols-4 gap-1.5 sm:gap-4">
-                  {finalExploreItems.slice(0, 4).map((item, index) => (
+              {/* 5 icons: one row on tablets/desktop; on phones the row slides sideways
+                  (4½ icons visible, the half-icon hints that Gourmet / Collections are to the right). */}
+              <div className={exploreSlides
+                ? "flex gap-1.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory sm:grid sm:grid-cols-5 sm:gap-4 sm:overflow-visible"
+                : "grid grid-cols-4 gap-1.5 sm:gap-4"}>
+                  {finalExploreItems.slice(0, 5).map((item, index) => (
                     <motion.div
                       key={item.id}
                       initial={false}
                       animate={{ opacity: 1, y: 0 }}
                       whileTap={{ scale: 0.95 }}
-                      className="w-full">
+                      className={exploreSlides ? "w-[calc((100%-1.5rem)/4.5)] shrink-0 snap-start sm:w-full sm:shrink" : "w-full"}>
                       <Link
                         to={item.href}
                         state={{ from: '/food/user' }}

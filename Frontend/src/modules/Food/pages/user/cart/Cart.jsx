@@ -1131,7 +1131,9 @@ export default function Cart() {
       setLoadingCoupons(true)
 
       try {
-        const response = await restaurantAPI.getPublicOffers()
+        const response = await restaurantAPI.getPublicOffers(
+          restaurantData?.partnerType === "store" ? { partnerType: "store" } : {},
+        )
         const list = response?.data?.data?.allOffers || response?.data?.allOffers || []
         const filteredOffers = filterPublicOffers(list, {
           restaurantId: resolvedRestaurantId,

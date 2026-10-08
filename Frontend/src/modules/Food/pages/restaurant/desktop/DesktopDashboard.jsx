@@ -320,7 +320,7 @@ export default function DesktopDashboard() {
                   <td className="pl-5 py-3 font-semibold">#{o.orderId}</td>
                   <td className="py-3">{o.customer}</td>
                   <td className="py-3 text-slate-600 max-w-[280px] truncate">{o.itemsText}</td>
-                  <td className="py-3 text-slate-600">{o.type}</td>
+                  <td className="py-3 text-slate-600">{o.type === "Delivery" ? "Home Delivery" : o.type}</td>
                   <td className="py-3 text-slate-500">{timeAgo(o.createdAt)}</td>
                   <td className="py-3 font-semibold tabular-nums">{inr(o.total)}</td>
                   <td className="pr-5 py-3 text-right"><StatusBadge status={o.status} /></td>

@@ -31,6 +31,7 @@ import { StatusContext, StatusDialogs } from "./StatusContext"
 import useRestaurantStatus from "./useRestaurantStatus"
 import LogoutDialog from "./LogoutDialog"
 import { BASE, imgUrl, pickRestaurant } from "./kit"
+import { isMyStorePartner } from "@food/utils/auth"
 import "./desktop.css"
 
 const NAV = [
@@ -44,6 +45,9 @@ const NAV = [
   { to: `${BASE}/support`, label: "Help & Support", icon: LifeBuoy },
   { to: `${BASE}/account`, label: "Settings", icon: Settings },
 ]
+
+// My Store partners have no table reservations (no dining).
+const STORE_HIDDEN_NAV = new Set([`${BASE}/reservations`])
 
 const THEME_KEY = "restaurant_desktop_theme"
 const readTheme = () => {
@@ -75,6 +79,9 @@ export default function DesktopShell() {
     return typeof window !== "undefined" && window.innerWidth < 1280
   })
   const [restaurant, setRestaurant] = useState(null)
+  // Saved profile is known before the fetch finishes, so the menu doesn't flicker for stores.
+  const isStore = restaurant ? restaurant.partnerType === "store" : isMyStorePartner()
+  const navItems = isStore ? NAV.filter((item) => !STORE_HIDDEN_NAV.has(item.to)) : NAV
   const [searchOpen, setSearchOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [dark, setDark] = useState(readTheme)
@@ -201,13 +208,13 @@ export default function DesktopShell() {
             {!collapsed && (
               <div className="min-w-0 flex-1">
                 <p className="break-words text-[15px] font-bold leading-tight text-white line-clamp-2" title={name}>{name}</p>
-                <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-neutral-500">Restaurant panel</p>
+                <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-neutral-500">{isStore ? "Store panel" : "Restaurant panel"}</p>
               </div>
             )}
           </div>
 
           <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
+            {navItems.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ArrowDownLeft, ArrowLeft, ArrowUpRight, RefreshCw, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
 
 const money = (value) => {
@@ -117,7 +116,6 @@ const OwnerWallet = () => {
                 </section>
             </main>
 
-            <DriverBottomNav />
         </div>
     );
 };

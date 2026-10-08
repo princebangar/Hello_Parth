@@ -211,6 +211,19 @@ const restaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    /**
+     * Partner kind. `store` = Hello Parth's own brand store ("My Store"); it is
+     * hidden from every normal delivery/takeaway/dining listing and only shows
+     * inside the My Store section. Documents written before this field existed
+     * have no value, so every normal listing filters on `{ $ne: 'store' }`
+     * rather than `{ partnerType: 'restaurant' }`.
+     */
+    partnerType: {
+      type: String,
+      enum: ["restaurant", "store"],
+      default: "restaurant",
+      index: true,
+    },
     panImage: {
       type: String,
     },
@@ -410,6 +423,7 @@ restaurantSchema.index({ "location.city": 1 });
 restaurantSchema.index({ location: "2dsphere", "takeawaySettings.isEnabled": 1 });
 restaurantSchema.index({ location: "2dsphere", "diningSettings.isEnabled": 1 });
 restaurantSchema.index({ location: "2dsphere" });
+restaurantSchema.index({ partnerType: 1, status: 1 });
 restaurantSchema.index({ restaurantName: 1, ownerPhone: 1 });
 // Enforce uniqueness at the database level to avoid race conditions in registration.
 // Uses partial filter to avoid blocking older documents that may not yet have normalized fields.

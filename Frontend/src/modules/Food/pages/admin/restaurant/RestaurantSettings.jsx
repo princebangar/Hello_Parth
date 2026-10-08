@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useEffect, useState } from "react";
 import { Save, Loader2, Settings, Clock, Truck, ShoppingBag } from "lucide-react";
 import { Button } from "@food/components/ui/button";
@@ -43,6 +45,8 @@ const sanitizeMinutesInput = (value) => {
 };
 
 export default function RestaurantSettings() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const [loading, setLoading] = useState(true);
   const [savingDelivery, setSavingDelivery] = useState(false);
   const [savingTakeaway, setSavingTakeaway] = useState(false);
@@ -165,7 +169,7 @@ export default function RestaurantSettings() {
           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-rose-500 to-rose-700 flex items-center justify-center">
             <Settings className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Restaurant Settings</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{w("Restaurant Settings")}</h1>
         </div>
         <p className="text-sm text-slate-600">
           Configure platform-wide restaurant behaviour. More options will be added here over time.

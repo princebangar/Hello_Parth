@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { Search, Menu, ChevronRight, MapPin, X, Bell, HelpCircle } from "lucide-react"
@@ -166,7 +167,7 @@ export default function RestaurantNavbar({
   }, [])
 
   // Get restaurant name (use prop if provided, otherwise use fetched data)
-  const restaurantName = propRestaurantName || restaurantData?.name || "Restaurant"
+  const restaurantName = propRestaurantName || restaurantData?.name || sw("Restaurant")
 
   const [restaurantAddress, setRestaurantAddress] = useState("")
 
@@ -288,7 +289,7 @@ export default function RestaurantNavbar({
               {/* Restaurant Name */}
               <div className="flex items-center gap-1.5 min-w-0">
                 <h1 className="text-[17px] font-bold text-white truncate tracking-tight leading-none">
-                  {loading ? "Loading..." : (restaurantName || "Restaurant")}
+                  {loading ? "Loading..." : (restaurantName || sw("Restaurant"))}
                 </h1>
               </div>
               {!loading && restaurantAddress && restaurantAddress.trim() !== "" && (

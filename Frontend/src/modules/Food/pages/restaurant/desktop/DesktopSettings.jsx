@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useNavigate } from "react-router-dom"
 import {
   Store,
@@ -25,6 +26,10 @@ import {
 } from "lucide-react"
 import { BASE } from "./kit"
 import { PageHeader } from "./ui"
+import { isMyStorePartner } from "@food/utils/auth"
+
+// Tiles a My Store partner doesn't have (no dining, no own menu categories, no takeaway toggle).
+const STORE_HIDDEN_TILES = new Set(["Menu categories", "Dining setup"])
 
 const T = {
   rose: "bg-rose-50 text-rose-600",
@@ -86,15 +91,18 @@ const GROUPS = [
 
 export default function DesktopSettings() {
   const navigate = useNavigate()
+  const isStore = isMyStorePartner()
   return (
     <>
-      <PageHeader title="Outlet Settings" subtitle="Everything about your restaurant in one place" />
+      <PageHeader title="Outlet Settings" subtitle={isStore ? "Everything about your store in one place" : "Everything about your restaurant in one place"} />
       <div className="space-y-8">
         {GROUPS.map((g) => (
           <section key={g.title}>
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{g.title}</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {g.items.map(({ label, hint, icon: Icon, tone, to }) => (
+              {g.items.filter((item) => !(isStore && STORE_HIDDEN_TILES.has(item.label))).map(({ label: rawLabel, hint, icon: Icon, tone, to }) => {
+                const label = isStore && rawLabel === "Delivery & takeaway" ? "Store status" : rawLabel
+                return (
                 <button
                   key={label}
                   onClick={() => navigate(`${BASE}/${to}`)}
@@ -105,11 +113,12 @@ export default function DesktopSettings() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block font-semibold text-slate-900">{label}</span>
-                    <span className="block truncate text-xs text-slate-500">{hint}</span>
+                    <span className="block truncate text-xs text-slate-500">{sw(hint)}</span>
                   </span>
                   <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
                 </button>
-              ))}
+                )
+              })}
             </div>
           </section>
         ))}

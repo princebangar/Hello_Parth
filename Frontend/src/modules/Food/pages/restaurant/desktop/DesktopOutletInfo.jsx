@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Camera, ImagePlus, Loader2, MapPin, Pencil, Star, Trash2, UtensilsCrossed } from "lucide-react"
@@ -140,7 +141,7 @@ export default function DesktopOutletInfo() {
         </div>
 
         <Card
-          title="Restaurant images"
+          title={sw("Restaurant images")}
           subtitle="The first image is your cover"
           action={
             <button onClick={() => bannerInput.current?.click()} disabled={busy === "banner"} className={btn.ghost}>

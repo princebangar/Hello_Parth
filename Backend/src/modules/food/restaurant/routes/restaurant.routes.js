@@ -4,6 +4,7 @@ import { FoodRestaurant } from '../models/restaurant.model.js';
 import {
     registerRestaurantController,
     listApprovedRestaurantsController,
+    listMyStoresController,
     getApprovedRestaurantController,
     listPublicOffersController,
     getCurrentRestaurantController,
@@ -91,6 +92,23 @@ const requireApprovedRestaurant = async (req, res, next) => {
     }
 };
 
+/**
+ * Features a My Store partner doesn't have (takeaway, dining, own menu
+ * categories). Reads partnerType from the DB so it can never be stale or forged
+ * through the token. Use after requireApprovedRestaurant.
+ */
+const requireRestaurantPartner = async (req, res, next) => {
+    try {
+        const doc = await FoodRestaurant.findById(req.user.userId).select('partnerType').lean();
+        if (doc?.partnerType === 'store') {
+            return sendError(res, 403, 'This option is not available for My Store');
+        }
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
 const uploadFields = upload.fields([
     { name: 'profileImage', maxCount: 1 },
     { name: 'panImage', maxCount: 1 },
@@ -103,6 +121,8 @@ router.post('/register', uploadFields, registerRestaurantController);
 
 // Public: approved restaurants list (for user app)
 router.get('/restaurants', cacheResponse(300, 'restaurants'), listApprovedRestaurantsController);
+// Public: My Store partners (brand stores) — the only list that includes them
+router.get('/my-stores', cacheResponse(120, 'my_stores'), listMyStoresController);
 router.get('/restaurants/:id', cacheResponse(600, 'restaurant_detail'), getApprovedRestaurantController);
 router.get('/restaurants/:id/menu', cacheResponse(600, 'restaurant_menu'), getPublicRestaurantMenuController);
 router.get('/restaurants/:id/outlet-timings', cacheResponse(600, 'restaurant_timings'), getOutletTimingsByRestaurantIdController);
@@ -125,14 +145,14 @@ router.patch('/availability', authMiddleware, requireApprovedRestaurant, async (
     await invalidateCache('search:*');
     next();
 }, updateRestaurantAcceptingOrdersController);
-router.patch('/dining-settings', authMiddleware, requireApprovedRestaurant, updateCurrentRestaurantDiningSettingsController);
-router.patch('/takeaway-settings', authMiddleware, requireApprovedRestaurant, async (req, res, next) => {
+router.patch('/dining-settings', authMiddleware, requireApprovedRestaurant, requireRestaurantPartner, updateCurrentRestaurantDiningSettingsController);
+router.patch('/takeaway-settings', authMiddleware, requireApprovedRestaurant, requireRestaurantPartner, async (req, res, next) => {
     await invalidateCache('restaurants:*');
     await invalidateCache('restaurant_detail:*');
     await invalidateCache('search:*');
     next();
 }, updateCurrentRestaurantTakeawaySettingsController);
-router.post('/dining-settings/request', authMiddleware, requireApprovedRestaurant, createDiningRequestController);
+router.post('/dining-settings/request', authMiddleware, requireApprovedRestaurant, requireRestaurantPartner, createDiningRequestController);
 router.get('/dining-settings/pending', authMiddleware, requireApprovedRestaurant, getPendingDiningRequestController);
 router.get('/outlet-timings', authMiddleware, requireApprovedRestaurant, getCurrentRestaurantOutletTimingsController);
 router.put('/outlet-timings', authMiddleware, requireApprovedRestaurant, async (req, res, next) => {
@@ -194,15 +214,15 @@ router.post(
 
 // Categories (restaurant dashboard). Read-only for item creation, CRUD for Menu Categories page.
 router.get('/categories', authMiddleware, requireApprovedRestaurant, listCategoriesController);
-router.post('/categories', authMiddleware, requireApprovedRestaurant, async (req, res, next) => {
+router.post('/categories', authMiddleware, requireApprovedRestaurant, requireRestaurantPartner, async (req, res, next) => {
     await invalidateFoodBrowseCaches(['categories', 'search']);
     next();
 }, createCategoryController);
-router.patch('/categories/:id', authMiddleware, requireApprovedRestaurant, async (req, res, next) => {
+router.patch('/categories/:id', authMiddleware, requireApprovedRestaurant, requireRestaurantPartner, async (req, res, next) => {
     await invalidateFoodBrowseCaches(['categories', 'search']);
     next();
 }, updateCategoryController);
-router.delete('/categories/:id', authMiddleware, requireApprovedRestaurant, async (req, res, next) => {
+router.delete('/categories/:id', authMiddleware, requireApprovedRestaurant, requireRestaurantPartner, async (req, res, next) => {
     await invalidateFoodBrowseCaches(['categories', 'search']);
     next();
 }, deleteCategoryController);

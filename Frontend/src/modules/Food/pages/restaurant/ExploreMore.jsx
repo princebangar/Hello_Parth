@@ -35,7 +35,7 @@ import {
 } from "lucide-react"
 import { Card, CardContent } from "@food/components/ui/card"
 import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
-import { clearModuleAuth, clearAuthData, getCurrentUser } from "@food/utils/auth"
+import { clearModuleAuth, clearAuthData, getCurrentUser, isMyStorePartner } from "@food/utils/auth"
 import { restaurantAPI, authAPI } from "@food/api"
 import { formatRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import { toast } from "sonner"
@@ -755,13 +755,15 @@ export default function ExploreMore() {
   }, [])
 
   // Section data
+  // A My Store partner has no dining, takeaway or menu categories of its own.
+  const isStorePartner = isMyStorePartner()
   const manageOutletItems = [
     { id: 1, label: "Outlet info", icon: Info, route: "/food/restaurant/outlet-info" },
     { id: 2, label: "Outlet timings", icon: Clock, route: "/food/restaurant/outlet-timings" },
     { id: 3, label: "Dining Reservations", icon: Calendar, route: "/food/restaurant/reservations" },
     { id: 4, label: "Menu categories", icon: Settings, route: "/food/restaurant/menu-categories" },
     { id: 6, label: "Takeaway", icon: ShoppingBag },
-  ]
+  ].filter((item) => !(isStorePartner && [3, 4, 6].includes(item.id)))
 
   const settingsItems = [
     { id: 3, label: "Delivery settings", icon: Truck, route: "/food/restaurant/delivery-settings" },

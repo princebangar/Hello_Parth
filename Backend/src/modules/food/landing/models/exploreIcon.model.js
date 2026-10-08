@@ -16,7 +16,7 @@ const foodExploreIconSchema = new mongoose.Schema(
         },
         linkType: {
             type: String,
-            enum: ['offers', 'gourmet', 'top-10', 'collections', 'under-250', 'custom'],
+            enum: ['offers', 'gourmet', 'top-10', 'collections', 'under-250', 'my-store', 'custom'],
             default: 'custom'
         },
         targetPath: {

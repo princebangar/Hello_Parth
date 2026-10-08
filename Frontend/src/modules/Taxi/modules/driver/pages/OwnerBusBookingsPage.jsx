@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Bus, CalendarDays, ChevronLeft, IndianRupee, Search, Ticket, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import {
   cancelOwnerBusBookingSeats,
   getOwnerBusBookingCalendar,
@@ -494,7 +493,6 @@ const OwnerBusBookingsPage = () => {
         </section>
       </div>
 
-      <DriverBottomNav />
     </div>
   );
 };

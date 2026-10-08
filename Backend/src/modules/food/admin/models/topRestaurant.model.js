@@ -20,7 +20,7 @@ const topRestaurantSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ['delivery', 'takeaway'],
+            enum: ['delivery', 'takeaway', 'store'],
             required: true,
         },
         restaurants: [

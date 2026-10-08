@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { Search } from "lucide-react"
 import { adminAPI } from "@food/api"
@@ -11,6 +13,8 @@ const RequiredMark = () => <span className="text-red-500">*</span>
 
 
 export default function Coupons() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -377,7 +381,7 @@ export default function Coupons() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-4">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">Restaurant Offers & Coupons</h1>
+              <h1 className="text-2xl font-bold text-slate-900">{w("Restaurant Offers & Coupons")}</h1>
             </div>
             <button
               type="button"
@@ -473,14 +477,14 @@ export default function Coupons() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Restaurant Scope</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">{w("Restaurant Scope")}</label>
                   <select
                     value={formData.restaurantScope}
                     onChange={(e) => handleFormChange("restaurantScope", e.target.value)}
                     className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="all">All Restaurants</option>
-                    <option value="selected">Selected Restaurant</option>
+                    <option value="all">{w("All Restaurants")}</option>
+                    <option value="selected">{w("Selected Restaurant")}</option>
                   </select>
                 </div>
 
@@ -597,7 +601,7 @@ export default function Coupons() {
                       onChange={(e) => handleFormChange("restaurantId", e.target.value)}
                       className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">Choose a restaurant</option>
+                      <option value="">{w("Choose a restaurant")}</option>
                       {restaurants.map((restaurant) => (
                         <option key={restaurant._id} value={restaurant._id}>
                           {restaurant.name}
@@ -641,7 +645,7 @@ export default function Coupons() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by restaurant name, dish name, or coupon code..."
+              placeholder={w("Search by restaurant name, dish name, or coupon code...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -687,7 +691,7 @@ export default function Coupons() {
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">SI</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Restaurant</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{w("Restaurant")}</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Dish</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Coupon Code</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">Coupon Type</th>
@@ -710,7 +714,7 @@ export default function Coupons() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-slate-900">
-                          {offer.restaurantScope === "all" || offer.restaurantName === "All Restaurants" ? "All Restaurants" : offer.restaurantName}
+                          {offer.restaurantScope === "all" || offer.restaurantName === "All Restaurants" ? w("All Restaurants") : offer.restaurantName}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

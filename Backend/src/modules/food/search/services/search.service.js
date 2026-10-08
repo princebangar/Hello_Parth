@@ -3,6 +3,8 @@ import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import mongoose from 'mongoose';
+import { partnerTypeCondition } from '../../utils/partnerScope.js';
+import { isMyStoreEnabled } from '../../../../core/platform/appSwitches.service.js';
 
 const zoneToPolygon = (zoneDoc) => {
     const coords = Array.isArray(zoneDoc?.coordinates) ? zoneDoc.coordinates : [];
@@ -84,6 +86,8 @@ export const searchUnified = async (query = {}, options = {}) => {
 
     // 1. Initial Filter (approved status and basic conditions)
     const baseConditions = [{ status: 'approved' }];
+    // My Store switched off by the Global admin: its stores (and their dishes) are not searchable at all.
+    if (!(await isMyStoreEnabled())) baseConditions.push({ partnerType: partnerTypeCondition() });
     const zoneCondition = await buildZoneCondition(zoneId);
     if (zoneCondition) baseConditions.push(zoneCondition);
 
@@ -189,7 +193,9 @@ export const searchUnified = async (query = {}, options = {}) => {
     // 3. Search Matching
     if (regex) {
         // A. Search by Restaurant Name / Cuisine
+        // My Store partners are never surfaced by name/cuisine — only through a dish match (B below).
         const nameSearchFilter = mergeAndConditions(restaurantFilter, {
+            partnerType: partnerTypeCondition(),
             $or: [
                 { restaurantName: { $regex: regex } },
                 { cuisines: { $regex: regex } }
@@ -276,7 +282,13 @@ export const searchUnified = async (query = {}, options = {}) => {
         }
     } else {
         // No search text -> List all restaurants matching filters (category/zone)
-        const allMatching = await FoodRestaurant.find(restaurantFilter)
+        // Plain zone browse never lists My Store partners. A category browse
+        // (categoryId set) already narrowed restaurantFilter to restaurants that
+        // have a dish in that category, so stores stay in.
+        const browseFilter = categoryId
+            ? restaurantFilter
+            : mergeAndConditions(restaurantFilter, { partnerType: partnerTypeCondition() });
+        const allMatching = await FoodRestaurant.find(browseFilter)
             .sort({ rating: -1, createdAt: -1 })
             .limit(limit * 2)
             .lean();
@@ -386,9 +398,11 @@ export const getAdminCategories = async (query = {}) => {
 
     let approvedCategoryIds = [];
     if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+        const storesHidden = !(await isMyStoreEnabled());
         const zoneRestaurants = await FoodRestaurant.find({
             zoneId: new mongoose.Types.ObjectId(zoneId),
-            status: 'approved'
+            status: 'approved',
+            ...(storesHidden ? { partnerType: partnerTypeCondition() } : {})
         }).select('_id').lean();
         const zoneRestaurantIds = zoneRestaurants.map(r => r._id);
         

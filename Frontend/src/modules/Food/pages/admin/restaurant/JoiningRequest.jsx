@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useMemo, useEffect, useRef } from "react"
 import { 
   Search, Filter, Eye, Check, X, UtensilsCrossed, ArrowUpDown, Loader2,
@@ -26,13 +28,16 @@ const formatTime12Hour = (timeStr) => {
 // Same short form as the restaurants list ("REST" + last 6 of the id) instead
 // of the full 24-character Mongo id.
 const toShortRestaurantId = (r) => {
+  const prefix = r?.partnerType === "store" ? "STORE" : "REST"
   const display = String(r?.restaurantId || "")
-  if (/^REST[0-9a-z]{6}$/i.test(display)) return display
+  if (/^(REST|STORE)[0-9a-z]{6}$/i.test(display)) return display
   const raw = String(r?._id || r?.id || display || "")
-  return raw ? `REST${raw.slice(-6)}` : "N/A"
+  return raw ? `${prefix}${raw.slice(-6)}` : "N/A"
 }
 
 export default function JoiningRequest() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -380,7 +385,7 @@ export default function JoiningRequest() {
             <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
               <UtensilsCrossed className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">New Restaurant Join Request</h1>
+            <h1 className="text-2xl font-bold text-slate-900">{w("New Restaurant Join Request")}</h1>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -388,7 +393,7 @@ export default function JoiningRequest() {
               <div className="relative flex-1 sm:flex-initial min-w-[340px]">
                 <input
                   type="text"
-                  placeholder="Search restaurant, owner, phone, email"
+                  placeholder={w("Search restaurant, owner, phone, email")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -430,7 +435,7 @@ export default function JoiningRequest() {
                   </th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                     <button type="button" onClick={() => handleSort("restaurantName")} className="flex items-center gap-1 hover:text-slate-900 transition-colors">
-                      <span>Restaurant Info</span>
+                      <span>{w("Restaurant Info")}</span>
                       <ArrowUpDown className={getSortIconClassName("restaurantName")} />
                     </button>
                   </th>
@@ -460,14 +465,14 @@ export default function JoiningRequest() {
                   <tr>
                     <td colSpan={7} className="px-6 py-20 text-center">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
-                      <p className="text-lg font-semibold text-slate-700">Loading restaurant requests...</p>
+                      <p className="text-lg font-semibold text-slate-700">{w("Loading restaurant requests...")}</p>
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-20 text-center">
                       <p className="text-lg font-semibold text-red-600 mb-1">Error: {error}</p>
-                      <p className="text-sm text-slate-500">Failed to load restaurant requests. Please try again.</p>
+                      <p className="text-sm text-slate-500">{w("Failed to load restaurant requests. Please try again.")}</p>
                     </td>
                   </tr>
                 ) : sortedRequests.length === 0 ? (
@@ -475,7 +480,7 @@ export default function JoiningRequest() {
                     <td colSpan={7} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
-                        <p className="text-sm text-slate-500">No restaurant requests match your search</p>
+                        <p className="text-sm text-slate-500">{w("No restaurant requests match your search")}</p>
                       </div>
                     </td>
                   </tr>
@@ -508,12 +513,17 @@ export default function JoiningRequest() {
                               }}
                             />
                           </div>
-                          <span 
-                            className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                            onClick={() => handleViewDetails(request)}
-                          >
-                            {request.restaurantName}
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            {request.partnerType === 'store' && (
+                              <span className="inline-flex w-fit items-center rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">My Store</span>
+                            )}
+                            <span 
+                              className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => handleViewDetails(request)}
+                            >
+                              {request.restaurantName}
+                            </span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -741,7 +751,7 @@ export default function JoiningRequest() {
                   <X className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Reject Restaurant Request</h3>
+                  <h3 className="text-lg font-bold text-slate-900">{w("Reject Restaurant Request")}</h3>
                   <p className="text-sm text-slate-600">{selectedRequest.restaurantName}</p>
                 </div>
               </div>
@@ -810,7 +820,7 @@ export default function JoiningRequest() {
                 <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
                   <UtensilsCrossed className="w-5 h-5 text-blue-600" />
                 </div>
-                <h2 className="text-xl font-bold text-slate-900">Restaurant Details - {selectedRequest.restaurantName || "N/A"}</h2>
+                <h2 className="text-xl font-bold text-slate-900">{w("Restaurant Details")} - {selectedRequest.restaurantName || "N/A"}</h2>
               </div>
               <button
                 onClick={closeDetailsModal}
@@ -1002,7 +1012,7 @@ export default function JoiningRequest() {
                   {/* Registration Documents – flat schema (PAN, GST, FSSAI, Bank) */}
                   {restaurantPhotoList.length > 0 && (
                     <div className="pt-6 border-t border-slate-200">
-                      <h4 className="text-lg font-semibold text-slate-900 mb-4">Restaurant Photos</h4>
+                      <h4 className="text-lg font-semibold text-slate-900 mb-4">{w("Restaurant Photos")}</h4>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {restaurantPhotoList.map((restaurantImg, idx) => {
                           const imgUrl = getNormalizedImageUrl(restaurantImg)
@@ -1261,7 +1271,7 @@ export default function JoiningRequest() {
                         )}
                         {r.restaurantId && (
                           <div>
-                            <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
+                            <p className="text-xs text-slate-500 mb-1">{w("Restaurant ID")}</p>
                             <p className="font-medium text-slate-900" title={String(r._id || r.restaurantId)}>{toShortRestaurantId(r)}</p>
                           </div>
                         )}
@@ -1319,7 +1329,7 @@ export default function JoiningRequest() {
               {!loadingDetails && !restaurantDetails && !selectedRequest && (
                 <div className="flex flex-col items-center justify-center py-20">
                   <p className="text-lg font-semibold text-slate-700 mb-2">No Details Available</p>
-                  <p className="text-sm text-slate-500">Unable to load restaurant details</p>
+                  <p className="text-sm text-slate-500">{w("Unable to load restaurant details")}</p>
                 </div>
               )}
             </div>

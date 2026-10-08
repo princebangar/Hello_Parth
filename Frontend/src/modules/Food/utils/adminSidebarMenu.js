@@ -33,6 +33,16 @@ export const adminSidebarMenu = [
       },
       {
         type: "expandable",
+        label: "My Store Foods",
+        icon: "Store",
+        myStore: true,
+        subItems: [
+          { label: "My Store Foods List", path: "/admin/food/my-store/foods", myStore: true },
+          { label: "My Store Addons List", path: "/admin/food/my-store/addons", myStore: true },
+        ],
+      },
+      {
+        type: "expandable",
         label: "Categories",
         icon: "FolderTree",
         subItems: [{ label: "Category", path: "/admin/food/categories" }],
@@ -67,6 +77,27 @@ export const adminSidebarMenu = [
   },
   {
     type: "section",
+    label: "MY STORE MANAGEMENT",
+    myStore: true,
+    items: [
+      {
+        type: "expandable",
+        label: "My Store",
+        icon: "Store",
+        myStore: true,
+        subItems: [
+          { label: "My Store List", path: "/admin/food/my-store", myStore: true },
+          { label: "New Store Join Request", permissionLabel: "My Store New Joining Request", path: "/admin/food/my-store/joining-request", myStore: true },
+          { label: "Top Stores", permissionLabel: "My Store Top Stores", path: "/admin/food/my-store/top-stores", myStore: true },
+          { label: "Store Commission", permissionLabel: "My Store Commission", path: "/admin/food/my-store/commission", myStore: true },
+          { label: "Store Reviews", permissionLabel: "My Store Reviews", path: "/admin/food/my-store/reviews", myStore: true },
+          { label: "Store Complaints", permissionLabel: "My Store Complaints", path: "/admin/food/my-store/complaints", myStore: true },
+        ],
+      },
+    ],
+  },
+  {
+    type: "section",
     label: "ORDER MANAGEMENT",
     items: [
       {
@@ -82,6 +113,7 @@ export const adminSidebarMenu = [
           { label: "Delivered", path: "/admin/food/orders/delivered" },
           { label: "Cancelled", path: "/admin/food/orders/canceled" },
           { label: "Restaurant cancelled", path: "/admin/food/orders/restaurant-cancelled" },
+          { label: "My Store cancelled", path: "/admin/food/orders/my-store-cancelled", myStore: true },
           { label: "Payment Failed", path: "/admin/food/orders/payment-failed" },
           { label: "Refunded", path: "/admin/food/orders/refunded" },
           { label: "Offline Payments", path: "/admin/food/orders/offline-payments" },
@@ -105,6 +137,7 @@ export const adminSidebarMenu = [
         path: "/admin/food/coupons",
         icon: "Gift",
       },
+      { type: "link", label: "My Store Coupons & Offers", path: "/admin/food/my-store/coupons", icon: "Gift", myStore: true },
     ],
   },
   // TODO: Referral feature temporarily disabled. Uncomment to re-enable in future.
@@ -182,7 +215,10 @@ export const adminSidebarMenu = [
         type: "expandable",
         label: "Restaurant Report",
         icon: "FileText",
-        subItems: [{ label: "Restaurant Report", path: "/admin/food/restaurant-report" }],
+        subItems: [
+          { label: "Restaurant Report", path: "/admin/food/restaurant-report" },
+          { label: "My Store Report", path: "/admin/food/my-store/report", myStore: true },
+        ],
       },
       {
         type: "expandable",
@@ -197,6 +233,7 @@ export const adminSidebarMenu = [
     label: "TRANSACTION MANAGEMENT",
     items: [
       { type: "link", label: "Restaurant Withdraws", path: "/admin/food/restaurant-withdraws", icon: "CreditCard" },
+      { type: "link", label: "My Store Withdraws", path: "/admin/food/my-store/withdraws", icon: "CreditCard", myStore: true },
     ],
   },
   {
@@ -236,3 +273,25 @@ export const adminSidebarMenu = [
   },
 ];
 
+
+/**
+ * Global admin > Customization Settings > My Store: when it is switched off, every My Store entry (flagged
+ * `myStore: true`, or a whole section / group flagged so) disappears from the admin sidebar.
+ */
+export function withoutMyStoreItems(menu = []) {
+  return menu
+    .filter((item) => !item.myStore)
+    .map((item) => {
+      if (item.type !== "section") return item;
+      return {
+        ...item,
+        items: (item.items || [])
+          .filter((sub) => !sub.myStore)
+          .map((sub) =>
+            sub.type === "expandable"
+              ? { ...sub, subItems: (sub.subItems || []).filter((si) => !si.myStore) }
+              : sub,
+          ),
+      };
+    });
+}

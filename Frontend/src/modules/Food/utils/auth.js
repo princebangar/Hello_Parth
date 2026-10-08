@@ -136,6 +136,61 @@ export function getCurrentUser(module) {
 }
 
 /**
+ * Partner kind of the logged-in restaurant panel user: "store" for a My Store
+ * partner, otherwise "restaurant" (also the value for accounts created before
+ * partnerType existed).
+ */
+export function getRestaurantPartnerType() {
+  const user = getCurrentUser("restaurant");
+  return user?.partnerType === "store" ? "store" : "restaurant";
+}
+
+export function isMyStorePartner() {
+  return getRestaurantPartnerType() === "store";
+}
+
+/** Kind of account that is waiting for approval ("store" = My Store); drives the "store" wording on the pending screen. */
+const PENDING_PARTNER_TYPE_KEY = "restaurant_pendingPartnerType";
+
+export function setPendingPartnerType(type) {
+  try {
+    localStorage.setItem(PENDING_PARTNER_TYPE_KEY, type === "store" ? "store" : "restaurant");
+  } catch {
+    // ignore
+  }
+}
+
+export function getPendingPartnerType() {
+  try {
+    const saved = localStorage.getItem(PENDING_PARTNER_TYPE_KEY);
+    if (saved === "store" || saved === "restaurant") return saved;
+  } catch {
+    // ignore
+  }
+  return readLastPartnerRole();
+}
+
+/** Role chosen on the restaurant login screen last time (survives logout). */
+export function readLastPartnerRole() {
+  try {
+    // My Store switched off by the Global admin (cached public settings): everything is Restaurant Partner again.
+    const cached = JSON.parse(localStorage.getItem("helloparth_customization_settings") || "null");
+    if (cached && cached.my_store_enabled === false) return "restaurant";
+    return localStorage.getItem("restaurantLoginRole") === "store" ? "store" : "restaurant";
+  } catch {
+    return "restaurant";
+  }
+}
+
+export function rememberPartnerRole(role) {
+  try {
+    localStorage.setItem("restaurantLoginRole", role === "store" ? "store" : "restaurant");
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * Check if user is authenticated for a specific module
  * @param {string} module - Module name (admin, restaurant, delivery, user)
  * @returns {boolean} - True if authenticated
@@ -259,6 +314,7 @@ export function clearRestaurantSessionCache() {
     "restaurant_pendingPhone",
     "restaurant_pendingStatus",
     "restaurant_pendingMessage",
+    "restaurant_pendingPartnerType",
   ];
 
   keys.forEach((key) => localStorage.removeItem(key));

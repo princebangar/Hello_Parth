@@ -355,7 +355,8 @@ export const upsertPendingFirebaseDeviceTokenByPhone = async ({
     phone,
     token,
     platform = 'web',
-    role
+    role,
+    partnerType = null
 }) => {
     const normalizedRole = String(role || '').trim().toLowerCase();
     const ownerType = PENDING_ROLE_TO_OWNER_TYPE[normalizedRole];
@@ -377,7 +378,8 @@ export const upsertPendingFirebaseDeviceTokenByPhone = async ({
 
     if (ownerType === 'RESTAURANT') {
         const { findRestaurantByPhone } = await import('../../modules/food/restaurant/services/restaurant.service.js');
-        owner = await findRestaurantByPhone(phone);
+        // The same phone can have a Restaurant Partner and a My Store account: save to the one being onboarded.
+        owner = await findRestaurantByPhone(phone, partnerType ? (String(partnerType).toLowerCase() === 'store' ? 'store' : 'restaurant') : null);
     } else {
         const { findDeliveryPartnerByPhone } = await import('../../modules/food/delivery/services/delivery.service.js');
         owner = await findDeliveryPartnerByPhone(phone);

@@ -25,7 +25,6 @@ import {
   updateOwnerFleetVehicle,
   deleteOwnerFleetVehicle,
 } from "../../services/registrationService";
-import DriverBottomNav from "../../../shared/components/DriverBottomNav";
 import { uploadService } from "../../../../shared/services/uploadService";
 
 const inputClass =
@@ -853,7 +852,6 @@ const OwnerVehicleFleet = () => {
             </div>
           </div>
         </div>
-        <DriverBottomNav />
       </div>
     );
   }
@@ -1159,7 +1157,6 @@ const OwnerVehicleFleet = () => {
         </div>
       </div>
 
-      <DriverBottomNav />
     </div>
   );
 };

@@ -104,7 +104,7 @@ export default function NewOrderModal({ order, onDone }) {
           </span>
           <div className="flex-1">
             <p className="font-bold text-lg leading-tight">New order #{n.orderId}</p>
-            <p className="text-xs text-white/80">{n.type} · {n.customer}</p>
+            <p className="text-xs text-white/80">{n.type === "Delivery" ? "Home Delivery" : n.type} · {n.customer}</p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold tabular-nums">{inr2(n.total)}</p>

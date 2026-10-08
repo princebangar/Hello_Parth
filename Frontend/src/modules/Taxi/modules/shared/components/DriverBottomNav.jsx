@@ -1,9 +1,10 @@
 import React from "react";
-import { createPortal } from "react-dom";
-import { NavLink, useLocation } from "react-router-dom";
+import { startTransition, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Briefcase,
   Bus,
+  CalendarCheck,
   Car,
   Home,
   IndianRupee,
@@ -13,7 +14,23 @@ import {
   Users,
 } from "lucide-react";
 import { useSettings } from "../../../shared/context/SettingsContext";
-import useTypingFocus from "../../../shared/hooks/useTypingFocus";
+import { getAuthenticatedDriverRole } from "../../driver/services/registrationService";
+import DriverNavBar from "./DriverNavBar";
+
+// Page chunks, warmed on touch so a tab opens without a "load" pause (same files the router lazy-loads).
+const PRELOAD = {
+  home: () => import("../../driver/pages/DriverHome"),
+  history: () => import("../../driver/pages/RideRequests"),
+  wallet: () => import("../../driver/pages/DriverWallet"),
+  incentives: () => import("../../driver/pages/DriverIncentives"),
+  profile: () => import("../../driver/pages/DriverProfile"),
+  dashboard: () => import("../../driver/pages/OwnerDashboard"),
+  ownerWallet: () => import("../../driver/pages/OwnerWallet"),
+  "manage-drivers": () => import("../../driver/pages/settings/ManageDrivers"),
+  "vehicle-fleet": () => import("../../driver/pages/settings/OwnerVehicleFleet"),
+  "pooling-vehicles": () => import("../../driver/pages/OwnerPoolingVehicles"),
+  "bus-service": () => import("../../driver/pages/OwnerBusServicePage"),
+};
 
 const isEnabledFlag = (value) => {
   if (typeof value === "boolean") return value;
@@ -21,128 +38,71 @@ const isEnabledFlag = (value) => {
   return ["1", "true", "yes", "on", "enabled"].includes(String(value || "").trim().toLowerCase());
 };
 
+// Bottom navigation of the Taxi driver, Owner and Pooling driver apps (the Bus driver has its own tabs).
 const DriverBottomNav = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { settings } = useSettings();
-  const role = String(localStorage.getItem("role") || "driver").toLowerCase();
+  const role = location.pathname.startsWith("/taxi/owner")
+    ? "owner"
+    : String(getAuthenticatedDriverRole() || "driver").toLowerCase();
   const isOwner = role === "owner";
   const routePrefix = isOwner ? "/taxi/owner" : "/taxi/driver";
+  // The tapped tab lights up at once; the page (and the real route) catches up behind it.
+  const [pendingPath, setPendingPath] = useState(null);
+  useEffect(() => {
+    setPendingPath(null);
+  }, [location.pathname]);
   const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
-  // Hidden while the keyboard is open so it never sits on top of the field being typed in.
-  const isTyping = useTypingFocus();
 
-  // Matching user's latest screenshot labels: Home, History, Earnings, Accounts
   const navItems = isOwner
     ? [
-        {
-          icon: <Home size={22} />,
-          label: "Dashboard",
-          path: `${routePrefix}/dashboard`,
-        },
-        {
-          icon: <Users size={22} />,
-          label: "Drivers",
-          path: `${routePrefix}/manage-drivers`,
-        },
-        {
-          icon: <Car size={22} />,
-          label: "Vehicle",
-          path: `${routePrefix}/vehicle-fleet`,
-        },
-        {
-          icon: <Briefcase size={22} />,
-          label: "Pooling",
-          path: `${routePrefix}/pooling-vehicles`,
-        },
-        ...(busEnabled
-          ? [
-              {
-                icon: <Bus size={22} />,
-                label: "Bus",
-                path: `${routePrefix}/bus-service`,
-              },
-            ]
-          : []),
-        {
-          icon: <User size={22} />,
-          label: "Account",
-          path: `${routePrefix}/profile`,
-        },
+        { Icon: Home, label: "Dashboard", path: `${routePrefix}/dashboard` },
+        { Icon: Users, label: "Drivers", path: `${routePrefix}/manage-drivers` },
+        { Icon: Car, label: "Vehicle", path: `${routePrefix}/vehicle-fleet` },
+        { Icon: Briefcase, label: "Pooling", path: `${routePrefix}/pooling-vehicles` },
+        ...(busEnabled ? [{ Icon: Bus, label: "Bus", path: `${routePrefix}/bus-service` }] : []),
+        { Icon: User, label: "Account", path: `${routePrefix}/profile` },
       ]
-    : [
-        { icon: <Home size={22} />, label: "Home", path: `${routePrefix}/home` },
-        {
-          icon: <History size={22} />,
-          label: "History",
-          path: `${routePrefix}/history`,
-        },
-        {
-          icon: <IndianRupee size={22} />,
-          label: "Wallet",
-          path: `${routePrefix}/wallet`,
-        },
-        {
-          icon: <Trophy size={22} />,
-          label: "Milestone",
-          path: `${routePrefix}/incentives`,
-        },
-        {
-          icon: <User size={22} />,
-          label: "Accounts",
-          path: `${routePrefix}/profile`,
-        },
-      ];
+    : role === "pooling_driver"
+      ? [
+          { Icon: Home, label: "Home", path: "/taxi/driver/pooling", exact: true },
+          { Icon: CalendarCheck, label: "Bookings", path: "/taxi/driver/pooling/bookings" },
+        ]
+      : [
+          { Icon: Home, label: "Home", path: `${routePrefix}/home` },
+          { Icon: History, label: "History", path: `${routePrefix}/history` },
+          { Icon: IndianRupee, label: "Wallet", path: `${routePrefix}/wallet` },
+          { Icon: Trophy, label: "Milestone", path: `${routePrefix}/incentives` },
+          { Icon: User, label: "Profile", path: `${routePrefix}/profile` },
+        ];
 
-  const nav = (
-    <nav style={{ fontFamily: "'Outfit', sans-serif" }} className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
-      <div
-        className="mx-auto grid h-[68px] w-full max-w-lg items-stretch gap-0.5"
-        style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
-      >
-      {navItems.map((item) => {
-        const isActive =
-          location.pathname === item.path ||
-          location.pathname.startsWith(`${item.path}/`) ||
-          (item.path === `${routePrefix}/home` &&
-            location.pathname === `${routePrefix}/dashboard`);
-        return (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-center transition-all duration-300 ${
-              isActive
-                ? "bg-slate-50 text-black translate-y-[-1px]"
-                : "text-black/60 font-bold opacity-80"
-            }`}>
-            <div
-              className={`transition-all duration-300 ${isActive ? "scale-105" : ""}`}>
-              {React.cloneElement(item.icon, {
-                strokeWidth: isActive ? 2.5 : 2,
-                size: 20,
-              })}
-            </div>
-            <span
-              className={`max-w-full truncate text-[8px] uppercase tracking-[0.04em] transition-all duration-300 ${
-                isActive
-                  ? "opacity-100 scale-100 font-black"
-                  : "opacity-80 scale-95 font-bold"
-              }`}>
-              {item.label}
-            </span>
-            {isActive && (
-              <div className="absolute -top-2 h-[2px] w-7 rounded-full bg-slate-900" />
-            )}
-          </NavLink>
-        );
-      })}
-      </div>
-    </nav>
-  );
+  const items = navItems.map(({ Icon, label, path, exact }) => {
+    const routeActive =
+      location.pathname === path ||
+      (!exact && location.pathname.startsWith(`${path}/`)) ||
+      (path === `${routePrefix}/home` && location.pathname === `${routePrefix}/dashboard`);
+    const active = pendingPath ? pendingPath === path : routeActive;
+    return {
+      key: path,
+      label,
+      Icon,
+      active,
+      onSelect: () => {
+        if (routeActive || pendingPath === path) return;
+        setPendingPath(path);
+        // A transition keeps the current screen on show until the next one is ready (no blank flash in between).
+        startTransition(() => navigate(path));
+      },
+      onPreload: () => {
+        const slug = path.split("/").pop();
+        const load = isOwner && slug === "wallet" ? PRELOAD.ownerWallet : PRELOAD[slug];
+        load?.().catch(() => {});
+      },
+    };
+  });
 
-  if (isTyping) return null;
-
-  // Rendered into <body> so a transformed/animated page wrapper can never make the bar scroll with the page.
-  return typeof document === "undefined" ? nav : createPortal(nav, document.body);
+  return <DriverNavBar items={items} />;
 };
 
 export default DriverBottomNav;

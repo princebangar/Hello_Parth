@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { isModuleAuthenticated } from "@food/utils/auth";
+import { isModuleAuthenticated, setPendingPartnerType } from "@food/utils/auth";
 
 /**
  * Role-based Protected Route Component
@@ -27,6 +27,10 @@ export default function ProtectedRoute({ children, requiredRole, loginPath = "/l
       try {
         const user = JSON.parse(userStr);
         const status = String(user?.status || "").toLowerCase();
+        if (status === "pending" || status === "rejected" || status === "banned" || status === "deleted") {
+          // the pending screen says "store" for My Store accounts
+          setPendingPartnerType(user?.partnerType === "store" ? "store" : "restaurant");
+        }
         if (status === "pending" || status === "rejected") {
           if (status === "rejected") {
             const msg = user.rejectionReason

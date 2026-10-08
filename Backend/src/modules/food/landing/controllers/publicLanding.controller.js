@@ -6,6 +6,7 @@ import { FoodDiningBanner } from '../models/diningBanner.model.js';
 import { FoodExploreIcon } from '../models/exploreIcon.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { sendResponse } from '../../../../utils/response.js';
+import { partnerTypeCondition } from '../../utils/partnerScope.js';
 
 /** Public hero banners for user home: active only, sorted, with linkedRestaurants populated for click-through */
 export const getPublicHeroBannersController = async (req, res, next) => {
@@ -19,7 +20,7 @@ export const getPublicHeroBannersController = async (req, res, next) => {
             .sort({ sortOrder: 1, createdAt: -1 })
             .populate({
                 path: 'linkedRestaurantIds',
-                select: '_id restaurantName slug area city rating cuisines profileImage pureVegRestaurant zoneId',
+                select: '_id restaurantName slug area city rating cuisines profileImage pureVegRestaurant zoneId partnerType',
                 model: 'FoodRestaurant'
             })
             .lean();
@@ -30,7 +31,7 @@ export const getPublicHeroBannersController = async (req, res, next) => {
                 .sort({ sortOrder: 1, createdAt: -1 })
                 .populate({
                     path: 'linkedRestaurantIds',
-                    select: '_id restaurantName slug area city rating cuisines profileImage pureVegRestaurant zoneId',
+                    select: '_id restaurantName slug area city rating cuisines profileImage pureVegRestaurant zoneId partnerType',
                     model: 'FoodRestaurant'
                 })
                 .lean();
@@ -39,7 +40,10 @@ export const getPublicHeroBannersController = async (req, res, next) => {
             const { linkedRestaurantIds, ...rest } = b;
             return {
                 ...rest,
-                linkedRestaurants: Array.isArray(linkedRestaurantIds) ? linkedRestaurantIds : [],
+                // Hero banners can't deep-link into a My Store partner.
+                linkedRestaurants: Array.isArray(linkedRestaurantIds)
+                    ? linkedRestaurantIds.filter((r) => r && r.partnerType !== 'store')
+                    : [],
                 imageUrl: b.imageUrl
             };
         });
@@ -165,7 +169,7 @@ export const getPublicLandingSettingsController = async (req, res, next) => {
         const ids = settings?.recommendedRestaurantIds || [];
         let recommendedRestaurants = [];
         if (Array.isArray(ids) && ids.length > 0) {
-            recommendedRestaurants = await FoodRestaurant.find({ _id: { $in: ids }, status: 'approved' })
+            recommendedRestaurants = await FoodRestaurant.find({ _id: { $in: ids }, status: 'approved', partnerType: partnerTypeCondition() })
                 .select('restaurantName area city profileImage coverImages menuImages slug rating cuisines pureVegRestaurant isAcceptingOrders isActive openingTime closingTime openDays zoneId')
                 .lean();
         }

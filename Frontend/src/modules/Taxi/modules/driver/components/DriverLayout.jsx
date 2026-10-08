@@ -8,6 +8,7 @@ import {
     getStoredDriverRole,
 } from '../services/registrationService';
 import DriverRideRequestListener from './DriverRideRequestListener';
+import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { useScrollFocusedFieldIntoView } from '../../../shared/hooks/useTypingFocus';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
@@ -76,6 +77,35 @@ const isOnboardingRoute = (pathname = '') =>
     onboardingRoutes.has(pathname) ||
     /^\/taxi\/(driver|owner)\/legal\/(terms|privacy|support)$/.test(pathname) ||
     pathname.startsWith('/taxi/driver/role-signup/bus-builder');
+
+// Only Taxi Home carries the "Hello Parth" header (drawn by the page, over the map). The other main screens keep
+// their own top, with a small gap above it.
+const TOP_BAR_PATHS = new Set([
+    '/taxi/driver/history',
+    '/taxi/driver/wallet',
+    '/taxi/driver/incentives',
+    '/taxi/driver/profile',
+    '/taxi/driver/bus-home',
+    '/taxi/driver/pooling',
+    '/taxi/driver/pooling/bookings',
+    '/taxi/owner/home',
+    '/taxi/owner/dashboard',
+    '/taxi/owner/manage-drivers',
+    '/taxi/owner/vehicle-fleet',
+    '/taxi/owner/pooling-vehicles',
+    '/taxi/owner/bus-service',
+    '/taxi/owner/bus-bookings',
+    '/taxi/owner/wallet',
+    '/taxi/owner/history',
+    '/taxi/owner/profile',
+]);
+
+// Screens that carry the floating bottom bar. It lives here (not in each page) so it stays mounted while the
+// pages change and the active pill can slide from tab to tab.
+const BOTTOM_NAV_PATH = new RegExp(
+    '^/taxi/driver/(home|dashboard|history|wallet|incentives|profile|vehicle-fleet(/.*)?|pooling|pooling/bookings)$'
+    + '|^/taxi/owner/(home|dashboard|history|wallet|profile|manage-drivers|vehicle-fleet(/.*)?|pooling-vehicles(/.*)?|bus-service(/.*)?|bus-bookings)$',
+);
 
 const softEntryRoutes = new Set([
     '/taxi/driver/welcome',
@@ -338,7 +368,7 @@ const DriverLayout = () => {
     }
 
     return (
-        <div className="driver-theme min-h-screen">
+        <div className={`driver-theme min-h-screen${isAllowed && TOP_BAR_PATHS.has(location.pathname.replace(/\/+$/, '')) ? ' driver-page-gap' : ''}`}>
             {isChecking && !isOnboardingRoute(location.pathname) ? (
                 <div className="min-h-screen flex items-center justify-center bg-white">
                     <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
@@ -346,6 +376,7 @@ const DriverLayout = () => {
             ) : (
                 <>
                     <Outlet context={{ isAllowed }} />
+                    {isAllowed && BOTTOM_NAV_PATH.test(location.pathname.replace(/\/+$/, '')) && <DriverBottomNav />}
                     {isAllowed && getStoredRole() === 'driver' && <DriverRideRequestListener />}
                 </>
             )}

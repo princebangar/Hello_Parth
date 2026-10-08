@@ -23,7 +23,7 @@ export async function calculateOrderPricing(userId, dto) {
   if (!restaurantId) throw new ValidationError('Restaurant id required');
 
   const restaurant = await FoodRestaurant.findById(restaurantId)
-    .select("status location zoneId restaurantName")
+    .select("status location zoneId restaurantName partnerType")
     .lean();
   if (!restaurant) throw new ValidationError("Restaurant not found");
   if (restaurant.status !== "approved")
@@ -168,6 +168,10 @@ export async function calculateOrderPricing(userId, dto) {
       const scopeOk =
         offer.restaurantScope !== "selected" ||
         String(offer.restaurantId || "") === String(restaurantId || "");
+      // A restaurant coupon never applies to a My Store order and a My Store coupon never to a restaurant.
+      const partnerOk =
+        (offer.partnerType === "store" ? "store" : "restaurant") ===
+        (restaurant.partnerType === "store" ? "store" : "restaurant");
       const minOrderValue = Number(offer.minOrderValue);
       const minOk = !Number.isFinite(minOrderValue) || minOrderValue <= 0 || subtotal >= minOrderValue;
       let usageOk = true;
@@ -213,6 +217,7 @@ export async function calculateOrderPricing(userId, dto) {
         startOk &&
         endOk &&
         scopeOk &&
+        partnerOk &&
         minOk &&
         usageOk &&
         perUserOk &&

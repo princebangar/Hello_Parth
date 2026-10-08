@@ -15,6 +15,7 @@ import { useOrdersManagement } from "@food/components/admin/orders/useOrdersMana
 import { Loader2 } from "lucide-react"
 import { OrdersDashboardSkeleton, TableSkeleton } from "@food/components/ui/loading-skeletons"
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js"
 const alertSound = "/assets/media/alert.mp3"
 const originalSound = "/assets/media/original.mp3"
 const debugLog = (...args) => {}
@@ -33,6 +34,7 @@ const statusConfig = {
   "delivered": { title: "Delivered Orders", color: "emerald", icon: Package },
   "canceled": { title: "Canceled Orders", color: "rose", icon: Package },
   "restaurant-cancelled": { title: "Restaurant Cancelled Orders", color: "red", icon: Package },
+  "my-store-cancelled": { title: "My Store Cancelled Orders", color: "red", icon: Package },
   "payment-failed": { title: "Payment Failed Orders", color: "red", icon: Package },
   "refunded": { title: "Refunded Orders", color: "sky", icon: Package },
   "offline-payments": { title: "Offline Payments", color: "slate", icon: Package },
@@ -40,6 +42,11 @@ const statusConfig = {
 
 export default function OrdersPage({ statusKey = "all" }) {
   const config = statusConfig[statusKey] || statusConfig["all"]
+  // Which orders the page lists: all | Restaurant orders | My Store orders. "My Store cancelled" is always My Store.
+  // With My Store switched off (Global admin) My Store orders are hidden: the page is the plain Restaurant list.
+  const myStoreEnabled = useMyStoreEnabled()
+  const [orderKind, setOrderKind] = useState("all")
+  const effectiveKind = statusKey === "my-store-cancelled" ? "store" : (!myStoreEnabled ? "restaurant" : orderKind)
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -524,6 +531,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         order.restaurantName ||
         order.restaurantId?.restaurantName ||
         ""
+      const isStoreOrder = order.partnerType === "store" || order.restaurantId?.partnerType === "store"
 
       return {
         ...order,
@@ -535,6 +543,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         customerPhone,
         customerId,
         restaurant,
+        isStoreOrder,
         items,
         subtotal,
         baseSubtotal,
@@ -602,10 +611,11 @@ export default function OrdersPage({ statusKey = "all" }) {
         status:
           statusKey === "all"
             ? undefined
-            : statusKey === "restaurant-cancelled"
+            : statusKey === "restaurant-cancelled" || statusKey === "my-store-cancelled"
               ? "cancelled"
               : statusKey,
         cancelledBy: statusKey === "restaurant-cancelled" ? "restaurant" : undefined,
+        partnerType: effectiveKind === "all" ? undefined : effectiveKind,
         search: debouncedSearch || undefined,
         restaurantId: filters.restaurant || undefined,
         startDate: filters.fromDate || undefined,
@@ -696,7 +706,7 @@ export default function OrdersPage({ statusKey = "all" }) {
     } finally {
       if (!silent) setIsLoading(false)
     }
-  }, [statusKey, currentPage, pageSize, debouncedSearch, filters, playDefaultRing, showBrowserNotification, startAlertLoop, stopOrderAlert])
+  }, [statusKey, effectiveKind, currentPage, pageSize, debouncedSearch, filters, playDefaultRing, showBrowserNotification, startAlertLoop, stopOrderAlert])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -1106,6 +1116,29 @@ export default function OrdersPage({ statusKey = "all" }) {
         onSettingsClick={() => setIsSettingsOpen(true)}
         isLoading={isLoading}
       />
+      {statusKey !== "my-store-cancelled" && myStoreEnabled && (
+        <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1 text-sm">
+          {[
+            { id: "all", label: "All" },
+            { id: "restaurant", label: "Restaurant Orders" },
+            { id: "store", label: "My Store Orders" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setOrderKind(tab.id)
+                setCurrentPage(1)
+              }}
+              className={`rounded-md px-4 py-1.5 font-medium transition-colors ${
+                effectiveKind === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
       {isLoading ? (
         <TableSkeleton rows={8} columns={7} />
       ) : (
@@ -1169,7 +1202,12 @@ export default function OrdersPage({ statusKey = "all" }) {
           />
           <OrdersTable 
             orders={filteredOrders} 
-            visibleColumns={visibleColumns}
+            visibleColumns={{
+              ...visibleColumns,
+              // Restaurant column: not on My Store lists. My Store column: not on Restaurant lists, nor when My Store is off.
+              restaurant: visibleColumns.restaurant && effectiveKind !== "store",
+              myStore: visibleColumns.myStore && myStoreEnabled && effectiveKind !== "restaurant",
+            }}
             onViewOrder={handleViewOrder}
             onPrintOrder={handlePrintOrder}
             onRefund={handleRefund}

@@ -8,6 +8,8 @@ const foodOfferSchema = new mongoose.Schema(
         customerScope: { type: String, enum: ['all', 'first-time'], default: 'all', index: true },
         restaurantScope: { type: String, enum: ['all', 'selected'], default: 'all', index: true },
         restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodRestaurant' },
+        /** Who the coupon is for. A restaurant coupon never applies to a My Store and the other way round. Missing = restaurant. */
+        partnerType: { type: String, enum: ['restaurant', 'store'], default: 'restaurant', index: true },
         minOrderValue: { type: Number, default: null, min: 0 },
         maxDiscount: { type: Number, default: null, min: 0 },
         usageLimit: { type: Number, default: null, min: 0 },

@@ -9,6 +9,7 @@ import { FoodZone } from '../../admin/models/zone.model.js';
 import { ValidationError, ForbiddenError, NotFoundError } from '../../../../core/auth/errors.js';
 import { buildPaginationOptions, buildPaginatedResult } from '../../../../utils/helpers.js';
 import { FoodOffer } from '../../admin/models/offer.model.js';
+import { andPartnerFilter } from '../../utils/partnerScope.js';
 import { FoodOfferUsage } from '../../admin/models/offerUsage.model.js';
 import { FoodSystemConfig } from '../../admin/models/systemConfig.model.js';
 import { FoodRestaurantCommission } from '../../admin/models/restaurantCommission.model.js';
@@ -1947,6 +1948,9 @@ export async function listOrdersAdmin(query) {
     filter.userId = new mongoose.Types.ObjectId(userIdRaw);
   }
 
+  // "Restaurant orders" / "My Store orders" filter of the admin Orders pages (none = both)
+  await andPartnerFilter(filter, query.partnerType);
+
   const zoneIdRaw =
     typeof query.zoneId === "string" ? query.zoneId.trim() : "";
   if (zoneIdRaw && mongoose.Types.ObjectId.isValid(zoneIdRaw) && !filter.restaurantId) {
@@ -2060,7 +2064,7 @@ export async function listOrdersAdmin(query) {
     FoodOrder.find(filter)
       .select("+deliveryOtp")
       .populate("userId", "name phone email")
-      .populate("restaurantId", "restaurantName area city ownerPhone")
+      .populate("restaurantId", "restaurantName area city ownerPhone partnerType")
       .populate("dispatch.deliveryPartnerId", "name phone")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -2068,7 +2072,16 @@ export async function listOrdersAdmin(query) {
       .lean(),
     FoodOrder.countDocuments(filter),
   ]);
-  const paginated = buildPaginatedResult({ docs: docs.map(d => normalizeOrderForClient(d)), total, page, limit });
+  const paginated = buildPaginatedResult({
+    docs: docs.map((d) => ({
+      ...normalizeOrderForClient(d),
+      // My Store orders carry the store's name in their own column (the Restaurant column shows N/A)
+      partnerType: d?.restaurantId?.partnerType === "store" ? "store" : "restaurant",
+    })),
+    total,
+    page,
+    limit,
+  });
 
   let statusCounts = null;
   const wantCounts =

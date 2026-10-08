@@ -26,6 +26,7 @@ export async function approveFoodItemController(req, res, next) {
             'categories',
             'under_250',
             'restaurants',
+            'my_stores',
         ]);
 
         return sendResponse(res, 200, 'Food item approved successfully', { food: updated });
@@ -45,6 +46,7 @@ export async function rejectFoodItemController(req, res, next) {
             'categories',
             'under_250',
             'restaurants',
+            'my_stores',
         ]);
 
         return sendResponse(res, 200, 'Food item rejected successfully', { food: updated });

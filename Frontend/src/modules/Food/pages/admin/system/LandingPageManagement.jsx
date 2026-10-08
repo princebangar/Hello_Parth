@@ -3,6 +3,7 @@ import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2,
 import api from "@food/api"
 import { adminAPI } from "@food/api"
 import { getModuleToken } from "@food/utils/auth"
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js"
 import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Button } from "@food/components/ui/button"
@@ -17,6 +18,8 @@ const debugError = (...args) => {}
 
 
 export default function LandingPageManagement() {
+  // My Store switched off in Global > Customization Settings: its Explore More icon box is hidden too
+  const myStoreEnabled = useMyStoreEnabled()
   const [activeTab, setActiveTab] = useState('banners')
   const [exploreMoreSubTab, setExploreMoreSubTab] = useState('icons')
 
@@ -2012,13 +2015,14 @@ export default function LandingPageManagement() {
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                 <h2 className="text-lg font-bold text-slate-900 mb-6">Manage Explore More Icons</h2>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                   {[
+                    { id: 'my-store', label: 'My Store', link: '/food/user/my-store' },
                     { id: 'offers', label: 'Offers', link: '/user/offers' },
                     { id: 'gourmet', label: 'Gourmet', link: '/user/gourmet' },
                     { id: 'collection', label: 'Collections', link: '/user/profile/favorites' },
                     { id: 'under-250', label: 'Under 250', link: '/food/user/under-250' }
-                  ].map((item) => {
+                  ].filter((item) => myStoreEnabled || item.id !== 'my-store').map((item) => {
                     // Find matching item from DB
                     const dbItem = exploreMore.find(i => {
                       const dbLabel = i.label?.toLowerCase().trim() || ""

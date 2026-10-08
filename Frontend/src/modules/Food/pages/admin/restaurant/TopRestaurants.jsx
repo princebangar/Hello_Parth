@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Trophy, Search, Star, Loader2, Save, Bike, ShoppingBag, RotateCcw, ArrowLeftRight } from "lucide-react"
 import { adminAPI } from "@food/api"
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { toast } from "sonner"
 import {
   Select,
@@ -51,7 +53,11 @@ const getScrollParent = (el) => {
 }
 
 export default function TopRestaurants() {
-  const [activeTab, setActiveTab] = useState("delivery") // 'delivery' | 'takeaway'
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
+  const isStore = partnerType === "store"
+  // My Store has one curated list (type "store"); Restaurants keep Delivery / Takeaway
+  const [activeTab, setActiveTab] = useState(isStore ? "store" : "delivery") // 'delivery' | 'takeaway' | 'store'
   const [zones, setZones] = useState([])
   const [selectedZone, setSelectedZone] = useState("")
   const [restaurants, setRestaurants] = useState([])
@@ -372,10 +378,12 @@ export default function TopRestaurants() {
     }
   }
 
-  const tabs = [
-    { key: "delivery", label: "Delivery Top Restaurants", icon: Bike },
-    { key: "takeaway", label: "Takeaway Top Restaurants", icon: ShoppingBag },
-  ]
+  const tabs = isStore
+    ? []
+    : [
+        { key: "delivery", label: "Delivery Top Restaurants", icon: Bike },
+        { key: "takeaway", label: "Takeaway Top Restaurants", icon: ShoppingBag },
+      ]
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
@@ -387,15 +395,15 @@ export default function TopRestaurants() {
               <Trophy className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Top Restaurants</h1>
+              <h1 className="text-2xl font-bold text-slate-900">{isStore ? "Top Stores" : "Top Restaurants"}</h1>
               <p className="text-sm text-slate-600">
-                Choose which restaurants appear at the top for users in each zone. Max {MAX_TOP} per zone.
+                {w(`Choose which restaurants appear at the top for users in each zone. Max ${MAX_TOP} per zone.`)}
               </p>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="mt-4 inline-flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+          <div className={tabs.length === 0 ? "hidden" : "mt-4 inline-flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1"}>
             {tabs.map((t) => {
               const Icon = t.icon
               const active = activeTab === t.key
@@ -426,7 +434,7 @@ export default function TopRestaurants() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by restaurant, owner or phone..."
+                placeholder={w("Search by restaurant, owner or phone...")}
                 className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -460,13 +468,13 @@ export default function TopRestaurants() {
                 className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save Top Restaurants
+                {w("Save Top Restaurants")}
               </button>
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">
             {assignedCount}/{MAX_TOP} selected · Pick a number in the <strong>Top No.</strong> dropdown
-            to promote a restaurant. Choosing a number that&apos;s already taken lets you replace it.
+            {w("to promote a restaurant. Choosing a number that's already taken lets you replace it.")}
           </p>
         </div>
 
@@ -480,7 +488,7 @@ export default function TopRestaurants() {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">S.No</th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant Info</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">{w("Restaurant Info")}</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Owner Info</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Zone</th>
                   <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Rating</th>

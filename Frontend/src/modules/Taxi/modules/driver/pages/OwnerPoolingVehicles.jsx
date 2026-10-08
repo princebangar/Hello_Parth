@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Car, LoaderCircle, PencilLine, Plus, Trash2, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { ownerPoolingVehicleService } from '../services/registrationService';
 
 const LIST_PATH = '/taxi/owner/pooling-vehicles';
@@ -142,7 +141,6 @@ const OwnerPoolingVehicles = () => {
         </div>
       )}
 
-      <DriverBottomNav />
     </div>
   );
 };

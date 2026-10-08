@@ -12,7 +12,10 @@ import {
   getPendingTicket,
   clearPendingTicket,
   setAuthData,
+  readLastPartnerRole,
+  getPendingPartnerType,
 } from "@food/utils/auth"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { clearOnboardingFromLocalStorage } from "@food/utils/onboardingUtils"
 import {
   enablePendingVerificationPush,
@@ -56,6 +59,10 @@ export default function VerificationPending() {
       ""
     )
   }, [location.state?.phone])
+
+  // My Store accounts see "store" instead of "restaurant" on this screen
+  const partnerKind = getPendingPartnerType() === "store" ? "store" : "restaurant"
+  const w = (t) => pw(t, partnerKind)
 
   const parsedMessage = useMemo(() => {
     if (localStatus === "banned") {
@@ -175,7 +182,7 @@ export default function VerificationPending() {
           clearRestaurantPendingPhone()
           localStorage.removeItem("restaurant_pendingStatus")
           localStorage.removeItem("restaurant_pendingMessage")
-          toast.success("Your restaurant is approved! 🎉")
+          toast.success(w("Your restaurant is approved! 🎉"))
           hardNavigate("/food/restaurant")
         } else if (status === "rejected") {
           const msg = data.rejectionReason
@@ -331,10 +338,10 @@ export default function VerificationPending() {
             {localStatus === "rejected" || localStatus === "banned" ? (
               <>
                 <h1 className="text-xl font-extrabold text-slate-950">
-                  {isDisabledByAdmin ? "Restaurant Disabled" : "Registration Rejected"}
+                  {isDisabledByAdmin ? w("Restaurant Disabled") : "Registration Rejected"}
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  {isDisabledByAdmin ? "Your restaurant has been disabled." : parsedMessage.text}
+                  {isDisabledByAdmin ? w("Your restaurant has been disabled.") : w(parsedMessage.text)}
                 </p>
                 {parsedMessage.reason && !isDisabledByAdmin && (
                   <div className="mt-4 text-sm font-semibold text-left p-3.5 rounded-2xl border border-red-100 bg-red-50/50">
@@ -353,11 +360,11 @@ export default function VerificationPending() {
                   Verification Pending
                 </p>
                 <h1 className="mx-auto max-w-[19rem] text-center text-[15px] font-extrabold leading-5 text-slate-950 sm:text-xl sm:leading-tight">
-                  <span className="block">Your restaurant is</span>
+                  <span className="block">{w("Your restaurant is")}</span>
                   <span className="block">under{"\u00A0"}review</span>
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Admin received your onboarding details successfully. Our team will verify your restaurant and activate your dashboard once approval is complete.
+                  {w("Admin received your onboarding details successfully. Our team will verify your restaurant and activate your dashboard once approval is complete.")}
                 </p>
               </>
             )}
@@ -438,7 +445,7 @@ export default function VerificationPending() {
                     clearOnboardingFromLocalStorage()
                     localStorage.removeItem("restaurant_pendingStatus")
                     localStorage.removeItem("restaurant_pendingMessage")
-                    navigate("/food/restaurant/onboarding?step=1", { replace: true })
+                    navigate(`/food/restaurant/onboarding?step=1${readLastPartnerRole() === "store" ? "&type=store" : ""}`, { replace: true })
                   }}
                 >
                   Re-apply

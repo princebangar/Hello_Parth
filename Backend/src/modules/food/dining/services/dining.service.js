@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { partnerTypeCondition } from '../../utils/partnerScope.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { FoodDiningCategory } from '../models/diningCategory.model.js';
 import { FoodDiningRestaurant } from '../models/diningRestaurant.model.js';
@@ -395,7 +396,8 @@ export async function listDiningRestaurantsPublic(query = {}) {
         filter.categoryIds = category._id;
     }
 
-    const restaurantMatch = {};
+    // My Store partners have no dining; keep them out even if a flag slips through.
+    const restaurantMatch = { partnerType: partnerTypeCondition() };
     const restaurantAndConditions = [];
 
     if (cityValue) {

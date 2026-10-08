@@ -406,6 +406,9 @@ export default function ProfessionalSearch() {
                              {r.matchedDish || query}
                           </div>
                           <h3 className="text-base font-black text-gray-900 dark:text-white line-clamp-1 group-hover:text-[#DC2626] transition-colors">{r.restaurantName}</h3>
+                          {r.partnerType === 'store' && (
+<span className="mt-0.5 inline-flex w-fit items-center rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-700">My Store</span>
+)}
                           <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-zinc-400 mt-2 font-medium">
                              <div className="flex items-center gap-1">
                                 <Star className="w-3 h-3 text-[#DC2626] fill-[#DC2626]" />
@@ -446,6 +449,9 @@ export default function ProfessionalSearch() {
                         <div className="absolute bottom-4 left-5 right-5 flex justify-between items-end">
                            <div className="min-w-0 flex-1 mr-2">
                               <h3 className="text-xl sm:text-2xl font-black text-white mb-1.5 truncate">{r.restaurantName}</h3>
+                              {r.partnerType === 'store' && (
+<span className="mb-1.5 inline-flex w-fit items-center rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-700">My Store</span>
+)}
                               <p className="text-white/80 text-[11px] font-bold uppercase tracking-wider line-clamp-1">{r.cuisines?.join(", ")}</p>
                            </div>
                            <div className="bg-white/10 backdrop-blur-xl border border-white/20 px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-2xl">

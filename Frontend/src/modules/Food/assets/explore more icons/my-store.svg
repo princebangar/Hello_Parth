@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="My Store">
+  <defs>
+    <linearGradient id="roof" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E11D48"/>
+      <stop offset="1" stop-color="#9F0A32"/>
+    </linearGradient>
+  </defs>
+  <!-- ground shadow -->
+  <ellipse cx="128" cy="222" rx="82" ry="9" fill="#000" opacity="0.08"/>
+  <!-- shop body -->
+  <rect x="48" y="112" width="160" height="104" rx="8" fill="#FFF4E5" stroke="#F1D2A8" stroke-width="3"/>
+  <!-- door -->
+  <rect x="106" y="146" width="44" height="70" rx="6" fill="#B80B3D"/>
+  <circle cx="142" cy="182" r="3.5" fill="#FFE4A8"/>
+  <!-- windows -->
+  <rect x="62" y="136" width="34" height="34" rx="5" fill="#BFE3F5" stroke="#8FC5E0" stroke-width="2.5"/>
+  <rect x="160" y="136" width="34" height="34" rx="5" fill="#BFE3F5" stroke="#8FC5E0" stroke-width="2.5"/>
+  <!-- awning -->
+  <path d="M36 112 L50 62 H206 L220 112 Z" fill="url(#roof)"/>
+  <g fill="#FFF">
+    <path d="M36 112 L50 62 H78 L70 112 Z" opacity="0.92"/>
+    <path d="M106 62 H134 L132 112 H108 Z" opacity="0.92"/>
+    <path d="M178 62 H206 L220 112 H186 Z" opacity="0.92"/>
+  </g>
+  <!-- scalloped edge -->
+  <g fill="url(#roof)">
+    <circle cx="53" cy="112" r="17"/>
+    <circle cx="91" cy="112" r="17"/>
+    <circle cx="128" cy="112" r="17"/>
+    <circle cx="165" cy="112" r="17"/>
+    <circle cx="203" cy="112" r="17"/>
+  </g>
+  <g fill="#FFF" opacity="0.92">
+    <circle cx="91" cy="112" r="17"/>
+    <circle cx="165" cy="112" r="17"/>
+  </g>
+  <!-- sign -->
+  <rect x="92" y="34" width="72" height="22" rx="11" fill="#FBBF24"/>
+  <path d="M128 40 l3 6 6.5 1 -4.7 4.5 1.1 6.5 -5.9 -3.1 -5.9 3.1 1.1 -6.5 -4.7 -4.5 6.5 -1z" fill="#B45309" transform="translate(0 -3) scale(1)"/>
+</svg>

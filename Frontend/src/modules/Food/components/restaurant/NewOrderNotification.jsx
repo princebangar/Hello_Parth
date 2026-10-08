@@ -52,7 +52,7 @@ export default function NewOrderNotification({ order, onClose, onViewOrder }) {
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
-                      Delivery
+                      Home Delivery
                     </span>
                   )}
                 </div>

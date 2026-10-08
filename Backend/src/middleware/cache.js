@@ -58,10 +58,15 @@ export const invalidateCache = async (pattern) => {
     if (!redis || !redis.isReady) return;
 
     try {
-        const keys = await redis.keys(pattern);
-        if (keys.length > 0) {
-            await redis.del(keys);
-            logger.info(`Invalidated ${keys.length} cache keys matching: ${pattern}`);
+        // Anything that changes a restaurant also changes the My Store list
+        // (same collection), so clearing `restaurants:*` clears `my_stores:*` too.
+        const patterns = pattern === 'restaurants:*' ? [pattern, 'my_stores:*'] : [pattern];
+        for (const p of patterns) {
+            const keys = await redis.keys(p);
+            if (keys.length > 0) {
+                await redis.del(keys);
+                logger.info(`Invalidated ${keys.length} cache keys matching: ${p}`);
+            }
         }
     } catch (err) {
         logger.error(`Cache invalidation error: ${err.message}`);
@@ -77,6 +82,7 @@ export const invalidateFoodBrowseCaches = async (
         'search',
         'under_250',
         'offers',
+        'my_stores',
     ],
 ) => {
     const list = Array.isArray(prefixes) ? prefixes.filter(Boolean) : [];

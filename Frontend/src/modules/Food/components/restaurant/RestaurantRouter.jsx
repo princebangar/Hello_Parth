@@ -7,6 +7,7 @@ import { OnboardingSkeleton } from "@food/components/ui/loading-skeletons"
 import PolicyPageLoader from "@/shared/components/PolicyPageLoader"
 import { isPolicyPath } from "@/shared/utils/policyPaths"
 import useDesktopLayout from "@food/pages/restaurant/desktop/useDesktopLayout"
+import StorePanelWording from "./StorePanelWording"
 import "./restaurantTheme.css"
 import { toast } from "sonner"
 
@@ -118,6 +119,7 @@ export default function RestaurantRouter() {
 
   return (
     <div className="restaurant-theme">
+      <StorePanelWording />
       <Suspense fallback={
         isPolicyScreen ? (
           <PolicyPageLoader />

@@ -2,6 +2,7 @@
  * API layer - auth connected to new backend; rest stubbed for UI compatibility.
  */
 
+import { withPartnerScope, withPartnerBody } from "../../modules/Food/utils/adminPartnerScope.js";
 import apiClient from "./axios.js";
 import { API_ENDPOINTS } from "./config.js";
 import * as authService from "./auth.js";
@@ -250,13 +251,13 @@ export const adminAPI = {
   // Restaurant approvals and join requests
   getPendingRestaurants: (params = {}) =>
     adminCachedGet("/food/admin/restaurants/pending", {
-      params,
+      params: withPartnerScope(params),
       contextModule: "admin",
     }, { ttlMs: 10000, staleOn429Ms: 90000 }),
   /** List restaurant complaints (admin). */
   getRestaurantComplaints: (params = {}) =>
     apiClient.get("/food/admin/restaurants/complaints", {
-      params,
+      params: withPartnerScope(params),
       contextModule: "admin",
     }),
   updateRestaurantComplaint: (id, body) =>
@@ -318,7 +319,7 @@ export const adminAPI = {
   /** List restaurant withdrawal requests (admin). */
   getWithdrawals: (params = {}) =>
     apiClient.get("/food/admin/withdrawals", {
-      params,
+      params: withPartnerScope(params),
       contextModule: "admin",
     }),
   /** Update status of a withdrawal request. */
@@ -422,13 +423,13 @@ export const adminAPI = {
   /** List restaurants for admin. Requires admin auth. */
   getRestaurants: (params = {}, config = {}) =>
     apiClient.get("/food/admin/restaurants", {
-      params: { limit: 1000, ...params },
+      params: { limit: 1000, ...withPartnerScope(params) },
       contextModule: "admin",
       ...config,
     }),
   getRestaurantReviews: (params = {}) =>
     apiClient.get("/food/admin/restaurants/reviews", {
-      params: { page: 1, limit: 1000, ...params },
+      params: { page: 1, limit: 1000, ...withPartnerScope(params) },
       contextModule: "admin",
     }),
   /** Categories (admin) */
@@ -553,7 +554,7 @@ export const adminAPI = {
     }),
   /** Foods (admin) - separate collection */
   getFoods: (params = {}) =>
-    apiClient.get("/food/admin/foods", { params, contextModule: "admin" }),
+    apiClient.get("/food/admin/foods", { params: withPartnerScope(params), contextModule: "admin" }),
   getPricingSummary: (params = {}) =>
     apiClient.get("/food/admin/pricing/summary", { params, contextModule: "admin" }),
   getPricingRules: (params = {}) =>
@@ -647,7 +648,7 @@ export const adminAPI = {
   /** Dispatch settings – auto vs manual assign (global) */
   /** Create restaurant (admin). Single API: POST /food/admin/restaurants. Body: JSON with image URLs. */
   createRestaurant: (body) =>
-    apiClient.post("/food/admin/restaurants", body ?? {}, {
+    apiClient.post("/food/admin/restaurants", withPartnerBody(body), {
       contextModule: "admin",
     }),
   /** List delivery zones. Query: limit, page, isActive, search */
@@ -670,7 +671,7 @@ export const adminAPI = {
   /** Restaurant report (admin). */
   getRestaurantReport: (params = {}) =>
     apiClient.get("/food/admin/reports/restaurants", {
-      params: { page: 1, limit: 1000, ...params },
+      params: { page: 1, limit: 1000, ...withPartnerScope(params) },
       contextModule: "admin",
     }),
   getTransactionReport: (params = {}) =>
@@ -726,13 +727,13 @@ export const adminAPI = {
 
   /** Offers & Coupons (admin) */
   getAllOffers: (params = {}) =>
-    apiClient.get("/food/admin/offers", { params, contextModule: "admin" }),
+    apiClient.get("/food/admin/offers", { params: withPartnerScope(params), contextModule: "admin" }),
   createAdminOffer: (body) =>
-    apiClient.post("/food/admin/offers", body ?? {}, {
+    apiClient.post("/food/admin/offers", withPartnerBody(body), {
       contextModule: "admin",
     }),
   updateAdminOffer: (offerId, body) =>
-    apiClient.put(`/food/admin/offers/${String(offerId)}`, body ?? {}, {
+    apiClient.put(`/food/admin/offers/${String(offerId)}`, withPartnerBody(body), {
       contextModule: "admin",
     }),
   updateAdminOfferCartVisibility: (offerId, itemId, showInCart) =>
@@ -852,11 +853,12 @@ export const adminAPI = {
   /** Restaurant Commission (admin) */
   getRestaurantCommissionBootstrap: () =>
     apiClient.get("/food/admin/restaurant-commissions/bootstrap", {
+      params: withPartnerScope({}),
       contextModule: "admin",
     }),
   getRestaurantCommissions: (params = {}) =>
     apiClient.get("/food/admin/restaurant-commissions", {
-      params,
+      params: withPartnerScope(params),
       contextModule: "admin",
     }),
   getRestaurantCommissionById: (id) =>
@@ -886,7 +888,7 @@ export const adminAPI = {
   /** Backward-compatible alias used in UI */
   getApprovedRestaurants: (params = {}) =>
     apiClient.get("/food/admin/restaurants", {
-      params: { status: "approved", limit: 1000, ...params },
+      params: { status: "approved", limit: 1000, ...withPartnerScope(params) },
       contextModule: "admin",
     }),
 
@@ -982,7 +984,7 @@ export const adminAPI = {
   /** Restaurant add-ons approval (admin) */
   getRestaurantAddons: (params = {}) =>
     apiClient.get("/food/admin/addons", {
-      params: params ?? {},
+      params: withPartnerScope(params ?? {}),
       contextModule: "admin",
     }),
   updateRestaurantAddon: (id, body) =>
@@ -1058,14 +1060,14 @@ export const optimisticallyUpdateRestaurantOrderStatus = (orderId, targetStatus)
 
 /** Restaurant API - OTP login via new backend; no email/password. */
 export const restaurantAPI = {
-  sendOTP: (phone, _purpose = "login") => {
+  sendOTP: (phone, _purpose = "login", _email = null, partnerType = "restaurant", confirmNewRole = false) => {
     if (!phone) return Promise.reject(new Error("Phone is required"));
-    return authService.requestRestaurantOtp(phone);
+    return authService.requestRestaurantOtp(phone, partnerType, confirmNewRole);
   },
-  verifyOTP: (phone, otp, _purpose, _name, _email, fcmToken = null, platform = "web", confirmAction = null) => {
+  verifyOTP: (phone, otp, _purpose, _name, _email, fcmToken = null, platform = "web", confirmAction = null, partnerType = "restaurant") => {
     if (!phone || !otp)
       return Promise.reject(new Error("Phone and OTP are required"));
-    return authService.verifyRestaurantOtp(phone, otp, fcmToken, platform, confirmAction);
+    return authService.verifyRestaurantOtp(phone, otp, fcmToken, platform, confirmAction, partnerType);
   },
   reapply: (phone) => {
     if (!phone) return Promise.reject(new Error("Phone is required"));
@@ -1554,6 +1556,12 @@ export const restaurantAPI = {
   /** Public: list approved restaurants for user app */
   getRestaurants: (params = {}, config = {}) =>
     getPublicRestaurantsOnce(params, config),
+  /** Public: My Store partners of a zone (brand stores — never in getRestaurants) */
+  getMyStores: (params = {}, config = {}) =>
+    apiClient.get("/food/restaurant/my-stores", {
+      params: { limit: 40, ...params },
+      ...config,
+    }),
   /** Public: list restaurants with dishes under ₹250 */
   getRestaurantsUnder250: (params = {}, config = {}) =>
     getPublicRestaurantsUnder250Once(params, config),

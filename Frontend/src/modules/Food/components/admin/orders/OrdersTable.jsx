@@ -134,8 +134,12 @@ export default function OrdersTable({
             bVal = String(b.customerName || "").toLowerCase()
             break
           case "restaurant":
-            aVal = String(a.restaurant || "").toLowerCase()
-            bVal = String(b.restaurant || "").toLowerCase()
+            aVal = a.isStoreOrder ? "" : String(a.restaurant || "").toLowerCase()
+            bVal = b.isStoreOrder ? "" : String(b.restaurant || "").toLowerCase()
+            break
+          case "myStore":
+            aVal = a.isStoreOrder ? String(a.restaurant || "").toLowerCase() : ""
+            bVal = b.isStoreOrder ? String(b.restaurant || "").toLowerCase() : ""
             break
           case "foodItems":
             aVal = a.items && a.items[0] ? String(a.items[0].name || a.items[0].foodName || "").toLowerCase() : ""
@@ -264,6 +268,14 @@ export default function OrdersTable({
                   </div>
                 </th>
               )}
+              {visibleColumns.myStore && (
+                <th className="w-[200px] px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">
+                  <div className="flex items-center gap-2 cursor-pointer select-none group" onClick={() => requestSort("myStore")}>
+                    <span>My Store</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortConfig.key === "myStore" ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600"}`} />
+                  </div>
+                </th>
+              )}
               {visibleColumns.foodItems && (
                 <th className="w-[240px] px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">
                   <div className="flex items-center gap-2 cursor-pointer select-none group" onClick={() => requestSort("foodItems")}>
@@ -373,7 +385,12 @@ export default function OrdersTable({
                 )}
                 {visibleColumns.restaurant && (
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-slate-700">{formatRestaurantName(order.restaurant)}</span>
+                    <span className="text-sm font-medium text-slate-700">{order.isStoreOrder ? "N/A" : formatRestaurantName(order.restaurant)}</span>
+                  </td>
+                )}
+                {visibleColumns.myStore && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm font-medium text-slate-700">{order.isStoreOrder ? formatRestaurantName(order.restaurant) : "N/A"}</span>
                   </td>
                 )}
                 {visibleColumns.foodItems && (

@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useEffect } from "react"
 import { Search, Download, ChevronDown, Star, ArrowUpDown, Settings, FileText, FileSpreadsheet, Code, Check, Columns, Loader2, Eye, Utensils } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
@@ -12,6 +14,8 @@ const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 export default function RestaurantReviews() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -169,7 +173,7 @@ export default function RestaurantReviews() {
             <div className="flex items-center gap-3">
               <Utensils className="w-5 h-5 text-emerald-500" />
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900">Restaurant Reviews</h1>
+                <h1 className="text-2xl font-bold text-slate-900">{w("Restaurant Reviews")}</h1>
                 <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700 flex items-center justify-center min-w-[2.5rem] h-7">
                   {isLoading ? (
                     <span className="w-5 h-3 rounded bg-slate-300/80 animate-pulse" />
@@ -184,7 +188,7 @@ export default function RestaurantReviews() {
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"
-                  placeholder="Search by restaurant or customer"
+                  placeholder={w("Search by restaurant or customer")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -251,7 +255,7 @@ export default function RestaurantReviews() {
                       <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Order ID</th>
                     )}
                     {visibleColumns.restaurant && (
-                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">{w("Restaurant")}</th>
                     )}
                     {visibleColumns.customer && (
                       <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Customer</th>

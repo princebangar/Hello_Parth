@@ -27,6 +27,8 @@ const platformSettingSchema = new mongoose.Schema(
     app: {
       maintenance_mode_enabled: { type: Boolean },
       default_location_enabled: { type: Boolean },
+      // Food "My Store" (brand stores). No schema default: absent means ON, so nothing changes until the Global admin turns it off.
+      my_store_enabled: { type: Boolean },
     },
     // Customer payment methods for every customer app. Off here beats any per-app (Food) switch.
     user_payments: {

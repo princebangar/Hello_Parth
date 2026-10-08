@@ -1,9 +1,11 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useNavigate } from "react-router-dom"
 import { Clock, Power, ShoppingBag, Truck } from "lucide-react"
 import { toast } from "sonner"
 import { BASE, SubPageHeader, Switch } from "./kit"
 import { useStatus } from "./StatusContext"
 import { Card, Spinner, btn } from "./ui"
+import { isMyStorePartner } from "@food/utils/auth"
 
 const fmt = (t) => {
   if (!t) return ""
@@ -33,7 +35,7 @@ export default function DesktopOnlineStatus() {
 
   return (
     <>
-      <SubPageHeader title="Restaurant status" subtitle="Control whether customers can place new orders" />
+      <SubPageHeader title={sw("Restaurant status")} subtitle="Control whether customers can place new orders" />
       <div className="grid max-w-3xl gap-4">
         <Card>
           <div className="flex items-center gap-5">
@@ -58,11 +60,12 @@ export default function DesktopOnlineStatus() {
           <div className="flex items-center gap-4 px-5 py-4">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-600"><Truck className="h-5 w-5" /></span>
             <div className="flex-1">
-              <p className="font-semibold text-slate-900">Delivery status</p>
+              <p className="font-semibold text-slate-900">{isMyStorePartner() ? "Store status" : "Delivery status"}</p>
               <p className="text-xs text-slate-500">{day && day.isOpen !== false ? `Today ${fmt(day.openingTime)} – ${fmt(day.closingTime)}` : "Delivery timings follow your outlet timings"}</p>
             </div>
-            <Switch checked={s.accepting} disabled={s.busy} onChange={toggleDelivery} label="Delivery status" />
+            <Switch checked={s.accepting} disabled={s.busy} onChange={toggleDelivery} label={isMyStorePartner() ? "Store status" : "Delivery status"} />
           </div>
+          {!isMyStorePartner() && (
           <div className="flex items-center gap-4 border-t border-slate-100 px-5 py-4">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-violet-600"><ShoppingBag className="h-5 w-5" /></span>
             <div className="flex-1">
@@ -71,6 +74,7 @@ export default function DesktopOnlineStatus() {
             </div>
             <Switch checked={s.takeaway} onChange={toggleTakeaway} label="Takeaway orders" />
           </div>
+          )}
         </Card>
 
         <div className="flex items-center gap-3 rounded-xl bg-white p-4 text-sm text-slate-600 ring-1 ring-slate-200/80">

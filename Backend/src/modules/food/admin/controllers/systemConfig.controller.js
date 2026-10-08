@@ -99,6 +99,8 @@ export async function getPublicCustomizationSettings(req, res) {
     data.online_payment_enabled =
         data.online_payment_enabled === true && razorpayActive && appSwitches.user_online_enabled;
     data.default_location_enabled = appSwitches.default_location_enabled;
+    // Global admin > Customization Settings > My Store (hides the whole brand-store feature when off)
+    data.my_store_enabled = appSwitches.my_store_enabled !== false;
     // maintenance_mode_enabled stays the Food-only switch; this one locks every app (Food + Taxi)
     data.global_maintenance_enabled = appSwitches.maintenance_mode_enabled;
     // Raw Global switches, for the Taxi app

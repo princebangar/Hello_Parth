@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, memo, Component } from "react";
 import { useNavigate } from "react-router-dom";
+import { isMyStorePartner } from "@food/utils/auth";
 import {
   checkOnboardingStatus,
   isRestaurantOnboardingComplete,
@@ -3004,7 +3005,7 @@ function OrdersMainInner() {
           </motion.div>
         )}
 
-        {searchQuery.trim() === '' && (
+        {!isMyStorePartner() && searchQuery.trim() === '' && (
           activeFilter === 'all' ||
           activeFilter === 'preparing' ||
           activeFilter === 'ready' ||

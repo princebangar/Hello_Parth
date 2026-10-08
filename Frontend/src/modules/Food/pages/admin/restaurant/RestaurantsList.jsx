@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2, Plus, ShieldCheck, CheckCircle2, Utensils, UtensilsCrossed, Store } from "lucide-react"
@@ -104,6 +106,8 @@ const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
 
 
 export default function RestaurantsList() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [restaurants, setRestaurants] = useState([])
@@ -167,8 +171,9 @@ export default function RestaurantsList() {
   const placesAutocompleteRef = useRef(null)
 
   // Format Restaurant ID to REST format (e.g., REST422829)
+  const idPrefix = partnerType === "store" ? "STORE" : "REST"
   const formatRestaurantId = (id) => {
-    if (!id) return "REST000000"
+    if (!id) return `${idPrefix}000000`
 
     const idString = String(id)
     // Extract last 6 digits from the ID
@@ -204,7 +209,7 @@ export default function RestaurantsList() {
       lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
     }
 
-    return `REST${lastDigits}`
+    return `${idPrefix}${lastDigits}`
   }
 
   // Fetch restaurants from backend API
@@ -1091,7 +1096,7 @@ export default function RestaurantsList() {
   // Handle export functionality
   const handleExport = () => {
     const dataToExport = filteredRestaurants.length > 0 ? filteredRestaurants : restaurants
-    const filename = "restaurants_list"
+    const filename = partnerType === "store" ? "my_store_list" : "restaurants_list"
     exportRestaurantsToPDF(dataToExport, filename)
   }
 
@@ -1102,7 +1107,7 @@ export default function RestaurantsList() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">Restaurants List</h1>
+              <h1 className="text-2xl font-bold text-slate-900">{w("Restaurants List")}</h1>
             </div>
 
           </div>
@@ -1114,7 +1119,7 @@ export default function RestaurantsList() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Total restaurants</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">{w("Total restaurants")}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {loading ? (
                     <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
@@ -1133,7 +1138,7 @@ export default function RestaurantsList() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Active restaurants</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">{w("Active restaurants")}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {loading ? (
                     <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
@@ -1152,7 +1157,7 @@ export default function RestaurantsList() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Inactive restaurants</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">{w("Inactive restaurants")}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {loading ? (
                     <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
@@ -1171,7 +1176,7 @@ export default function RestaurantsList() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Rejected restaurants</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">{w("Rejected restaurants")}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {loading ? (
                     <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
@@ -1190,7 +1195,7 @@ export default function RestaurantsList() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Banned restaurants</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">{w("Banned restaurants")}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {loading ? (
                     <span className="inline-block w-12 h-6 rounded bg-slate-200 animate-pulse" />
@@ -1219,7 +1224,7 @@ export default function RestaurantsList() {
                     : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                Restaurants List
+                {w("Restaurants List")}
               </button>
               <button
                 type="button"
@@ -1230,7 +1235,7 @@ export default function RestaurantsList() {
                     : "border-red-200/80 bg-white text-red-500 hover:bg-red-50/50"
                 }`}
               >
-                Rejected Restaurants
+                {w("Rejected Restaurants")}
               </button>
               <button
                 type="button"
@@ -1241,24 +1246,24 @@ export default function RestaurantsList() {
                     : "border-rose-200/80 bg-white text-rose-500 hover:bg-rose-50/50"
                 }`}
               >
-                Banned Restaurants
+                {w("Banned Restaurants")}
               </button>
             </div>
 
             <div className="flex items-center gap-3">
               {viewMode === "active" && (
                 <button
-                  onClick={() => navigate("/admin/food/restaurants/add")}
+                  onClick={() => navigate(partnerType === "store" ? "/admin/food/my-store/add" : "/admin/food/restaurants/add")}
                   className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Add Restaurant</span>
+                  <span>{w("Add Restaurant")}</span>
                 </button>
               )}
               <div className="relative flex-1 sm:flex-initial min-w-[340px]">
                 <input
                   type="text"
-                  placeholder="Search restaurant, owner or phone"
+                  placeholder={w("Search restaurant, owner or phone")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1291,7 +1296,7 @@ export default function RestaurantsList() {
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                <span className="ml-3 text-slate-600">Loading restaurants...</span>
+                <span className="ml-3 text-slate-600">{w("Loading restaurants...")}</span>
               </div>
             ) : error ? (
               <div className="flex flex-col items-center justify-center py-20">
@@ -1323,7 +1328,7 @@ export default function RestaurantsList() {
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-1">
-                        <span>Restaurant Info</span>
+                        <span>{w("Restaurant Info")}</span>
                         <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === 'name' ? 'text-blue-600' : 'text-slate-400'}`} />
                       </div>
                     </th>
@@ -1372,7 +1377,7 @@ export default function RestaurantsList() {
                       <td colSpan={7} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
-                          <p className="text-sm text-slate-500">No restaurants match your search</p>
+                          <p className="text-sm text-slate-500">{w("No restaurants match your search")}</p>
                         </div>
                       </td>
                     </tr>
@@ -1402,6 +1407,9 @@ export default function RestaurantsList() {
                               />
                             </div>
                             <div className="flex flex-col">
+                              {(restaurant.partnerType || restaurant.originalData?.partnerType) === 'store' && (
+                              <span className="inline-flex w-fit items-center rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">My Store</span>
+                            )}
                               <span 
                                 className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
                                 onClick={() => handleViewDetails(restaurant)}
@@ -1485,7 +1493,7 @@ export default function RestaurantsList() {
                                   ? "text-green-600 hover:bg-green-50"
                                   : "text-red-600 hover:bg-red-50"
                                   }`}
-                                title={!restaurant.isActive ? "Unban Restaurant" : "Ban Restaurant"}
+                                title={w(!restaurant.isActive ? "Unban Restaurant" : "Ban Restaurant")}
                               >
                                 <ShieldX className="w-4 h-4" />
                               </button>
@@ -1494,7 +1502,7 @@ export default function RestaurantsList() {
                               <button
                                 onClick={() => handleDeleteRestaurant(restaurant)}
                                 className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
-                                title="Delete Restaurant"
+                                title={w("Delete Restaurant")}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1524,7 +1532,7 @@ export default function RestaurantsList() {
             {/* Modal Header */}
             <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Restaurant Details</h2>
+                <h2 className="text-2xl font-bold text-slate-900">{w("Restaurant Details")}</h2>
                 <p className="text-sm text-slate-500 mt-1">Detailed overview and information</p>
               </div>
               <div className="flex items-center gap-2">
@@ -1574,7 +1582,7 @@ export default function RestaurantsList() {
                     <div className="w-12 h-12 rounded-full border-4 border-slate-100"></div>
                     <div className="absolute inset-0 w-12 h-12 rounded-full border-4 border-blue-600 border-t-transparent animate-spin"></div>
                   </div>
-                  <span className="mt-4 text-slate-500 font-medium tracking-wide">Fetching restaurant data...</span>
+                  <span className="mt-4 text-slate-500 font-medium tracking-wide">{w("Fetching restaurant data...")}</span>
                 </div>
               )}
               {!loadingDetails && isEditingDetails && (
@@ -1609,7 +1617,7 @@ export default function RestaurantsList() {
                     </div>
 
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Restaurant Name</label>
+                      <label className="block text-xs text-slate-500 mb-1">{w("Restaurant Name")}</label>
                       <input type="text" value={detailsForm.name} onChange={(e) => setDetailsForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
                     <div>
@@ -1640,7 +1648,7 @@ export default function RestaurantsList() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Restaurant Email</label>
+                      <label className="block text-xs text-slate-500 mb-1">{w("Restaurant Email")}</label>
                       <input type="email" value={detailsForm.email} onChange={(e) => setDetailsForm((prev) => ({ ...prev, email: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" />
                     </div>
                     <div>
@@ -1886,7 +1894,7 @@ export default function RestaurantsList() {
                           <div className="flex items-center gap-3">
                             <Mail className="w-5 h-5 text-slate-400" />
                             <div>
-                              <p className="text-xs text-slate-500">Restaurant Email</p>
+                              <p className="text-xs text-slate-500">{w("Restaurant Email")}</p>
                               <p className="text-sm font-medium text-slate-900">{r.email}</p>
                             </div>
                           </div>
@@ -1976,7 +1984,7 @@ export default function RestaurantsList() {
                         )}
                         {coverImages.length > 0 && (
                           <div>
-                            <p className="text-xs text-slate-500 mb-2">Restaurant Photos</p>
+                            <p className="text-xs text-slate-500 mb-2">{w("Restaurant Photos")}</p>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                               {coverImages.map((url, idx) => (
                                 <a
@@ -2073,7 +2081,7 @@ export default function RestaurantsList() {
                         )}
                         {r.restaurantId && (
                           <div>
-                            <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
+                            <p className="text-xs text-slate-500 mb-1">{w("Restaurant ID")}</p>
                             <p className="font-medium text-slate-900">{formatRestaurantId(r.restaurantId)}</p>
                           </div>
                         )}
@@ -2276,7 +2284,7 @@ export default function RestaurantsList() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                         {r.onboarding.step1.restaurantName && (
                           <div>
-                            <p className="text-xs text-slate-500 mb-1">Restaurant Name (at registration)</p>
+                            <p className="text-xs text-slate-500 mb-1">{w("Restaurant Name (at registration)")}</p>
                             <p className="font-medium text-slate-900">{r.onboarding.step1.restaurantName}</p>
                           </div>
                         )}
@@ -2431,7 +2439,7 @@ export default function RestaurantsList() {
                         )}
                         {r?.restaurantId && (
                           <div>
-                            <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
+                            <p className="text-xs text-slate-500 mb-1">{w("Restaurant ID")}</p>
                             <p className="font-medium text-slate-900">{formatRestaurantId(r.restaurantId)}</p>
                           </div>
                         )}
@@ -2567,7 +2575,7 @@ export default function RestaurantsList() {
               {!loadingDetails && !restaurantDetails && !selectedRestaurant && (
                 <div className="flex flex-col items-center justify-center py-20">
                   <p className="text-lg font-semibold text-slate-700 mb-2">No Details Available</p>
-                  <p className="text-sm text-slate-500">Unable to load restaurant details</p>
+                  <p className="text-sm text-slate-500">{w("Unable to load restaurant details")}</p>
                 </div>
               )}
             </div>
@@ -2591,7 +2599,7 @@ export default function RestaurantsList() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">
-                    {banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unbanned Restaurant'}
+                    {w(banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unban Restaurant')}
                   </h3>
                   <p className="text-sm text-slate-600">
                     {banConfirmDialog.restaurant.name}
@@ -2601,8 +2609,8 @@ export default function RestaurantsList() {
 
               <p className="text-sm text-slate-700 mb-6">
                 {banConfirmDialog.action === 'ban'
-                  ? 'Are you sure you want to ban this restaurant? They will not be able to receive orders or access their account.'
-                  : 'Are you sure you want to unbanned this Restautant?'
+                  ? w('Are you sure you want to ban this restaurant? They will not be able to receive orders or access their account.')
+                  : w('Are you sure you want to unban this restaurant?')
                 }
               </p>
 
@@ -2628,7 +2636,7 @@ export default function RestaurantsList() {
                       {banConfirmDialog.action === 'ban' ? 'Banning...' : 'Unbanning...'}
                     </span>
                   ) : (
-                    banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unbanned Restaurant'
+                    w(banConfirmDialog.action === 'ban' ? 'Ban Restaurant' : 'Unban Restaurant')
                   )}
                 </button>
               </div>
@@ -2647,7 +2655,7 @@ export default function RestaurantsList() {
                   <Trash2 className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Delete Restaurant</h3>
+                  <h3 className="text-lg font-bold text-slate-900">{w("Delete Restaurant")}</h3>
                   <p className="text-sm text-slate-600">
                     {deleteConfirmDialog.restaurant.name}
                   </p>
@@ -2655,7 +2663,7 @@ export default function RestaurantsList() {
               </div>
 
               <p className="text-sm text-slate-700 mb-6">
-                Are you sure you want to delete this restaurant? This action cannot be undone and will permanently remove all restaurant data, including orders, menu items, and settings.
+                {w("Are you sure you want to delete this restaurant? This action cannot be undone and will permanently remove all restaurant data, including orders, menu items, and settings.")}
               </p>
 
               <div className="flex items-center gap-3">
@@ -2677,7 +2685,7 @@ export default function RestaurantsList() {
                       Deleting...
                     </span>
                   ) : (
-                    "Delete Restaurant"
+                    w("Delete Restaurant")
                   )}
                 </button>
               </div>

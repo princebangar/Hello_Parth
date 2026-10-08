@@ -28,7 +28,7 @@ import toast from 'react-hot-toast';
 
 
 import MapGrid from '../../../assets/premium_grid_map.png';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
+import DriverTopBar from '../../shared/components/DriverTopBar';
 import IncomingRideRequest from './IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
 import { useSettings } from '../../../shared/context/SettingsContext';
@@ -633,6 +633,8 @@ const mapStyles = [
   { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#9e9e9e" }] }
 ];
 
+const DRIVER_ONLINE_CACHE_KEY = 'driver_is_online_cache';
+
 const DriverHome = () => {
     const navigate = useNavigate();
     const { settings } = useSettings();
@@ -640,7 +642,22 @@ const DriverHome = () => {
     const appLogo = settings.general?.logo || settings.customization?.logo;
     const storedDriverInfo = useMemo(() => readStoredDriverInfo(), []);
     const [isOwnerManagedDriver, setIsOwnerManagedDriver] = useState(() => isOwnerManagedDriverProfile(storedDriverInfo));
-    const [isOnline, setIsOnline] = useState(false);
+    // Last known duty state, so coming back to Home from another tab shows Online right away instead of
+    // Offline -> Online after the profile fetch.
+    const [isOnline, setIsOnline] = useState(() => {
+        try {
+            return localStorage.getItem(DRIVER_ONLINE_CACHE_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    });
+    useEffect(() => {
+        try {
+            localStorage.setItem(DRIVER_ONLINE_CACHE_KEY, isOnline ? 'true' : 'false');
+        } catch {
+            // storage unavailable: the fetch still sets the state
+        }
+    }, [isOnline]);
     const [showRequest, setShowRequest] = useState(false);
 
     const [currentRequest, setCurrentRequest] = useState(null);
@@ -677,6 +694,12 @@ const DriverHome = () => {
     const [vehicleIconUrl, setVehicleIconUrl] = useState(
         () => storedDriverInfo?.vehicleIconUrl || '',
     );
+    // The balance in the header shows a skeleton until the first real value arrives (no flash of "0").
+    const [walletLoaded, setWalletLoaded] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => setWalletLoaded(true), 6000);
+        return () => clearTimeout(timer);
+    }, []);
     const [walletSummary, setWalletSummary] = useState({
         balance: 0,
         cashLimit: 500,
@@ -1074,6 +1097,7 @@ const DriverHome = () => {
         setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
         if (driver?.wallet) {
             setWalletSummary(driver.wallet);
+            setWalletLoaded(true);
         }
         setOnlineSelfie(driver?.onlineSelfie || null);
         setDriverDocuments(driver?.documents || {});
@@ -1117,6 +1141,7 @@ const DriverHome = () => {
         setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
         if (driver?.wallet) {
             setWalletSummary(driver.wallet);
+            setWalletLoaded(true);
         }
 
         return driver;
@@ -1634,11 +1659,7 @@ const DriverHome = () => {
                 // Realtime recovery should continue even if active-job hydration fails.
             }
 
-            setStatusMessage(
-                reason === 'visibility'
-                    ? 'Realtime connection refreshed.'
-                    : 'Driver session synced.',
-            );
+            // Background re-sync is silent: no "synced / refreshed" banner popping up over the map.
         } finally {
             recoveryInFlightRef.current = false;
         }
@@ -1852,6 +1873,7 @@ const DriverHome = () => {
             const onWalletUpdated = (payload) => {
                 if (payload?.wallet) {
                     setWalletSummary(payload.wallet);
+                    setWalletLoaded(true);
 
                     const nextWalletAlertState = getWalletAlertState(payload.wallet, {
                         ignoreRestrictions: isOwnerManagedDriver,
@@ -2245,7 +2267,7 @@ const DriverHome = () => {
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-                            className="absolute inset-x-0 bottom-0 z-[75] max-h-[78vh] rounded-t-[30px] border border-white/70 bg-white px-5 pb-6 pt-5 shadow-[0_-24px_60px_rgba(15,23,42,0.24)]"
+                            className="absolute inset-x-0 bottom-0 z-[75] max-h-[78vh] overflow-y-auto rounded-t-[30px] border border-white/70 bg-white px-5 pb-28 pt-5 shadow-[0_-24px_60px_rgba(15,23,42,0.24)]"
                         >
                             <div className="mx-auto h-1.5 w-14 rounded-full bg-slate-200" />
                             <div className="mt-4 flex items-start justify-between gap-3">
@@ -2329,49 +2351,59 @@ const DriverHome = () => {
                 )}
             </AnimatePresence>
 
-            {/* --- TOP FLOATING UI --- */}
-            {/* --- TOP FLOATING UI --- */}
-            <div className="fixed top-0 left-0 right-0 z-40 mx-auto max-w-md grid grid-cols-3 items-center p-4 pt-12 pointer-events-none">
-                {/* Left Side: Actions */}
-                <div className="pointer-events-auto flex items-center gap-2">
-                    <button
-                        onClick={() => {
-                            loadScheduledRides();
-                            setIsScheduleSheetOpen(true);
-                        }}
-                        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
-                    >
-                        <CalendarClock size={18} />
-                        {scheduledRideCount > 0 ? (
-                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-white bg-blue-600 px-1 text-[8px] font-black text-white shadow-sm">
-                                {scheduledRideCount > 99 ? '99+' : scheduledRideCount}
-                            </span>
-                        ) : null}
-                    </button>
-
-                    <button 
-                        onClick={() => navigate('/taxi/driver/notifications')}
-                        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
-                    >
-                        <Bell size={18} />
-                        {notificationCount > 0 ? (
-                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1 text-[8px] font-black text-white shadow-sm">
-                                {notificationCount > 99 ? '99+' : notificationCount}
-                            </span>
-                        ) : null}
-                    </button>
-                </div>
-
-                {/* Center: Duty Toggle */}
+            <DriverTopBar floating>
+                        <button
+                            onClick={() => {
+                                loadScheduledRides();
+                                setIsScheduleSheetOpen(true);
+                            }}
+                            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
+                        >
+                            <CalendarClock size={18} />
+                            {scheduledRideCount > 0 ? (
+                                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-white bg-blue-600 px-1 text-[8px] font-black text-white shadow-sm">
+                                    {scheduledRideCount > 99 ? '99+' : scheduledRideCount}
+                                </span>
+                            ) : null}
+                        </button>
+    
+                        <button 
+                            onClick={() => navigate('/taxi/driver/notifications')}
+                            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-900 shadow-md transition-all active:scale-90"
+                        >
+                            <Bell size={18} />
+                            {notificationCount > 0 ? (
+                                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1 text-[8px] font-black text-white shadow-sm">
+                                    {notificationCount > 99 ? '99+' : notificationCount}
+                                </span>
+                            ) : null}
+                        </button>
+                        <div 
+                            onClick={() => navigate('/taxi/driver/wallet')}
+                            className="flex items-center gap-1.5 rounded-full bg-black px-3 py-1.5 text-white shadow-xl shadow-black/10 active:scale-95 transition-all cursor-pointer border border-white/10"
+                        >
+                            <IndianRupee size={12} className="text-emerald-400" strokeWidth={3} />
+                            {walletLoaded ? (
+                                <span className="text-[13px] font-black tracking-tight">
+                                    {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                </span>
+                            ) : (
+                                <span className="h-3.5 w-9 animate-pulse rounded-md bg-white/25" aria-label="Loading balance" />
+                            )}
+                        </div>
+            </DriverTopBar>
+            {/* --- DUTY TOGGLE (under the header) --- */}
+            <div className="fixed left-0 right-0 z-40 mx-auto flex max-w-md justify-center pointer-events-none" style={{ top: 'calc(82px + env(safe-area-inset-top, 0px))' }}>
                 <div className="flex justify-center pointer-events-auto">
                     <button
                         disabled={isTogglingDuty}
                         onClick={handleDutyToggle}
                         className={`relative flex h-10 w-28 items-center rounded-full p-1 transition-all duration-500 shadow-lg ${
-                            isOnline ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-slate-200'
+                            isOnline ? 'bg-black shadow-black/25' : 'bg-slate-900 shadow-black/15'
                         }`}
                     >
                         <motion.div
+                            initial={false}
                             animate={{ x: isOnline ? 72 : 0 }}
                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                             className="absolute left-1 h-8 w-8 rounded-full bg-white shadow-sm flex items-center justify-center"
@@ -2379,29 +2411,16 @@ const DriverHome = () => {
                             <Power size={14} className={isOnline ? 'text-emerald-500' : 'text-slate-400'} strokeWidth={3} />
                         </motion.div>
                         <div className="flex w-full items-center justify-center text-[9px] font-black uppercase tracking-widest pl-2">
-                            <span className={`transition-opacity duration-300 ${isOnline ? 'text-white mr-6' : 'text-slate-400 ml-6'}`}>
+                            <span className={`transition-opacity duration-300 ${isOnline ? 'text-emerald-400 mr-6' : 'text-slate-400 ml-6'}`}>
                                 {isOnline ? 'Online' : 'Offline'}
                             </span>
                         </div>
                     </button>
                 </div>
-
-                {/* Right Side: Wallet */}
-                <div className="flex justify-end pointer-events-auto">
-                    <div 
-                        onClick={() => navigate('/taxi/driver/wallet')}
-                        className="flex items-center gap-1.5 rounded-full bg-black px-3 py-1.5 text-white shadow-xl shadow-black/10 active:scale-95 transition-all cursor-pointer border border-white/10"
-                    >
-                        <IndianRupee size={12} className="text-emerald-400" strokeWidth={3} />
-                        <span className="text-[13px] font-black tracking-tight">
-                            {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>
-                    </div>
-                </div>
             </div>
 
             {walletNotice ? (
-                <div className="fixed left-4 right-4 top-[6.5rem] z-40 mx-auto max-w-md pointer-events-auto">
+                <div className="fixed left-4 right-4 top-[9.25rem] z-40 mx-auto max-w-md pointer-events-auto">
                     <div className={`flex items-center gap-3 rounded-[1.35rem] border bg-white/95 px-3.5 py-3 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-md ${
                         walletNotice.tone === 'danger' ? 'border-rose-100' : 'border-amber-100'
                     }`}>
@@ -2601,7 +2620,6 @@ const DriverHome = () => {
                 )}
             </AnimatePresence>
 
-            <DriverBottomNav />
         </div>
     );
 };

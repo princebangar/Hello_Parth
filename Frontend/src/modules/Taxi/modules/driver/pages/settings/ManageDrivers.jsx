@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getOwnerFleetDrivers } from "../../services/registrationService";
-import DriverBottomNav from "../../../shared/components/DriverBottomNav";
 
 const ManageDrivers = () => {
   const navigate = useNavigate();
@@ -244,7 +243,6 @@ const ManageDrivers = () => {
         </button>
       </div>
 
-      <DriverBottomNav />
     </div>
   );
 };

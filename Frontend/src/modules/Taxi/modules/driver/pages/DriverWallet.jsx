@@ -13,7 +13,6 @@ import {
     X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import api from '../../../shared/api/axiosInstance';
 import { API_BASE_URL } from '../../../shared/api/runtimeConfig';
 import { socketService } from '../../../shared/api/socket';
@@ -1184,7 +1183,6 @@ const DriverWallet = () => {
                 )}
             </AnimatePresence>
 
-            <DriverBottomNav />
         </div>
     );
 };

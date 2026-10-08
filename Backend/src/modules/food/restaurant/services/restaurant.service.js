@@ -14,6 +14,14 @@ import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
 import { seedOutletTimingsForRestaurant } from './outletTimings.service.js';
 import { logger } from '../../../../utils/logger.js';
 import { fetchDrivingDistancesKmBatch, fetchDrivingDistanceKm } from '../../orders/utils/googleMaps.js';
+import {
+    applyPartnerTypeScope,
+    partnerTypeCondition,
+    normalizePartnerType,
+    isStorePartnerType,
+    PARTNER_TYPE_STORE,
+} from '../../utils/partnerScope.js';
+import { isMyStoreEnabled } from '../../../../core/platform/appSwitches.service.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -34,12 +42,17 @@ const normalizePhone = (value) => {
     };
 };
 
-export const findRestaurantByPhone = async (phone) => {
+/**
+ * partnerType = 'restaurant' | 'store' limits the lookup to that kind of account (the same phone can
+ * hold one Restaurant Partner account AND one My Store account). Omit it to look across both.
+ */
+export const findRestaurantByPhone = async (phone, partnerType = null) => {
     const { last10 } = normalizePhone(phone);
     if (!last10) return null;
 
     const suffixPattern = new RegExp(`${last10.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
     const matching = await FoodRestaurant.find({
+        ...(partnerType ? { partnerType: partnerTypeCondition(partnerType) } : {}),
         $or: [
             { ownerPhoneLast10: last10 },
             { ownerPhone: { $regex: suffixPattern } },
@@ -58,15 +71,17 @@ export const findRestaurantByPhone = async (phone) => {
     );
 };
 
-// One phone number belongs to ONE restaurant: the owner phone and the primary contact number of every other restaurant are
-// taken (a restaurant may use the same number for both of its own fields).
-export const assertRestaurantPhonesAvailable = async ({ ownerPhone, primaryContactNumber, excludeId = null } = {}) => {
+// One phone number belongs to ONE account of a kind: the owner phone and the primary contact number of every other
+// restaurant of the SAME kind are taken (a restaurant may use the same number for both of its own fields). A Restaurant
+// Partner and a My Store may share a number — they are separate accounts, like the roles in the driver app.
+export const assertRestaurantPhonesAvailable = async ({ ownerPhone, primaryContactNumber, excludeId = null, partnerType = 'restaurant' } = {}) => {
     for (const [label, value] of [['owner phone number', ownerPhone], ['primary contact number', primaryContactNumber]]) {
         const { last10 } = normalizePhone(value);
         if (!last10) continue;
         const suffixPattern = new RegExp(`${last10.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
         const query = {
             status: { $ne: 'deleted' },
+            partnerType: partnerTypeCondition(partnerType),
             $or: [
                 { ownerPhoneLast10: last10 },
                 { ownerPhone: { $regex: suffixPattern } },
@@ -76,7 +91,11 @@ export const assertRestaurantPhonesAvailable = async ({ ownerPhone, primaryConta
         };
         if (excludeId && mongoose.Types.ObjectId.isValid(String(excludeId))) query._id = { $ne: new mongoose.Types.ObjectId(String(excludeId)) };
         const other = await FoodRestaurant.findOne(query).select('_id').lean();
-        if (other) throw new ValidationError(`The ${label} ${last10} is already used by another restaurant`);
+        if (other) {
+            throw new ValidationError(
+                `The ${label} ${last10} is already used by another ${normalizePartnerType(partnerType) === PARTNER_TYPE_STORE ? 'store' : 'restaurant'}`
+            );
+        }
     }
 };
 
@@ -223,6 +242,7 @@ const toRestaurantProfile = (doc) => {
         name: doc.restaurantName || '',
         restaurantName: doc.restaurantName || '',
         zoneId: doc.zoneId ? String(doc.zoneId) : '',
+        partnerType: doc.partnerType === 'store' ? 'store' : 'restaurant',
         cuisines: Array.isArray(doc.cuisines) ? doc.cuisines : [],
         location,
         ownerName: doc.ownerName || '',
@@ -399,9 +419,16 @@ export const registerRestaurant = async (payload, files) => {
         accountHolderName,
         accountType,
         isTakeawayEnabled,
+        partnerType: partnerTypeRaw,
         fcmToken,
         platform
     } = payload;
+
+    const partnerType = normalizePartnerType(partnerTypeRaw);
+    const isStore = partnerType === PARTNER_TYPE_STORE;
+    if (isStore && !(await isMyStoreEnabled())) {
+        throw new ValidationError('My Store is not available right now');
+    }
 
     if (!ownerPhone) {
         throw new ValidationError('Owner phone is required to register a restaurant');
@@ -417,7 +444,7 @@ export const registerRestaurant = async (payload, files) => {
         throw new ValidationError('Restaurant name is required to register a restaurant');
     }
 
-    await assertRestaurantPhonesAvailable({ ownerPhone, primaryContactNumber });
+    await assertRestaurantPhonesAvailable({ ownerPhone, primaryContactNumber, partnerType });
 
     const images = {};
 
@@ -513,9 +540,12 @@ export const registerRestaurant = async (payload, files) => {
             accountHolderName,
             accountType,
             menuImages,
+            partnerType,
+            // A My Store has no takeaway or dining, whatever the client sent.
             takeawaySettings: {
-                isEnabled: isTakeawayEnabled === 'true' || isTakeawayEnabled === true
+                isEnabled: !isStore && (isTakeawayEnabled === 'true' || isTakeawayEnabled === true)
             },
+            diningSettings: { isEnabled: false },
             ...(fcmToken
                 ? (platform === 'mobile'
                     ? { fcmTokenMobile: [String(fcmToken).trim()] }
@@ -618,6 +648,7 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
                 'openDays',
                 'estimatedDeliveryTime',
                 'estimatedDeliveryTimeMinutes',
+                'partnerType',
                 'diningSettings',
                 'takeawaySettings',
                 'isAcceptingOrders',
@@ -683,6 +714,7 @@ export const updateRestaurantAcceptingOrders = async (restaurantId, isAcceptingO
                 'openingTime',
                 'closingTime',
                 'openDays',
+                'partnerType',
                 'diningSettings',
                 'isAcceptingOrders',
                 'status',
@@ -789,6 +821,7 @@ export const updateCurrentRestaurantDiningSettings = async (restaurantId, body =
                 'openDays',
                 'estimatedDeliveryTime',
                 'estimatedDeliveryTimeMinutes',
+                'partnerType',
                 'diningSettings',
                 'isAcceptingOrders',
                 'status',
@@ -870,6 +903,7 @@ export const updateCurrentRestaurantTakeawaySettings = async (restaurantId, body
                 'openDays',
                 'estimatedDeliveryTime',
                 'estimatedDeliveryTimeMinutes',
+                'partnerType',
                 'diningSettings',
                 'takeawaySettings',
                 'isAcceptingOrders',
@@ -889,7 +923,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
     }
 
     const currentRestaurant = await FoodRestaurant.findById(restaurantId)
-        .select('restaurantName restaurantNameNormalized ownerPhone ownerPhoneDigits ownerPhoneLast10 primaryContactNumber status profileImage coverImages menuImages panImage gstImage fssaiImage upiQrImage')
+        .select('restaurantName restaurantNameNormalized ownerPhone ownerPhoneDigits ownerPhoneLast10 primaryContactNumber status partnerType profileImage coverImages menuImages panImage gstImage fssaiImage upiQrImage')
         .lean();
 
     if (!currentRestaurant) {
@@ -943,7 +977,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
             '';
 
         if (digits !== currentOwnerPhoneDigits) {
-            await assertRestaurantPhonesAvailable({ ownerPhone: digits, excludeId: currentRestaurant._id });
+            await assertRestaurantPhonesAvailable({ ownerPhone: digits, excludeId: currentRestaurant._id, partnerType: currentRestaurant.partnerType });
             update.ownerPhone = digits;
             update.ownerPhoneDigits = digits;
             update.ownerPhoneLast10 = last10 || undefined;
@@ -960,7 +994,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
                 : '';
 
         if (normalizedPrimaryContact !== currentPrimaryContact) {
-            await assertRestaurantPhonesAvailable({ primaryContactNumber: normalizedPrimaryContact, excludeId: currentRestaurant._id });
+            await assertRestaurantPhonesAvailable({ primaryContactNumber: normalizedPrimaryContact, excludeId: currentRestaurant._id, partnerType: currentRestaurant.partnerType });
             update.primaryContactNumber = normalizedPrimaryContact;
         }
     }
@@ -1242,7 +1276,8 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
                     'upiQrImage',
                     'estimatedDeliveryTime',
                     'estimatedDeliveryTimeMinutes',
-                    'zoneId'
+                    'zoneId',
+                    'partnerType'
                 ].join(' ')
             }
         ).lean();
@@ -1414,7 +1449,9 @@ export const listApprovedRestaurants = async (query = {}) => {
     const skip = (page - 1) * limit;
 
     const filter = { status: 'approved' };
-
+    // My Store partners only appear when asked for (partnerType=store); every
+    // other list — home, takeaway, dining, cuisine, top-rated … — excludes them.
+    applyPartnerTypeScope(filter, query.partnerType);
 
     if (query.city && String(query.city).trim()) {
         const city = String(query.city).trim().slice(0, 80);
@@ -1511,7 +1548,9 @@ export const listApprovedRestaurants = async (query = {}) => {
         mongoose.Types.ObjectId.isValid(zoneIdRaw) &&
         query.orderType !== 'dining'
     ) {
-        const topType = query.orderType === 'takeaway' ? 'takeaway' : 'delivery';
+        const topType = isStorePartnerType(query.partnerType)
+            ? 'store'
+            : (query.orderType === 'takeaway' ? 'takeaway' : 'delivery');
         const topDoc = await FoodTopRestaurant.findOne({
             zoneId: new mongoose.Types.ObjectId(zoneIdRaw),
             type: topType,
@@ -1537,6 +1576,7 @@ export const listApprovedRestaurants = async (query = {}) => {
         totalRatings: 1,
         isAcceptingOrders: 1,
         status: 1,
+        partnerType: 1,
         pureVegRestaurant: 1,
         createdAt: 1,
         location: 1,
@@ -1874,7 +1914,8 @@ export const getApprovedRestaurantByIdOrSlug = async (idOrSlug, userId = null, c
     return result;
 };
 
-export const listPublicOffers = async () => {
+export const listPublicOffers = async (query = {}) => {
+    const wantedPartner = isStorePartnerType(query?.partnerType) ? 'store' : 'restaurant';
     const now = new Date();
     const filter = {
         status: 'active',
@@ -1886,16 +1927,19 @@ export const listPublicOffers = async () => {
 
     const list = await FoodOffer.find(filter)
         .sort({ createdAt: -1 })
-        .populate({ path: 'restaurantId', select: 'restaurantName restaurantNameNormalized profileImage estimatedDeliveryTime rating' })
+        .populate({ path: 'restaurantId', select: 'restaurantName restaurantNameNormalized profileImage estimatedDeliveryTime rating partnerType' })
         .lean();
 
-    const allOffers = list.map((o) => {
+    // Restaurant coupons and My Store coupons are separate: each side only sees its own.
+    const visibleOffers = list.filter((o) => (o.partnerType === 'store' ? 'store' : 'restaurant') === wantedPartner);
+
+    const allOffers = visibleOffers.map((o) => {
         const restaurant = o.restaurantId && typeof o.restaurantId === 'object' ? o.restaurantId : null;
         const restaurantSlug = restaurant?.restaurantNameNormalized || undefined;
         const restaurantName =
             o.restaurantScope === 'selected'
-                ? (restaurant?.restaurantName || 'Selected Restaurant')
-                : 'All Restaurants';
+                ? (restaurant?.restaurantName || (wantedPartner === 'store' ? 'Selected Store' : 'Selected Restaurant'))
+                : (wantedPartner === 'store' ? 'All Stores' : 'All Restaurants');
 
         const title =
             o.discountType === 'percentage'
@@ -1912,6 +1956,7 @@ export const listPublicOffers = async () => {
             maxDiscount: o.maxDiscount ?? null,
             customerScope: o.customerScope,
             restaurantScope: o.restaurantScope,
+            partnerType: wantedPartner,
             restaurantId: restaurant?._id ? String(restaurant._id) : (o.restaurantScope === 'selected' ? String(o.restaurantId) : null),
             restaurantName,
             restaurantSlug,
@@ -2081,6 +2126,7 @@ export const listRestaurantsUnderPriceLimit = async (query = {}, priceLimit = 25
             const batch = await FoodRestaurant.find({
                 zoneId: new mongoose.Types.ObjectId(zoneIdRaw),
                 status: 'approved',
+                partnerType: partnerTypeCondition(),
             })
                 .select(restaurantSelect)
                 .sort({ rating: -1, totalRatings: -1, _id: 1 })
@@ -2128,6 +2174,7 @@ export const listRestaurantsUnderPriceLimit = async (query = {}, priceLimit = 25
     const restaurantsInZone = await FoodRestaurant.find({
         zoneId: new mongoose.Types.ObjectId(zoneIdRaw),
         status: 'approved',
+        partnerType: partnerTypeCondition(),
     })
         .select(restaurantSelect)
         .sort({ rating: -1, totalRatings: -1 })

@@ -47,6 +47,9 @@ const Offers = lazy(() => import("@food/pages/user/Offers"))
 // Gourmet
 const Gourmet = lazy(() => import("@food/pages/user/Gourmet"))
 
+// My Store (brand stores)
+const MyStore = lazy(() => import("@food/pages/user/MyStore"))
+
 
 // Collections
 const Collections = lazy(() => import("@food/pages/user/Collections"))
@@ -205,6 +208,8 @@ export default function UserRouter() {
           <Route path="search" element={<SearchResults />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="address-selector" element={<AddressSelectorPage />} />
+          {/* My Store (brand stores) — browsing is open to guests, like restaurants */}
+          <Route path="my-store" element={<MyStore />} />
 
           {/* ========================================== */}
           {/* PROTECTED ROUTES (Login required)          */}

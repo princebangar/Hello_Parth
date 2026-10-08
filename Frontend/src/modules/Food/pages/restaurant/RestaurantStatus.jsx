@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useState, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
@@ -6,6 +7,7 @@ import { ArrowLeft, Settings, ChevronRight } from "lucide-react"
 import { Switch } from "@food/components/ui/switch"
 import { Card, CardContent } from "@food/components/ui/card"
 import { restaurantAPI } from "@food/api"
+import { isMyStorePartner } from "@food/utils/auth"
 import {
   Dialog,
   DialogContent,
@@ -29,12 +31,21 @@ const persistRestaurantOnlineStatus = (isOnline) => {
   }
 }
 
+// Last known switch position, so coming back to this screen (e.g. from Details) shows it right away
+// instead of flipping off -> on after the fetch.
+const readCachedOnlineStatus = () => {
+  try {
+    return JSON.parse(localStorage.getItem(RESTAURANT_ONLINE_STATUS_KEY)) === true
+  } catch {
+    return false
+  }
+}
 
 export default function RestaurantStatus() {
   const navigate = useNavigate()
   const location = useLocation()
   const goBack = useRestaurantBackNavigation()
-  const [deliveryStatus, setDeliveryStatus] = useState(false)
+  const [deliveryStatus, setDeliveryStatus] = useState(readCachedOnlineStatus)
   const [takeawayStatus, setTakeawayStatus] = useState(false)
   const [restaurantData, setRestaurantData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -193,29 +204,13 @@ export default function RestaurantStatus() {
           window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
             detail: { isOnline: restaurant.isAcceptingOrders } 
           }))
-        } else {
-          setDeliveryStatus(false)
-          try {
-            localStorage.setItem('restaurant_online_status', JSON.stringify(false))
-          } catch {}
-          persistRestaurantOnlineStatus(false)
-          window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-            detail: { isOnline: false } 
-          }))
         }
       } catch (error) {
         // Only log error if it's not a network/timeout error (backend might be down/slow)
         if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
           debugError("Error loading delivery status:", error)
         }
-        setDeliveryStatus(false)
-        try {
-          localStorage.setItem('restaurant_online_status', JSON.stringify(false))
-        } catch {}
-        persistRestaurantOnlineStatus(false)
-        window.dispatchEvent(new CustomEvent('restaurantStatusChanged', { 
-          detail: { isOnline: false } 
-        }))
+        // A failed refresh keeps the last known state instead of showing the store as offline.
       }
     }
 
@@ -365,8 +360,8 @@ export default function RestaurantStatus() {
             <ArrowLeft className="w-6 h-6 text-gray-900" />
           </button>
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-gray-900">Restaurant status</h1>
-            <p className="text-sm text-gray-500 mt-0.5">You are mapped to 1 restaurant</p>
+            <h1 className="text-lg font-bold text-gray-900">{sw("Restaurant status")}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{sw("You are mapped to 1 restaurant")}</p>
           </div>
         </div>
       </div>
@@ -406,7 +401,7 @@ export default function RestaurantStatus() {
 
             <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className="text-base font-bold text-gray-900 mb-1.5">Delivery status</p>
+              <p className="text-base font-bold text-gray-900 mb-1.5">{isMyStorePartner() ? "Store status" : "Delivery status"}</p>
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${deliveryStatus ? 'bg-green-500' : 'bg-gray-600'}`}></div>
                 <p className="text-sm text-gray-500">
@@ -421,6 +416,7 @@ export default function RestaurantStatus() {
             />
           </div>
 
+          {!isMyStorePartner() && (
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <p className="text-base font-bold text-gray-900 mb-1.5">Takeaway status</p>
@@ -437,6 +433,7 @@ export default function RestaurantStatus() {
               className="ml-4 data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
             />
           </div>
+          )}
 
           <p className="text-sm text-gray-700 mb-2">Current delivery slot</p>
           <div className="flex items-center justify-between">

@@ -30,7 +30,6 @@ import {
     Landmark,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import useBodyScrollLock from '../../../shared/hooks/useBodyScrollLock';
 import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
 
@@ -325,6 +324,7 @@ Processing Time: Refunds are typically credited back to the original payment met
         {
             title: 'Legal & Support',
             items: [
+                { id: 'help', label: 'Help & Support', icon: <Info size={20} />, path: `${routePrefix}/help-support` },
                 { id: 'terms', label: 'Terms & Conditions', icon: <FileText size={20} />, action: () => openLegal('terms') },
                 { id: 'privacy', label: 'Privacy Policy', icon: <Shield size={20} />, action: () => openLegal('privacy') },
                 { id: 'refund', label: 'Refund Policy', icon: <HandCoins size={20} />, action: () => openLegal('refund') },
@@ -342,19 +342,12 @@ Processing Time: Refunds are typically credited back to the original payment met
         <div className="min-h-screen bg-white font-sans select-none overflow-x-hidden pb-32">
             {/* Header - Compact & Aligned */}
             <header className="px-5 pt-4 pb-4 border-b border-slate-50 sticky top-0 bg-white z-[60]">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="w-8" />
-                    <button onClick={() => navigate(`${routePrefix}/help-support`)} className="flex items-center gap-1.5 text-[#88B04B] font-bold text-[13px] tracking-wide">
-                        <Info size={18} />
-                        Help & Support
-                    </button>
-                </div>
-
                 <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                        <h2 className="text-[22px] font-bold text-slate-900 leading-tight">
+                        <h2 className="text-[22px] font-bold text-slate-900 leading-tight">Profile</h2>
+                        <p className="text-[15px] font-semibold text-slate-600 leading-tight">
                             {isLoading ? 'Loading...' : driverName}
-                        </h2>
+                        </p>
                         <div className="flex items-center gap-1.5 text-sky-500">
                             <Star size={14} fill="currentColor" />
                             <span className="text-[14px] font-bold">{driverRating > 0 ? `${driverRating.toFixed(1)} Rating` : 'New - no ratings yet'}</span>
@@ -508,7 +501,6 @@ Processing Time: Refunds are typically credited back to the original payment met
                 </button>
             </div>
 
-            <DriverBottomNav />
 
             <AnimatePresence>
                 {isLogoutOpen && (

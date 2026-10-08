@@ -23,6 +23,7 @@ const LEGACY_FOOD_KEYS = {
 export const APP_SWITCH_DEFAULTS = {
   maintenance_mode_enabled: false,
   default_location_enabled: false,
+  my_store_enabled: true,
   user_cod_enabled: true,
   user_wallet_enabled: true,
   user_online_enabled: true,
@@ -59,6 +60,7 @@ const loadSwitches = async () => {
   return {
     maintenance_mode_enabled: settings?.app?.maintenance_mode_enabled === true,
     default_location_enabled: pickApp('default_location_enabled'),
+    my_store_enabled: settings?.app?.my_store_enabled !== false,
     user_cod_enabled: settings?.user_payments?.cod_enabled !== false,
     user_wallet_enabled: settings?.user_payments?.wallet_enabled !== false,
     user_online_enabled: settings?.user_payments?.online_enabled !== false,
@@ -90,6 +92,13 @@ export const invalidateAppSwitches = () => {
 
 export const isMaintenanceModeOn = async () => (await getAppSwitches()).maintenance_mode_enabled === true;
 
+/**
+ * Global admin > Customization Settings > My Store. Off hides the whole My Store feature from customers and restaurant
+ * partners (Explore More icon, store list, store dishes in search / categories, the Restaurant Partner | My Store choice on
+ * login) and refuses new My Store sign-ins / registrations. Nothing is deleted; stores logged in already keep working.
+ */
+export const isMyStoreEnabled = async () => (await getAppSwitches()).my_store_enabled !== false;
+
 /** `kind`: 'cod' | 'wallet' | 'online'. True unless the Global admin switched it off for all customers. */
 export const isUserPaymentEnabled = async (kind) => (await getAppSwitches())[USER_PAYMENT_SWITCH[kind]] !== false;
 
@@ -107,7 +116,7 @@ export const setAppSwitches = async (payload = {}, updatedBy = null) => {
     if (typeof payload[key] !== 'boolean') {
       throw new ApiError(400, `${key} must be true or false`);
     }
-    if (key === 'maintenance_mode_enabled' || key === 'default_location_enabled') {
+    if (key === 'maintenance_mode_enabled' || key === 'default_location_enabled' || key === 'my_store_enabled') {
       set[`app.${key}`] = payload[key];
     } else {
       set[`user_payments.${key.replace('user_', '')}`] = payload[key];

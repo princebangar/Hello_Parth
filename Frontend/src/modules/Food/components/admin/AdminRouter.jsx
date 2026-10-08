@@ -5,6 +5,14 @@ import PermissionRoute from "./PermissionRoute";
 import AdminLayout from "./AdminLayout";
 import AuthRedirect from "@food/components/AuthRedirect";
 import Loader from "@food/components/Loader";
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js";
+import PartnerScope from "./PartnerScope";
+
+/** My Store pages exist only while Global admin > Customization Settings > My Store is on. */
+function MyStoreRoute({ children }) {
+  const enabled = useMyStoreEnabled();
+  return enabled ? children : <Navigate to="/admin/food" replace />;
+}
 
 const AdminHome = lazy(() => import("@food/pages/admin/AdminHome"));
 const GlobalAdminHome = lazy(() => import("@/modules/Global/pages/GlobalAdminHome"));
@@ -217,6 +225,7 @@ export default function AdminRouter() {
             <Route path="orders/delivered" element={<OrdersPage statusKey="delivered" />} />
             <Route path="orders/canceled" element={<OrdersPage statusKey="canceled" />} />
             <Route path="orders/restaurant-cancelled" element={<OrdersPage statusKey="restaurant-cancelled" />} />
+            <Route path="orders/my-store-cancelled" element={<MyStoreRoute><OrdersPage statusKey="my-store-cancelled" /></MyStoreRoute>} />
             <Route path="orders/payment-failed" element={<OrdersPage statusKey="payment-failed" />} />
             <Route path="orders/refunded" element={<OrdersPage statusKey="refunded" />} />
             <Route path="orders/offline-payments" element={<OrdersPage statusKey="offline-payments" />} />
@@ -231,32 +240,46 @@ export default function AdminRouter() {
             <Route path="zone-setup/edit/:id" element={<AddZone />} />
             <Route path="zone-setup/view/:id" element={<ViewZone />} />
             <Route path="food-approval" element={<FoodApproval />} />
-            <Route path="restaurants" element={<RestaurantsList />} />
-            <Route path="restaurants/add" element={<AddRestaurant />} />
+            <Route path="restaurants" element={<PartnerScope type="restaurant"><RestaurantsList /></PartnerScope>} />
+
+            {/* MY STORE MANAGEMENT — the same pages, showing My Store partners only */}
+            <Route path="my-store" element={<MyStoreRoute><PartnerScope type="store"><RestaurantsList /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/add" element={<MyStoreRoute><PartnerScope type="store"><AddRestaurant /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/joining-request" element={<MyStoreRoute><PartnerScope type="store"><JoiningRequest /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/top-stores" element={<MyStoreRoute><PartnerScope type="store"><TopRestaurants /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/commission" element={<MyStoreRoute><PartnerScope type="store"><RestaurantCommission /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/complaints" element={<MyStoreRoute><PartnerScope type="store"><RestaurantComplaints /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/reviews" element={<MyStoreRoute><PartnerScope type="store"><RestaurantReviews /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/foods" element={<MyStoreRoute><PartnerScope type="store"><FoodsList /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/addons" element={<MyStoreRoute><PartnerScope type="store"><AddonsList /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/coupons" element={<MyStoreRoute><PartnerScope type="store"><Coupons /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/report" element={<MyStoreRoute><PartnerScope type="store"><RestaurantReport /></PartnerScope></MyStoreRoute>} />
+            <Route path="my-store/withdraws" element={<MyStoreRoute><PartnerScope type="store"><RestaurantWithdraws /></PartnerScope></MyStoreRoute>} />
+            <Route path="restaurants/add" element={<PartnerScope type="restaurant"><AddRestaurant /></PartnerScope>} />
             <Route path="restaurants/edit/:id" element={<EditRestaurant />} />
-            <Route path="restaurants/joining-request" element={<JoiningRequest />} />
-            <Route path="restaurants/top-restaurants" element={<TopRestaurants />} />
-            <Route path="restaurants/commission" element={<RestaurantCommission />} />
-            <Route path="restaurants/complaints" element={<RestaurantComplaints />} />
-            <Route path="restaurants/reviews" element={<RestaurantReviews />} />
+            <Route path="restaurants/joining-request" element={<PartnerScope type="restaurant"><JoiningRequest /></PartnerScope>} />
+            <Route path="restaurants/top-restaurants" element={<PartnerScope type="restaurant"><TopRestaurants /></PartnerScope>} />
+            <Route path="restaurants/commission" element={<PartnerScope type="restaurant"><RestaurantCommission /></PartnerScope>} />
+            <Route path="restaurants/complaints" element={<PartnerScope type="restaurant"><RestaurantComplaints /></PartnerScope>} />
+            <Route path="restaurants/reviews" element={<PartnerScope type="restaurant"><RestaurantReviews /></PartnerScope>} />
             <Route path="restaurants/bulk-import" element={<RestaurantsBulkImport />} />
             <Route path="restaurants/bulk-export" element={<RestaurantsBulkExport />} />
-            <Route path="restaurants/settings" element={<RestaurantSettings />} />
+            <Route path="restaurants/settings" element={<PartnerScope type="restaurant"><RestaurantSettings /></PartnerScope>} />
 
             {/* FOOD & CATEGORY MANAGEMENT */}
             <Route path="categories" element={<Category />} />
             <Route path="fee-settings" element={<FeeSettings />} />
             {/* TODO: Referral feature temporarily disabled. Uncomment to re-enable in future. */}
             {/* <Route path="referral-settings" element={<ReferralSettings />} /> */}
-            <Route path="foods" element={<FoodsList />} />
+            <Route path="foods" element={<PartnerScope type="restaurant"><FoodsList /></PartnerScope>} />
             <Route path="food/list" element={<FoodsList />} />
             <Route path="pricing" element={<PricingManagement />} />
-            <Route path="addons" element={<AddonsList />} />
+            <Route path="addons" element={<PartnerScope type="restaurant"><AddonsList /></PartnerScope>} />
 
             {/* PROMOTIONS, CUSTOMERS, DELIVERYMEN, etc. */}
             <Route path="campaigns/basic" element={<BasicCampaign />} />
             <Route path="campaigns/food" element={<FoodCampaign />} />
-            <Route path="coupons" element={<Coupons />} />
+            <Route path="coupons" element={<PartnerScope type="restaurant"><Coupons /></PartnerScope>} />
             <Route path="cashback" element={<Cashback />} />
             <Route path="banners" element={<Banners />} />
             <Route path="promotional-banner" element={<PromotionalBanner />} />
@@ -301,12 +324,12 @@ export default function AdminRouter() {
             <Route path="disbursement-report/deliverymen" element={<DisbursementReportDeliverymen />} />
             <Route path="order-report/regular" element={<RegularOrderReport />} />
             <Route path="order-report/campaign" element={<CampaignOrderReport />} />
-            <Route path="restaurant-report" element={<RestaurantReport />} />
+            <Route path="restaurant-report" element={<PartnerScope type="restaurant"><RestaurantReport /></PartnerScope>} />
             <Route path="customer-report/feedback-experience" element={<FeedbackExperienceReport />} />
             <Route path="tax-report" element={<TaxReport />} />
             <Route path="restaurant-vat-report" element={<RestaurantVATReport />} />
             
-            <Route path="restaurant-withdraws" element={<RestaurantWithdraws />} />
+            <Route path="restaurant-withdraws" element={<PartnerScope type="restaurant"><RestaurantWithdraws /></PartnerScope>} />
             <Route path="withdraw-method" element={<WithdrawMethod />} />
             
             <Route path="employee-role" element={<EmployeeRole />} />

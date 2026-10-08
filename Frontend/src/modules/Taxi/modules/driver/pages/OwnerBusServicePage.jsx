@@ -2,7 +2,6 @@ import React from 'react';
 import { Bus, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../../shared/context/SettingsContext';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import BusServiceManager from '../../admin/pages/bus-service/BusServiceManager';
 import { normalizeBusCatalog } from '../../admin/services/busService';
 import {
@@ -95,7 +94,6 @@ const OwnerBusServicePage = () => {
         )}
       </div>
 
-      <DriverBottomNav />
     </div>
   );
 };

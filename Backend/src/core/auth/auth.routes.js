@@ -11,6 +11,7 @@ import {
     logoutController,
     getMeController,
     deleteAccountController,
+    logoutAllController,
     checkAccountBalanceController,
     recoverAccountController,
     startFreshAccountController,
@@ -63,6 +64,9 @@ router.post('/refresh-token', refreshTokenController);
 
 // Logout (invalidates refresh token)
 router.post('/logout', logoutController);
+
+// Logout from all devices of THIS account (Bearer token): drops every refresh token + push token
+router.post('/logout-all', authMiddleware, logoutAllController);
 
 // Authenticated user profile (requires Bearer token)
 router.get('/me', authMiddleware, getMeController);

@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
 import { Search, Trash2, Loader2, Eye, Pencil, Plus, Save, ChevronDown } from "lucide-react"
@@ -93,6 +95,8 @@ function FoodImageThumb({ name, src, size = "md", className = "" }) {
 }
 
 export default function FoodsList() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRestaurant, setSelectedRestaurant] = useState("all")
   const [foods, setFoods] = useState([])
@@ -679,7 +683,7 @@ export default function FoodsList() {
               onChange={(e) => setSelectedRestaurant(e.target.value)}
               className="px-4 py-2.5 min-w-[220px] text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
             >
-              <option value="all">All Restaurants</option>
+              <option value="all">{w("All Restaurants")}</option>
               {restaurantOptions.map((restaurant) => (
                 <option key={restaurant.id} value={restaurant.id}>
                   {restaurant.name}
@@ -706,7 +710,7 @@ export default function FoodsList() {
                   Title
                 </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  Restaurant
+                  {w("Restaurant")}
                 </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Category
@@ -731,7 +735,7 @@ export default function FoodsList() {
                   <td colSpan={6} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
-                      <p className="text-sm text-slate-500">No food items match your search or restaurant filter</p>
+                      <p className="text-sm text-slate-500">{w("No food items match your search or restaurant filter")}</p>
                     </div>
                   </td>
                 </tr>
@@ -903,7 +907,7 @@ export default function FoodsList() {
           <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Restaurant</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{w("Restaurant")}</label>
                 <select
                   value={foodForm.restaurantId}
                   onChange={(e) => {
@@ -923,7 +927,7 @@ export default function FoodsList() {
                   disabled={foodFormMode === "edit"}
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white disabled:bg-slate-100"
                 >
-                  <option value="">Select restaurant</option>
+                  <option value="">{w("Select restaurant")}</option>
                   {restaurantOptions.map((restaurant) => (
                     <option key={restaurant.id} value={restaurant.id}>
                       {restaurant.name}
@@ -1019,7 +1023,7 @@ export default function FoodsList() {
                   {!isSelectedRestaurantPureVeg ? <option value="Non-Veg">Non-Veg</option> : null}
                 </select>
                 {isSelectedRestaurantPureVeg ? (
-                  <p className="mt-1 text-xs text-emerald-600">Pure veg restaurant — only Veg items allowed</p>
+                  <p className="mt-1 text-xs text-emerald-600">{w("Pure veg restaurant — only Veg items allowed")}</p>
                 ) : null}
               </div>
               <div>

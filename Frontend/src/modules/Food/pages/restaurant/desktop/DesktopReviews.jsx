@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { Search, Star, MessageSquareWarning, ChevronDown, RefreshCw } from "lucide-react"
@@ -122,7 +123,7 @@ export default function DesktopReviews() {
     <>
       <PageHeader
         title="Reviews & Complaints"
-        subtitle="What customers are saying about your restaurant"
+        subtitle={sw("What customers are saying about your restaurant")}
         actions={
           <button onClick={refresh} className={btn.ghost} disabled={refreshing}>
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
@@ -255,7 +256,7 @@ export default function DesktopReviews() {
             {FAQ.map(([q, a], i) => (
               <li key={q}>
                 <button onClick={() => setOpen(open === i ? -1 : i)} className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-medium text-slate-800 hover:text-[#B80B3D]">
-                  {q}
+                  {sw(q)}
                   <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open === i ? "rotate-180" : ""}`} />
                 </button>
                 {open === i && <p className="px-3 pb-3 text-sm text-slate-600">{a}</p>}

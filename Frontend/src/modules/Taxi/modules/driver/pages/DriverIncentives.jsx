@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { claimDriverIncentiveReward, getCurrentDriver, getDriverIncentives } from '../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
@@ -286,7 +285,6 @@ const DriverIncentives = () => {
         </section>
       </main>
 
-      <DriverBottomNav />
     </div>
   );
 };

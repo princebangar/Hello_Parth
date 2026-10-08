@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
+import { isMyStorePartner } from "@food/utils/auth"
 import { Printer, Search, RefreshCw, X, Check, Loader2, MapPin, Phone, StickyNote, Clock, Store, UtensilsCrossed, ChevronRight, ArrowLeft, Volume2, UserCheck, Hourglass } from "lucide-react"
 import { toast } from "sonner"
 import { restaurantAPI } from "@food/api"
@@ -536,7 +537,7 @@ export default function DesktopOrders() {
         </div>
       )}
 
-      {!chipDef.finished && (
+      {!chipDef.finished && !isMyStorePartner() && (
       <div className="mb-5 flex gap-3">
         <button
           onClick={() => update({ mode: mode === "takeaway" ? null : "takeaway", open: null })}

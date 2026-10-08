@@ -1,6 +1,5 @@
 import React from "react";
 import PoolingVehicleForm from "../../admin/pages/pooling/PoolingVehicleForm";
-import DriverBottomNav from "../../shared/components/DriverBottomNav";
 import { uploadService } from "../../../shared/services/uploadService";
 import { ownerPoolingVehicleService } from "../services/registrationService";
 
@@ -21,7 +20,6 @@ const OwnerPoolingVehicleForm = () => (
       pageLabel="Add Pooling Vehicle"
       hidePricingFields
     />
-    <DriverBottomNav />
   </>
 );
 

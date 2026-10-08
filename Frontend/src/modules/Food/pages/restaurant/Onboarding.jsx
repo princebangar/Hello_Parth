@@ -1,3 +1,4 @@
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate, useSearchParams } from "react-router-dom"
@@ -24,7 +25,7 @@ import { determineStepToShow, clearOnboardingFromLocalStorage, clearAllFilesFrom
 import { toast } from "sonner"
 import { useCompanyName } from "@food/hooks/useCompanyName"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
-import { clearModuleAuth, clearAuthData, isModuleAuthenticated, getModuleToken } from "@food/utils/auth"
+import { clearModuleAuth, clearAuthData, isModuleAuthenticated, getModuleToken, setPendingPartnerType } from "@food/utils/auth"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { prepareUploadFile, prepareUploadFiles } from "@/shared/utils/imageCompressor"
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation"
@@ -43,7 +44,8 @@ const normalizePhoneDigits = (value) => {
 }
 
 async function finalizeRestaurantPendingSubmission(navigate, phone, fcmOptions = {}) {
-  const { fcmToken, platform } = fcmOptions
+  const { fcmToken, platform, partnerType } = fcmOptions
+  setPendingPartnerType(partnerType === "store" ? "store" : "restaurant")
   const normalizedPhone = normalizePhoneDigits(phone || "")
 
   try {
@@ -62,7 +64,7 @@ async function finalizeRestaurantPendingSubmission(navigate, phone, fcmOptions =
   localStorage.removeItem("restaurant_pendingMessage")
 
   try {
-    syncPendingPartnerFcmQuick("restaurant", normalizedPhone, { fcmToken, platform })
+    syncPendingPartnerFcmQuick("restaurant", normalizedPhone, { fcmToken, platform, partnerType })
   } catch {}
 
   if (localStorage.getItem("restaurant_accessToken")) {
@@ -640,6 +642,10 @@ export default function RestaurantOnboarding() {
   const [keyboardInset, setKeyboardInset] = useState(0)
   const [isEditing, setIsEditing] = useState(true)
   const [hasExistingRestaurantProfile, setHasExistingRestaurantProfile] = useState(false)
+  // "My Store" partner: same onboarding, but no takeaway option and "store" wording.
+  // Comes from ?type=store (set after the My Store OTP login) or the saved profile.
+  const [isStore, setIsStore] = useState(() => searchParams.get("type") === "store")
+  const w = (t) => pw(t, isStore ? "store" : "restaurant")
   const [isFssaiCalendarOpen, setIsFssaiCalendarOpen] = useState(false)
   const [zones, setZones] = useState([])
   const [zonesLoading, setZonesLoading] = useState(false)
@@ -1007,6 +1013,7 @@ export default function RestaurantOnboarding() {
         // 2. Hydrate from API if exists
         if (apiData) {
           setHasExistingRestaurantProfile(true)
+          if (apiData.partnerType === "store") setIsStore(true)
           const onboarding = apiData.onboarding || {}
           const s1 = onboarding.step1 || {}
           const s2 = onboarding.step2 || {}
@@ -1255,12 +1262,12 @@ export default function RestaurantOnboarding() {
     const errors = []
 
     if (!step1.restaurantName?.trim()) {
-      errors.push("Restaurant name is required")
+      errors.push(isStore ? "Store name is required" : "Restaurant name is required")
     } else if (/[\/-]/.test(step1.restaurantName)) {
-      errors.push("Restaurant name cannot contain slashes (/) or hyphens (-)")
+      errors.push(`${isStore ? "Store" : "Restaurant"} name cannot contain slashes (/) or hyphens (-)`)
     }
     if (typeof step1.pureVegRestaurant !== "boolean") {
-      errors.push("Please select whether your restaurant is pure veg")
+      errors.push(w("Please select whether your restaurant is pure veg"))
     }
     if (!step1.ownerName?.trim()) {
       errors.push("Owner name is required")
@@ -1285,7 +1292,7 @@ export default function RestaurantOnboarding() {
        errors.push("Primary contact number must be exactly 10 digits")
     }
     if (!hasLocationPoint) {
-      errors.push("Please search and select your restaurant location")
+      errors.push(w("Please search and select your restaurant location"))
     } else if (isLocationOutsideZones) {
       errors.push("This location is outside our service zones")
     } else if (!step1.zoneId?.trim()) {
@@ -1328,7 +1335,7 @@ export default function RestaurantOnboarding() {
 
     // Check profile image - must be a File or existing URL
     if (!step2.profileImage) {
-      errors.push("Restaurant profile image is required")
+      errors.push(w("Restaurant profile image is required"))
     } else {
       // Verify profile image is either a File or has a valid URL
       const isValidProfileImage =
@@ -1336,7 +1343,7 @@ export default function RestaurantOnboarding() {
         (step2.profileImage?.url && typeof step2.profileImage.url === 'string') ||
         (typeof step2.profileImage === 'string' && step2.profileImage.trim())
       if (!isValidProfileImage) {
-        errors.push("Please upload a valid restaurant profile image")
+        errors.push(w("Please upload a valid restaurant profile image"))
       }
     }
 
@@ -1559,8 +1566,8 @@ export default function RestaurantOnboarding() {
             ifscCode: (step3.ifscCode || "").toUpperCase(),
             accountHolderName: step3.accountHolderName || "",
             accountType: step3.accountType || "",
-            isTakeawayEnabled: step2.isTakeawayEnabled === true,
-            isTakeawayCodEnabled: step2.isTakeawayCodEnabled === true,
+            isTakeawayEnabled: !isStore && step2.isTakeawayEnabled === true,
+            isTakeawayCodEnabled: !isStore && step2.isTakeawayCodEnabled === true,
           }
 
           if (fcmToken) {
@@ -1575,7 +1582,7 @@ export default function RestaurantOnboarding() {
           await clearAllFilesFromDB()
 
           toast.success("Registration submitted. Awaiting admin approval.", { duration: 4000 })
-          await finalizeRestaurantPendingSubmission(navigate, step1.ownerPhone, { fcmToken, platform })
+          await finalizeRestaurantPendingSubmission(navigate, step1.ownerPhone, { fcmToken, platform, partnerType: isStore ? "store" : "restaurant" })
           return
         }
 
@@ -1584,6 +1591,7 @@ export default function RestaurantOnboarding() {
 
         // Step 1
         formData.append("restaurantName", step1.restaurantName || "")
+        if (isStore) formData.append("partnerType", "store")
         formData.append(
           "pureVegRestaurant",
           step1.pureVegRestaurant === true ? "true" : "false",
@@ -1610,8 +1618,8 @@ export default function RestaurantOnboarding() {
         formData.append("openingTime", normalizeTimeValue(step2.openingTime) || "")
         formData.append("closingTime", normalizeTimeValue(step2.closingTime) || "")
         formData.append("openDays", (step2.openDays || []).join(","))
-        formData.append("isTakeawayEnabled", step2.isTakeawayEnabled ? "true" : "false")
-        formData.append("isTakeawayCodEnabled", step2.isTakeawayCodEnabled ? "true" : "false")
+        formData.append("isTakeawayEnabled", !isStore && step2.isTakeawayEnabled ? "true" : "false")
+        formData.append("isTakeawayCodEnabled", !isStore && step2.isTakeawayCodEnabled ? "true" : "false")
 
         const menuFiles = (step2.menuImages || []).filter((f) => isUploadableFile(f))
         if (menuFiles.length === 0) {
@@ -1621,7 +1629,7 @@ export default function RestaurantOnboarding() {
         preparedMenuFiles.forEach((file) => formData.append("menuImages", file))
 
         if (!isUploadableFile(step2.profileImage)) {
-          throw new Error("Restaurant profile image is required")
+          throw new Error(w("Restaurant profile image is required"))
         }
         formData.append(
           "profileImage",
@@ -1674,7 +1682,7 @@ export default function RestaurantOnboarding() {
         } catch {}
 
         toast.success("Registration submitted. Awaiting admin approval.", { duration: 4000 })
-        await finalizeRestaurantPendingSubmission(navigate, step1.ownerPhone, { fcmToken, platform })
+        await finalizeRestaurantPendingSubmission(navigate, step1.ownerPhone, { fcmToken, platform, partnerType: isStore ? "store" : "restaurant" })
       }
     } catch (err) {
       const msg =
@@ -1704,10 +1712,10 @@ export default function RestaurantOnboarding() {
   const renderStep1 = () => (
     <div className="space-y-6">
       <section className="bg-white p-4 sm:p-6 rounded-md">
-        <h2 className="text-lg font-semibold text-black mb-4">Restaurant information</h2>
+        <h2 className="text-lg font-semibold text-black mb-4">{isStore ? "Store information" : "Restaurant information"}</h2>
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-gray-700">Restaurant name*</Label>
+            <Label className="text-xs text-gray-700">{isStore ? "Store name*" : "Restaurant name*"}</Label>
             <Input
               value={step1.restaurantName || ""}
               onChange={(e) => {
@@ -1720,7 +1728,7 @@ export default function RestaurantOnboarding() {
             />
           </div>
           <div>
-            <Label className="text-xs text-gray-700">Pure veg restaurant?*</Label>
+            <Label className="text-xs text-gray-700">{isStore ? "Pure veg store?*" : "Pure veg restaurant?*"}</Label>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1746,7 +1754,7 @@ export default function RestaurantOnboarding() {
               </button>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
-              This helps users filter restaurants by dietary preference.
+              {w("This helps users filter restaurants by dietary preference.")}
             </p>
           </div>
         </div>
@@ -1802,7 +1810,7 @@ export default function RestaurantOnboarding() {
       </section>
 
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
-        <h2 className="text-lg font-semibold text-black">Restaurant contact & location</h2>
+        <h2 className="text-lg font-semibold text-black">{w("Restaurant contact & location")}</h2>
         <div>
           <Label className="text-xs text-gray-700">Primary contact number*</Label>
           <Input
@@ -1823,7 +1831,7 @@ export default function RestaurantOnboarding() {
             }}
             inputMode="numeric"
             className="mt-1 bg-white text-sm"
-            placeholder="Restaurant's primary contact number"
+            placeholder={w("Restaurant's primary contact number")}
             disabled={!isEditing}
           />
           <p className="text-[11px] text-gray-500 mt-1">
@@ -1833,7 +1841,7 @@ export default function RestaurantOnboarding() {
         </div>
         <div className="space-y-3">
           <p className="text-sm text-gray-700">
-            Add your restaurant's location for order pick-up.
+            {w("Add your restaurant's location for order pick-up.")}
           </p>
           <div ref={locationSearchContainerRef} className="relative">
             <Label className="text-xs text-gray-700">Search location</Label>
@@ -1846,7 +1854,7 @@ export default function RestaurantOnboarding() {
                 onBlur={() => setIsLocationSearchFocused(false)}
                 className="mt-1 bg-white text-sm text-black! dark:text-white! placeholder:text-slate-400/70 dark:placeholder:text-slate-500/70 caret-black dark:caret-white"
                 style={locationSearchValue ? { color: "#000", WebkitTextFillColor: "#000" } : {}}
-                placeholder={isLocationSearchFocused ? "" : "Start typing your restaurant address..."}
+                placeholder={isLocationSearchFocused ? "" : w("Start typing your restaurant address...")}
               />
               {isSearchingLocation && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -2015,7 +2023,7 @@ export default function RestaurantOnboarding() {
               {zonesLoading
                 ? "Loading zones..."
                 : isLocationOutsideZones
-                  ? "This location is outside our service zones. Please pick your restaurant's exact location."
+                  ? w("This location is outside our service zones. Please pick your restaurant's exact location.")
                   : detectedZone
                     ? getZoneLabel(detectedZone)
                     : "Select your location above — the zone is filled automatically."}
@@ -2431,7 +2439,7 @@ export default function RestaurantOnboarding() {
 
         {/* Profile image */}
         <div className="space-y-2">
-          <Label className="text-xs font-medium text-gray-700">Restaurant profile image</Label>
+          <Label className="text-xs font-medium text-gray-700">{w("Restaurant profile image")}</Label>
           <div className="flex items-center gap-4">
             <div className="relative">
               <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
@@ -2471,7 +2479,7 @@ export default function RestaurantOnboarding() {
               <div className="flex flex-col">
                 <span className="text-xs font-medium text-gray-900">Upload profile image</span>
                 <span className="text-[11px] text-gray-500">
-                  This will be shown on your listing card and restaurant page.
+                  {w("This will be shown on your listing card and restaurant page.")}
                 </span>
               </div>
 
@@ -2588,7 +2596,7 @@ export default function RestaurantOnboarding() {
             <span>Open days</span>
           </Label>
           <p className="text-[11px] text-gray-500">
-            Select the days your restaurant accepts delivery orders.
+            {w("Select the days your restaurant accepts delivery orders.")}
           </p>
           <div className="mt-1 grid grid-cols-7 gap-1.5 sm:gap-2">
             {daysOfWeek.map((day) => {
@@ -2609,7 +2617,8 @@ export default function RestaurantOnboarding() {
         </div>
       </section>
 
-      {/* Takeaway Service Toggle */}
+      {/* Takeaway Service Toggle — not offered to My Store partners */}
+      {!isStore && (
       <section className="bg-white p-4 sm:p-6 rounded-md space-y-5">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
@@ -2618,7 +2627,7 @@ export default function RestaurantOnboarding() {
               <span>Takeaway (Pickup) order</span>
             </Label>
             <p className="text-[11px] text-gray-500 leading-relaxed">
-              Enable this to allow customers to pick up orders themselves from your restaurant.
+              {w("Enable this to allow customers to pick up orders themselves from your restaurant.")}
             </p>
           </div>
           <button
@@ -2637,6 +2646,7 @@ export default function RestaurantOnboarding() {
         </div>
 
       </section>
+      )}
     </div>
   )
 
@@ -3109,7 +3119,7 @@ export default function RestaurantOnboarding() {
                   <ArrowLeft className="w-[18px] h-[18px] text-gray-700 stroke-[2.5]" />
                 </button>
               )}
-              <div className="text-sm font-semibold text-black">Restaurant onboarding</div>
+              <div className="text-sm font-semibold text-black">{w("Restaurant onboarding")}</div>
             </div>
             <div className="flex items-center gap-3">
               {!isEditing && (

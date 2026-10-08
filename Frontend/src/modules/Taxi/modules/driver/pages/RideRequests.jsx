@@ -16,7 +16,6 @@ import {
   User,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { getDriverRideHistory } from '../services/registrationService';
 
 const TABS = [
@@ -272,8 +271,7 @@ const RideRequests = () => {
           <ArrowLeft size={16} />
         </button>
         <div className="text-center">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.22em]">Driver log</p>
-          <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">History</h1>
+          <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">Trip History</h1>
         </div>
         <button
           type="button"
@@ -467,7 +465,6 @@ const RideRequests = () => {
         )}
       </div>
 
-      <DriverBottomNav />
     </div>
   );
 };

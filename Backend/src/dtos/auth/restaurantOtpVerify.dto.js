@@ -11,7 +11,8 @@ const schema = z.object({
         .min(4, 'OTP must be 4-6 digits')
         .max(6, 'OTP must be 4-6 digits'),
     fcmToken: z.string().optional().nullable(),
-    platform: z.enum(['web', 'mobile']).optional().default('web')
+    platform: z.enum(['web', 'mobile']).optional().default('web'),
+    partnerType: z.enum(['restaurant', 'store']).optional().default('restaurant')
 });
 
 export const validateRestaurantOtpVerifyDto = (body) => {

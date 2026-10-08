@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
@@ -455,7 +456,7 @@ export default function ZoneSetup() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Zone Setup</h1>
-              <p className="text-sm text-gray-600">Set your restaurant location on the map</p>
+              <p className="text-sm text-gray-600">{sw("Set your restaurant location on the map")}</p>
             </div>
           </div>
         </div>
@@ -471,7 +472,7 @@ export default function ZoneSetup() {
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                placeholder="Search for your restaurant location..."
+                placeholder={sw("Search for your restaurant location...")}
                 className="w-full min-w-0 pl-10 sm:pl-12 pr-4 py-3.5 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#B80B3D] focus:border-transparent"
               />
               {showSuggestions && suggestions.length > 0 && (
@@ -541,7 +542,7 @@ export default function ZoneSetup() {
             <li>Search for your location using the search bar above, or</li>
             <li>Click anywhere on the map to place a pin at that location</li>
             <li>You can drag the pin to adjust the exact position</li>
-            <li>Click "Save Location" to save your restaurant location</li>
+            <li>{sw('Click "Save Location" to save your restaurant location')}</li>
           </ul>
         </div>
 

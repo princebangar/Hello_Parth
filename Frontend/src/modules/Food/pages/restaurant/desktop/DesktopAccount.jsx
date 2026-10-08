@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { AlertTriangle, ChevronRight, FileText, Loader2, LogOut, ShieldCheck, Trash2 } from "lucide-react"
@@ -89,7 +90,7 @@ export default function DesktopAccount() {
           <Card title="Legal" bodyClass="p-0">
             <div className="mt-3 divide-y divide-slate-100">
               {row(ShieldCheck, "bg-blue-50 text-blue-600", "Privacy policy", "How we handle your data", () => navigate(`${BASE}/privacy`))}
-              {row(FileText, "bg-violet-50 text-violet-600", "Terms & conditions", "Rules for restaurant partners", () => navigate(`${BASE}/terms`))}
+              {row(FileText, "bg-violet-50 text-violet-600", "Terms & conditions", sw("Rules for restaurant partners"), () => navigate(`${BASE}/terms`))}
             </div>
           </Card>
         </div>
@@ -100,7 +101,7 @@ export default function DesktopAccount() {
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-100 text-rose-600"><Trash2 className="h-[18px] w-[18px]" /></span>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-slate-900">Delete account</p>
-                <p className="mt-0.5 text-sm text-slate-600">Your restaurant account will be deleted. The admin keeps historical records for revenue reporting.</p>
+                <p className="mt-0.5 text-sm text-slate-600">{sw("Your restaurant account will be deleted. The admin keeps historical records for revenue reporting.")}</p>
                 <button onClick={startDelete} disabled={checking} className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-rose-600 px-4 text-[13px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60">
                   {checking && <Loader2 className="h-4 w-4 animate-spin" />} Delete my account
                 </button>

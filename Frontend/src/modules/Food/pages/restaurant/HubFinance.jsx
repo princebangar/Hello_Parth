@@ -6,6 +6,7 @@ import { useLocation } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders"
 import { restaurantAPI } from "@food/api"
+import { isMyStorePartner } from "@food/utils/auth"
 import { DateRangeCalendar } from "@food/components/ui/date-range-calendar"
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
@@ -139,7 +140,7 @@ export default function HubFinance() {
       const numericPart = numericMatch[1]
       // Take last 6 digits and pad with zeros if needed
       const lastDigits = numericPart.slice(-6).padStart(6, '0')
-      return `REST${lastDigits}`
+      return `${isMyStorePartner() ? 'STORE' : 'REST'}${lastDigits}`
     }
 
     // Fallback: if no numeric part found, use original

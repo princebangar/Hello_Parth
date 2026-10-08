@@ -22,6 +22,7 @@ import {
   FolderTree,
   Plus,
   Utensils,
+  Store,
   Megaphone,
   ChevronDown,
   ChevronRight,
@@ -59,7 +60,8 @@ import {
 } from "lucide-react"
 import { cn } from "@food/utils/utils"
 import { Input } from "@food/components/ui/input"
-import { adminSidebarMenu } from "@food/utils/adminSidebarMenu"
+import { adminSidebarMenu, withoutMyStoreItems } from "@food/utils/adminSidebarMenu"
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js"
 import { filterSidebarMenuByPermissions, getFoodPermissionMap } from "@food/utils/subAdminPermissions"
 import { getModuleAccess } from "@/shared/utils/adminAccess.js"
 import { getCurrentUser } from "@food/utils/auth"
@@ -71,9 +73,34 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const trimPath = (value) => String(value || "").replace(/\/+$/, "") || "/"
+
+// Every link / sub-link path of the sidebar. A page belongs to the LONGEST of these that matches its URL, so
+// /admin/food/my-store/foods is "My Store Foods List" only - not also "My Store List" (/admin/food/my-store),
+// which is a prefix of it but lives in another group.
+const ALL_MENU_PATHS = (() => {
+  const out = []
+  adminSidebarMenu.forEach((item) => {
+    if (item.path) out.push(trimPath(item.path))
+    if (item.type === "section") {
+      ;(item.items || []).forEach((sub) => {
+        if (sub.path) out.push(trimPath(sub.path))
+        ;(sub.subItems || []).forEach((si) => si.path && out.push(trimPath(si.path)))
+      })
+    }
+  })
+  return out.sort((a, b) => b.length - a.length)
+})()
+
+function bestMenuPath(currentPath) {
+  const cur = trimPath(currentPath)
+  return ALL_MENU_PATHS.find((candidate) => cur === candidate || cur.startsWith(`${candidate}/`)) || null
+}
+
 
 // Icon mapping
 const iconMap = {
+  Store,
   LayoutDashboard,
   UtensilsCrossed,
   Building2,
@@ -292,6 +319,12 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
     const l = label.toLowerCase()
     const p = path?.toLowerCase() || ""
 
+    // My Store entries have their own counts (checked first: their labels also say "joining request" / "withdraws")
+    if (p.includes("my-store/joining-request")) return badges.myStoreJoining ?? 0
+    if (p.includes("my-store/complaints")) return badges.myStoreComplaints ?? 0
+    if (p.includes("my-store/withdraws")) return badges.myStoreWithdrawals ?? 0
+    if (l === "my store") return badges.myStoreJoining ?? 0
+
     // Path-based (sub-menu items & direct links)
     if (p.includes("food-approval")) return badges.foodApprovals ?? 0
     if (p.includes("dining-requests")) return badges.diningRequests ?? 0
@@ -364,10 +397,8 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
       if (item.type === "section") {
         item.items.forEach((menuItem) => {
           if (menuItem.type === "expandable" && menuItem.subItems) {
-            const hasMatchingSubItem = menuItem.subItems.some((subItem) => {
-              const subPath = String(subItem.path || "").replace(/\/+$/, "")
-              return currentPath === subPath || currentPath.startsWith(`${subPath}/`)
-            })
+            const bestPath = bestMenuPath(currentPath)
+            const hasMatchingSubItem = menuItem.subItems.some((subItem) => trimPath(subItem.path) === bestPath)
             if (hasMatchingSubItem) {
               const key = menuItem.label.toLowerCase().replace(/\s+/g, "")
               state[key] = true
@@ -414,9 +445,12 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
   // Do NOT depend on location.pathname — remounting menu on every route break expandable submenus.
   const adminUser = getCurrentUser("admin")
   const permissionSyncKey = `${adminUser?.role || ""}:${JSON.stringify(getFoodPermissionMap(adminUser))}`
+  // Global admin > Customization Settings > My Store: off hides every My Store entry
+  const myStoreEnabled = useMyStoreEnabled()
   const permissionMenuData = useMemo(() => {
-    return filterSidebarMenuByPermissions(adminSidebarMenu, getCurrentUser("admin"))
-  }, [permissionSyncKey])
+    const base = myStoreEnabled ? adminSidebarMenu : withoutMyStoreItems(adminSidebarMenu)
+    return filterSidebarMenuByPermissions(base, getCurrentUser("admin"))
+  }, [permissionSyncKey, myStoreEnabled])
 
   // Filter menu items based on search query
   const filteredMenuData = useMemo(() => {
@@ -510,12 +544,8 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
 
     // For subItems, check if this is the most specific match
     if (allPaths.length > 0) {
-      // Sort paths by length (longest first) to find most specific match
-      const sortedPaths = [...allPaths].sort((a, b) => b.length - a.length)
-      const bestMatch = sortedPaths.find((candidatePath) =>
-        matchesPath(String(candidatePath || "").replace(/\/+$/, "") || "/")
-      )
-      return (String(bestMatch || "").replace(/\/+$/, "") || "/") === targetPath
+      // The most specific match across the whole menu (not only this group's siblings)
+      return bestMenuPath(currentPath) === targetPath
     }
 
     return matchesPath(targetPath)
@@ -529,10 +559,8 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
       if (item.type === "section") {
         item.items.forEach((menuItem) => {
           if (menuItem.type === "expandable" && menuItem.subItems) {
-            const hasMatchingSubItem = menuItem.subItems.some((subItem) => {
-              const subPath = String(subItem.path || "").replace(/\/+$/, "")
-              return currentPath === subPath || currentPath.startsWith(`${subPath}/`)
-            })
+            const bestPath = bestMenuPath(currentPath)
+            const hasMatchingSubItem = menuItem.subItems.some((subItem) => trimPath(subItem.path) === bestPath)
             if (hasMatchingSubItem) {
               foundSectionKey = menuItem.label.toLowerCase().replace(/\s+/g, "")
             }

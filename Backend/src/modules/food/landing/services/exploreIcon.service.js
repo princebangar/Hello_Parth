@@ -56,6 +56,7 @@ export const createExploreIcon = async (file, meta) => {
     else if (lowerLabel === 'gourmet') linkType = 'gourmet';
     else if (lowerLabel === 'collections') linkType = 'collections';
     else if (lowerLabel === 'under 250' || lowerLabel === 'under-250') linkType = 'under-250';
+    else if (lowerLabel === 'my store' || lowerLabel === 'my-store' || lowerLabel === 'mystore') linkType = 'my-store';
 
     const doc = await FoodExploreIcon.create({
         label,
@@ -101,6 +102,7 @@ export const updateExploreIcon = async (id, payload) => {
         else if (lowerLabel === 'gourmet') updates.linkType = 'gourmet';
         else if (lowerLabel === 'collections') updates.linkType = 'collections';
         else if (lowerLabel === 'under 250' || lowerLabel === 'under-250') updates.linkType = 'under-250';
+        else if (lowerLabel === 'my store' || lowerLabel === 'my-store' || lowerLabel === 'mystore') updates.linkType = 'my-store';
         else updates.linkType = 'custom';
     }
     if (payload?.link !== undefined) {

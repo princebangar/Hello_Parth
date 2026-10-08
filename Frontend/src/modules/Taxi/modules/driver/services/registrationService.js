@@ -116,6 +116,11 @@ const isDriverOwnedAuthValue = (key, value) => {
 
 export const clearDriverAuthState = () => {
   clearDriverRegistrationSession();
+  try {
+    localStorage.removeItem("driver_is_online_cache");
+  } catch {
+    // ignore
+  }
   DRIVER_AUTH_KEYS.forEach((key) => {
     if (isDriverOwnedAuthValue(key, readSessionValue(key))) {
       removeSessionValue(key);

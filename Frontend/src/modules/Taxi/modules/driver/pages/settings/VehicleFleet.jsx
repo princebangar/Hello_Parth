@@ -8,7 +8,6 @@ import {
     updateDriverVehicle,
 } from '../../services/registrationService';
 import { useImageUpload } from '../../../../shared/hooks/useImageUpload';
-import DriverBottomNav from '../../../shared/components/DriverBottomNav';
 import OwnerVehicleFleet from './OwnerVehicleFleet';
 import CarIcon from '../../../../assets/icons/car.png';
 import BikeIcon from '../../../../assets/icons/bike.png';
@@ -582,7 +581,6 @@ const VehicleFleet = () => {
                     </>
                 )}
             </AnimatePresence>
-            <DriverBottomNav />
             </div>
             )}
         </>

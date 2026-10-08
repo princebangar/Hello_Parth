@@ -5,6 +5,7 @@ import { FoodAddon } from '../../restaurant/models/foodAddon.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { syncMenuItemApprovalStatus } from '../../restaurant/services/restaurantMenu.service.js';
 import { getFoodDisplayPrice, serializeFoodVariants } from './foodVariant.service.js';
+import { partnerTypeCondition } from '../../utils/partnerScope.js';
 
 const toRestaurantDisplayId = (mongoId) => {
     const s = String(mongoId || '');
@@ -22,6 +23,22 @@ export async function listPendingFoodApprovals(query = {}) {
     if (query.restaurantId && mongoose.Types.ObjectId.isValid(String(query.restaurantId))) {
         foodFilter.restaurantId = query.restaurantId;
         addonFilter.restaurantId = query.restaurantId;
+    }
+
+    // Optional "Restaurants" / "My Store" tab: narrow requests to partners of one kind.
+    const partnerTypeFilter = String(query.partnerType || '').trim().toLowerCase();
+    if (partnerTypeFilter === 'store' || partnerTypeFilter === 'restaurant') {
+        const ids = await FoodRestaurant.find({ partnerType: partnerTypeCondition(partnerTypeFilter) })
+            .distinct('_id');
+        if (foodFilter.restaurantId) {
+            const wanted = String(foodFilter.restaurantId);
+            const allowed = ids.some((id) => String(id) === wanted);
+            foodFilter.restaurantId = allowed ? foodFilter.restaurantId : { $in: [] };
+            addonFilter.restaurantId = foodFilter.restaurantId;
+        } else {
+            foodFilter.restaurantId = { $in: ids };
+            addonFilter.restaurantId = { $in: ids };
+        }
     }
 
     if (query.search && String(query.search).trim()) {
@@ -52,9 +69,12 @@ export async function listPendingFoodApprovals(query = {}) {
     ].filter(Boolean)));
 
     const restaurants = restaurantIds.length
-        ? await FoodRestaurant.find({ _id: { $in: restaurantIds } }).select('restaurantName').lean()
+        ? await FoodRestaurant.find({ _id: { $in: restaurantIds } }).select('restaurantName partnerType').lean()
         : [];
     const restaurantMap = new Map(restaurants.map((r) => [String(r._id), r.restaurantName]));
+    const partnerTypeMap = new Map(
+        restaurants.map((r) => [String(r._id), r.partnerType === 'store' ? 'store' : 'restaurant']),
+    );
 
     const foodRequests = foodList.map((f) => ({
         _id: f._id,
@@ -63,6 +83,7 @@ export async function listPendingFoodApprovals(query = {}) {
         type: 'food',
         restaurantName: restaurantMap.get(String(f.restaurantId)) || 'Unknown Restaurant',
         restaurantId: toRestaurantDisplayId(f.restaurantId),
+        partnerType: partnerTypeMap.get(String(f.restaurantId)) || 'restaurant',
         category: f.categoryName || '',
         itemName: f.name,
         foodType: f.foodType || 'Non-Veg',
@@ -89,6 +110,7 @@ export async function listPendingFoodApprovals(query = {}) {
         type: 'addon',
         restaurantName: restaurantMap.get(String(a.restaurantId)) || 'Unknown Restaurant',
         restaurantId: toRestaurantDisplayId(a.restaurantId),
+        partnerType: partnerTypeMap.get(String(a.restaurantId)) || 'restaurant',
         category: 'Add-on',
         itemName: a.draft?.name || 'Unnamed Add-on',
         foodType: 'Add-on',

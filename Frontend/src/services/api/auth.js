@@ -307,15 +307,19 @@ function getMeOnce(module) {
 /**
  * Restaurant OTP auth (backend: same phone format as user, 4-digit OTP e.g. 1234).
  */
-export function requestRestaurantOtp(phone) {
+export function requestRestaurantOtp(phone, partnerType = "restaurant", confirmNewRole = false) {
   const normalized = normalizePhone(phone);
   if (normalized.length < 8) {
     return Promise.reject(new Error("Phone must be at least 8 digits"));
   }
-  return apiClient.post(AUTH.RESTAURANT_REQUEST_OTP, { phone: normalized });
+  return apiClient.post(AUTH.RESTAURANT_REQUEST_OTP, {
+    phone: normalized,
+    ...(partnerType === "store" ? { partnerType } : {}),
+    ...(confirmNewRole ? { confirmNewRole: true } : {}),
+  });
 }
 
-export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web", confirmAction = null) {
+export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web", confirmAction = null, partnerType = "restaurant") {
   const normalized = normalizePhone(phone);
   const otpStr = String(otp).replace(/\D/g, "").slice(0, 6);
   if (!normalized || otpStr.length < 4) {
@@ -326,6 +330,7 @@ export function verifyRestaurantOtp(phone, otp, fcmToken = null, platform = "web
     otp: otpStr,
     ...(fcmToken ? { fcmToken, platform } : {}),
     ...(confirmAction ? { confirmAction } : {}),
+    ...(partnerType === "store" ? { partnerType } : {}),
   });
 }
 

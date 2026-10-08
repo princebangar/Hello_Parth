@@ -103,6 +103,7 @@ const restaurantRegisterSchema = z.object({
     accountType: z.string().optional(),
     isTakeawayEnabled: z.string().optional(),
     isTakeawayCodEnabled: z.string().optional(),
+    partnerType: z.enum(['restaurant', 'store']).optional().default('restaurant'),
     fcmToken: z.string().optional().nullable(),
     platform: z.string().optional().nullable()
 });

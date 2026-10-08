@@ -1,5 +1,6 @@
 import { FoodGourmetRestaurant } from '../models/gourmetRestaurant.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { partnerTypeCondition } from '../../utils/partnerScope.js';
 
 export const getPublicGourmetRestaurants = async (zoneId) => {
     const docs = await FoodGourmetRestaurant.find({ isActive: true })
@@ -7,7 +8,8 @@ export const getPublicGourmetRestaurants = async (zoneId) => {
         .lean();
 
     const restaurantIds = docs.map((d) => d.restaurantId);
-    const restaurantFilter = { _id: { $in: restaurantIds } };
+    // My Store partners never show in Gourmet.
+    const restaurantFilter = { _id: { $in: restaurantIds }, partnerType: partnerTypeCondition() };
     if (zoneId && String(zoneId).trim()) {
         restaurantFilter.zoneId = String(zoneId).trim();
     }

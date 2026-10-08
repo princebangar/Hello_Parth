@@ -1,3 +1,4 @@
+import { panelWords as sw } from "@food/utils/adminPartnerLabels"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
@@ -365,7 +366,7 @@ export default function OutletInfo() {
         {/* Main Image & Profile Section */}
         <div className="px-4 pt-4">
           <div className="relative w-full h-[180px] rounded-[2rem] overflow-hidden shadow-xl ring-1 ring-black/5">
-            <img src={mainImage} alt="Restaurant banner" className="w-full h-full object-cover" />
+            <img src={mainImage} alt={sw("Restaurant banner")} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                         <input
               ref={menuImageInputRef}
@@ -383,7 +384,7 @@ export default function OutletInfo() {
               {/* Profile Image */}
               <div className="relative -mt-12 group inline-block w-fit">
                 <div className="w-24 h-24 rounded-[2rem] bg-white p-1.5 shadow-2xl ring-1 ring-black/5 shrink-0">
-                  <img src={thumbnailImage} alt="Restaurant thumbnail" className="w-full h-full rounded-[1.6rem] object-cover" />
+                  <img src={thumbnailImage} alt={sw("Restaurant thumbnail")} className="w-full h-full rounded-[1.6rem] object-cover" />
                 </div>
               </div>
 
@@ -425,7 +426,7 @@ export default function OutletInfo() {
             >
               <p className="text-[10px] text-[#B80B3D] font-black uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-gradient-to-br from-[#B80B3D] to-[#66001D] rounded-full"></span>
-                Restaurant Name
+                {sw("Restaurant Name")}
               </p>
               <p className="text-lg font-black text-gray-900 group-hover:text-[#B80B3D] transition-colors">
                 {loading ? "Loading..." : (restaurantName || "N/A")}

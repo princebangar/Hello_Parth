@@ -4,6 +4,7 @@ import apiClient, { userAPI, restaurantAPI, deliveryAPI, adminAPI } from "@food/
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { buildMessagingServiceWorkerUrl } from "@/shared/utils/firebaseServiceWorkerUrl";
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
+import { readLastPartnerRole } from "@food/utils/auth";
 const fallbackNotificationSound = "/assets/media/alert.mp3";
 
 const pushNotificationSoundPath = "/assets/media/zomato_sms.mp3";
@@ -417,6 +418,10 @@ export async function persistPendingModuleFcmToken(moduleName, phone, options = 
         token: fcmToken,
         platform,
         role: moduleName,
+        // The same phone can hold a Restaurant Partner and a My Store account.
+        ...(moduleName === "restaurant"
+          ? { partnerType: options.partnerType || readLastPartnerRole() }
+          : {}),
       });
       pushDebugLog(PUSH_DEBUG_PREFIX, "Pending FCM token saved by phone", {
         moduleName,

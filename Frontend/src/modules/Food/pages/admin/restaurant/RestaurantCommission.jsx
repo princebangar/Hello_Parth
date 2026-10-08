@@ -1,3 +1,5 @@
+import { usePartnerType } from "@food/components/admin/PartnerScope"
+import { pw } from "@food/utils/adminPartnerLabels"
 import { useState, useMemo, useEffect } from "react"
 import { 
   Search, Plus, Edit, Trash2, ArrowUpDown, 
@@ -19,6 +21,8 @@ const DEFAULT_COMMISSION_PERCENT = "18"
 const DEFAULT_COMMISSION_FIXED_AMOUNT = "50"
 
 export default function RestaurantCommission() {
+  const partnerType = usePartnerType()
+  const w = (t) => pw(t, partnerType)
   const [searchQuery, setSearchQuery] = useState("")
   const [commissions, setCommissions] = useState([])
   const [approvedRestaurants, setApprovedRestaurants] = useState([])
@@ -349,7 +353,7 @@ export default function RestaurantCommission() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">Restaurant Commission</h1>
+              <h1 className="text-2xl font-bold text-slate-900">{w("Restaurant Commission")}</h1>
               <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700 flex items-center justify-center min-w-[2.5rem] h-7">
                 {loading ? (
                   <span className="w-5 h-3 rounded bg-slate-300/80 animate-pulse" />
@@ -374,7 +378,7 @@ export default function RestaurantCommission() {
             <div className="relative w-full max-w-xl">
               <input
                 type="text"
-                placeholder="Search by restaurant name or ID"
+                placeholder={w("Search by restaurant name or ID")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -402,12 +406,12 @@ export default function RestaurantCommission() {
                     )}
                     {visibleColumns.restaurant && (
                       <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                        Restaurant Name
+                        {w("Restaurant Name")}
                       </th>
                     )}
                     {visibleColumns.restaurantId && (
                       <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                        Restaurant ID
+                        {w("Restaurant ID")}
                       </th>
                     )}
                     {visibleColumns.defaultCommission && (
@@ -515,13 +519,13 @@ export default function RestaurantCommission() {
       <Dialog open={isRestaurantSelectOpen} onOpenChange={setIsRestaurantSelectOpen}>
         <DialogContent className="max-w-xl bg-white p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200">
-            <DialogTitle className="text-lg font-semibold text-slate-900">Select Restaurant</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-slate-900">{w("Select Restaurant")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-6 py-4">
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search restaurants..."
+                placeholder={w("Search restaurants...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-4 py-2 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -547,7 +551,7 @@ export default function RestaurantCommission() {
                   </button>
                 ))}
               {filteredRestaurants.filter(r => !r.hasCommissionSetup).length === 0 && (
-                <p className="text-center text-sm text-slate-500 py-4">No restaurants available</p>
+                <p className="text-center text-sm text-slate-500 py-4">{w("No restaurants available")}</p>
               )}
             </div>
           </div>
@@ -669,7 +673,7 @@ export default function RestaurantCommission() {
               </div>
               <div className="min-w-0 space-y-1.5">
                 <DialogTitle className="text-base font-semibold text-slate-900 leading-snug">
-                  Delete Restaurant Commission
+                  {w("Delete Restaurant Commission")}
                 </DialogTitle>
                 <p className="text-sm text-slate-600 leading-relaxed break-words">
                   Remove commission settings for{" "}

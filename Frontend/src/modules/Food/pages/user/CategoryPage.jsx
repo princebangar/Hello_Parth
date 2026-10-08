@@ -1251,6 +1251,7 @@ export default function CategoryPage({
               return {
                 id: restaurantId,
                 name: restaurant.restaurantName || restaurant.name,
+                partnerType: restaurant.partnerType || 'restaurant',
                 cuisine: cuisine,
                 rating: restaurant.rating || null,
                 deliveryTime: deliveryTime,
@@ -2252,6 +2253,9 @@ export default function CategoryPage({
                               ? (restaurant.categoryDishName || restaurant.featuredDish || restaurant.name)
                               : restaurant.name}
                           </h3>
+                          {restaurant.partnerType === 'store' && (
+<span className="mt-0.5 inline-flex w-fit items-center rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-700">My Store</span>
+)}
                           {isCategoryView && (
                             <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
                               {restaurant.name}
@@ -2409,6 +2413,9 @@ export default function CategoryPage({
                             <h3 className="text-md md:text-xl lg:text-2xl font-bold text-[#1c1c1c] dark:text-white line-clamp-1 lg:line-clamp-2 leading-tight tracking-tight">
                               {restaurant.name}
                             </h3>
+                            {restaurant.partnerType === 'store' && (
+<span className="mt-1 inline-flex w-fit items-center rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-700">My Store</span>
+)}
                             <div className="flex flex-wrap items-center gap-2 mt-2">
                               <div className="flex items-center gap-1.5 text-sm font-semibold text-[#257d3c] transition-all duration-300">
                                 <Zap

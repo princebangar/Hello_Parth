@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CreditCard, Gift, Loader2, SlidersHorizontal, TriangleAlert, Wallet, Wrench } from "lucide-react"
+import { CreditCard, Gift, Loader2, SlidersHorizontal, Store, TriangleAlert, Wallet, Wrench } from "lucide-react"
 import { toast } from "sonner"
 import { Switch } from "@food/components/ui/switch"
 import { hasGlobalSection, readAdminProfile } from "@/shared/utils/adminAccess.js"
@@ -43,6 +43,16 @@ const APP_CONTROL_SWITCHES = [
     label: "Under Maintenance",
     description:
       "When ON, every app shows the Under Maintenance screen: Food (user, restaurant, delivery) and Taxi (user, driver). Admin panels stay available. To stop only the Food apps use Food admin > Customization Settings.",
+  },
+]
+
+// Food "My Store" (brand stores). On unless switched off here.
+const MY_STORE_SWITCH = [
+  {
+    key: "my_store_enabled",
+    label: "My Store",
+    description:
+      "Brand-owned stores in Food. If you turn this off, it hides from everywhere.",
   },
 ]
 
@@ -104,7 +114,7 @@ export default function GlobalCustomizationSettings() {
         setAppSwitches(next)
         setPageCache(CUSTOMIZATION_CACHE_KEY, { ...(getPageCache(CUSTOMIZATION_CACHE_KEY) || {}), appSwitches: next })
       }
-      if (item.key === "maintenance_mode_enabled" || item.key === "default_location_enabled") {
+      if (item.key === "maintenance_mode_enabled" || item.key === "default_location_enabled" || item.key === "my_store_enabled") {
         // Keep this browser's copy of the public settings in step so the customer app reacts straight away.
         // The public settings call the all-apps maintenance switch "global_maintenance_enabled".
         const publicKey = item.key === "maintenance_mode_enabled" ? "global_maintenance_enabled" : item.key
@@ -249,6 +259,14 @@ export default function GlobalCustomizationSettings() {
         note: "Apply to the whole app — Food and Taxi.",
         loadingNow: loading || !appSwitches,
         tiles: appSwitchTiles(APP_CONTROL_SWITCHES),
+      })}
+
+      {renderSection({
+        icon: Store,
+        title: "My Store (Food)",
+        note: "Applies to the Food app.",
+        loadingNow: loading || !appSwitches,
+        tiles: appSwitchTiles(MY_STORE_SWITCH),
       })}
 
       {renderSection({

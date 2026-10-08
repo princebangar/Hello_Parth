@@ -9,7 +9,13 @@ import {
   setRestaurantPendingPhone,
   setPendingTicket,
   clearPendingTicket,
+  readLastPartnerRole,
+  rememberPartnerRole,
+  setPendingPartnerType,
 } from "@food/utils/auth"
+import PartnerRolePicker from "@food/components/restaurant/PartnerRolePicker"
+import NewRoleConfirmDialog from "@food/components/restaurant/NewRoleConfirmDialog"
+import useMyStoreEnabled from "@/shared/hooks/useMyStoreEnabled.js"
 import { clearOnboardingFromLocalStorage, clearAllFilesFromDB, checkOnboardingStatus, isRestaurantOnboardingComplete } from "@/modules/Food/utils/onboardingUtils"
 import { collectFcmTokenFast, persistModuleFcmToken } from "@food/utils/firebaseMessaging"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
@@ -61,6 +67,18 @@ export default function RestaurantLogin() {
   }
   const [loading, setLoading] = useState(false)
   const submitting = useRef(false)
+  // Restaurant Partner or My Store — chosen before the OTP is sent; a number
+  // belongs to one of them only. Last choice is remembered across logins.
+  // Global admin can switch My Store off: then the login is the plain Restaurant Partner login again.
+  const myStoreEnabled = useMyStoreEnabled()
+  const [chosenPartnerType, setPartnerTypeState] = useState(readLastPartnerRole)
+  const partnerType = myStoreEnabled ? chosenPartnerType : "restaurant"
+  const setPartnerType = (value) => {
+    setPartnerTypeState(value)
+    rememberPartnerRole(value)
+  }
+  // The number already has an account for the OTHER role: ask before creating a second one.
+  const [roleConfirm, setRoleConfirm] = useState(null)
 
   // Step 2 States
   const [otp, setOtp] = useState(["", "", "", ""])
@@ -205,7 +223,7 @@ export default function RestaurantLogin() {
   }
 
   // Action Step 1: Send OTP
-  const handleSendOTP = async (e) => {
+  const handleSendOTP = async (e, confirmNewRole = false) => {
     if (e) e.preventDefault()
     if (!validatePhone(phone)) {
       toast.error("Please enter a valid 10-digit mobile number")
@@ -224,12 +242,20 @@ export default function RestaurantLogin() {
     const fullPhone = `${DEFAULT_COUNTRY_CODE} ${phone}`.trim()
 
     try {
-      await restaurantAPI.sendOTP(fullPhone, "login")
+      const sendRes = await restaurantAPI.sendOTP(fullPhone, "login", null, partnerType, confirmNewRole)
+      const sendData = sendRes?.data?.data || sendRes?.data || {}
+      if (sendData.requiresRoleConfirmation) {
+        // No OTP was sent yet — show the "create a new account for this role?" popup first.
+        setRoleConfirm({ existing: sendData.existingPartnerType === "store" ? "store" : "restaurant" })
+        return
+      }
+      setRoleConfirm(null)
       const authData = {
         method: "phone",
         phone: fullPhone,
         isSignUp: false,
         module: "restaurant",
+        partnerType,
       }
       sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
       sessionStorage.setItem("restaurantLoginPhone", phone)
@@ -258,12 +284,14 @@ export default function RestaurantLogin() {
           phone: fullPhone,
           isSignUp: false,
           module: "restaurant",
+          partnerType,
         }
         sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
         sessionStorage.setItem("restaurantLoginPhone", phone)
         navigate("/food/restaurant/otp", { state: { initialBlockMins: totalMins } })
         return
       }
+      setRoleConfirm(null)
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -292,6 +320,7 @@ export default function RestaurantLogin() {
 
       const phoneVal = authData.phone
       const purpose = authData.isSignUp ? "register" : "login"
+      const verifyPartnerType = authData.partnerType === "store" ? "store" : "restaurant"
 
       const { fcmToken, platform } = await collectFcmTokenFast("restaurant")
 
@@ -304,6 +333,7 @@ export default function RestaurantLogin() {
         fcmToken,
         platform,
         confirmAction,
+        verifyPartnerType,
       )
       const data = response?.data?.data || response?.data
 
@@ -323,6 +353,7 @@ export default function RestaurantLogin() {
         sessionStorage.removeItem(getResendKey(phoneVal))
         setRestaurantPendingPhone(phoneVal)
         const isRejected = Boolean(data.isRejected)
+        setPendingPartnerType(verifyPartnerType)
         const statusVal = isRejected ? "rejected" : "pending"
         localStorage.setItem("restaurant_pendingStatus", statusVal)
         localStorage.setItem("restaurant_pendingMessage", data.message || "")
@@ -345,7 +376,11 @@ export default function RestaurantLogin() {
         sessionStorage.removeItem(getBlockKey(phoneVal))
         sessionStorage.removeItem(getResendKey(phoneVal))
         setShowRestorePopup(false)
-        hardNavigate("/food/restaurant/onboarding")
+        hardNavigate(
+          verifyPartnerType === "store"
+            ? "/food/restaurant/onboarding?type=store"
+            : "/food/restaurant/onboarding",
+        )
       } else {
         isSuccessRef.current = true
         const accessToken = data.accessToken
@@ -353,6 +388,7 @@ export default function RestaurantLogin() {
         const status = String(restaurant?.status || "").toLowerCase()
 
         if (status && status !== "approved") {
+          setPendingPartnerType(restaurant?.partnerType === "store" ? "store" : verifyPartnerType)
           sessionStorage.removeItem("restaurantAuthData")
           sessionStorage.removeItem("restaurantLoginPhone")
           sessionStorage.removeItem(getBlockKey(phoneVal))
@@ -469,7 +505,7 @@ export default function RestaurantLogin() {
     setLoading(true)
     try {
       const purpose = authData.isSignUp ? "register" : "login"
-      await restaurantAPI.sendOTP(authData.phone, purpose, authData.email)
+      await restaurantAPI.sendOTP(authData.phone, purpose, authData.email, authData.partnerType)
       setResendTimer(59)
       sessionStorage.setItem(getResendKey(authData.phone), (Date.now() + (59 * 1000)).toString())
       // Clear the old code from the boxes — only the new one should be entered.
@@ -564,6 +600,10 @@ export default function RestaurantLogin() {
 
   const isOtpComplete = otp.every((digit) => digit !== "")
 
+  // On the OTP step the role comes from what was chosen when the code was sent.
+  const activePartnerType = isOtpStep && authData?.partnerType ? authData.partnerType : partnerType
+  const isStoreLogin = activePartnerType === "store"
+
   // When an input is focused the mobile soft-keyboard opens and shrinks the
   // viewport. Scroll the focused field into the centre of the remaining space
   // so the submit button / logo never get hidden behind the keyboard.
@@ -626,11 +666,13 @@ export default function RestaurantLogin() {
               className="h-28 -mb-3.5 object-contain drop-shadow-md"
             />
             <h2 className="text-[25px] font-extrabold text-[#B80B3D] dark:text-red-400 tracking-tight font-['Outfit']">
-              Restaurant Partner
+              {isStoreLogin ? "My Store" : "Restaurant Partner"}
             </h2>
             <div className="text-[13.5px] text-slate-600 dark:text-slate-350 font-['Outfit'] font-medium tracking-wide leading-relaxed max-w-[310px] text-center px-4 mt-3">
               {!isOtpStep ? (
-                "Enter your registered mobile number to manage your restaurant"
+                isStoreLogin
+                  ? "Enter your registered mobile number to manage your store"
+                  : "Enter your registered mobile number to manage your restaurant"
               ) : (
                 <div className="text-[13px] text-slate-500/90 dark:text-slate-400/90 font-['Outfit'] font-semibold tracking-[0.015em] leading-relaxed max-w-[300px] text-center mt-2 flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <span>We've sent a code to {contactInfo}</span>
@@ -659,6 +701,9 @@ export default function RestaurantLogin() {
                   onSubmit={handleSendOTP}
                   className="space-y-6"
                 >
+                  {myStoreEnabled && (
+                    <PartnerRolePicker value={partnerType} onChange={setPartnerType} disabled={loading} />
+                  )}
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
                       <span className="text-sm font-medium text-gray-500 dark:text-gray-400 pr-3 border-r border-gray-300 dark:border-gray-600">+91</span>
@@ -812,6 +857,15 @@ export default function RestaurantLogin() {
 
         </div>
       </div>
+
+      <NewRoleConfirmDialog
+        open={Boolean(roleConfirm)}
+        requestedPartnerType={partnerType}
+        existingPartnerType={roleConfirm?.existing}
+        busy={loading}
+        onConfirm={() => handleSendOTP(null, true)}
+        onClose={() => setRoleConfirm(null)}
+      />
 
       {/* Restore/New Account Popup */}
       <AnimatePresence>
