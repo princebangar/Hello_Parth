@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     clearDriverAuthState,
@@ -10,7 +10,7 @@ import {
 import DriverRideRequestListener from './DriverRideRequestListener';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import { preloadDriverTabs } from '../driverTabPages';
-import { whenAppSettled } from '@/shared/utils/whenSettled';
+import TaxiPageSkeleton from '@/shared/components/TaxiPageSkeleton';
 import { useScrollFocusedFieldIntoView } from '../../../shared/hooks/useTypingFocus';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
@@ -395,21 +395,31 @@ const DriverLayout = () => {
         }
     }, [isChecking, connectionError]);
 
-    // Once a screen is up and the app has settled: load the other bottom-bar screens of this role, so a tab tap
-    // shows its screen at once (like the customer app's tabs).
-    const tabsPreloadedRef = useRef(false);
+    // Shortly after the first screen is drawn: load the other bottom-bar screens of this role, so a tab tap shows its
+    // screen at once. Scheduled once - switching tabs must not cancel it (it did with the settle helper, so quick
+    // tab hopping never got the preload) - and not skipped on Save-Data: these are the app's own main screens.
+    const tabsPreloadRef = useRef({ scheduled: false, timer: null });
     useEffect(() => {
-        if (isChecking || !isAllowed || tabsPreloadedRef.current || !getLocalDriverToken()) {
-            return undefined;
+        if (tabsPreloadRef.current.scheduled || isChecking || !isAllowed || !getLocalDriverToken()) {
+            return;
         }
         if (isOnboardingRoute(location.pathname)) {
-            return undefined;
+            return;
         }
-        return whenAppSettled(() => {
-            tabsPreloadedRef.current = true;
-            preloadDriverTabs(location.pathname.startsWith('/taxi/owner') ? 'owner' : getAuthenticatedRole());
-        });
+        tabsPreloadRef.current.scheduled = true;
+        const role = location.pathname.startsWith('/taxi/owner') ? 'owner' : getAuthenticatedRole();
+        tabsPreloadRef.current.timer = window.setTimeout(() => {
+            const run = () => {
+                preloadDriverTabs(role);
+            };
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(run, { timeout: 1500 });
+            } else {
+                run();
+            }
+        }, 600);
     }, [isAllowed, isChecking, location.pathname]);
+    useEffect(() => () => window.clearTimeout(tabsPreloadRef.current.timer), []);
 
     const handleSignOut = () => {
         clearDriverAuthState();
@@ -450,7 +460,10 @@ const DriverLayout = () => {
                 </div>
             ) : (
                 <>
-                    <Outlet context={{ isAllowed }} />
+                    {/* A screen whose code is not here yet shows a skeleton in its own place; the bottom bar stays. */}
+                    <Suspense fallback={<div className="min-h-screen"><TaxiPageSkeleton variant="page" /></div>}>
+                        <Outlet context={{ isAllowed }} />
+                    </Suspense>
                     {isAllowed && BOTTOM_NAV_PATH.test(location.pathname.replace(/\/+$/, '')) && <DriverBottomNav />}
                     {isAllowed && getStoredRole() === 'driver' && <DriverRideRequestListener />}
                 </>

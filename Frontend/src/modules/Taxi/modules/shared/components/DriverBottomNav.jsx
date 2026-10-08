@@ -1,5 +1,5 @@
 import React from "react";
-import { startTransition, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Briefcase,
@@ -77,8 +77,9 @@ const DriverBottomNav = () => {
       onSelect: () => {
         if (routeActive || pendingPath === path) return;
         setPendingPath(path);
-        // A transition keeps the current screen on show until the next one is ready (no blank flash in between).
-        startTransition(() => navigate(path));
+        // Straight away, like the delivery app: the screen is normally preloaded; if not, its skeleton shows in place
+        // (a transition kept the old screen frozen until the code arrived - that was the 1 s wait).
+        navigate(path);
       },
       // the screen's code starts loading as soon as a finger lands (normally it is already preloaded)
       onPreload: () => preloadDriverPath(path),

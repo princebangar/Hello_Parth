@@ -311,7 +311,13 @@ export const unlockRideRequestAlertSound = () => {
     const previousVolume = audio.volume;
     audio.volume = 0;
     bindLifecycleListeners();
-    getAudioContext()?.resume?.().catch?.(() => {});
+    // AudioContext.resume() can hold the main thread for a few hundred ms (it opens the audio output). Run inside the
+    // tap it delayed the screen that tap opened - the first bottom-bar tap after opening the app felt stuck. Shortly
+    // after the tap instead: the new screen paints first, and it still counts as the tap (Chrome only needs an earlier
+    // interaction, WebKit carries the tap over to timers under 1 s). audio.play() below stays inside the tap.
+    window.setTimeout(() => {
+        getAudioContext()?.resume?.().catch?.(() => {});
+    }, 400);
 
     unlockInFlight = audio.play()
         .then(() => {

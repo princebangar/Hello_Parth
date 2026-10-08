@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import TaxiPageSkeleton from '@/shared/components/TaxiPageSkeleton';
 import { claimDriverIncentiveReward, getCurrentDriver, getDriverIncentives, readDriverCache, writeDriverCache } from '../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
@@ -103,12 +104,8 @@ const DriverIncentives = () => {
   }, [summary]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center">
-        <Loader2 className="animate-spin text-black" size={24} />
-        <p className="mt-4 text-xs font-semibold text-gray-400 uppercase tracking-widest">Loading Rewards</p>
-      </div>
-    );
+    // same skeleton as any screen still loading (no spinner page in between)
+    return <TaxiPageSkeleton variant="page" />;
   }
 
   return (

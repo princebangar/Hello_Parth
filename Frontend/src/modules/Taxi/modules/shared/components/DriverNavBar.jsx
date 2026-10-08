@@ -43,7 +43,7 @@ const DriverNavBar = ({ items = [] }) => {
                 <Icon size={21} strokeWidth={active ? 2.4 : 2} aria-hidden="true" />
                 {badge ? <span className="driver-nav-badge">{badge}</span> : null}
               </span>
-              <span className="text-[9px] font-extrabold uppercase leading-none tracking-[0.04em]">{label}</span>
+              <span className="text-[9px] font-bold uppercase leading-none tracking-[0.02em]">{label}</span>
             </span>
           </button>
         ))}
