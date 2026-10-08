@@ -130,32 +130,25 @@ const StepReferral = () => {
                     </div>
                 </section>
 
-                <button 
-                    onClick={() => handleNext(true)}
-                    disabled={loading}
-                    className="w-full text-[12px] font-bold text-slate-500 hover:text-slate-900 transition-colors py-4 uppercase tracking-[0.2em] opacity-60 hover:opacity-100"
-                >
-                    Skip referral program
-                </button>
+                <p className="px-2 text-center text-[12px] font-semibold text-slate-500">
+                    A referral code is not required. Leave it empty to continue.
+                </p>
 
                 <div className="fixed bottom-0 left-0 right-0 px-6 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
                     <div className="mx-auto max-w-sm">
                         <motion.button
                             whileHover={{ scale: 1.02, y: -2 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => handleNext(false)}
-                            disabled={loading || !referral}
-                            className={`group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] text-[15px] font-bold tracking-tight transition-all relative overflow-hidden ${
-                                referral
-                                    ? 'bg-slate-900 text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] active:bg-black'
-                                    : 'pointer-events-none bg-slate-300 text-slate-600 shadow-none'
-                            }`}
+                            // no code typed = continue without one (it used to stay greyed out, so drivers thought the code was compulsory)
+                            onClick={() => handleNext(!referral.trim())}
+                            disabled={loading}
+                            className="group flex h-16 w-full items-center justify-center gap-3 rounded-[1.8rem] bg-slate-900 text-[15px] font-bold tracking-tight text-white shadow-[0_20px_40px_rgba(0,0,0,0.2)] transition-all relative overflow-hidden active:bg-black"
                         >
                             {loading ? (
                                 <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             ) : (
                                 <>
-                                    <span className="relative z-10 uppercase tracking-widest">Apply & Continue</span>
+                                    <span className="relative z-10 uppercase tracking-widest">{referral.trim() ? 'Apply & Continue' : 'Continue'}</span>
                                     <ChevronRight size={18} strokeWidth={3} className="relative z-10 group-hover:translate-x-1 transition-transform" />
                                 </>
                             )}

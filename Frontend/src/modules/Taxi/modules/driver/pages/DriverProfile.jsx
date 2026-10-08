@@ -397,8 +397,8 @@ Processing Time: Refunds are typically credited back to the original payment met
                     <path d="M290 0 C300 30 332 50 400 52 L400 0 Z" fill="rgba(255,255,255,0.08)" />
                 </svg>
                 <div
-                    className="relative flex items-start gap-2 px-4 pb-16"
-                    style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}
+                    className="relative flex items-start gap-2 px-4 pb-14"
+                    style={{ paddingTop: '8px' }}
                 >
                     <button
                         type="button"
@@ -421,7 +421,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                 </svg>
             </div>
 
-            <div className="relative z-10 -mt-[56px] flex items-start gap-4 px-5">
+            <div className="relative z-10 -mt-[42px] flex items-start gap-4 px-5">
                 <div className="relative shrink-0">
                     <div className="h-[96px] w-[96px] rounded-full bg-white p-1 shadow-[0_10px_24px_rgba(14,42,122,0.22)]">
                         <img

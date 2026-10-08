@@ -2480,7 +2480,7 @@ const DriverHome = () => {
                         </div>
             </DriverTopBar>
             {/* --- DUTY TOGGLE (under the header) --- */}
-            <div className="fixed left-0 right-0 z-40 mx-auto flex max-w-md justify-center pointer-events-none" style={{ top: 'calc(82px + env(safe-area-inset-top, 0px))' }}>
+            <div className="fixed left-0 right-0 z-40 mx-auto flex max-w-md justify-center pointer-events-none" style={{ top: '82px' }}>
                 <div className="flex justify-center pointer-events-auto">
                     <button
                         disabled={isTogglingDuty}
@@ -2575,7 +2575,7 @@ const DriverHome = () => {
             {/* Sits just above the floating bottom bar (24px from the edge + 72px tall + safe area). */}
             <div
                 className="fixed left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto"
-                style={{ bottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}
+                style={{ bottom: '88px' }}
             >
                 <AnimatePresence>
                     {statusMessage ? (

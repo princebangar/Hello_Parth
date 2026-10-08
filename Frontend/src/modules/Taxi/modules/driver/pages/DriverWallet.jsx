@@ -770,7 +770,7 @@ const DriverWallet = () => {
         : 'Cash commission and online earnings';
 
     return (
-        <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-4 text-slate-950">
+        <div className="min-h-screen bg-[#f5f1e8] px-4 pb-28 pt-3 text-slate-950">
             <div className="mx-auto max-w-md">
                 <header className="sticky top-0 z-30 -mx-4 mb-4 flex items-center justify-between bg-[#f5f1e8] px-4 py-2">
                     <button

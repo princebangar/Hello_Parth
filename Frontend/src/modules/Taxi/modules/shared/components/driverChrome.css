@@ -31,8 +31,9 @@
   margin: 0 auto;
   z-index: 45;
   max-width: 448px;
-  min-height: calc(72px + env(safe-area-inset-top, 0px));
-  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  /* no safe-area here: the app already starts the page below the status bar (adding it doubled the space) */
+  min-height: 72px;
+  padding-top: 12px;
 }
 
 .driver-topbar-title {
@@ -71,7 +72,6 @@
   z-index: 9997 !important;
   width: calc(100% - 48px) !important;
   max-width: 448px !important;
-  margin-bottom: env(safe-area-inset-bottom, 0px);
   pointer-events: none;
 }
 
@@ -146,5 +146,5 @@
 /* Main screens other than Taxi Home: a very small gap above the page's own top. The gap is a transparent border, so
    the page's background fills it (no strip of a different colour). */
 .driver-page-gap > :first-child {
-  border-top: calc(6px + env(safe-area-inset-top, 0px)) solid transparent;
+  border-top: 0 solid transparent;
 }

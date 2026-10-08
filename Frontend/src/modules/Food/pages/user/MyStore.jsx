@@ -80,7 +80,7 @@ export default function MyStore() {
       {/* Same red banner as the Food takeaway / home top bar, with room above the title */}
       <div
         className="sticky top-0 z-20 flex items-center gap-3.5 rounded-b-[2rem] bg-[#D91F3A] px-3 pb-4 shadow-lg"
-        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        style={{ paddingTop: "12px" }}
       >
         <button
           type="button"

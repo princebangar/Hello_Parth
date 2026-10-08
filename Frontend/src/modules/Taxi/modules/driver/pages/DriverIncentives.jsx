@@ -111,7 +111,7 @@ const DriverIncentives = () => {
   return (
     <div className="min-h-screen bg-white font-sans pb-32">
       {/* Clean Header */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md px-6 pt-10 pb-6 border-b border-gray-100">
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md px-6 pt-4 pb-5 border-b border-gray-100">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button

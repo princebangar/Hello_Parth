@@ -262,7 +262,7 @@ const RideRequests = () => {
   }, [categoryHistory]);
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] font-sans select-none overflow-x-clip p-5 pb-32">
+    <div className="min-h-screen bg-[#f8f9fb] font-sans select-none overflow-x-clip px-5 pb-32 pt-2">
       <header className="sticky top-0 z-30 -mx-5 mb-4 flex items-center justify-between bg-[#f8f9fb] px-5 py-3">
         <button
           type="button"
