@@ -22,6 +22,8 @@ import NumberSkeleton from '@/shared/components/NumberSkeleton';
 
 const MotionDiv = motion.div;
 const MotionButton = motion.button;
+// Same placeholder photo as the Food user profile (one account across the app).
+const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
 
 const pickObject = (...values) => values.find((value) => value && typeof value === 'object' && !Array.isArray(value)) || {};
 
@@ -285,13 +287,6 @@ const Profile = () => {
     setLogoutConfirmOpen(true);
   };
 
-  const initials = (profile.name || 'User')
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || '')
-    .join('');
-
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -374,7 +369,7 @@ const Profile = () => {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-2xl font-black text-white opacity-40">{initials || 'U'}</span>
+                    <img src={DEFAULT_AVATAR} alt="User" className="w-full h-full object-cover" />
                   )}
                 </div>
                 {/* Border colour matches the card behind it (not a flat

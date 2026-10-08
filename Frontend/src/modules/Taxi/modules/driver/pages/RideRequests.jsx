@@ -16,7 +16,7 @@ import {
   User,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getDriverRideHistory } from '../services/registrationService';
+import { getDriverRideHistory, readDriverCache, writeDriverCache } from '../services/registrationService';
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -179,8 +179,9 @@ const statusBadgeClass = (status) => {
 const RideRequests = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
-  const [rides, setRides] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // The list from the last visit shows at once; the fresh one replaces it.
+  const [rides, setRides] = useState(() => (readDriverCache('history') || []).map(normalizeRide).filter((ride) => ride.id));
+  const [loading, setLoading] = useState(() => !readDriverCache('history'));
   const [error, setError] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -189,7 +190,6 @@ const RideRequests = () => {
     let active = true;
 
     const loadHistory = async () => {
-      setLoading(true);
       setError('');
 
       try {
@@ -200,6 +200,7 @@ const RideRequests = () => {
           return;
         }
 
+        writeDriverCache('history', results);
         setRides(results.map(normalizeRide).filter((ride) => ride.id));
       } catch (loadError) {
         if (!active) {

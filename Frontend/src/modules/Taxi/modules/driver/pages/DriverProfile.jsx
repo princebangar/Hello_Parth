@@ -22,16 +22,45 @@ import {
     Gift,
     Shield,
     BadgePercent,
-    Check,
     Mail,
     HandCoins,
     Phone,
     X,
     Landmark,
+    MapPin,
+    MapPinned,
+    Hash,
+    Palette,
+    ChevronLeft,
+    Pencil,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useBodyScrollLock from '../../../shared/hooks/useBodyScrollLock';
-import { clearDriverAuthState, getCurrentDriver, updateDriverProfile } from '../services/registrationService';
+import { clearDriverAuthState, getCurrentDriver, readDriverCache, updateDriverProfile } from '../services/registrationService';
+
+// Same placeholder photo as the Food user and delivery profiles.
+const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
+
+// Soft coloured chip behind each menu icon (blue family first, a few accents like the reference design).
+const ICON_TONES = {
+    personal: 'bg-blue-50 text-blue-600',
+    wallet: 'bg-emerald-50 text-emerald-600',
+    bankDetails: 'bg-orange-50 text-orange-500',
+    vehicle: 'bg-violet-50 text-violet-600',
+    docs: 'bg-sky-50 text-sky-600',
+    history: 'bg-indigo-50 text-indigo-600',
+    notifications: 'bg-amber-50 text-amber-500',
+    refer: 'bg-pink-50 text-pink-500',
+    incentives: 'bg-teal-50 text-teal-600',
+    sos: 'bg-rose-50 text-rose-500',
+    help: 'bg-cyan-50 text-cyan-600',
+    terms: 'bg-slate-100 text-slate-600',
+    privacy: 'bg-slate-100 text-slate-600',
+    refund: 'bg-slate-100 text-slate-600',
+    deleteAccount: 'bg-rose-50 text-rose-500',
+    fleet: 'bg-violet-50 text-violet-600',
+    drivers: 'bg-blue-50 text-blue-600',
+};
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
 const ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
@@ -93,8 +122,9 @@ const DriverProfile = () => {
     const [legalModal, setLegalModal] = useState(null);
     // The page behind the policy sheet must not scroll while it is open.
     useBodyScrollLock(Boolean(legalModal));
-    const [driver, setDriver] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    // Home already loaded the driver: show it at once, refresh quietly.
+    const [driver, setDriver] = useState(() => readDriverCache('me') || null);
+    const [isLoading, setIsLoading] = useState(() => !readDriverCache('me'));
     const [error, setError] = useState('');
     const [routeBookingBusy, setRouteBookingBusy] = useState(false);
     const role = localStorage.getItem('role') || 'driver';
@@ -105,7 +135,6 @@ const DriverProfile = () => {
         let active = true;
 
         const loadDriver = async () => {
-            setIsLoading(true);
             setError('');
 
             try {
@@ -217,6 +246,11 @@ Processing Time: Refunds are typically credited back to the original payment met
     }, [bankDetails.accountHolderName, bankDetails.accountNumber, bankDetails.upiId]);
 
     const hasProfileImage = Boolean(driver?.profileImage);
+    const [avatarBroken, setAvatarBroken] = useState(false);
+    useEffect(() => {
+        setAvatarBroken(false);
+    }, [driver?.profileImage]);
+    const avatarSrc = hasProfileImage && !avatarBroken ? driver.profileImage : DEFAULT_AVATAR;
 
     const openBankDetails = () => {
         navigate(`${routePrefix}/profile/bank-details`);
@@ -302,15 +336,15 @@ Processing Time: Refunds are typically credited back to the original payment met
         {
             title: 'Your Account',
             items: [
-                { id: 'personal', label: 'Personal Information', sub: driverPhone, icon: <User size={20} />, path: `${routePrefix}/edit-profile` },
-                { id: 'wallet', label: 'Wallet', icon: <Wallet size={20} />, path: `${routePrefix}/wallet` },
+                { id: 'personal', label: 'Personal Information', sub: 'Name, phone, email, photo', icon: <User size={20} />, path: `${routePrefix}/edit-profile` },
+                { id: 'wallet', label: 'Wallet', sub: 'Balance and earnings', icon: <Wallet size={20} />, path: `${routePrefix}/wallet` },
                 { id: 'bankDetails', label: 'Bank Details', sub: bankDetailsSubtitle, icon: <Landmark size={20} />, action: openBankDetails },
                 ...(!isOwner ? [
-                    { id: 'vehicle', label: 'My Vehicle', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
+                    { id: 'vehicle', label: 'My Vehicle', sub: 'Your vehicle details', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
                 ] : []),
-                { id: 'docs', label: 'Documents', icon: <FileText size={20} />, path: `${routePrefix}/documents` },
-                { id: 'history', label: 'Ride History', icon: <History size={20} />, path: `${routePrefix}/history` },
-                { id: 'notifications', label: 'Notifications', icon: <Bell size={20} />, path: `${routePrefix}/notifications` },
+                { id: 'docs', label: 'Documents', sub: 'Your uploaded documents', icon: <FileText size={20} />, path: `${routePrefix}/documents` },
+                { id: 'history', label: 'Ride History', sub: 'Your past trips', icon: <History size={20} />, path: `${routePrefix}/history` },
+                { id: 'notifications', label: 'Notifications', sub: 'Alerts and updates', icon: <Bell size={20} />, path: `${routePrefix}/notifications` },
             ]
         },
         {
@@ -340,117 +374,154 @@ Processing Time: Refunds are typically credited back to the original payment met
 
     return (
         <div className="min-h-screen bg-white font-sans select-none overflow-x-hidden pb-32">
-            {/* Header - Compact & Aligned */}
-            <header className="px-5 pt-4 pb-4 border-b border-slate-50 sticky top-0 bg-white z-[60]">
-                <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                        <h2 className="text-[22px] font-bold text-slate-900 leading-tight">Profile</h2>
-                        <p className="text-[15px] font-semibold text-slate-600 leading-tight">
-                            {isLoading ? 'Loading...' : driverName}
-                        </p>
-                        <div className="flex items-center gap-1.5 text-sky-500">
-                            <Star size={14} fill="currentColor" />
-                            <span className="text-[14px] font-bold">{driverRating > 0 ? `${driverRating.toFixed(1)} Rating` : 'New - no ratings yet'}</span>
-                        </div>
-                    </div>
-                    {/* Integrated Profile Image */}
-                    <div className="relative">
-                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg relative overflow-hidden group ${hasProfileImage ? 'bg-slate-900' : 'bg-slate-100 border border-slate-200'
-                            }`}>
-                            {hasProfileImage ? (
-                                <img
-                                    src={driver?.profileImage}
-                                    alt={driverName}
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                <User size={30} className="text-slate-500" strokeWidth={1.8} />
-                            )}
-                        </div>
-                        {hasProfileImage ? (
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-lg border-2 border-white flex items-center justify-center shadow-sm">
-                                <Check size={12} className="text-white" strokeWidth={4} />
-                            </div>
-                        ) : null}
+            {/* Hero: blue gradient with a soft swoosh and a wave edge; the photo sits on the wave (reference design) */}
+            <div
+                className="relative text-white"
+                style={{ background: 'linear-gradient(110deg, #0e2a7a 0%, #1e4fd0 52%, #3d84f5 100%)' }}
+            >
+                <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 400 160" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M190 0 C230 40 262 70 330 80 C370 86 390 96 400 110 L400 0 Z" fill="rgba(255,255,255,0.10)" />
+                    <path d="M290 0 C300 30 332 50 400 52 L400 0 Z" fill="rgba(255,255,255,0.08)" />
+                </svg>
+                <div
+                    className="relative flex items-start gap-2 px-4 pb-16"
+                    style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}
+                >
+                    <button
+                        type="button"
+                        onClick={() => navigate(-1)}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white active:scale-90"
+                        aria-label="Back"
+                    >
+                        <ChevronLeft size={28} strokeWidth={2.2} />
+                    </button>
+                    <div className="pt-0.5">
+                        <h2 className="text-[28px] font-bold leading-tight">Profile</h2>
+                        <p className="mt-1 text-[13px] font-medium text-white/85">Your information, your way</p>
                     </div>
                 </div>
-                <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 border border-slate-100">
-                    {error ? (
-                        <p className="text-[11px] font-medium text-rose-500">{error}</p>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-3 text-left">
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">Phone</p>
-                                <p className="text-[12px] font-bold text-slate-900">{driverPhone}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">Email</p>
-                                <p className="text-[12px] font-bold text-slate-900 break-all">{driverEmail}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">Vehicle Type</p>
-                                <p className="text-[12px] font-bold text-slate-900">{driverVehicle}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">City</p>
-                                <p className="text-[12px] font-bold text-slate-900">{driverLocation}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">Zone</p>
-                                <p className="text-[12px] font-bold text-slate-900">{driverZone}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">Vehicle No.</p>
-                                <p className="text-[12px] font-bold text-slate-900">{driverNumber}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-medium text-slate-400">Color</p>
-                                <p className="text-[12px] font-bold text-slate-900">{driverColor}</p>
-                            </div>
-                        </div>
-                    )}
+                {/* The white runs 1px past the hero's bottom (the hero is deliberately not overflow-hidden): two
+                    anti-aliased edges on the same fractional pixel left a hairline behind the name on phones. */}
+                <svg className="absolute -bottom-px left-0 block h-[56px] w-full" viewBox="0 0 400 56" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M0 56 V30 C70 22 150 30 230 26 C305 22 355 6 400 0 V56 Z" fill="rgba(255,255,255,0.28)" />
+                    <path d="M0 56 V40 C80 32 160 44 240 36 C310 29 360 18 400 12 V56 Z" fill="#ffffff" />
+                </svg>
+            </div>
+
+            <div className="relative z-10 -mt-[56px] flex items-start gap-4 px-5">
+                <div className="relative shrink-0">
+                    <div className="h-[96px] w-[96px] rounded-full bg-white p-1 shadow-[0_10px_24px_rgba(14,42,122,0.22)]">
+                        <img
+                            src={avatarSrc}
+                            alt={driverName}
+                            onError={() => setAvatarBroken(true)}
+                            className="h-full w-full rounded-full object-cover"
+                            draggable={false}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => navigate(`${routePrefix}/edit-profile`)}
+                        aria-label="Edit profile"
+                        className="absolute bottom-1 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] text-white shadow-md active:scale-90"
+                    >
+                        <Pencil size={14} strokeWidth={2.5} />
+                    </button>
                 </div>
-            </header>
+                <div className="min-w-0 flex-1 pt-[44px]">
+                    <p className="truncate text-[22px] font-bold leading-tight text-[#0f1b4c]">
+                        {isLoading ? 'Loading...' : driverName}
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                        <Star size={15} className="text-amber-400" fill="currentColor" />
+                        <span className="text-[13px] font-medium text-slate-500">{driverRating > 0 ? `${driverRating.toFixed(1)} Rating` : 'New - no ratings yet'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="mx-4 mt-5 rounded-[22px] bg-white p-1.5 shadow-[0_8px_30px_rgba(14,42,122,0.10)] ring-1 ring-slate-100">
+                {error ? (
+                    <p className="p-3 text-[11px] font-medium text-rose-500">{error}</p>
+                ) : (
+                    [
+                        [
+                            { label: 'Phone', value: driverPhone, Icon: Phone },
+                            { label: 'Email', value: driverEmail, Icon: Mail },
+                        ],
+                        [
+                            { label: 'City', value: driverLocation, Icon: MapPin },
+                            { label: 'Zone', value: driverZone, Icon: MapPinned },
+                            { label: 'Color', value: driverColor, Icon: Palette },
+                        ],
+                        [
+                            { label: 'Vehicle Type', value: driverVehicle, Icon: Car },
+                            { label: 'Vehicle No.', value: driverNumber, Icon: Hash },
+                        ],
+                    ].map((row, rowIndex) => (
+                        <div
+                            key={rowIndex}
+                            // first row: the email gets the wider half, so it fits on 360px phones too
+                            className={`grid ${row.length === 3 ? 'grid-cols-3' : rowIndex === 0 ? 'grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]' : 'grid-cols-2'} ${rowIndex > 0 ? 'border-t border-slate-100' : ''}`}
+                        >
+                            {row.map(({ label, value, Icon }, cellIndex) => (
+                                <div
+                                    key={label}
+                                    className={`flex min-w-0 items-center gap-2 px-2.5 py-3 ${cellIndex > 0 ? 'border-l border-slate-100' : ''}`}
+                                >
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                        <Icon size={15} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-medium text-slate-400">{label}</p>
+                                        <p className="truncate text-[12px] font-semibold text-slate-900" title={value}>{value}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ))
+                )}
+            </div>
 
             {/* List Menu */}
             <main className="space-y-1">
                 {sections.map((section, sIdx) => (
-                    <div key={sIdx} className="pt-5">
-                        <h3 className="px-6 text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">{section.title}</h3>
-                        <div className="space-y-0">
-                            {section.items.map((item) => (
+                    <div key={sIdx} className="pt-6">
+                        <h3 className="px-6 text-[12px] font-bold uppercase tracking-[0.16em] text-[#5a6b8f] mb-1">{section.title}</h3>
+                        <div>
+                            {section.items.map((item, itemIndex) => (
                                 <Motion.motion.div
                                     key={item.id}
-                                    whileTap={item.type !== 'toggle' ? { backgroundColor: '#F8F9FA' } : {}}
+                                    whileTap={item.type !== 'toggle' ? { backgroundColor: '#F5F8FF' } : {}}
                                     onClick={() => {
                                         if (item.action) item.action();
                                         else if (item.path) navigate(item.path, item.state ? { state: item.state } : undefined);
                                     }}
-                                    className="flex items-center justify-between px-6 py-4 group cursor-pointer border-b border-slate-50/50"
+                                    className="group flex cursor-pointer items-center gap-4 pl-6 pr-5"
                                 >
-                                    <div className="flex items-center gap-5">
-                                        <div className="text-slate-400 group-hover:text-slate-900 transition-colors">
-                                            {item.icon}
-                                        </div>
-                                        <div>
-                                            <h4 className="text-[15px] font-medium text-slate-800 tracking-tight">{item.label}</h4>
-                                            {item.sub && <p className="text-[11px] text-slate-400 font-medium">{item.sub}</p>}
-                                        </div>
+                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${ICON_TONES[item.id] || 'bg-blue-50 text-blue-600'}`}>
+                                        {item.icon}
                                     </div>
-                                    {item.type === 'toggle' ? (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleRouteBookingToggle(); }}
-                                            disabled={routeBookingBusy}
-                                            className={`w-10 h-5.5 rounded-full relative transition-colors duration-300 ${routeBookingPreferences.enabled ? 'bg-slate-900' : 'bg-slate-200'} ${routeBookingBusy ? 'opacity-70' : ''}`}
-                                        >
-                                            <Motion.motion.div
-                                                animate={{ x: routeBookingPreferences.enabled ? 20 : 2 }}
-                                                className="absolute top-1 w-3.5 h-3.5 rounded-full bg-white shadow-sm"
-                                            />
-                                        </button>
-                                    ) : (
-                                        <ChevronRight size={16} className="text-slate-200" />
-                                    )}
+                                    {/* the divider starts at the text, like the reference */}
+                                    <div className={`flex min-w-0 flex-1 items-center justify-between gap-3 py-4 ${itemIndex < section.items.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                                        <div className="min-w-0">
+                                            <h4 className="text-[15px] font-semibold tracking-tight text-[#0f1b4c]">{item.label}</h4>
+                                            {item.sub && <p className="mt-0.5 truncate text-[12px] font-medium text-slate-400">{item.sub}</p>}
+                                        </div>
+                                        {item.type === 'toggle' ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleRouteBookingToggle(); }}
+                                                disabled={routeBookingBusy}
+                                                className={`w-10 h-5.5 rounded-full relative transition-colors duration-300 ${routeBookingPreferences.enabled ? 'bg-slate-900' : 'bg-slate-200'} ${routeBookingBusy ? 'opacity-70' : ''}`}
+                                            >
+                                                <Motion.motion.div
+                                                    animate={{ x: routeBookingPreferences.enabled ? 20 : 2 }}
+                                                    className="absolute top-1 w-3.5 h-3.5 rounded-full bg-white shadow-sm"
+                                                />
+                                            </button>
+                                        ) : (
+                                            <ChevronRight size={18} className="shrink-0 text-slate-400" />
+                                        )}
+                                    </div>
                                 </Motion.motion.div>
                             ))}
                         </div>

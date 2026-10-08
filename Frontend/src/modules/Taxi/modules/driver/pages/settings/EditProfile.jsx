@@ -12,6 +12,8 @@ const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const normalizeName = (value) => String(value || '').replace(/[^A-Za-z .'-]/g, '').replace(/\s+/g, ' ');
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || {};
+// Same placeholder photo as the Food user and delivery profiles.
+const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
 
 const EditProfile = () => {
     const navigate = useNavigate();
@@ -27,6 +29,7 @@ const EditProfile = () => {
         email: ''
     });
     const [errors, setErrors] = useState({});
+    const [avatarBroken, setAvatarBroken] = useState(false);
 
     const { 
         uploading: imageUploading, 
@@ -36,6 +39,7 @@ const EditProfile = () => {
         folder: 'driver-profiles',
         onSuccess: async (url) => {
             setDriver(prev => ({ ...prev, profileImage: url }));
+            setAvatarBroken(false);
             try {
                 await updateDriverProfile({ profileImage: url });
                 toast.success('Profile photo updated');
@@ -141,24 +145,21 @@ const EditProfile = () => {
                 {/* Profile Image Upload */}
                 <div className="flex flex-col items-center gap-4 mb-8">
                     <div className="relative group">
-                        <div className="w-24 h-24 bg-slate-900 rounded-[2rem] flex items-center justify-center shadow-lg relative overflow-hidden">
-                            {(imagePreview || driver?.profileImage) ? (
-                                <img 
-                                    src={imagePreview || driver.profileImage} 
-                                    className={`w-full h-full object-cover ${imageUploading ? 'opacity-50' : ''}`} 
-                                    alt="Profile" 
-                                />
-                            ) : (
-                                <User size={48} className="text-white opacity-20" strokeWidth={1.5} />
-                            )}
+                        <div className="relative h-24 w-24 overflow-hidden rounded-full bg-white p-1 shadow-[0_10px_24px_rgba(14,42,122,0.22)]">
+                            <img
+                                src={imagePreview || (driver?.profileImage && !avatarBroken ? driver.profileImage : DEFAULT_AVATAR)}
+                                onError={() => setAvatarBroken(true)}
+                                className={`h-full w-full rounded-full object-cover ${imageUploading ? 'opacity-50' : ''}`}
+                                alt="Profile"
+                            />
                             {imageUploading && (
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <Loader2 className="animate-spin text-white" size={24} />
+                                    <Loader2 className="animate-spin text-blue-600" size={24} />
                                 </div>
                             )}
                         </div>
-                        <label className="absolute bottom-0 right-0 w-9 h-9 bg-white rounded-xl shadow-xl flex items-center justify-center cursor-pointer border-2 border-slate-50 hover:scale-110 active:scale-90 transition-all">
-                            <Camera size={16} className="text-slate-900" />
+                        <label className="absolute bottom-0 right-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] text-white shadow-md transition-all active:scale-90">
+                            <Camera size={16} />
                             <input 
                                 type="file" 
                                 accept="image/*"

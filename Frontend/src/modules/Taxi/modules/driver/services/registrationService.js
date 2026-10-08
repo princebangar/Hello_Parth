@@ -118,6 +118,7 @@ export const clearDriverAuthState = () => {
   clearDriverRegistrationSession();
   try {
     localStorage.removeItem("driver_is_online_cache");
+    localStorage.removeItem("driver_verified_session");
   } catch {
     // ignore
   }
@@ -502,7 +503,25 @@ const withDriverAuth = (config = {}) => {
   };
 };
 
-export const getCurrentDriver = () => api.get("/drivers/me", withDriverAuth());
+// What the driver screens loaded earlier in this app session (memory only, per driver): opening a screen again shows
+// it at once and refreshes it in the background instead of "Loading..." every visit.
+const driverSessionValues = new Map();
+const driverSessionOwner = () => {
+  const payload = getTokenPayload(readLocalDriverToken());
+  return String(payload?.sub || payload?.id || "driver");
+};
+export const readDriverCache = (key) => driverSessionValues.get(`${driverSessionOwner()}:${key}`);
+export const writeDriverCache = (key, value) => {
+  driverSessionValues.set(`${driverSessionOwner()}:${key}`, value);
+  return value;
+};
+
+export const getCurrentDriver = () =>
+  api.get("/drivers/me", withDriverAuth()).then((response) => {
+    const driver = response?.data?.data || response?.data || response;
+    if (driver && typeof driver === "object") writeDriverCache("me", driver);
+    return response;
+  });
 
 export const getPoolingDriverBookings = () =>
   api.get("/drivers/pooling/bookings", withDriverAuth());

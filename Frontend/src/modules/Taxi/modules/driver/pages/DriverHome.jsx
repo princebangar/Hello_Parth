@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Bell, 
@@ -23,12 +23,13 @@ import {
     BarChart2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { GoogleMap, Marker } from '@react-google-maps/api';
 import toast from 'react-hot-toast';
 
 
 import MapGrid from '../../../assets/premium_grid_map.png';
 import DriverTopBar from '../../shared/components/DriverTopBar';
+import { acquirePersistentMap, hasPersistentMap, releasePersistentMap } from '../../user/utils/persistentMap';
+import { decodeJwtPayload } from '../../shared/chat/chatIdentity';
 import IncomingRideRequest from './IncomingRideRequest';
 import api from '../../../shared/api/axiosInstance';
 import { useSettings } from '../../../shared/context/SettingsContext';
@@ -60,11 +61,6 @@ import {
 } from '../utils/rideRequestAlertSound';
 
 const Motion = motion;
-
-const containerStyle = {
-    width: '100%',
-    height: '100%'
-};
 
 const DEFAULT_MAP_CENTER = {
     lat: 22.7196,
@@ -634,6 +630,21 @@ const mapStyles = [
 ];
 
 const DRIVER_ONLINE_CACHE_KEY = 'driver_is_online_cache';
+const DRIVER_MAP_NAME = 'driver-home';
+
+// Last balance / summary seen in this app session (memory only): coming back to Home from another tab shows them at
+// once; a refresh or app start shows the skeleton until the server answers.
+const homeSessionValues = new Map();
+// The vehicle marker outlives Home together with the map it sits on.
+const persistentVehicleMarker = { current: null };
+
+// Today's date on this phone: a remembered summary from yesterday is never shown as today's.
+const localDateKey = () => new Date().toLocaleDateString('en-CA');
+
+// Same pulse bar as the wallet chip, in slate for the white summary card; same height as the number (no jump).
+const SummaryNumberSkeleton = () => (
+    <span className="my-[3px] block h-3.5 w-10 animate-pulse rounded-md bg-slate-200" aria-label="Loading" />
+);
 
 const DriverHome = () => {
     const navigate = useNavigate();
@@ -641,6 +652,17 @@ const DriverHome = () => {
     const appName = settings.general?.app_name || 'App';
     const appLogo = settings.general?.logo || settings.customization?.logo;
     const storedDriverInfo = useMemo(() => readStoredDriverInfo(), []);
+    // What this driver saw earlier in this session: coming back to Home shows today's summary and the balance at
+    // once instead of 0. Keyed by driver, so another account on the phone never sees them.
+    const lastKnownPrefix = useMemo(() => {
+        const payload = decodeJwtPayload(getLocalDriverToken());
+        return `driver:${payload?.sub || payload?.id || 'unknown'}`;
+    }, []);
+    const rememberedSummary = useMemo(() => {
+        const saved = homeSessionValues.get(`${lastKnownPrefix}:todaySummary`);
+        return saved?.date === localDateKey() ? saved.summary : undefined;
+    }, [lastKnownPrefix]);
+    const rememberedWallet = useMemo(() => homeSessionValues.get(`${lastKnownPrefix}:wallet`), [lastKnownPrefix]);
     const [isOwnerManagedDriver, setIsOwnerManagedDriver] = useState(() => isOwnerManagedDriverProfile(storedDriverInfo));
     // Last known duty state, so coming back to Home from another tab shows Online right away instead of
     // Offline -> Online after the profile fetch.
@@ -661,7 +683,8 @@ const DriverHome = () => {
     const [showRequest, setShowRequest] = useState(false);
 
     const [currentRequest, setCurrentRequest] = useState(null);
-    const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary());
+    const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary(rememberedSummary));
+    const [summaryLoaded, setSummaryLoaded] = useState(() => rememberedSummary !== undefined);
     const [isTodaySummaryExpanded, setIsTodaySummaryExpanded] = useState(true);
     const [map, setMap] = useState(null);
     const [driverCoords, setDriverCoords] = useState(() => readStoredDriverCoords());
@@ -694,19 +717,37 @@ const DriverHome = () => {
     const [vehicleIconUrl, setVehicleIconUrl] = useState(
         () => storedDriverInfo?.vehicleIconUrl || '',
     );
-    // The balance in the header shows a skeleton until the first real value arrives (no flash of "0").
+    // Balance + summary show a skeleton only when nothing is known yet (first visit); never a made-up "0".
+    // The balance chip shows the pulse bar on every visit until this visit's balance arrives (his choice); the
+    // summary card keeps the last numbers instead.
     const [walletLoaded, setWalletLoaded] = useState(false);
     useEffect(() => {
-        const timer = setTimeout(() => setWalletLoaded(true), 6000);
+        // the request failed / hangs: stop pulsing after a while
+        const timer = setTimeout(() => {
+            setWalletLoaded(true);
+            setSummaryLoaded(true);
+        }, 6000);
         return () => clearTimeout(timer);
     }, []);
-    const [walletSummary, setWalletSummary] = useState({
+    const [walletSummary, setWalletSummary] = useState(() => ({
         balance: 0,
         cashLimit: 500,
         minimumBalanceForOrders: 0,
         availableForOrders: 0,
         isBlocked: false,
-    });
+        ...(rememberedWallet || {}),
+    }));
+    const applyWallet = useCallback((wallet) => {
+        setWalletSummary(wallet);
+        setWalletLoaded(true);
+        homeSessionValues.set(`${lastKnownPrefix}:wallet`, wallet);
+    }, [lastKnownPrefix]);
+    const applyTodaySummary = useCallback((value) => {
+        const next = normalizeTodaySummary(value);
+        setTodaySummary(next);
+        setSummaryLoaded(true);
+        homeSessionValues.set(`${lastKnownPrefix}:todaySummary`, { date: localDateKey(), summary: next });
+    }, [lastKnownPrefix]);
     const driverCoordsRef = useRef(readStoredDriverCoords());
     const selfieCameraInputRef = useRef(null);
     const selfieVideoRef = useRef(null);
@@ -1039,20 +1080,59 @@ const DriverHome = () => {
         });
     }, [clearAcceptRecovery, fetchActiveJob, openActiveJob]);
 
-    const onLoad = useCallback(function callback(map) {
-        setMap(map);
-    }, []);
-
-    const onUnmount = useCallback(function callback() {
-        setMap(null);
-    }, []);
-
     const mapOptions = useMemo(() => ({
         styles: mapStyles,
         disableDefaultUI: true,
         zoomControl: false,
         clickableIcons: false
     }), []);
+
+    // One map for Home that outlives the screen: leaving Home only detaches it, coming back from History / Wallet /
+    // Profile puts the same map (tiles, zoom) back at once instead of building a new one (that took 1-2 s).
+    const mapHostRef = useRef(null);
+    const mapsReady = HAS_VALID_GOOGLE_MAPS_KEY
+        && !mapLoadError
+        && Boolean(window.google?.maps)
+        && (isLoaded || hasPersistentMap(DRIVER_MAP_NAME));
+
+    useLayoutEffect(() => {
+        if (!mapsReady || !mapHostRef.current) {
+            return undefined;
+        }
+        const host = mapHostRef.current;
+        const { map: persistentMap } = acquirePersistentMap(
+            host,
+            { center: driverPosition, zoom: 15, options: mapOptions },
+            DRIVER_MAP_NAME,
+        );
+        setMap(persistentMap);
+        return () => {
+            setMap(null);
+            releasePersistentMap(host, DRIVER_MAP_NAME);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mapsReady]);
+
+    // The driver's vehicle: one marker that stays on the persistent map, so it is already there when Home comes back.
+    useEffect(() => {
+        const maps = window.google?.maps;
+        if (!map || !maps) {
+            return;
+        }
+        if (!persistentVehicleMarker.current) {
+            persistentVehicleMarker.current = new maps.Marker();
+        }
+        persistentVehicleMarker.current.setOptions({
+            map,
+            position: driverPosition,
+            icon: {
+                url: mapVehicleIcon,
+                scaledSize: new maps.Size(40, 40),
+                anchor: new maps.Point(20, 20),
+            },
+        });
+    }, [map, driverPosition, mapVehicleIcon]);
+
 
     const updateDriverLocation = useCallback(async ({ quiet = false } = {}) => {
         try {
@@ -1094,10 +1174,9 @@ const DriverHome = () => {
         setVehicleIconUrl(driver?.vehicleIconUrl || '');
         setIsOnline(Boolean(driver?.isOnline));
         setIsOwnerManagedDriver(isOwnerManagedDriverProfile(driver));
-        setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
+        applyTodaySummary(driver?.todaySummary);
         if (driver?.wallet) {
-            setWalletSummary(driver.wallet);
-            setWalletLoaded(true);
+            applyWallet(driver.wallet);
         }
         setOnlineSelfie(driver?.onlineSelfie || null);
         setDriverDocuments(driver?.documents || {});
@@ -1138,10 +1217,9 @@ const DriverHome = () => {
         const response = await getCurrentDriver();
         const driver = response?.data?.data || response?.data || response;
 
-        setTodaySummary(normalizeTodaySummary(driver?.todaySummary));
+        applyTodaySummary(driver?.todaySummary);
         if (driver?.wallet) {
-            setWalletSummary(driver.wallet);
-            setWalletLoaded(true);
+            applyWallet(driver.wallet);
         }
 
         return driver;
@@ -1872,8 +1950,7 @@ const DriverHome = () => {
 
             const onWalletUpdated = (payload) => {
                 if (payload?.wallet) {
-                    setWalletSummary(payload.wallet);
-                    setWalletLoaded(true);
+                    applyWallet(payload.wallet);
 
                     const nextWalletAlertState = getWalletAlertState(payload.wallet, {
                         ignoreRestrictions: isOwnerManagedDriver,
@@ -2388,7 +2465,7 @@ const DriverHome = () => {
                                     {Number(walletSummary.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </span>
                             ) : (
-                                <span className="h-3.5 w-9 animate-pulse rounded-md bg-white/25" aria-label="Loading balance" />
+                                <span className="my-0.5 h-3.5 w-9 animate-pulse rounded-md bg-white/25" aria-label="Loading balance" />
                             )}
                         </div>
             </DriverTopBar>
@@ -2461,24 +2538,8 @@ const DriverHome = () => {
 
             {/* --- MAP BACKGROUND --- */}
             <div className="absolute inset-0 z-0 w-full h-full">
-                {HAS_VALID_GOOGLE_MAPS_KEY && isLoaded ? (
-                    <GoogleMap 
-                        mapContainerStyle={containerStyle} 
-                        center={driverPosition} 
-                        zoom={15} 
-                        onLoad={onLoad} 
-                        onUnmount={onUnmount} 
-                        options={mapOptions}
-                    >
-                        <Marker 
-                            position={driverPosition} 
-                            icon={{ 
-                                url: mapVehicleIcon, 
-                                scaledSize: new window.google.maps.Size(40, 40), 
-                                anchor: new window.google.maps.Point(20, 20)
-                            }} 
-                        />
-                    </GoogleMap>
+                {mapsReady ? (
+                    <div ref={mapHostRef} className="h-full w-full" />
                 ) : (
                     <div className="w-full h-full bg-slate-200 flex items-center justify-center">
                         <div className="text-center px-10">
@@ -2532,7 +2593,8 @@ const DriverHome = () => {
                 <AnimatePresence>
                     <motion.div
                         layout
-                        initial={{ opacity: 0, y: 40 }}
+                        // drawn in place: sliding up from below hid it behind the bottom bar for a moment
+                        initial={false}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 40 }}
                         transition={{ type: "spring", stiffness: 300, damping: 25 }}
@@ -2573,7 +2635,7 @@ const DriverHome = () => {
                                             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                                                 <IndianRupee size={18} strokeWidth={2.5} />
                                             </div>
-                                            <span className="text-[14px] font-black text-slate-900">{formatSummaryMoney(todaySummary.earnings)}</span>
+                                            {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{formatSummaryMoney(todaySummary.earnings)}</span> : <SummaryNumberSkeleton />}
                                             <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Earnings</span>
                                         </div>
 
@@ -2581,7 +2643,7 @@ const DriverHome = () => {
                                             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                                                 <Clock size={18} strokeWidth={2.5} />
                                             </div>
-                                            <span className="text-[14px] font-black text-slate-900">{`${dutyHours}h ${dutyMins}m`}</span>
+                                            {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{`${dutyHours}h ${dutyMins}m`}</span> : <SummaryNumberSkeleton />}
                                             <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Active</span>
                                         </div>
 
@@ -2589,7 +2651,7 @@ const DriverHome = () => {
                                             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
                                                 <Navigation size={18} strokeWidth={2.5} />
                                             </div>
-                                            <span className="text-[14px] font-black text-slate-900">{formatSummaryDistance(todaySummary.distanceMeters)}</span>
+                                            {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{formatSummaryDistance(todaySummary.distanceMeters)}</span> : <SummaryNumberSkeleton />}
                                             <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Distance</span>
                                         </div>
 
@@ -2597,7 +2659,7 @@ const DriverHome = () => {
                                             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
                                                 <BarChart2 size={18} strokeWidth={2.5} />
                                             </div>
-                                            <span className="text-[14px] font-black text-slate-900">{todaySummary.rides}</span>
+                                            {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{todaySummary.rides}</span> : <SummaryNumberSkeleton />}
                                             <span className="text-[9px] font-bold uppercase tracking-tight text-slate-400">Rides</span>
                                         </div>
                                     </div>

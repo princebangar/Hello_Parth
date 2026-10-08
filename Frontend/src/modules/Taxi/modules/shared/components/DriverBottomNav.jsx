@@ -16,21 +16,7 @@ import {
 import { useSettings } from "../../../shared/context/SettingsContext";
 import { getAuthenticatedDriverRole } from "../../driver/services/registrationService";
 import DriverNavBar from "./DriverNavBar";
-
-// Page chunks, warmed on touch so a tab opens without a "load" pause (same files the router lazy-loads).
-const PRELOAD = {
-  home: () => import("../../driver/pages/DriverHome"),
-  history: () => import("../../driver/pages/RideRequests"),
-  wallet: () => import("../../driver/pages/DriverWallet"),
-  incentives: () => import("../../driver/pages/DriverIncentives"),
-  profile: () => import("../../driver/pages/DriverProfile"),
-  dashboard: () => import("../../driver/pages/OwnerDashboard"),
-  ownerWallet: () => import("../../driver/pages/OwnerWallet"),
-  "manage-drivers": () => import("../../driver/pages/settings/ManageDrivers"),
-  "vehicle-fleet": () => import("../../driver/pages/settings/OwnerVehicleFleet"),
-  "pooling-vehicles": () => import("../../driver/pages/OwnerPoolingVehicles"),
-  "bus-service": () => import("../../driver/pages/OwnerBusServicePage"),
-};
+import { preloadDriverPath } from "../../driver/driverTabPages";
 
 const isEnabledFlag = (value) => {
   if (typeof value === "boolean") return value;
@@ -94,11 +80,8 @@ const DriverBottomNav = () => {
         // A transition keeps the current screen on show until the next one is ready (no blank flash in between).
         startTransition(() => navigate(path));
       },
-      onPreload: () => {
-        const slug = path.split("/").pop();
-        const load = isOwner && slug === "wallet" ? PRELOAD.ownerWallet : PRELOAD[slug];
-        load?.().catch(() => {});
-      },
+      // the screen's code starts loading as soon as a finger lands (normally it is already preloaded)
+      onPreload: () => preloadDriverPath(path),
     };
   });
 

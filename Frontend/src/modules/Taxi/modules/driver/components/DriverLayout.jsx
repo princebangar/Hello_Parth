@@ -9,6 +9,8 @@ import {
 } from '../services/registrationService';
 import DriverRideRequestListener from './DriverRideRequestListener';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
+import { preloadDriverTabs } from '../driverTabPages';
+import { whenAppSettled } from '@/shared/utils/whenSettled';
 import { useScrollFocusedFieldIntoView } from '../../../shared/hooks/useTypingFocus';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response;
@@ -84,7 +86,6 @@ const TOP_BAR_PATHS = new Set([
     '/taxi/driver/history',
     '/taxi/driver/wallet',
     '/taxi/driver/incentives',
-    '/taxi/driver/profile',
     '/taxi/driver/bus-home',
     '/taxi/driver/pooling',
     '/taxi/driver/pooling/bookings',
@@ -97,7 +98,6 @@ const TOP_BAR_PATHS = new Set([
     '/taxi/owner/bus-bookings',
     '/taxi/owner/wallet',
     '/taxi/owner/history',
-    '/taxi/owner/profile',
 ]);
 
 // Screens that carry the floating bottom bar. It lives here (not in each page) so it stays mounted while the
@@ -106,6 +106,33 @@ const BOTTOM_NAV_PATH = new RegExp(
     '^/taxi/driver/(home|dashboard|history|wallet|incentives|profile|vehicle-fleet(/.*)?|pooling|pooling/bookings)$'
     + '|^/taxi/owner/(home|dashboard|history|wallet|profile|manage-drivers|vehicle-fleet(/.*)?|pooling-vehicles(/.*)?|bus-service(/.*)?|bus-bookings)$',
 );
+
+// A token that already passed /drivers/me (approved): a refresh opens the screen straight away and the check runs
+// in the background. Before, the page was drawn, then swapped for a spinner while checking, then mounted again -
+// header and bottom bar flashed, every Home request ran twice and the map could come back blank.
+const VERIFIED_SESSION_KEY = 'driver_verified_session';
+const tokenTag = (token) => String(token || '').slice(-32);
+const isVerifiedSession = (token) => {
+    try {
+        return Boolean(token) && localStorage.getItem(VERIFIED_SESSION_KEY) === tokenTag(token);
+    } catch {
+        return false;
+    }
+};
+const rememberVerifiedSession = (token) => {
+    try {
+        localStorage.setItem(VERIFIED_SESSION_KEY, tokenTag(token));
+    } catch {
+        // storage unavailable: the next refresh just checks again
+    }
+};
+const forgetVerifiedSession = () => {
+    try {
+        localStorage.removeItem(VERIFIED_SESSION_KEY);
+    } catch {
+        // ignore
+    }
+};
 
 const softEntryRoutes = new Set([
     '/taxi/driver/welcome',
@@ -160,7 +187,11 @@ const DriverLayout = () => {
     useScrollFocusedFieldIntoView();
     const location = useLocation();
     const navigate = useNavigate();
-    const [isChecking, setIsChecking] = useState(false);
+    // A check that has to finish before the screen may show starts in the checking state (no page drawn first).
+    const [isChecking, setIsChecking] = useState(() => {
+        const token = getLocalDriverToken();
+        return Boolean(token) && !isOnboardingRoute(location.pathname) && !isVerifiedSession(token);
+    });
     const [isAllowed, setIsAllowed] = useState(true);
     // Server unreachable / 5xx while verifying the driver — must NOT be shown as "pending approval".
     const [connectionError, setConnectionError] = useState(false);
@@ -216,10 +247,21 @@ const DriverLayout = () => {
             return;
         }
 
+        // Approved before with this very token: show the screen now and re-check quietly.
+        const background = isVerifiedSession(token);
+        if (background) {
+            verifiedTokenRef.current = token;
+            verifiedApprovalRef.current = true;
+            setIsAllowed(true);
+            setIsChecking(false);
+        }
+
         let active = true;
 
         const verifyDriver = async () => {
-            setIsChecking(true);
+            if (!background) {
+                setIsChecking(true);
+            }
             setConnectionError(false);
 
             try {
@@ -233,6 +275,7 @@ const DriverLayout = () => {
                 }
 
                 if (!isApproved) {
+                    forgetVerifiedSession();
                     // Login / welcome must stay reachable for an unapproved account, otherwise the
                     // person is trapped on the pending screen and can never sign in with another number.
                     if (isPendingAllowedRoute(currentPath) || softEntryRoutes.has(currentPath)) {
@@ -253,6 +296,7 @@ const DriverLayout = () => {
                 setIsAllowed(true);
                 verifiedTokenRef.current = token;
                 verifiedApprovalRef.current = true;
+                rememberVerifiedSession(token);
 
                 if (isBusConsoleRoute(currentPath) && effectiveRole !== 'bus_driver') {
                     navigate(getAuthenticatedDriverHome(currentPath, effectiveRole), { replace: true });
@@ -297,6 +341,13 @@ const DriverLayout = () => {
                     return;
                 }
 
+                const status = error?.status;
+                if (background && status !== 401 && status !== 403 && status !== 404) {
+                    // offline / server hiccup during the quiet re-check: keep the screen the driver already has
+                    return;
+                }
+                forgetVerifiedSession();
+
                 setIsAllowed(false);
                 verifiedTokenRef.current = '';
                 verifiedApprovalRef.current = false;
@@ -335,6 +386,30 @@ const DriverLayout = () => {
             active = false;
         };
     }, [isAllowed, location.pathname, location.state, navigate, retryKey]);
+
+    // index.html keeps a copy of the start-up skeleton over driver screens until real content is drawn. Once the
+    // layout shows a screen it is drawn (Home's "Loading map..." text used to keep that copy up, half covering Home).
+    useEffect(() => {
+        if (!isChecking && !connectionError) {
+            window.__bootKeepDone?.();
+        }
+    }, [isChecking, connectionError]);
+
+    // Once a screen is up and the app has settled: load the other bottom-bar screens of this role, so a tab tap
+    // shows its screen at once (like the customer app's tabs).
+    const tabsPreloadedRef = useRef(false);
+    useEffect(() => {
+        if (isChecking || !isAllowed || tabsPreloadedRef.current || !getLocalDriverToken()) {
+            return undefined;
+        }
+        if (isOnboardingRoute(location.pathname)) {
+            return undefined;
+        }
+        return whenAppSettled(() => {
+            tabsPreloadedRef.current = true;
+            preloadDriverTabs(location.pathname.startsWith('/taxi/owner') ? 'owner' : getAuthenticatedRole());
+        });
+    }, [isAllowed, isChecking, location.pathname]);
 
     const handleSignOut = () => {
         clearDriverAuthState();

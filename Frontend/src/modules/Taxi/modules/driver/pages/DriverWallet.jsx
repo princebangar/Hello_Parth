@@ -19,7 +19,7 @@ import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { isMobileOrWebView, openExternalCheckout } from '../../../shared/utils/externalNavigation';
 import { rememberPendingPhonePeRedirect } from '../../../shared/utils/phonePeResume';
-import { getLocalDriverToken } from '../services/registrationService';
+import { getLocalDriverToken, readDriverCache, writeDriverCache } from '../services/registrationService';
 
 const PHONEPE_DRIVER_WALLET_FLOW_KEY = 'driver-wallet-topup';
 
@@ -191,11 +191,13 @@ const DriverWallet = () => {
     const { settings: appSettings } = useSettings();
     const appName = appSettings.general?.app_name || 'App';
     const activePaymentGateway = appSettings.paymentGateway || null;
-    const [wallet, setWallet] = useState(emptyWallet);
-    const [transactions, setTransactions] = useState([]);
-    const [withdrawalRequests, setWithdrawalRequests] = useState([]);
-    const [settings, setSettings] = useState({});
-    const [loading, setLoading] = useState(true);
+    // The wallet from the last visit shows at once; the fresh one replaces it.
+    const cachedWalletPage = readDriverCache('walletPage');
+    const [wallet, setWallet] = useState(() => cachedWalletPage?.wallet || emptyWallet);
+    const [transactions, setTransactions] = useState(() => cachedWalletPage?.transactions || []);
+    const [withdrawalRequests, setWithdrawalRequests] = useState(() => cachedWalletPage?.withdrawalRequests || []);
+    const [settings, setSettings] = useState(() => cachedWalletPage?.settings || {});
+    const [loading, setLoading] = useState(() => !cachedWalletPage);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [showTopUp, setShowTopUp] = useState(false);
@@ -210,7 +212,7 @@ const DriverWallet = () => {
     // Shown inside the sheet itself — the page-level `error` banner sits behind the sheet's overlay.
     const [withdrawError, setWithdrawError] = useState('');
     const [payoutDetailsMissing, setPayoutDetailsMissing] = useState(false);
-    const [driverProfile, setDriverProfile] = useState({
+    const [driverProfile, setDriverProfile] = useState(() => cachedWalletPage?.driverProfile || {
         salary: 0,
         isOwnerManagedDriver: false,
     });
@@ -239,10 +241,12 @@ const DriverWallet = () => {
             setTransactions(next.transactions);
             setWithdrawalRequests(next.withdrawalRequests);
             setSettings(next.settings);
-            setDriverProfile({
+            const nextDriverProfile = {
                 salary: toNumber(profile.salary, 0),
                 isOwnerManagedDriver: isOwnerManagedDriverProfile(profile),
-            });
+            };
+            setDriverProfile(nextDriverProfile);
+            writeDriverCache('walletPage', { ...next, driverProfile: nextDriverProfile });
         } catch (requestError) {
             setError(requestError?.response?.data?.message || requestError?.message || 'Could not load wallet.');
         } finally {

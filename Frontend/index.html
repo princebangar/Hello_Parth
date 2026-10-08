@@ -688,6 +688,8 @@
           // a page loader (spinner) has hardly any text; a real screen with a small spinner somewhere has more
           if (text.length >= 30 && !/loading/i.test(text) && (!spinning || text.length >= 120)) finish();
         };
+        // driver screens call this once they are drawn (their map says "Loading map..." for a while)
+        window.__bootKeepDone = finish;
         obs = new MutationObserver(check);
         obs.observe(root, { childList: true, subtree: true, characterData: true });
         timer = setTimeout(finish, 7000);

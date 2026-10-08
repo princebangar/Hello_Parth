@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { claimDriverIncentiveReward, getCurrentDriver, getDriverIncentives } from '../services/registrationService';
+import { claimDriverIncentiveReward, getCurrentDriver, getDriverIncentives, readDriverCache, writeDriverCache } from '../services/registrationService';
 
 const unwrap = (response) => response?.data?.data || response?.data || response || {};
 
@@ -24,11 +24,12 @@ const progressPercent = (current, target) => {
 
 const DriverIncentives = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // The progress from the last visit shows at once; the fresh one replaces it.
+  const [data, setData] = useState(() => readDriverCache('incentives')?.data ?? null);
+  const [loading, setLoading] = useState(() => !readDriverCache('incentives'));
   const [error, setError] = useState('');
   const [claimingKey, setClaimingKey] = useState('');
-  const [driverRating, setDriverRating] = useState(0);
+  const [driverRating, setDriverRating] = useState(() => readDriverCache('incentives')?.rating ?? 0);
 
   const fetchIncentives = async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
@@ -39,8 +40,11 @@ const DriverIncentives = () => {
         getDriverIncentives(),
         getCurrentDriver(),
       ]);
-      setData(unwrap(incentiveResponse));
-      setDriverRating(Number(unwrap(driverResponse)?.rating || 0));
+      const nextData = unwrap(incentiveResponse);
+      const nextRating = Number(unwrap(driverResponse)?.rating || 0);
+      setData(nextData);
+      setDriverRating(nextRating);
+      writeDriverCache('incentives', { data: nextData, rating: nextRating });
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || 'Unable to load milestone progress');
     } finally {
@@ -49,7 +53,7 @@ const DriverIncentives = () => {
   };
 
   useEffect(() => {
-    fetchIncentives();
+    fetchIncentives({ quiet: Boolean(readDriverCache('incentives')) });
   }, []);
 
   const handleClaim = async (rewardType, rewardKey) => {

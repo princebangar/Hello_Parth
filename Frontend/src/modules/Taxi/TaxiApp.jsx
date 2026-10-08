@@ -25,6 +25,24 @@ import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
 import { POOLING_ENABLED } from './shared/featureFlags';
 import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
 import AppRouteFallback from '@/shared/components/AppRouteFallback';
+// Driver / owner / bus / pooling bottom-bar screens: preloadable, so a tab tap renders without waiting.
+import {
+  BusDriverHome,
+  DriverHome,
+  DriverIncentives,
+  DriverProfile,
+  DriverWallet,
+  ManageDrivers,
+  OwnerBusBookingsPage,
+  OwnerBusServicePage,
+  OwnerDashboard,
+  OwnerPoolingVehicles,
+  OwnerVehicleFleet,
+  OwnerWallet,
+  PoolingDriverBookings,
+  PoolingDriverDashboard,
+  RideRequests,
+} from './modules/driver/driverTabPages';
 import './App.css';
 import './index.css';
 
@@ -132,25 +150,12 @@ const StepDocuments = lazy(() => import('./modules/driver/pages/registration/Ste
 const ApplicationStatus = lazy(() => import('./modules/driver/pages/registration/ApplicationStatus'));
 
 // Driver Module - Core
-const DriverHome = lazy(() => import('./modules/driver/pages/DriverHome'));
-const OwnerDashboard = lazy(() => import('./modules/driver/pages/OwnerDashboard'));
-const OwnerBusServicePage = lazy(() => import('./modules/driver/pages/OwnerBusServicePage'));
-const OwnerBusBookingsPage = lazy(() => import('./modules/driver/pages/OwnerBusBookingsPage'));
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
-const DriverWallet = lazy(() => import('./modules/driver/pages/DriverWallet'));
-const OwnerWallet = lazy(() => import('./modules/driver/pages/OwnerWallet'));
-const DriverProfile = lazy(() => import('./modules/driver/pages/DriverProfile'));
-const RideRequests = lazy(() => import('./modules/driver/pages/RideRequests'));
-const DriverIncentives = lazy(() => import('./modules/driver/pages/DriverIncentives'));
-const BusDriverHome = lazy(() => import('./modules/driver/pages/BusDriverHome'));
 const BusDriverLiveRoute = lazy(() => import('./modules/driver/pages/BusDriverLiveRoute'));
-const OwnerPoolingVehicles = lazy(() => import('./modules/driver/pages/OwnerPoolingVehicles'));
 const OwnerPoolingVehicleForm = lazy(() => import('./modules/driver/pages/OwnerPoolingVehicleForm'));
 const DriverBankDetailsPage = lazy(() => import('./modules/driver/pages/DriverBankDetailsPage'));
-const PoolingDriverDashboard = lazy(() => import('./modules/driver/pages/PoolingDriverDashboard'));
 const PoolingDriverOnboarding = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverOnboarding'));
 const PoolingDriverPendingStatus = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverPendingStatus'));
-const PoolingDriverBookings = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverBookings'));
 const RoleSelection = lazy(() => import('./modules/driver/pages/registration/RoleSelection'));
 const RoleSpecificOnboarding = lazy(() => import('./modules/driver/pages/registration/RoleSpecificOnboarding'));
 const BusSignupBuilderPage = lazy(() => import('./modules/driver/pages/registration/BusSignupBuilderPage'));
@@ -166,9 +171,7 @@ const DriverSupport = lazy(() => import('./modules/driver/pages/settings/Support
 const DriverHelpSupportOptions = lazy(() => import('./modules/driver/pages/settings/HelpSupportOptions'));
 const DriverSupportChat = lazy(() => import('./modules/driver/pages/settings/SupportChat'));
 const VehicleFleet = lazy(() => import('./modules/driver/pages/settings/VehicleFleet'));
-const OwnerVehicleFleet = lazy(() => import('./modules/driver/pages/settings/OwnerVehicleFleet'));
 const AddVehicle = lazy(() => import('./modules/driver/pages/settings/AddVehicle'));
-const ManageDrivers = lazy(() => import('./modules/driver/pages/settings/ManageDrivers'));
 const AddDriver = lazy(() => import('./modules/driver/pages/settings/AddDriver'));
 
 // Admin Module Pages

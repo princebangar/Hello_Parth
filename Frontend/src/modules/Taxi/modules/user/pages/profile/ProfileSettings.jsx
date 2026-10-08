@@ -32,9 +32,10 @@ const ProfileSettings = () => {
     return (
       photoPreview ||
       profileImage ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=E85D04&color=fff`
+      // same placeholder photo as the Food user profile
+      '/assets/images/profile_avatar.webp'
     );
-  }, [name, profileImage, photoPreview]);
+  }, [profileImage, photoPreview]);
 
   useEffect(() => {
     let stored = {};
