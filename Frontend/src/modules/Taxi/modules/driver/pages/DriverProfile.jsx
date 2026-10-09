@@ -24,7 +24,7 @@ import {
     ReceiptText,
     ScrollText,
     ShieldAlert,
-    Trash2,
+    Settings as SettingsIcon,
     Power,
     Mail,
     Phone,
@@ -38,6 +38,7 @@ import {
     Pencil,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import UserLogoutConfirmDialog from '@/shared/components/UserLogoutConfirmDialog.jsx';
 import useBodyScrollLock from '../../../shared/hooks/useBodyScrollLock';
 import { clearDriverAuthState, getCurrentDriver, readDriverCache, updateDriverProfile } from '../services/registrationService';
 
@@ -355,6 +356,7 @@ Processing Time: Refunds are typically credited back to the original payment met
         },
         {
             title: 'Legal & Support',
+            continues: true,
             items: [
                 { id: 'help', label: 'Help & Support', icon: <Headset size={20} />, path: `${routePrefix}/help-support` },
                 { id: 'terms', label: 'Terms & Conditions', icon: <ScrollText size={20} />, action: () => openLegal('terms') },
@@ -362,10 +364,17 @@ Processing Time: Refunds are typically credited back to the original payment met
                 { id: 'refund', label: 'Refund Policy', icon: <ReceiptText size={20} />, action: () => openLegal('refund') },
             ]
         },
+        {
+            title: '',
+            items: [
+                { id: 'settings', label: 'Settings', icon: <SettingsIcon size={20} />, path: `${routePrefix}/settings` },
+                { id: 'logout', label: 'Log out', icon: <Power size={20} />, action: () => setIsLogoutOpen(true) },
+            ]
+        },
     ];
 
     return (
-        <div className="min-h-screen bg-white font-sans select-none overflow-x-hidden pb-32">
+        <div className="min-h-screen bg-white font-sans select-none overflow-x-hidden pb-28">
             {/* Hero: blue gradient with a soft swoosh and a wave edge; the photo sits on the wave (reference design) */}
             <div
                 className="relative text-white"
@@ -477,8 +486,8 @@ Processing Time: Refunds are typically credited back to the original payment met
             {/* List Menu */}
             <main className="space-y-1">
                 {(showFullList ? sections : sections.slice(0, 1)).map((section, sIdx) => (
-                    <div key={sIdx} className="pt-6">
-                        <h3 className="px-6 text-[12px] font-bold uppercase tracking-[0.16em] text-[#5a6b8f] mb-1">{section.title}</h3>
+                    <div key={sIdx} className={section.title ? 'pt-6' : ''}>
+                        {section.title ? <h3 className="px-6 text-[12px] font-bold uppercase tracking-[0.16em] text-[#5a6b8f] mb-1">{section.title}</h3> : null}
                         <div>
                             {section.items.map((item, itemIndex) => (
                                 <Motion.motion.div
@@ -490,11 +499,11 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     }}
                                     className="group flex cursor-pointer items-center gap-4 pl-6 pr-5"
                                 >
-                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${ICON_CHIP}`}>
+                                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${ICON_CHIP}`}>
                                         {item.icon}
                                     </div>
                                     {/* the divider starts at the text, like the reference */}
-                                    <div className={`flex min-w-0 flex-1 items-center justify-between gap-3 py-4 ${itemIndex < section.items.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                                    <div className={`flex min-h-[66px] min-w-0 flex-1 items-center justify-between gap-3 py-3 ${itemIndex < section.items.length - 1 || (section.continues && showFullList) ? 'border-b border-slate-100' : ''}`}>
                                         <div className="min-w-0">
                                             <h4 className="text-[15px] font-semibold tracking-tight text-[#0f1b4c]">{item.label}</h4>
                                             {item.sub && <p className="mt-0.5 truncate text-[12px] font-medium text-slate-400">{item.sub}</p>}
@@ -521,73 +530,15 @@ Processing Time: Refunds are typically credited back to the original payment met
                 ))}
             </main>
 
-            {showFullList ? (
-                <div className="px-6 pt-6">
-                    {/* Delete Account: red bin + hint line, same row as the Food user's Settings page */}
-                    <button
-                        type="button"
-                        onClick={() => navigate(`${routePrefix}/delete-account`)}
-                        className="flex w-full items-center gap-3 border-b border-slate-100 py-4 text-left active:bg-slate-50"
-                    >
-                        <Trash2 className="h-5 w-5 shrink-0 text-[#FF3131]" />
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-[17px] font-semibold text-slate-900">Delete Account</h3>
-                            <p className="mt-0.5 truncate text-[13px] text-slate-500">Tap to delete your account</p>
-                        </div>
-                    </button>
 
-                    {/* Log out: grey chip + power icon in a white card, same as the Food user profile */}
-                    <button
-                        type="button"
-                        onClick={() => setIsLogoutOpen(true)}
-                        className="mt-4 flex w-full items-center justify-between rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-100 transition active:scale-[0.99]"
-                    >
-                        <div className="flex items-center gap-3">
-                            <div className="flex shrink-0 items-center justify-center rounded-2xl bg-gray-100 p-2.5">
-                                <Power className="h-5 w-5 text-gray-700" />
-                            </div>
-                            <span className="text-base font-bold text-gray-900">Log out</span>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-gray-400" />
-                    </button>
-                </div>
-            ) : null}
-
-
-            <AnimatePresence>
-                {isLogoutOpen && (
-                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 px-5 backdrop-blur-sm">
-                        <Motion.motion.div
-                            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-                            className="w-full max-w-xs rounded-[28px] bg-white p-6 shadow-2xl border border-slate-100"
-                        >
-                            <div className="space-y-2 text-center">
-                                <h3 className="text-[18px] font-bold text-slate-900 tracking-tight">Logout</h3>
-                                <p className="text-[13px] font-medium text-slate-500">
-                                    Are you sure you want to logout?
-                                </p>
-                            </div>
-
-                            <div className="mt-6 grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => setIsLogoutOpen(false)}
-                                    className="h-12 rounded-2xl border border-slate-200 text-slate-700 font-bold text-[13px]"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleLogout}
-                                    className="h-12 rounded-2xl bg-rose-500 text-white font-bold text-[13px]"
-                                >
-                                    Logout
-                                </button>
-                            </div>
-                        </Motion.motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
+            <UserLogoutConfirmDialog
+                open={isLogoutOpen}
+                onClose={() => setIsLogoutOpen(false)}
+                onConfirm={handleLogout}
+                iconBgClassName="bg-blue-600/10"
+                iconClassName="text-blue-600"
+                confirmButtonClassName="bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] shadow-blue-600/25"
+            />
 
             {/* Legal Modal */}
             <AnimatePresence>

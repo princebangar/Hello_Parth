@@ -3,7 +3,7 @@ import { useNavigate, useNavigationType, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet, Bell, ShieldAlert, Power, ChevronRight, Headset, ScrollText, Lock, ReceiptText,
-  MapPin, Star, Package, Gift, Tag, Check, BusFront, ArrowLeft,
+  MapPin, Star, Package, Gift, Tag, BusFront, ArrowLeft,
   History, Phone, Palette, Settings
 } from 'lucide-react';
 // ... removed BottomNavbar import ...
@@ -370,16 +370,6 @@ const Profile = () => {
                   ) : (
                     <img src={DEFAULT_AVATAR} alt="User" className="w-full h-full object-cover" />
                   )}
-                </div>
-                {/* Border colour matches the card behind it (not a flat
-                    `border-white`) so the badge reads as cut into the
-                    corner — a hardcoded white ring here showed up as a
-                    stray bright line against the dark-theme card. */}
-                <div
-                  style={{ borderColor: 'var(--user-card-bg)' }}
-                  className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg border-2 flex items-center justify-center shadow-sm"
-                >
-                  <Check size={14} className="text-white" strokeWidth={4} />
                 </div>
               </div>
               <div className="flex-1 min-w-0">

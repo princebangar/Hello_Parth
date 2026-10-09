@@ -166,6 +166,7 @@ const DriverDocuments = lazy(() => import('./modules/driver/pages/settings/Drive
 const Notifications = lazy(() => import('./modules/driver/pages/settings/Notifications'));
 const Referral = lazy(() => import('./modules/driver/pages/settings/Referral'));
 const DriverDeleteAccount = lazy(() => import('./modules/driver/pages/settings/DeleteAccount'));
+const DriverSettings = lazy(() => import('./modules/driver/pages/settings/DriverSettings'));
 const SecuritySOS = lazy(() => import('./modules/driver/pages/settings/SecuritySOS'));
 const DriverSupport = lazy(() => import('./modules/driver/pages/settings/Support'));
 const DriverHelpSupportOptions = lazy(() => import('./modules/driver/pages/settings/HelpSupportOptions'));
@@ -1045,6 +1046,7 @@ function TaxiApp() {
                 <Route path="wallet" element={<DriverWallet />} />
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="profile/bank-details" element={<DriverBankDetailsPage />} />
+                <Route path="settings" element={<DriverSettings />} />
                 <Route path="history" element={<RideRequests />} />
                 <Route path="incentives" element={<DriverIncentives />} />
 
@@ -1101,6 +1103,7 @@ function TaxiApp() {
                 <Route path="bus-bookings" element={<OwnerBusBookingsPage />} />
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="profile/bank-details" element={<DriverBankDetailsPage />} />
+                <Route path="settings" element={<DriverSettings />} />
                 <Route path="pooling-vehicles" element={<OwnerPoolingVehicles />} />
                 <Route path="pooling-vehicles/create" element={<OwnerPoolingVehicleForm />} />
                 <Route path="pooling-vehicles/edit/:id" element={<OwnerPoolingVehicleForm />} />
