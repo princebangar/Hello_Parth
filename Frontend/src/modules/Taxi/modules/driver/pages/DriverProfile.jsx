@@ -4,26 +4,29 @@ import { AnimatePresence } from 'framer-motion';
 import {
     User,
     Car,
-    FileText,
     Bell,
     History,
     CreditCard,
     UserPlus,
     ShieldCheck,
     HelpCircle,
-    LogOut,
     ArrowRight,
     Star,
     Route,
     ChevronRight,
     CheckCircle2,
     Wallet,
-    Info,
     Gift,
-    Shield,
-    BadgePercent,
+    Award,
+    Headset,
+    IdCard,
+    Lock,
+    ReceiptText,
+    ScrollText,
+    ShieldAlert,
+    Trash2,
+    Power,
     Mail,
-    HandCoins,
     Phone,
     X,
     Landmark,
@@ -41,26 +44,8 @@ import { clearDriverAuthState, getCurrentDriver, readDriverCache, updateDriverPr
 // Same placeholder photo as the Food user and delivery profiles.
 const DEFAULT_AVATAR = '/assets/images/profile_avatar.webp';
 
-// Soft coloured chip behind each menu icon (blue family first, a few accents like the reference design).
-const ICON_TONES = {
-    personal: 'bg-blue-50 text-blue-600',
-    wallet: 'bg-emerald-50 text-emerald-600',
-    bankDetails: 'bg-orange-50 text-orange-500',
-    vehicle: 'bg-violet-50 text-violet-600',
-    docs: 'bg-sky-50 text-sky-600',
-    history: 'bg-indigo-50 text-indigo-600',
-    notifications: 'bg-amber-50 text-amber-500',
-    refer: 'bg-pink-50 text-pink-500',
-    incentives: 'bg-teal-50 text-teal-600',
-    sos: 'bg-rose-50 text-rose-500',
-    help: 'bg-cyan-50 text-cyan-600',
-    terms: 'bg-slate-100 text-slate-600',
-    privacy: 'bg-slate-100 text-slate-600',
-    refund: 'bg-slate-100 text-slate-600',
-    deleteAccount: 'bg-rose-50 text-rose-500',
-    fleet: 'bg-violet-50 text-violet-600',
-    drivers: 'bg-blue-50 text-blue-600',
-};
+// One calm grey chip behind every menu icon (same look the Food profile always had).
+const ICON_CHIP = 'bg-slate-100 text-slate-600';
 
 const unwrapDriver = (response) => response?.data?.data || response?.data || response || null;
 const ROUTE_BOOKING_STORAGE_KEY = 'driver_route_booking_preferences';
@@ -178,7 +163,7 @@ const DriverProfile = () => {
         const contentMap = {
             terms: {
                 title: 'Terms and Conditions',
-                Icon: FileText,
+                Icon: ScrollText,
                 description: 'General rules for using the Hello Parth platform.',
                 content: `By using the Hello Parth platform, you agree to comply with all applicable transport regulations and our safety standards.
 
@@ -191,7 +176,7 @@ Key Highlights:
             },
             privacy: {
                 title: 'Privacy Policy',
-                Icon: Shield,
+                Icon: Lock,
                 description: 'How we handle your data and biometrics.',
                 content: `Hello Parth takes data security seriously. We collect specific information to ensure safety and service quality.
 
@@ -205,7 +190,7 @@ We do not share your biometric data with third-party advertising networks.`
             },
             refund: {
                 title: 'Refund Policy',
-                Icon: HandCoins,
+                Icon: ReceiptText,
                 description: 'Cancellation and refund guidelines.',
                 content: `Transparent refund rules for customers and partners.
 
@@ -355,7 +340,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                 ...(!isOwner ? [
                     { id: 'vehicle', label: 'My Vehicle', sub: 'Your vehicle details', icon: <Car size={20} />, path: `${routePrefix}/vehicle-fleet` },
                 ] : []),
-                { id: 'docs', label: 'Documents', sub: 'Your uploaded documents', icon: <FileText size={20} />, path: `${routePrefix}/documents` },
+                { id: 'docs', label: 'Documents', sub: 'Your uploaded documents', icon: <IdCard size={20} />, path: `${routePrefix}/documents` },
                 { id: 'history', label: 'Ride History', sub: 'Your past trips', icon: <History size={20} />, path: `${routePrefix}/history` },
                 { id: 'notifications', label: 'Notifications', sub: 'Alerts and updates', icon: <Bell size={20} />, path: `${routePrefix}/notifications` },
             ]
@@ -364,25 +349,19 @@ Processing Time: Refunds are typically credited back to the original payment met
             title: 'Benefits',
             items: [
                 { id: 'refer', label: 'Refer & Earn', icon: <Gift size={20} />, path: `${routePrefix}/referral` },
-                ...(!isOwner ? [{ id: 'incentives', label: 'Incentives', icon: <BadgePercent size={20} />, path: `${routePrefix}/incentives` }] : []),
-                ...(!isOwner ? [{ id: 'sos', label: 'Emergency SOS', icon: <Shield size={20} />, path: `${routePrefix}/security` }] : []),
+                ...(!isOwner ? [{ id: 'incentives', label: 'Incentives', icon: <Award size={20} />, path: `${routePrefix}/incentives` }] : []),
+                ...(!isOwner ? [{ id: 'sos', label: 'Emergency SOS', icon: <ShieldAlert size={20} />, path: `${routePrefix}/security` }] : []),
             ]
         },
         {
             title: 'Legal & Support',
             items: [
-                { id: 'help', label: 'Help & Support', icon: <Info size={20} />, path: `${routePrefix}/help-support` },
-                { id: 'terms', label: 'Terms & Conditions', icon: <FileText size={20} />, action: () => openLegal('terms') },
-                { id: 'privacy', label: 'Privacy Policy', icon: <Shield size={20} />, action: () => openLegal('privacy') },
-                { id: 'refund', label: 'Refund Policy', icon: <HandCoins size={20} />, action: () => openLegal('refund') },
+                { id: 'help', label: 'Help & Support', icon: <Headset size={20} />, path: `${routePrefix}/help-support` },
+                { id: 'terms', label: 'Terms & Conditions', icon: <ScrollText size={20} />, action: () => openLegal('terms') },
+                { id: 'privacy', label: 'Privacy Policy', icon: <Lock size={20} />, action: () => openLegal('privacy') },
+                { id: 'refund', label: 'Refund Policy', icon: <ReceiptText size={20} />, action: () => openLegal('refund') },
             ]
         },
-        {
-            title: 'Danger Zone',
-            items: [
-                { id: 'deleteAccount', label: 'Delete Account', icon: <LogOut size={20} />, path: `${routePrefix}/delete-account` },
-            ]
-        }
     ];
 
     return (
@@ -481,7 +460,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     key={label}
                                     className={`flex min-w-0 items-center gap-2 px-2.5 py-3 ${cellIndex > 0 ? 'border-l border-slate-100' : ''}`}
                                 >
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${ICON_CHIP}`}>
                                         <Icon size={15} />
                                     </div>
                                     <div className="min-w-0">
@@ -511,7 +490,7 @@ Processing Time: Refunds are typically credited back to the original payment met
                                     }}
                                     className="group flex cursor-pointer items-center gap-4 pl-6 pr-5"
                                 >
-                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${ICON_TONES[item.id] || 'bg-blue-50 text-blue-600'}`}>
+                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${ICON_CHIP}`}>
                                         {item.icon}
                                     </div>
                                     {/* the divider starts at the text, like the reference */}
@@ -543,50 +522,35 @@ Processing Time: Refunds are typically credited back to the original payment met
             </main>
 
             {showFullList ? (
-                <>
-                {/* Owner Support Section */}
-                <div className="px-6 py-4 mt-6">
-                    <div className="rounded-[28px] border border-slate-100 bg-slate-50/50 p-6">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <h3 className="text-[13px] font-bold text-slate-900 uppercase tracking-wider">Owner Support</h3>
-                        </div>
-
-                        <div className="space-y-5">
-                            <a href="mailto:helloparthg@gmail.com" className="flex items-center gap-4 group">
-                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors shadow-sm">
-                                    <Mail size={18} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email Support</p>
-                                    <p className="text-[14px] font-bold text-slate-800">helloparthg@gmail.com</p>
-                                </div>
-                            </a>
-
-                            <a href="tel:9193911911" className="flex items-center gap-4 group">
-                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-sky-500 transition-colors shadow-sm">
-                                    <Phone size={18} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Call Support</p>
-                                    <p className="text-[14px] font-bold text-slate-800">91-93-911-911</p>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Sign Out Section */}
-                <div className="px-6 py-6">
+                <div className="px-6 pt-6">
+                    {/* Delete Account: red bin + hint line, same row as the Food user's Settings page */}
                     <button
-                        onClick={() => setIsLogoutOpen(true)}
-                        className="flex items-center gap-3 text-rose-500 font-bold text-[13px] active:translate-x-1 transition-transform"
+                        type="button"
+                        onClick={() => navigate(`${routePrefix}/delete-account`)}
+                        className="flex w-full items-center gap-3 border-b border-slate-100 py-4 text-left active:bg-slate-50"
                     >
-                        <LogOut size={16} strokeWidth={2.5} />
-                        Logout from Account
+                        <Trash2 className="h-5 w-5 shrink-0 text-[#FF3131]" />
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-[17px] font-semibold text-slate-900">Delete Account</h3>
+                            <p className="mt-0.5 truncate text-[13px] text-slate-500">Tap to delete your account</p>
+                        </div>
+                    </button>
+
+                    {/* Log out: grey chip + power icon in a white card, same as the Food user profile */}
+                    <button
+                        type="button"
+                        onClick={() => setIsLogoutOpen(true)}
+                        className="mt-4 flex w-full items-center justify-between rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-100 transition active:scale-[0.99]"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="flex shrink-0 items-center justify-center rounded-2xl bg-gray-100 p-2.5">
+                                <Power className="h-5 w-5 text-gray-700" />
+                            </div>
+                            <span className="text-base font-bold text-gray-900">Log out</span>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-gray-400" />
                     </button>
                 </div>
-                </>
             ) : null}
 
 

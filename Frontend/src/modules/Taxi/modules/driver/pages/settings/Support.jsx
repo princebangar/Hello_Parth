@@ -69,14 +69,14 @@ const DriverSupport = () => {
                 <div className="grid grid-cols-2 gap-3">
                     <button 
                         onClick={() => openHelp('wa')}
-                        className="bg-emerald-50 text-emerald-500 p-5 rounded-3xl border border-emerald-500/10 flex flex-col items-center gap-2 shadow-sm active:scale-95 transition-all text-center"
+                        className="bg-slate-100 text-slate-600 p-5 rounded-3xl border border-slate-200 flex flex-col items-center gap-2 shadow-sm active:scale-95 transition-all text-center"
                     >
                         <MessageCircle size={24} strokeWidth={2.5} />
                         <span className="text-[9px] font-black uppercase tracking-widest">Chat on WhatsApp</span>
                     </button>
                     <button 
                         onClick={() => openHelp('call')}
-                        className="bg-blue-50 text-blue-500 p-5 rounded-3xl border border-blue-500/10 flex flex-col items-center gap-2 shadow-sm active:scale-95 transition-all text-center"
+                        className="bg-slate-100 text-slate-600 p-5 rounded-3xl border border-slate-200 flex flex-col items-center gap-2 shadow-sm active:scale-95 transition-all text-center"
                     >
                         <Phone size={24} strokeWidth={2.5} />
                         <span className="text-[9px] font-black uppercase tracking-widest">Speak to Agent</span>

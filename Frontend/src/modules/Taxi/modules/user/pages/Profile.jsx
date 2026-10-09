@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useNavigationType, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Wallet, Bell, Shield, LogOut, ChevronRight, HelpCircle, FileText,
+  Wallet, Bell, ShieldAlert, Power, ChevronRight, Headset, ScrollText, Lock, ReceiptText,
   MapPin, Star, Package, Gift, Tag, Check, BusFront, ArrowLeft,
-  CreditCard, History, Phone, Palette, Settings
+  History, Phone, Palette, Settings
 } from 'lucide-react';
 // ... removed BottomNavbar import ...
 
@@ -51,46 +51,45 @@ const menuSections = [
   {
     heading: null,
     items: [
-      { icon: MapPin, title: 'Saved Addresses', sub: 'Home, office & others', path: '/taxi/user/profile/addresses', bg: 'bg-emerald-50 dark:bg-emerald-950/30', color: 'text-emerald-600 dark:text-emerald-400' },
+      { icon: MapPin, title: 'Saved Addresses', sub: 'Home, office & others', path: '/taxi/user/profile/addresses' },
       // amber-400 (Tailwind's usual dark-mode partner for amber-600) reads
       // distinctly yellow rather than orange — amber-500 keeps this the
       // same "orange" family in both themes instead of shifting hue.
-      { icon: Wallet, title: 'My Wallet', sub: 'Balance & transactions', path: '/taxi/user/wallet', bg: 'bg-amber-50 dark:bg-amber-950/30', color: 'text-amber-600 dark:text-amber-500' },
+      { icon: Wallet, title: 'My Wallet', sub: 'Balance & transactions', path: '/taxi/user/wallet' },
       // Same shared appearance picker Food uses — no `path`, handled via id.
-      { id: 'appearance', icon: Palette, title: 'Appearance', sub: 'Light', bg: 'bg-yellow-50 dark:bg-yellow-950/30', color: 'text-yellow-600 dark:text-yellow-400' },
+      { id: 'appearance', icon: Palette, title: 'Appearance', sub: 'Light' },
     ],
   },
   {
     heading: 'My Activity',
     items: [
-      { icon: History, title: 'My Rides', sub: 'Rides, parcels & trips', path: '/taxi/user/activity', bg: 'bg-blue-50 dark:bg-blue-950/30', color: 'text-blue-600 dark:text-blue-400' },
-      { icon: BusFront, title: 'Bus Tickets', sub: 'Manage bus bookings', path: '/taxi/user/profile/bus-bookings', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-600 dark:text-orange-400' },
-      { icon: Package, title: 'Subscriptions', sub: 'Ride plans & credits', path: '/taxi/user/profile/subscriptions', bg: 'bg-indigo-50 dark:bg-indigo-950/30', color: 'text-indigo-600 dark:text-indigo-400' },
+      { icon: History, title: 'My Rides', sub: 'Rides, parcels & trips', path: '/taxi/user/activity' },
+      { icon: BusFront, title: 'Bus Tickets', sub: 'Manage bus bookings', path: '/taxi/user/profile/bus-bookings' },
+      { icon: Package, title: 'Subscriptions', sub: 'Ride plans & credits', path: '/taxi/user/profile/subscriptions' },
     ],
   },
   {
     heading: 'Rewards',
     items: [
-      { icon: Gift, title: 'Refer & Earn', sub: 'Invite friends & get rewards', path: '/taxi/user/referral', bg: 'bg-rose-50 dark:bg-rose-950/30', color: 'text-rose-600 dark:text-rose-400' },
-      { icon: Tag, title: 'Promo Codes', sub: 'Offers you can use on a booking', path: '/taxi/user/promo', bg: 'bg-yellow-50 dark:bg-yellow-950/30', color: 'text-yellow-600 dark:text-yellow-400' },
+      { icon: Gift, title: 'Refer & Earn', sub: 'Invite friends & get rewards', path: '/taxi/user/referral' },
+      { icon: Tag, title: 'Promo Codes', sub: 'Offers you can use on a booking', path: '/taxi/user/promo' },
     ],
   },
   {
     heading: 'More',
     items: [
-      { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications', bg: 'bg-purple-50 dark:bg-purple-950/30', color: 'text-purple-600 dark:text-purple-400' },
-      { icon: Shield, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos', bg: 'bg-sky-50 dark:bg-sky-950/30', color: 'text-sky-600 dark:text-sky-400' },
-      { icon: HelpCircle, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets', bg: 'bg-slate-50 dark:bg-slate-800/50', color: 'text-slate-600 dark:text-slate-400' },
-      { icon: FileText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/user/terms', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-600 dark:text-orange-400' },
-      { icon: Shield, title: 'Privacy Policy', sub: 'How your data is handled', path: '/user/privacy', bg: 'bg-emerald-50 dark:bg-emerald-950/30', color: 'text-emerald-600 dark:text-emerald-400' },
-      { icon: CreditCard, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/food/user/profile/refund', bg: 'bg-indigo-50 dark:bg-indigo-950/30', color: 'text-indigo-600 dark:text-indigo-400' },
+      { icon: Bell, title: 'Notifications', sub: 'Offers & alerts', path: '/taxi/user/profile/notifications' },
+      { icon: ShieldAlert, title: 'Security & SOS', sub: 'Trust & safety settings', path: '/safety/sos' },
+      { icon: Headset, title: 'Help & Support', sub: 'Help center & tickets', path: '/taxi/user/support/tickets' },
+      { icon: ScrollText, title: 'Terms & Conditions', sub: 'Read service terms', path: '/user/terms' },
+      { icon: Lock, title: 'Privacy Policy', sub: 'How your data is handled', path: '/user/privacy' },
+      { icon: ReceiptText, title: 'Refund Policy', sub: 'Refunds and cancellations', path: '/food/user/profile/refund' },
       // Settings hub (Edit Profile + Delete Account) — same spot Food puts
       // it: directly above Log out.
-      { icon: Settings, title: 'Settings', sub: 'Edit profile & account', path: '/taxi/user/profile/settings', bg: 'bg-slate-50 dark:bg-slate-800/50', color: 'text-slate-600 dark:text-slate-400' },
-      // Fixed navy — no `dark:` pair — so it stays the same colour in both
-      // themes, same list-row style as every other item (matches Food's
-      // flat "Log out" row instead of a standalone CTA button).
-      { id: 'logout', icon: LogOut, title: 'Log out', sub: 'Sign out of your account', bg: 'bg-blue-600/10', color: 'text-blue-600' },
+      { icon: Settings, title: 'Settings', sub: 'Edit profile & account', path: '/taxi/user/profile/settings' },
+      // Same neutral list-row style as every other item (matches Food's
+      // "Log out" row instead of a standalone CTA button).
+      { id: 'logout', icon: Power, title: 'Log out', sub: 'Sign out of your account' },
     ],
   },
 ];
@@ -501,13 +500,12 @@ const Profile = () => {
                     className="w-full flex items-center gap-4 px-4 py-3.5 rounded-[18px] border text-left cursor-pointer"
                   >
                     <div
-                      className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 ${item.id === 'logout' ? item.bg : ''}`}
-                      style={item.id === 'logout' ? undefined : { background: 'var(--user-card-soft)' }}
+                      className="w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0"
+                      style={{ background: 'var(--user-card-soft)' }}
                     >
                       <item.icon
                         size={19}
-                        className={item.id === 'logout' ? item.color : ''}
-                        style={item.id === 'logout' ? undefined : { color: 'var(--user-text-primary)' }}
+                        style={{ color: 'var(--user-text-primary)' }}
                         strokeWidth={2.2}
                       />
                     </div>

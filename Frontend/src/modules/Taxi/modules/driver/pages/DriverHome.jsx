@@ -2223,15 +2223,15 @@ const DriverHome = () => {
                             exit={{ opacity: 0, y: 24, scale: 0.96 }}
                             className="absolute left-1/2 top-1/2 z-[71] w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
                         >
-                            <h3 className="text-[18px] font-black tracking-tight text-slate-950">Go offline?</h3>
+                            <h3 className="text-[19px] font-black tracking-tight text-slate-950">Go offline?</h3>
                             <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
                                 New ride requests will stop until you go online again.
                             </p>
-                            <div className="mt-5 grid grid-cols-2 gap-3">
+                            <div className="mt-6 grid grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setShowOfflineConfirm(false)}
-                                    className="h-12 rounded-[16px] border border-slate-200 bg-slate-50 text-[12px] font-black uppercase tracking-[0.14em] text-slate-500"
+                                    className="flex h-12 items-center justify-center whitespace-nowrap rounded-[16px] border-2 border-[#1d4ed8] bg-white px-2 text-[13px] font-extrabold uppercase tracking-[0.04em] text-[#1d4ed8] transition active:scale-[0.97]"
                                 >
                                     Stay Online
                                 </button>
@@ -2241,7 +2241,7 @@ const DriverHome = () => {
                                         setShowOfflineConfirm(false);
                                         goOffline();
                                     }}
-                                    className="h-12 rounded-[16px] bg-rose-500 text-[12px] font-black uppercase tracking-[0.14em] text-white shadow-[0_14px_28px_rgba(244,63,94,0.28)]"
+                                    className="flex h-12 items-center justify-center whitespace-nowrap rounded-[16px] bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] px-2 text-[13px] font-extrabold uppercase tracking-[0.04em] text-white shadow-[0_10px_22px_rgba(29,78,216,0.32)] transition active:scale-[0.97]"
                                 >
                                     Go Offline
                                 </button>
@@ -2644,7 +2644,7 @@ const DriverHome = () => {
                                 >
                                     <div className="grid grid-cols-4 gap-2">
                                         <div className="flex flex-col items-center">
-                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
                                                 <IndianRupee size={18} strokeWidth={2.5} />
                                             </div>
                                             {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{formatSummaryMoney(todaySummary.earnings)}</span> : <SummaryNumberSkeleton />}
@@ -2652,7 +2652,7 @@ const DriverHome = () => {
                                         </div>
 
                                         <div className="flex flex-col items-center">
-                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
                                                 <Clock size={18} strokeWidth={2.5} />
                                             </div>
                                             {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{`${dutyHours}h ${dutyMins}m`}</span> : <SummaryNumberSkeleton />}
@@ -2660,7 +2660,7 @@ const DriverHome = () => {
                                         </div>
 
                                         <div className="flex flex-col items-center">
-                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
                                                 <Navigation size={18} strokeWidth={2.5} />
                                             </div>
                                             {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{formatSummaryDistance(todaySummary.distanceMeters)}</span> : <SummaryNumberSkeleton />}
@@ -2668,7 +2668,7 @@ const DriverHome = () => {
                                         </div>
 
                                         <div className="flex flex-col items-center">
-                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
                                                 <BarChart2 size={18} strokeWidth={2.5} />
                                             </div>
                                             {summaryLoaded ? <span className="text-[14px] font-black text-slate-900">{todaySummary.rides}</span> : <SummaryNumberSkeleton />}

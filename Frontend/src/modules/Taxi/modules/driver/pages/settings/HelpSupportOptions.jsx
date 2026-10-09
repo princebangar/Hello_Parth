@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, ChevronRight, Headset, MessageCircle } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Headset, Mail, MessageCircle, Phone } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const HelpSupportOptions = () => {
@@ -20,13 +20,43 @@ const HelpSupportOptions = () => {
       </header>
 
       <div className="space-y-4">
+        {/* Owner Support: direct email / phone (used to sit at the bottom of the profile page) */}
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <h2 className="text-[13px] font-bold uppercase tracking-wider text-slate-900">Owner Support</h2>
+          </div>
+
+          <div className="space-y-5">
+            <a href="mailto:helloparthg@gmail.com" className="flex items-center gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                <Mail size={20} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Email Support</p>
+                <p className="truncate text-[14px] font-bold text-slate-800">helloparthg@gmail.com</p>
+              </div>
+            </a>
+
+            <a href="tel:9193911911" className="flex items-center gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                <Phone size={20} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Call Support</p>
+                <p className="text-[14px] font-bold text-slate-800">91-93-911-911</p>
+              </div>
+            </a>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={() => navigate(`${routePrefix}/support/chat`)}
           className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-white px-5 py-5 shadow-sm"
         >
           <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
               <MessageCircle size={20} />
             </div>
             <div className="text-left">
@@ -43,7 +73,7 @@ const HelpSupportOptions = () => {
           className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-white px-5 py-5 shadow-sm"
         >
           <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
               <Headset size={20} />
             </div>
             <div className="text-left">

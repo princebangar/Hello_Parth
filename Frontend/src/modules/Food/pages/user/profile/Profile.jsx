@@ -83,21 +83,23 @@ const debugLog = (...args) => { };
 const debugWarn = (...args) => { };
 const debugError = (...args) => { };
 
+// Every row uses the same calm grey chip (same as the Log out row), no per-row colours.
+const GREY_ICON = { bg: "bg-gray-100 dark:bg-gray-800", color: "text-gray-700 dark:text-gray-300" };
 const PROFILE_ICON = {
-  wallet: { bg: "bg-amber-50 dark:bg-amber-950/30", color: "text-amber-600 dark:text-amber-400" },
-  coupons: { bg: "bg-rose-50 dark:bg-rose-950/30", color: "text-rose-600 dark:text-rose-400" },
-  cart: { bg: "bg-orange-50 dark:bg-orange-950/30", color: "text-orange-600 dark:text-orange-400" },
-  addresses: { bg: "bg-emerald-50 dark:bg-emerald-950/30", color: "text-emerald-600 dark:text-emerald-400" },
-  veg: { bg: "bg-green-50 dark:bg-green-950/30", color: "text-green-600 dark:text-green-400" },
-  appearance: { bg: "bg-violet-50 dark:bg-violet-950/30", color: "text-violet-600 dark:text-violet-400" },
-  collections: { bg: "bg-indigo-50 dark:bg-indigo-950/30", color: "text-indigo-600 dark:text-indigo-400" },
-  dining: { bg: "bg-orange-50 dark:bg-orange-950/30", color: "text-orange-600 dark:text-orange-400" },
-  orders: { bg: "bg-blue-50 dark:bg-blue-950/30", color: "text-blue-600 dark:text-blue-400" },
-  support: { bg: "bg-sky-50 dark:bg-sky-950/30", color: "text-sky-600 dark:text-sky-400" },
-  about: { bg: "bg-slate-50 dark:bg-slate-800/50", color: "text-slate-600 dark:text-slate-400" },
-  safety: { bg: "bg-red-50 dark:bg-red-950/30", color: "text-red-600 dark:text-red-400" },
-  settings: { bg: "bg-indigo-50 dark:bg-indigo-950/30", color: "text-indigo-600 dark:text-indigo-400" },
-  logout: { bg: "bg-gray-100 dark:bg-gray-800", color: "text-gray-700 dark:text-gray-300" },
+  wallet: GREY_ICON,
+  coupons: GREY_ICON,
+  cart: GREY_ICON,
+  addresses: GREY_ICON,
+  veg: GREY_ICON,
+  appearance: GREY_ICON,
+  collections: GREY_ICON,
+  dining: GREY_ICON,
+  orders: GREY_ICON,
+  support: GREY_ICON,
+  about: GREY_ICON,
+  safety: GREY_ICON,
+  settings: GREY_ICON,
+  logout: GREY_ICON,
 };
 
 function ProfileOptionIcon({ styleKey, icon: Icon }) {
