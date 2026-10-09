@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { isOfferFresh } from '@/modules/DeliveryV2/utils/offerFreshness';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '@food/api/config';
 import { deliveryAPI } from '@food/api';
@@ -704,7 +705,16 @@ export const useDeliveryNotifications = () => {
             ? availablePayload
             : [];
 
+      const newOffers = Array.isArray(availablePayload?.newOffers)
+        ? availablePayload.newOffers
+        : [];
+      const offeredKeys = new Set(newOffers.map((offer) => String(offer?._id || offer?.orderMongoId || offer?.orderId || '')));
+
       const recoverableOrder = availableOrders.find((order) => {
+        // Only an offer this rider can still take (not one they passed) and that is recent.
+        if (!offeredKeys.has(String(order?._id || order?.orderMongoId || order?.orderId || ''))) return false;
+        if (!isOfferFresh(order)) return false;
+
         const dispatchStatus = order?.dispatch?.status;
         const isEligibleStatus = ['unassigned', 'assigned'].includes(dispatchStatus) &&
           ['preparing', 'ready_for_pickup'].includes(order?.orderStatus);
@@ -723,10 +733,6 @@ export const useDeliveryNotifications = () => {
       if (availablePayload?.capacity) {
         useDeliveryStore.getState().setCapacity(availablePayload.capacity);
       }
-
-      const newOffers = Array.isArray(availablePayload?.newOffers)
-        ? availablePayload.newOffers
-        : [];
 
       newOffers.forEach((order) => useDeliveryStore.getState().addNewOrder(order));
 

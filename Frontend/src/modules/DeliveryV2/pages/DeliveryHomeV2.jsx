@@ -36,6 +36,7 @@ import { useCompanyName } from "@food/hooks/useCompanyName";
 import { useNavigate } from 'react-router-dom';
 import useNotificationInbox from "@food/hooks/useNotificationInbox";
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
+import { isOfferFresh } from '@/modules/DeliveryV2/utils/offerFreshness';
 
 /** Minimal bottom-sheet popup (Restored from legacy FeedNavbar) */
 function BottomPopup({ isOpen, onClose, title, children }) {
@@ -95,7 +96,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const [dismissedOfferKey, setDismissedOfferKey] = useState(null);
   const [offerActionBusy, setOfferActionBusy] = useState(false);
   const feedOffer = isOnline && acceptedOrders.length === 0
-    ? dedupeOrdersByIdentity(newOrders).find((order) => resolveOrderKey(order) !== dismissedOfferKey) || null
+    ? dedupeOrdersByIdentity(newOrders).find((order) => resolveOrderKey(order) !== dismissedOfferKey && isOfferFresh(order)) || null
     : null;
   const feedOfferKey = feedOffer ? resolveOrderKey(feedOffer) : null;
 

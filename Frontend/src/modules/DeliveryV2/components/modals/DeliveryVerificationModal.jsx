@@ -108,11 +108,11 @@ const OtpModal = ({ order, onVerified, onClose }) => {
   const isAlreadyVerified = order?.deliveryVerification?.dropOtp?.verified;
 
   return (
-    <div className="fixed inset-0 z-[9998] p-0 sm:p-4 flex items-end justify-center pointer-events-none">
+    <div className="fixed inset-x-0 top-0 bottom-[104px] z-[9998] p-0 sm:p-4 flex items-end justify-center pointer-events-none">
       <Backdrop onClose={onClose} />
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[84vh] overflow-y-auto"
+        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[calc(100dvh-132px)] overflow-y-auto"
       >
         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
         <div className="flex justify-between items-center mb-6">
@@ -243,11 +243,11 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
 
   return (
     <>
-      <div className="fixed inset-0 z-[9998] p-0 sm:p-4 flex items-end justify-center pointer-events-none">
+      <div className="fixed inset-x-0 top-0 bottom-[104px] z-[9998] p-0 sm:p-4 flex items-end justify-center pointer-events-none">
         <Backdrop onClose={onClose} />
         <motion.div
           initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-          className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[84vh] overflow-y-auto"
+          className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[calc(100dvh-132px)] overflow-y-auto"
         >
           <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
           <div className="flex justify-between items-center mb-6">
@@ -432,12 +432,12 @@ export const DeliveryVerificationModal = ({ order, onComplete, onClose }) => {
         />
       )}
       {step === 'complete' && (
-        <div className="fixed inset-0 z-[9998] p-0 sm:p-4 flex items-end justify-center pointer-events-none">
+        <div className="fixed inset-x-0 top-0 bottom-[104px] z-[9998] p-0 sm:p-4 flex items-end justify-center pointer-events-none">
           <Backdrop onClose={onClose || (() => { })} />
           <motion.div
             key="complete-modal"
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[84vh] overflow-y-auto"
+            className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.3)] p-4 sm:p-6 pb-6 sm:pb-12 pointer-events-auto max-h-[calc(100dvh-132px)] overflow-y-auto"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
             <div className="flex items-center gap-3 mb-8">

@@ -9,6 +9,7 @@ import { dayKey, fetchOrders, inr2, isCancelled, isCompleted, isNew } from "./de
 import DiningBookings, { usePendingBookingCount } from "./DiningBookings"
 import { Modal } from "./kit"
 import { Card, Empty, PageHeader, PrepStepper, Spinner, StatusBadge, btn, timeAgo } from "./ui"
+import { LiveDishBanner } from "@food/components/restaurant/LiveDishNotice"
 
 // Orders that are finished (these move to Full History, exactly like the phone "All orders" list).
 const isFinished = (o) => isCompleted(o) || isCancelled(o) || /refund|reject/.test(String(o.status))
@@ -509,6 +510,8 @@ export default function DesktopOrders() {
           )
         }
       />
+
+      <LiveDishBanner className="mb-4" />
 
       {pendingDining && (
         <div className="mb-4 flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">

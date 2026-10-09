@@ -31,6 +31,7 @@ import {
   isNew,
 } from "./desktopData"
 import { BRAND, Card, Empty, Kpi, PageHeader, Spinner, StatusBadge, btn, timeAgo } from "./ui"
+import { LiveDishBanner, LiveDishPopup } from "@food/components/restaurant/LiveDishNotice"
 
 const PIE = [BRAND, "#2563eb", "#f59e0b", "#10b981", "#8b5cf6"]
 const BASE = "/food/restaurant"
@@ -120,6 +121,9 @@ export default function DesktopDashboard() {
           </button>
         }
       />
+
+      <LiveDishPopup />
+      <LiveDishBanner className="mb-4" />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <Kpi label="Today's orders" value={stats.todayOrders} hint={`${stats.completed} completed · ${stats.cancelled} cancelled`} icon={ShoppingBag} tone="rose" />

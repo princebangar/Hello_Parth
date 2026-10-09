@@ -390,9 +390,16 @@ export async function tryAutoAssign(orderId, options = {}) {
       
       // If we ran out of new eligible partners, we might want to re-offer to everyone (Phase 2 style)
       const io = getIO();
-      if (io && partners.length > 0) {
+      // Never ring a rider again for an order they already passed on.
+      const passedIds = new Set(
+        (order.dispatch?.offeredTo || [])
+          .filter((o) => o.action === 'rejected')
+          .map((o) => o.partnerId.toString()),
+      );
+      const reofferPartners = partners.filter((p) => !passedIds.has(String(p.partnerId || p._id || '')));
+      if (io && reofferPartners.length > 0) {
         const payload = buildDeliverySocketPayload(order, order.restaurantId);
-        for (const p of partners) {
+        for (const p of reofferPartners) {
           const roomName = rooms.delivery(p.partnerId);
           const eventPayload = { ...payload, pickupDistanceKm: p.distanceKm };
           io.to(roomName).emit('new_order', eventPayload);

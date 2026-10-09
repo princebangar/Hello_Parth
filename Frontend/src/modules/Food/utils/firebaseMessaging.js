@@ -794,7 +794,26 @@ async function triggerWebViewNativeNotification(payload = {}) {
   return false;
 }
 
+// Only an order alert may use the loud order ringtone in the restaurant / delivery apps. Every other push
+// (approvals, status updates, refunds, broadcasts ...) shows its notification without ringing.
+const ORDER_ALERT_PUSH_TYPES = new Set([
+  "new_order",
+  "new_order_available",
+  "order_assigned",
+  "order_pending",
+  "dining_request",
+  "new_dining_booking",
+]);
+
+function isOrderAlertPush(payload = {}) {
+  const moduleName = normalizeModuleFromPath();
+  if (moduleName !== "restaurant" && moduleName !== "delivery") return true;
+  const type = String(payload?.data?.type || payload?.type || "").toLowerCase();
+  return ORDER_ALERT_PUSH_TYPES.has(type);
+}
+
 async function playPushSound(payload = {}) {
+  if (!isOrderAlertPush(payload)) return;
   try {
     pushDebugLog(PUSH_DEBUG_PREFIX, "playPushSound called", {
       notificationKey: getNotificationKey(payload),

@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner";
 import BottomNavOrders from "@food/components/restaurant/BottomNavOrders";
 import RestaurantNavbar from "@food/components/restaurant/RestaurantNavbar";
+import { LiveDishBanner, LiveDishPopup } from "@food/components/restaurant/LiveDishNotice";
 import { hardNavigate } from '@/shared/utils/nativeShell';
 const notificationSound = "/assets/media/restaurant_alert.mp3";
 import { restaurantAPI, diningAPI } from "@food/api";
@@ -2784,6 +2785,10 @@ function OrdersMainInner() {
       <div className="z-50 flex-shrink-0">
         <RestaurantNavbar showNotifications={true} hideSearch={true} />
       </div>
+
+      {/* Approved but nothing for customers to order yet: say so (banner here, popup once per session) */}
+      <LiveDishBanner className="mx-4 mt-2 flex-shrink-0" />
+      <LiveDishPopup />
 
       {/* Top Filter Bar */}
       <div className="z-40 bg-gray-100 px-4 pb-2 flex-shrink-0">

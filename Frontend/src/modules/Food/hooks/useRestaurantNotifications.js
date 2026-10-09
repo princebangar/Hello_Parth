@@ -123,6 +123,7 @@ const stopWebViewNativeNotification = async () => {
 // --------------------------------------------------------------------------
 // GLOBAL SINGLETON STATE (Shared across all component hook instances)
 // --------------------------------------------------------------------------
+let globalNativeRingCleared = false;
 let globalIsMuted = false;
 if (typeof window !== 'undefined') {
   globalIsMuted = localStorage.getItem('restaurant_notifications_muted') === 'true';
@@ -803,7 +804,9 @@ export const useRestaurantNotifications = () => {
             if (o.scheduledAt) {
               const scheduledTime = new Date(o.scheduledAt).getTime();
               const now = Date.now();
-              return scheduledTime <= now + 30 * 60000;
+              // Rings from 30 min before the slot until 30 min after it; a long-past scheduled order that was never
+              // accepted must not ring every time the app is opened.
+              return scheduledTime <= now + 30 * 60000 && scheduledTime >= now - 30 * 60000;
             }
             
             // Ignore stale test/bugged orders older than 30 minutes to prevent sound playing repeatedly on login
@@ -829,6 +832,12 @@ export const useRestaurantNotifications = () => {
             }
           });
         } else {
+          // Nothing is waiting for the restaurant: once per app session tell the native shell to stop any order
+          // ringtone left over from an earlier order, so opening the app never starts a ring on its own.
+          if (!globalNativeRingCleared) {
+            globalNativeRingCleared = true;
+            void stopWebViewNativeNotification();
+          }
           // If there are NO pending orders, ensure we clear any stale active order that might be playing sound
           if (globalActiveOrder) {
             globalActiveOrder = null;
