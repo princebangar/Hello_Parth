@@ -1134,7 +1134,6 @@ const SelectVehicle = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const queryVehicleType = searchParams.get('vehicleType') || '';
-  const localVehicleType = typeof window !== 'undefined' ? (window.localStorage.getItem('selectedVehicleType') || '') : '';
   const routeState = location.state || {};
   const [vehicles, setVehicles] = useState([]);
   const [availabilityByVehicleId, setAvailabilityByVehicleId] = useState({});
@@ -1358,7 +1357,9 @@ const SelectVehicle = () => {
           return;
         }
 
-        const categoryFilter = String(queryVehicleType || routeState?.selectedCategory || localVehicleType || '').trim().toLowerCase();
+        // Only the category of this booking (URL / route state). A leftover localStorage value from an
+        // earlier tile tap must not filter the list, or the other vehicle types vanish.
+        const categoryFilter = String(queryVehicleType || routeState?.selectedCategory || '').trim().toLowerCase();
         let nextVehicles = getVehicleTypes(response)
           .filter((type) => {
             const isActive = type.active !== false && Number(type.status ?? 1) !== 0;
@@ -1401,7 +1402,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, [isResolvingServiceLocation, queryVehicleType, routeState?.selectedCategory, localVehicleType, resolvedZoneId, resolvedServiceLocationId, routeState.transportType, routeState.transport_type, routeState.serviceType, hasCompleteRouteZoneContext]);
+  }, [isResolvingServiceLocation, queryVehicleType, routeState?.selectedCategory, resolvedZoneId, resolvedServiceLocationId, routeState.transportType, routeState.transport_type, routeState.serviceType, hasCompleteRouteZoneContext]);
 
   useEffect(() => {
     let active = true;
