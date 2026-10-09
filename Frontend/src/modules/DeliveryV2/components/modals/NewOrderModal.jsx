@@ -135,14 +135,14 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-1000 bg-black/60 flex items-end justify-center p-0"
+      className="fixed inset-0 z-[10000] bg-black/60 flex items-end justify-center p-0"
     >
       <motion.div 
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[3rem] overflow-hidden shadow-[0_-20px_60px_rgba(0,0,0,0.5)] flex flex-col pt-1 sm:pt-2"
+        className="w-full max-w-md sm:max-w-lg bg-white rounded-t-3xl sm:rounded-t-[3rem] overflow-hidden shadow-[0_-20px_60px_rgba(0,0,0,0.5)] flex flex-col pt-1 sm:pt-2 max-h-[92dvh]"
       >
         {/* Handle / Minimize */}
         <div className="w-full flex justify-center pb-1.5 pt-1 bg-white relative z-10 rounded-t-3xl sm:rounded-t-[3rem] -mb-1">
@@ -153,14 +153,14 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
 
         {/* Header Ribbon (Old Green Style) */}
         <div 
-          className="p-4 sm:p-8 flex justify-between items-center text-white border-b border-white/10"
+          className="px-4 py-2.5 sm:p-8 shrink-0 flex justify-between items-center text-white border-b border-white/10"
           style={{ background: 'linear-gradient(33deg, #15498b 0%, #000000 100%)' }}
         >
-          <div>
-            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1">
+          <div className="min-w-0">
+            <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-0.5 truncate">
               Incoming Request{displayOrderId ? ` · #${displayOrderId}` : ''}
             </p>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-tighter">₹{Number(earnings || 0).toFixed(2)}</h2>
+            <h2 className="text-xl sm:text-4xl font-bold tracking-tighter">₹{Number(earnings || 0).toFixed(2)}</h2>
           </div>
           {onToggleMute && (
             <button
@@ -182,28 +182,28 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
         </div>
 
         {/* Info Body */}
-        <div className="p-4 sm:p-8 pb-6 sm:pb-12 space-y-5 sm:space-y-10 overflow-y-auto max-h-[78vh]">
+        <div className="px-4 pt-3 pb-2 sm:p-8 sm:pb-4 space-y-3 sm:space-y-8 overflow-y-auto min-h-0 flex-1">
           <div className="flex gap-3 sm:gap-6">
-            <div className="flex flex-col items-center gap-1.5 mt-2 py-1">
-              <div className="w-5 h-5 rounded-full bg-green-500 border-4 border-green-50 shadow-lg shadow-green-500/20" />
-              <div className="w-0.5 h-16 bg-dashed border-l-2 border-gray-100" />
-              <div className="w-5 h-5 rounded-full bg-blue-500 border-4 border-blue-50 shadow-lg shadow-blue-500/20" />
+            <div className="flex flex-col items-center gap-1 mt-1.5 py-1">
+              <div className="w-4 h-4 rounded-full bg-green-500 border-[3px] border-green-50 shadow-lg shadow-green-500/20" />
+              <div className="w-0.5 flex-1 min-h-8 bg-dashed border-l-2 border-gray-100" />
+              <div className="w-4 h-4 rounded-full bg-blue-500 border-[3px] border-blue-50 shadow-lg shadow-blue-500/20" />
             </div>
-            <div className="flex-1 space-y-5 sm:space-y-10">
+            <div className="flex-1 min-w-0 space-y-3 sm:space-y-8">
               <div className="flex justify-between items-start">
                 <div className="min-w-0 flex-1 pr-2">
-                  <div className="flex items-center gap-2 mb-2 font-bold text-[10px] uppercase tracking-widest text-green-600">
+                  <div className="flex items-center gap-2 mb-1 font-bold text-[10px] uppercase tracking-widest text-green-600">
                     <ChefHat className="w-4 h-4" />
                     <span>Restaurant Pickup</span>
                   </div>
-                  <p className="text-gray-950 font-bold text-base sm:text-xl leading-tight">{restaurantName}</p>
-                  <p className="text-gray-500 text-sm font-medium leading-relaxed">{restaurantAddress}</p>
+                  <p className="text-gray-950 font-bold text-sm sm:text-xl leading-tight line-clamp-2 break-words">{restaurantName}</p>
+                  <p className="text-gray-500 text-xs sm:text-sm font-medium leading-snug line-clamp-2 break-words">{restaurantAddress}</p>
                 </div>
                 <div className="flex gap-2 shrink-0 mt-1">
                   <button
                     type="button"
                     onClick={handleCallRestaurant}
-                    className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
+                    className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
                     aria-label="Call restaurant"
                   >
                     <Phone className="w-5 h-5" />
@@ -211,7 +211,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
                   <button
                     type="button"
                     onClick={handleNavigateToRestaurant}
-                    className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+                    className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
                     aria-label="Navigate to restaurant"
                   >
                     <Navigation className="w-5 h-5" />
@@ -221,19 +221,19 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
 
               <div className="flex justify-between items-start">
                 <div className="min-w-0 flex-1 pr-2">
-                  <div className="flex items-center gap-2 mb-2 font-bold text-[10px] uppercase tracking-widest text-blue-600">
+                  <div className="flex items-center gap-2 mb-1 font-bold text-[10px] uppercase tracking-widest text-blue-600">
                     <MapPin className="w-4 h-4" />
                     <span>Customer Drop</span>
                   </div>
-                  <p className="text-gray-950 font-bold text-base sm:text-xl leading-tight">{customerName}</p>
-                  {customerPhone ? <p className="text-gray-500 text-sm font-medium">{customerPhone}</p> : null}
-                  <p className="text-gray-500 text-sm font-medium line-clamp-2">{customerAddress}</p>
+                  <p className="text-gray-950 font-bold text-sm sm:text-xl leading-tight line-clamp-2 break-words">{customerName}</p>
+                  {customerPhone ? <p className="text-gray-500 text-xs sm:text-sm font-medium">{customerPhone}</p> : null}
+                  <p className="text-gray-500 text-xs sm:text-sm font-medium leading-snug line-clamp-2 break-words">{customerAddress}</p>
                 </div>
                 <div className="flex gap-2 shrink-0 mt-1">
                   <button
                     type="button"
                     onClick={handleCallCustomer}
-                    className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
+                    className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 active:scale-95 transition-all shadow-sm"
                     aria-label="Call customer"
                   >
                     <Phone className="w-5 h-5" />
@@ -241,7 +241,7 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
                   <button
                     type="button"
                     onClick={handleNavigateToCustomer}
-                    className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+                    className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
                     aria-label="Navigate to customer"
                   >
                     <Navigation className="w-5 h-5" />
@@ -251,33 +251,33 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
             </div>
           </div>
 
-           <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
-             <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">
-               <Clock className="w-5 h-5 text-orange-500" />
+           <div className="grid grid-cols-2 gap-2 sm:gap-4">
+             <div className="p-2.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2 sm:gap-3">
+               <Clock className="w-5 h-5 text-orange-500 shrink-0" />
                <PickupMetricsValue metrics={metrics} label="Time" unit="min" />
              </div>
-             <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">
-               <MapPin className="w-5 h-5 text-gray-400" />
+             <div className="p-2.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2 sm:gap-3">
+               <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                <PickupMetricsValue metrics={metrics} label="Distance" unit="km" />
              </div>
           </div>
+        </div>
 
-        {/* Action Area */}
-          <div className="space-y-4 sm:space-y-6 pt-1 sm:pt-2">
-            <ActionSlider 
-              label="Slide to Accept" 
-              onConfirm={() => onAccept(order)} 
-              color="bg-black"
-              successLabel="Order Accepted ✓"
-            />
+        {/* Action Area: pinned under the scrolling details so the slider is always on screen */}
+        <div className="shrink-0 px-4 sm:px-8 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-gray-100 space-y-1">
+          <ActionSlider
+            label="Slide to Accept"
+            onConfirm={() => onAccept(order)}
+            color="bg-black"
+            successLabel="Order Accepted ✓"
+          />
 
-            <button 
-              onClick={onReject}
-              className="w-full text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-500 transition-colors py-2 active:scale-95"
-            >
-              Pass this task
-            </button>
-          </div>
+          <button
+            onClick={onReject}
+            className="w-full text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-500 transition-colors py-2 active:scale-95"
+          >
+            Pass this task
+          </button>
         </div>
       </motion.div>
     </motion.div>

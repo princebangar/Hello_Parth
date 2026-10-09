@@ -41,7 +41,7 @@ import { getAppRoutePath } from '@/shared/utils/nativeShell';
 function BottomPopup({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[600] flex items-end">
+    <div className="fixed inset-0 z-[9999] flex items-end">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <motion.div
         initial={{ y: "100%" }}

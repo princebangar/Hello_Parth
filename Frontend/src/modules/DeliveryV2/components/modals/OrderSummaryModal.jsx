@@ -12,7 +12,7 @@ export const OrderSummaryModal = ({ order, onDone }) => {
   const orderRef = order?.displayOrderId || order?.orderId || '';
 
   return (
-    <div className="fixed inset-0 z-[160] overflow-y-auto bg-[#15498b]">
+    <div className="fixed inset-0 z-[9999] overflow-y-auto bg-[#15498b]">
       <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 text-center">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}

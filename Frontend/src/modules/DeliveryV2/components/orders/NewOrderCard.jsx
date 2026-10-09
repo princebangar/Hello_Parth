@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   ChefHat,
   ChevronDown,
@@ -52,6 +52,21 @@ export default function NewOrderCard({
   onToggleMute,
 }) {
   const riderLocation = useDeliveryStore((state) => state.riderLocation);
+  const cardRef = useRef(null);
+
+  // When the card opens, bring all of it (slider included) above the floating bottom bar.
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const timer = setTimeout(() => {
+      // Scroll just far enough that the card's bottom (the slider) sits above the bar; on a short
+      // phone the card's top may scroll away, but the slider must never stay under the bar.
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const overlap = rect.bottom - (window.innerHeight - 112);
+      if (overlap > 0) window.scrollBy({ top: overlap, behavior: 'smooth' });
+    }, 160);
+    return () => clearTimeout(timer);
+  }, [expanded]);
 
   const metrics = useMemo(
     () => computePickupMetrics(order, riderLocation),
@@ -166,6 +181,7 @@ export default function NewOrderCard({
 
   return (
     <div
+      ref={cardRef}
       className={`bg-white rounded-2xl border transition-all overflow-hidden ${
         expanded ? 'border-blue-200 shadow-lg shadow-blue-500/10' : 'border-gray-100 shadow-sm'
       }`}
@@ -228,22 +244,22 @@ export default function NewOrderCard({
       </div>
 
       {expanded ? (
-        <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-          <div className="flex gap-3">
-            <div className="flex flex-col items-center gap-1.5 mt-2">
-              <div className="w-4 h-4 rounded-full bg-green-500 border-4 border-green-50" />
-              <div className="w-0.5 h-12 border-l-2 border-dashed border-gray-100" />
-              <div className="w-4 h-4 rounded-full bg-blue-500 border-4 border-blue-50" />
+        <div className="px-3 pb-3 space-y-3 border-t border-gray-100 pt-3">
+          <div className="flex gap-2.5">
+            <div className="flex flex-col items-center gap-1 mt-1.5">
+              <div className="w-3.5 h-3.5 rounded-full bg-green-500 border-[3px] border-green-50" />
+              <div className="w-0.5 flex-1 min-h-6 border-l-2 border-dashed border-gray-200" />
+              <div className="w-3.5 h-3.5 rounded-full bg-blue-500 border-[3px] border-blue-50" />
             </div>
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 min-w-0 space-y-3">
               <div className="flex justify-between items-start">
                 <div className="min-w-0 flex-1 pr-2">
                   <div className="flex items-center gap-2 mb-1 text-[10px] font-bold uppercase tracking-widest text-green-600">
                     <ChefHat className="w-3.5 h-3.5" />
                     <span>Restaurant Pickup</span>
                   </div>
-                  <p className="text-gray-950 font-bold text-sm leading-tight">{restaurantName}</p>
-                  <p className="text-gray-500 text-xs">{restaurantAddress}</p>
+                  <p className="text-gray-950 font-bold text-sm leading-tight line-clamp-2 break-words">{restaurantName}</p>
+                  <p className="text-gray-500 text-xs leading-snug line-clamp-2 break-words">{restaurantAddress}</p>
                 </div>
                 <div className="flex gap-1.5 shrink-0 mt-1">
                   <button
@@ -271,9 +287,9 @@ export default function NewOrderCard({
                     <MapPin className="w-3.5 h-3.5" />
                     <span>Customer Drop</span>
                   </div>
-                  <p className="text-gray-950 font-bold text-sm leading-tight">{customerName}</p>
+                  <p className="text-gray-950 font-bold text-sm leading-tight line-clamp-2 break-words">{customerName}</p>
                   {customerPhone ? <p className="text-gray-500 text-xs">{customerPhone}</p> : null}
-                  <p className="text-gray-500 text-xs line-clamp-2">{customerAddress}</p>
+                  <p className="text-gray-500 text-xs leading-snug line-clamp-2 break-words">{customerAddress}</p>
                 </div>
                 <div className="flex gap-1.5 shrink-0 mt-1">
                   <button
@@ -298,12 +314,12 @@ export default function NewOrderCard({
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-orange-500" />
+            <div className="p-2 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-orange-500 shrink-0" />
               <PickupMetricsValue metrics={metrics} label="Time" unit="min" />
             </div>
-            <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-gray-400" />
+            <div className="p-2 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
               <PickupMetricsValue metrics={metrics} label="Distance" unit="km" />
             </div>
           </div>
@@ -325,7 +341,7 @@ export default function NewOrderCard({
           <button
             type="button"
             onClick={() => onReject?.(order)}
-            className="w-full text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-500 transition-colors py-2"
+            className="w-full text-gray-400 font-bold text-[10px] uppercase tracking-widest hover:text-red-500 transition-colors py-1.5"
           >
             Pass this task
           </button>

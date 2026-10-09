@@ -262,7 +262,7 @@ export default function BottomPopup({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={handleBackdropClick}
-              className="fixed inset-0 bg-black/50 z-100"
+              className="fixed inset-0 bg-black/50 z-[9998]"
             />
           )}
 
@@ -298,7 +298,7 @@ export default function BottomPopup({
               }
               handlePopupClick(e)
             }}
-            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-110 overflow-hidden flex flex-col"
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-[9999] overflow-hidden flex flex-col"
             style={{
               maxHeight: isCollapsed ? "120px" : maxHeight,
               touchAction: disableSwipeToClose ? 'auto' : 'none'

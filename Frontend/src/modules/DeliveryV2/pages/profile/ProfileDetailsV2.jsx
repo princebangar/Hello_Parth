@@ -940,7 +940,7 @@ export const ProfileDetailsV2 = () => {
              initial={{ opacity: 0 }}
              animate={{ opacity: 1 }}
              exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl flex flex-col items-center p-6"
+             className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex flex-col items-center p-6"
           >
              <div className="w-full flex justify-between items-center mb-10 pt-safe">
                 <h3 className="text-white text-lg font-black uppercase tracking-widest">{selectedDocument.name}</h3>

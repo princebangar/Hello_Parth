@@ -246,7 +246,7 @@ export const ProfileV2 = () => {
       {/* Logout Confirm Popup */}
       {showLogoutConfirm && (
         <div 
-          className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center px-4 backdrop-blur-sm overflow-y-auto py-10"
+          className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center px-4 backdrop-blur-sm overflow-y-auto py-10"
           onClick={() => setShowLogoutConfirm(false)}
         >
           <div 
@@ -297,7 +297,7 @@ export const ProfileV2 = () => {
 
       {/* Balance Warning Popup */}
       {showBalanceWarning && (
-        <div className="fixed inset-0 bg-black/80 z-[1000] flex items-center justify-center px-4 backdrop-blur-sm overflow-y-auto py-10">
+        <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center px-4 backdrop-blur-sm overflow-y-auto py-10">
           <div 
             className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6"
             onClick={(e) => e.stopPropagation()}
@@ -342,7 +342,7 @@ export const ProfileV2 = () => {
 
       {deleteAccountOpen && (
         <div 
-          className="fixed inset-0 z-[1000] overflow-y-auto bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] overflow-y-auto bg-black/80 backdrop-blur-sm"
         >
           <div className="flex min-h-screen items-center justify-center p-4 py-10">
             <div 

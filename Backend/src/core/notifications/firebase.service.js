@@ -240,7 +240,12 @@ const parseFirebaseError = async (response) => {
 const shouldRemoveTokenFromError = (errorJson, response) => {
     const status = response?.status;
     const message = String(errorJson?.error?.message || '').toUpperCase();
-    return status === 404 || message.includes('UNREGISTERED') || message.includes('INVALID_ARGUMENT');
+    return (
+        status === 404 ||
+        message.includes('UNREGISTERED') ||
+        message.includes('INVALID_ARGUMENT') ||
+        message.includes('NOT A VALID FCM REGISTRATION TOKEN')
+    );
 };
 
 const normalizeOwnerType = (ownerType) => {
@@ -257,8 +262,11 @@ const getTokenFieldForOwnerPlatform = (ownerType, platform) => {
     return platform === 'mobile' ? config.mobile : config.web;
 };
 
+// A login JWT is never an FCM registration token; one such value was found saved in a rider's token list.
+const looksLikeJwt = (value) => /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(value);
+
 const normalizeTokenList = (tokens = []) => {
-    const normalized = [...new Set((Array.isArray(tokens) ? tokens : [tokens]).map(sanitizeString).filter(Boolean))];
+    const normalized = [...new Set((Array.isArray(tokens) ? tokens : [tokens]).map(sanitizeString).filter((t) => t && !looksLikeJwt(t)))];
     return normalized.slice(-10);
 };
 

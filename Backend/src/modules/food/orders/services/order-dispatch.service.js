@@ -177,7 +177,12 @@ async function listNearbyOnlineDeliveryPartners(
 
   const allowedStatuses =
     process.env.NODE_ENV === 'production' ? ['approved'] : ['approved', 'pending'];
+  // A rider's GPS goes quiet as soon as the app is in the background, but push still reaches the phone.
+  // So: fresh GPS (<= 10 min) is preferred; an online rider with a push token and an older fix (up to
+  // DELIVERY_BACKGROUND_GPS_GRACE_MIN, default 3 h) is still offered the order, ranked after the fresh ones.
   const STALE_GPS_MS = 10 * 60 * 1000;
+  const BACKGROUND_GPS_GRACE_MS =
+    Math.max(0, Number(process.env.DELIVERY_BACKGROUND_GPS_GRACE_MIN ?? 180)) * 60 * 1000;
   const offerRadiusKm = Math.min(
     Math.max(Number(maxKm) || 15, 1),
     HARD_MAX_OFFER_DISTANCE_KM,
@@ -187,14 +192,19 @@ async function listNearbyOnlineDeliveryPartners(
     availabilityStatus: 'online',
     status: { $in: allowedStatuses },
   })
-    .select('_id status lastLat lastLng lastLocationAt name')
+    .select('_id status lastLat lastLng lastLocationAt name fcmTokens fcmTokenMobile')
     .lean();
 
   // Zone-first: only partners currently inside the order/restaurant zone.
   const inZonePartners = (allOnline || []).filter((p) => {
     if (p.lastLat == null || p.lastLng == null || !p.lastLocationAt) return false;
     const ageMs = Date.now() - new Date(p.lastLocationAt).getTime();
-    if (!Number.isFinite(ageMs) || ageMs > STALE_GPS_MS) return false;
+    if (!Number.isFinite(ageMs)) return false;
+    const hasPushToken =
+      (Array.isArray(p.fcmTokenMobile) && p.fcmTokenMobile.length > 0) ||
+      (Array.isArray(p.fcmTokens) && p.fcmTokens.length > 0);
+    p.__stalePosition = ageMs > STALE_GPS_MS;
+    if (p.__stalePosition && !(hasPushToken && ageMs <= BACKGROUND_GPS_GRACE_MS)) return false;
     return isPartnerInsideZone(p, zoneDoc);
   });
 
@@ -207,10 +217,11 @@ async function listNearbyOnlineDeliveryPartners(
     for (const p of inZonePartners) {
       const d = haversineKm(rLat, rLng, p.lastLat, p.lastLng);
       if (Number.isFinite(d) && d <= offerRadiusKm) {
-        scored.push({ partnerId: p._id, distanceKm: d, status: p.status });
+        scored.push({ partnerId: p._id, distanceKm: d, status: p.status, stalePosition: Boolean(p.__stalePosition) });
       }
     }
-    scored.sort((a, b) => a.distanceKm - b.distanceKm);
+    // Riders with a live position first, then background riders; nearest first inside each group.
+    scored.sort((a, b) => (Number(a.stalePosition) - Number(b.stalePosition)) || (a.distanceKm - b.distanceKm));
   } else {
     // No restaurant GPS — refuse dispatch rather than guessing city-wide.
     logger.warn(
@@ -432,10 +443,15 @@ export async function tryAutoAssign(orderId, options = {}) {
         }
       }
 
-      if (lead) {
+    }
+
+    // Push every rider that was offered this order (the socket only reaches an app that is open).
+    const pushTargets = isPhase2 ? eligible : phase1Batch;
+    await Promise.all(
+      pushTargets.map(async (p) => {
         try {
           await notifyOwnerSafely(
-            { ownerType: 'DELIVERY_PARTNER', ownerId: lead.partnerId },
+            { ownerType: 'DELIVERY_PARTNER', ownerId: p.partnerId },
             {
               title: 'New order assigned!',
               body: `You have 60 seconds to accept Order #${order.order_id || order._id}.`,
@@ -447,10 +463,10 @@ export async function tryAutoAssign(orderId, options = {}) {
             },
           );
         } catch (err) {
-          logger.warn(`Push notification failed for partner ${lead.partnerId}: ${err.message}`);
+          logger.warn(`Push notification failed for partner ${p.partnerId}: ${err.message}`);
         }
-      }
-    }
+      }),
+    );
 
     const partnersToRecord = isPhase2 ? eligible : phase1Batch;
     const offeredToEntries = partnersToRecord.map(p => ({

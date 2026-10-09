@@ -397,7 +397,7 @@ export const HistoryV2 = () => {
        {/* Bonus Drawer (The Gift Modal) */}
        <AnimatePresence>
           {showBonusModal && (
-             <div className="fixed inset-0 z-[1000] flex items-end">
+             <div className="fixed inset-0 z-[9999] flex items-end">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBonusModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
                 <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="relative w-full bg-white rounded-t-[2.5rem] p-8 max-h-[85vh] flex flex-col shadow-2xl">
                    <div className="w-12 h-1 bg-gray-100 rounded-full mx-auto mb-8 shrink-0" />

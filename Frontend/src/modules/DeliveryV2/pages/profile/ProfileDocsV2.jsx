@@ -141,7 +141,7 @@ export const ProfileDocsV2 = () => {
        {/* Simple Modal Image Viewer */}
        <AnimatePresence>
           {showViewer && (
-             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+             <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowViewer(null)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
                 <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-lg bg-white rounded-3xl overflow-hidden shadow-2xl">
                    <div className="flex items-center justify-between p-6 border-b border-gray-100">
