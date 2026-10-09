@@ -700,7 +700,16 @@ const ServiceGrid = ({
                   if (clickRoute === "ALL_SERVICES_MODAL" || isAllServices) {
                     setShowAllModal(true);
                   } else if (clickRoute) {
-                    navigate(clickRoute);
+                    // Hand the tile's vehicle category to Select Vehicle through the route itself (Home does the same).
+                    const tileTitle = String(item.title || '').toLowerCase();
+                    const tileCategory = /bike|moto/.test(tileTitle) ? 'bike'
+                      : /auto/.test(tileTitle) ? 'auto'
+                        : /cab|taxi|car/.test(tileTitle) ? 'cab' : '';
+                    if (tileCategory && clickRoute.includes('/ride/select-location')) {
+                      navigate(`${clickRoute}?vehicleType=${tileCategory}`, { state: { selectedCategory: tileCategory } });
+                    } else {
+                      navigate(clickRoute);
+                    }
                   } else {
                     const fallbackRoute = isParcel ? '/taxi/user/parcel/type' : '/taxi/user/ride/select-location';
                     const isSelectLocationRoute = fallbackRoute.includes('/ride/select-location');
