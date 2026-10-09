@@ -15,6 +15,7 @@ import {
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
 import { toast } from "sonner"
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => console.error("[ZoneSetup]", ...args)
@@ -294,11 +295,7 @@ export default function ZoneSetup() {
       // Load (or reload) Google Maps with the Places library via Loader.
       if (apiKey) {
         debugLog("?? Loading Google Maps with Places library via Loader...")
-        const loader = new Loader({
-          apiKey: apiKey,
-          version: "weekly",
-          libraries: ["places"]
-        })
+        const loader = new Loader(getLoaderOptions(apiKey))
 
         const google = await loader.load()
         debugLog("? Google Maps loaded via Loader, initializing map...")
@@ -311,7 +308,7 @@ export default function ZoneSetup() {
     } catch (error) {
       debugError("? Error loading Google Maps:", error)
       setMapLoading(false)
-      alert(`Failed to load Google Maps: ${error.message}. Please refresh the page or contact administrator.`)
+      alert("Failed to load Google Maps. Please refresh the page or contact administrator.")
     }
   }
 

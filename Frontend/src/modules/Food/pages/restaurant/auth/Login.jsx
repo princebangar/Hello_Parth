@@ -513,7 +513,7 @@ export default function RestaurantLogin() {
       setOtpError("")
       hasSubmittedRef.current = false
       setTimeout(() => inputRefs.current[0]?.focus(), 50)
-      toast.success("OTP resent successfully.")
+      toast.success("OTP resent successfully.", { duration: 3000 })
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to resend code")
     } finally {

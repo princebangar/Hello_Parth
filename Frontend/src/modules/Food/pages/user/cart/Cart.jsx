@@ -1469,10 +1469,7 @@ export default function Cart() {
     }
 
     const shared = await tryNativeShare(payload)
-    if (shared) {
-      toast.success("Link shared successfully")
-      return
-    }
+    if (shared) return
 
     openShareModal(payload)
   }
@@ -1559,7 +1556,6 @@ export default function Cart() {
     const shared = await tryNativeShare(sharePayload)
     if (shared) {
       setShowShareModal(false)
-      toast.success("Shared successfully")
     }
   }
 
@@ -2170,7 +2166,6 @@ export default function Cart() {
         debugLog("? Cash order created successfully:", orderResponse.data)
         const { order } = orderResponse.data.data
 
-        toast.success("Order placed with Cash on Delivery")
         setPlacedOrderId(order?._id || order?.orderId || order?.id || null)
         setPlacedOrderObj(order)
         setShowOrderSuccess(true)
@@ -2193,7 +2188,6 @@ export default function Cart() {
         debugLog("? Wallet order created successfully:", orderResponse.data)
         const { order } = orderResponse.data.data
 
-        toast.success("Order placed with Wallet payment")
         setPlacedOrderId(order?._id || order?.orderId || order?.id || null)
         setPlacedOrderObj(order)
         setShowOrderSuccess(true)

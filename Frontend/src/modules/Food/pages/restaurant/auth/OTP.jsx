@@ -354,7 +354,7 @@ export default function RestaurantOTP() {
       setTimeout(() => inputRefs.current?.[0]?.focus?.(), 50)
       setResendTimer(59)
       sessionStorage.setItem(getResendKey(), (Date.now() + (59 * 1000)).toString())
-      toast.success("OTP resent successfully.")
+      toast.success("OTP resent successfully.", { duration: 3000 })
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to resend code")
     } finally {

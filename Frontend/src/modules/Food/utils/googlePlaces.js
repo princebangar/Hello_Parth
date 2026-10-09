@@ -2,6 +2,7 @@ import { getGoogleMapsApiKey } from "./googleMapsApiKey"
 import { geocodeGooglePlaceId } from "./googleGeocoding"
 import { Loader } from "@googlemaps/js-api-loader"
 import { geocodeAPI } from "@food/api"
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 
 let mapsLoadPromise = null
 let autocompleteService = null
@@ -25,11 +26,7 @@ export async function ensureGoogleMapsPlacesLoaded() {
       const apiKey = await getGoogleMapsApiKey()
       if (!apiKey) throw new Error("Google Maps API key is not configured")
 
-      const loader = new Loader({
-        apiKey,
-        version: "weekly",
-        libraries: ["places"],
-      })
+      const loader = new Loader(getLoaderOptions(apiKey))
 
       const google = await loader.load()
       autocompleteService = new google.maps.places.AutocompleteService()

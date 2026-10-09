@@ -6,6 +6,7 @@ import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
 import { subscribeAllDeliveryLocations } from "@food/realtimeTracking"
 import bikeLogo from "@food/assets/bikelogo.png"
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -188,11 +189,7 @@ export default function DeliveryBoyViewMap() {
       }
 
       if (apiKey) {
-        const loader = new Loader({
-          apiKey: apiKey,
-          version: "weekly",
-          libraries: ["places", "drawing", "geometry"]
-        })
+        const loader = new Loader(getLoaderOptions(apiKey))
 
         const google = await loader.load()
         initializeMap(google)

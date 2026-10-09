@@ -10,6 +10,7 @@ import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
 import { locationAPI, userAPI } from "@food/api"
 import { Loader } from '@googlemaps/js-api-loader'
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -456,10 +457,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
     const initializeGoogleMap = async () => {
       try {
-        const loader = new Loader({
-          apiKey: GOOGLE_MAPS_API_KEY,
-          version: "weekly"
-        })
+        const loader = new Loader(getLoaderOptions(GOOGLE_MAPS_API_KEY))
 
         const google = await loader.load()
 

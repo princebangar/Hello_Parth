@@ -9,6 +9,7 @@ import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { reverseGeocodeWithGoogle } from "@food/utils/googleGeocoding"
 import { formatLocationPreview } from "@food/utils/googlePlaces"
 import { Loader } from "@googlemaps/js-api-loader"
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 
 const debugError = (...args) => console.error("[EditRestaurantAddress]", ...args)
 
@@ -293,11 +294,7 @@ export default function EditRestaurantAddress() {
           return
         }
 
-        const loader = new Loader({
-          apiKey,
-          version: "weekly",
-          libraries: ["places"],
-        })
+        const loader = new Loader(getLoaderOptions(apiKey))
 
         const google = await loader.load()
         initializeMap(google, centerLat, centerLng)

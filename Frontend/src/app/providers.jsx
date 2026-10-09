@@ -1,5 +1,6 @@
 import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import '@/shared/utils/toastGuard'
 import { StrictMode } from 'react'
 import { Provider as ReduxProvider } from 'react-redux'
 import { store } from './store'
@@ -28,7 +29,7 @@ export function AppProviders({ children }) {
       <ReduxProvider store={store}>
         <Router unstable_useTransitions={false}>
           <AppErrorBoundary>{children}</AppErrorBoundary>
-          <Toaster position="top-center" richColors offset="80px" closeButton />
+          <Toaster position="top-center" richColors offset="80px" closeButton visibleToasts={1} />
         </Router>
       </ReduxProvider>
     </StrictMode>

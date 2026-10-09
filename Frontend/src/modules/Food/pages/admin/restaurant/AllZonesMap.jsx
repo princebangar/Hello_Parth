@@ -4,6 +4,7 @@ import { MapPin, ArrowLeft, Search } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { Loader } from "@googlemaps/js-api-loader"
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -127,11 +128,7 @@ export default function AllZonesMap() {
 
       // If Google Maps is not loaded yet and we have an API key, use Loader as fallback
       if (apiKey) {
-        const loader = new Loader({
-          apiKey: apiKey,
-          version: "weekly",
-          libraries: ["places", "drawing", "geometry"]
-        })
+        const loader = new Loader(getLoaderOptions(apiKey))
 
         const google = await loader.load()
         initializeMap(google)

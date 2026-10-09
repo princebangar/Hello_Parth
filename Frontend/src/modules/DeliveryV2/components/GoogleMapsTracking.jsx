@@ -1,6 +1,7 @@
 import { useCallback, useRef, useEffect, useState } from 'react'
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api'
 import { motion } from 'framer-motion'
+import { getJsApiLoaderOptions } from '@/shared/utils/googleMapsConfig'
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -99,12 +100,7 @@ export default function GoogleMapsTracking({
     }
   }, [routeInfo, onRouteInfoUpdate]);
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: apiKey || '',
-    // Do not load `places` — it pulls Geocoding-related code paths; Directions is in core Maps JS.
-    libraries: MAP_LIBRARIES,
-  })
+  const { isLoaded, loadError } = useJsApiLoader(getJsApiLoaderOptions(apiKey || ''))
 
   // Combine storeLocation with sellerLocations
   const allSellers = storeLocation ? [storeLocation, ...sellerLocations] : sellerLocations;

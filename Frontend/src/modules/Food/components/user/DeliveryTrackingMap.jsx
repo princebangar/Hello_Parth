@@ -12,6 +12,7 @@ import bikeLogo from '@food/assets/bikelogo.png';
 import { subscribeOrderTracking } from '@food/realtimeTracking';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navigation } from 'lucide-react';
+import { getJsApiLoaderOptions } from '@/shared/utils/googleMapsConfig'
 
 const MAP_LIBRARIES = Object.freeze(['geometry', 'places']);
 
@@ -110,10 +111,7 @@ const DeliveryTrackingMap = ({
   const lastSmoothSetRef = useRef(0);
   const baselineRequestedRef = useRef(false);
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: MAP_LIBRARIES,
-  });
+  const { isLoaded, loadError } = useJsApiLoader(getJsApiLoaderOptions());
 
   if (loadError) {
     return (

@@ -61,7 +61,7 @@ export const ProfileV2 = () => {
           setProfile(response.data.data.profile)
         }
       } catch (error) {
-        toast.error("Failed to load profile data")
+        showUserFacingApiError(error, "Failed to load profile data")
       } finally {
         setLoading(false)
       }

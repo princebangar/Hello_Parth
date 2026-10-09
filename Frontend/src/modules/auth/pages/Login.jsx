@@ -264,7 +264,7 @@ export default function UnifiedOTPFastLogin() {
       setOtp("")
       goToStep(2)
       setResendTimer(RESEND_COOLDOWN_SECONDS)
-      toast.success("OTP sent! Check your phone.")
+      toast.success("OTP sent! Check your phone.", { duration: 3000 })
     } catch (err) {
       console.log("[Auth] OTP send error:", err?.response?.data || err)
       const msg = err?.response?.data?.message || err?.message || "Failed to send OTP."
@@ -291,7 +291,7 @@ export default function UnifiedOTPFastLogin() {
       setOtpSent(true)
       setResendTimer(RESEND_COOLDOWN_SECONDS)
       document.getElementById("otp-0")?.focus()
-      toast.success("OTP resent successfully.")
+      toast.success("OTP resent successfully.", { duration: 3000 })
     } catch (err) {
       console.log("[Auth] OTP resend error:", err?.response?.data || err)
       const msg = err?.response?.data?.message || err?.message || "Failed to resend OTP."
@@ -389,7 +389,6 @@ export default function UnifiedOTPFastLogin() {
         setName("")
         // Replace the OTP entry: back from "enter name" returns to the phone screen.
         goToStep(3, { replace: true })
-        toast.success("OTP verified. Complete your profile to continue.")
         return
       }
 

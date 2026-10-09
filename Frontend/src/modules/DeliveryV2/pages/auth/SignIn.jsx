@@ -551,7 +551,7 @@ export default function DeliverySignIn() {
       setNameError("")
       setVerifiedOtp("")
       inputRefs.current[0]?.focus()
-      toast.success("OTP resent successfully.")
+      toast.success("OTP resent successfully.", { duration: 3000 })
     } catch (err) {
       const message = getUserFacingApiError(err, "Failed to resend OTP. Please try again.")
 

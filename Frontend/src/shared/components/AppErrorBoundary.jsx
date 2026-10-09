@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { isChunkLoadError, reloadForNewVersion } from '@/shared/utils/chunkReload'
 import { hardNavigate } from '@/shared/utils/nativeShell'
+import { safeErrorText } from '@/shared/utils/redactSecrets'
 
 /**
  * Last line of defence. Without one, any error while a screen renders removes the whole app and leaves a blank page.
@@ -37,7 +38,7 @@ export default class AppErrorBoundary extends Component {
         >
           Go to home
         </button>
-        <code style={{ marginTop: 16, maxWidth: '100%', fontSize: 11, opacity: 0.5, wordBreak: 'break-word' }}>{String(error?.message || error).slice(0, 200)}</code>
+        <code style={{ marginTop: 16, maxWidth: '100%', fontSize: 11, opacity: 0.5, wordBreak: 'break-word' }}>{safeErrorText(error)}</code>
       </div>
     )
   }

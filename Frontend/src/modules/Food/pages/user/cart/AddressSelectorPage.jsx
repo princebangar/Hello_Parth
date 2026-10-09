@@ -19,6 +19,7 @@ import { Loader } from '@googlemaps/js-api-loader'
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import useAppBackNavigation from "@food/hooks/useAppBackNavigation"
 import { reverseGeocodeWithGoogle, geocodeGooglePlaceId, getFreshGpsCoordinates } from "@food/utils/googleGeocoding"
+import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
 
 const MAP_SEARCH_INPUT_CLASS =
   "pl-12 pr-10 h-14 bg-white dark:bg-[#1a1a1a] border-2 border-zinc-200/90 dark:border-zinc-700 rounded-2xl focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-zinc-400 dark:focus:border-zinc-500 text-zinc-900 dark:text-zinc-50 placeholder:!text-neutral-400 dark:placeholder:!text-neutral-500 font-medium text-sm transition-all shadow-sm w-full"
@@ -241,7 +242,7 @@ export default function AddressSelectorPage() {
         if (cancelled || !key) return
         setGOOGLE_MAPS_API_KEY(key)
         try {
-          const loader = new Loader({ apiKey: key, version: "weekly", libraries: ["places"] })
+          const loader = new Loader(getLoaderOptions(key))
           const google = await loader.load()
           if (cancelled) return
           googleMapsRef.current = google
@@ -382,7 +383,7 @@ export default function AddressSelectorPage() {
           return
         }
 
-        const loader = new Loader({ apiKey: GOOGLE_MAPS_API_KEY, version: "weekly", libraries: ["places"] })
+        const loader = new Loader(getLoaderOptions(GOOGLE_MAPS_API_KEY))
         const google = await loader.load()
         if (!isMounted || !mapContainerRef.current) return
         googleMapsRef.current = google

@@ -471,7 +471,6 @@ export default function Orders() {
     const shared = await tryNativeShare(sharePayload)
     if (shared) {
       setShowShareModal(false)
-      toast.success("Shared successfully")
     }
   }
 
@@ -500,10 +499,7 @@ Order again from this restaurant in the ${companyName} app.`
     try {
       const shared = await tryNativeShare(payload)
       if (shared === "cancelled") return
-      if (shared) {
-        toast.success("Restaurant shared successfully")
-        return
-      }
+      if (shared) return
 
       openShareModal(payload)
     } catch (error) {
