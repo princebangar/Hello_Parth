@@ -16,6 +16,7 @@ import {
 import AuthShell from '../../components/auth/AuthShell';
 import { prefetchPolicyContentWhenIdle } from '@/shared/utils/policyPages';
 import RolePicker from '../../components/auth/RolePicker';
+import { usePhoneFocusRequest } from '@/shared/utils/loginFocus';
 import {
   DEFAULT_DRIVER_ROLE,
   getDriverRole,
@@ -42,6 +43,8 @@ const PhoneRegistration = () => {
 
   // Terms / Privacy / Support load in the background so tapping one opens it straight away.
   useEffect(() => prefetchPolicyContentWhenIdle('driver'), []);
+  // back from the code screen with "Change number": cursor into the number box (never on a plain visit / after logout)
+  usePhoneFocusRequest(() => document.getElementById('partner-phone'), true);
 
   const storedSession = getStoredDriverRegistrationSession();
   const isOwnerPortal = location.pathname.startsWith('/taxi/owner');

@@ -21,6 +21,7 @@ import { collectFcmTokenFast, persistModuleFcmToken } from "@food/utils/firebase
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { prefetchPolicyContentWhenIdle } from "@/shared/utils/policyPages"
 import { hardNavigate } from '@/shared/utils/nativeShell'
+import { requestPhoneFocus, usePhoneFocusRequest } from '@/shared/utils/loginFocus'
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -40,6 +41,8 @@ export default function RestaurantLogin() {
 
   // Step 1 States
   const phoneInputRef = useRef(null)
+  // cursor into the number box only when coming back with the pencil (not after a logout / plain visit)
+  usePhoneFocusRequest(() => phoneInputRef.current, !isOtpStep)
 
   // Never prefill a number (the old dev "default test phone" leaked into
   // builds). Only what the restaurant typed is kept — saved on every change so
@@ -677,7 +680,10 @@ export default function RestaurantLogin() {
                 <div className="text-[13px] text-slate-500/90 dark:text-slate-400/90 font-['Outfit'] font-semibold tracking-[0.015em] leading-relaxed max-w-[300px] text-center mt-2 flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <span>We've sent a code to {contactInfo}</span>
                   <button
-                    onClick={() => navigate("/food/restaurant/login")}
+                    onClick={() => {
+                      requestPhoneFocus()
+                      navigate("/food/restaurant/login")
+                    }}
                     className="p-1.5 ml-1 bg-gradient-to-r from-[#B80B3D] to-[#66001D] hover:from-[#90082E] hover:to-[#4A0014] rounded-[10px] text-white shadow-md shadow-[#B80B3D]/20 transition-all hover:scale-105 active:scale-95"
                     aria-label="Edit phone number"
                   >
@@ -712,7 +718,6 @@ export default function RestaurantLogin() {
                       ref={phoneInputRef}
                       type="tel"
                       required
-                      autoFocus
                       onFocus={handleInputFocusScroll}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}

@@ -8,6 +8,7 @@ import { setAuthData as storeAuthData } from "@food/utils/auth"
 import { collectFcmTokenFast, persistModuleFcmToken, finalizeDeliveryPendingSubmission, prefetchModuleFcmToken } from "@food/utils/firebaseMessaging"
 import { getUserFacingApiError, showUserFacingApiError } from "@/shared/utils/apiError"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
+import { requestPhoneFocus } from '@/shared/utils/loginFocus'
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -543,7 +544,10 @@ export default function DeliveryOTP() {
               <div className="text-[13px] text-slate-500/90 dark:text-slate-400/90 font-['Outfit'] font-semibold tracking-[0.015em] leading-relaxed w-full max-w-none text-center px-4 mt-5 flex items-center justify-center gap-1.5 whitespace-nowrap">
                 <span>We've sent a code to {getPhoneNumber()}</span>
                 <button
-                  onClick={() => navigate("/food/delivery/login")}
+                  onClick={() => {
+                    requestPhoneFocus()
+                    navigate("/food/delivery/login")
+                  }}
                   className="p-1.5 ml-1 bg-gradient-to-r from-[#0E4B9C] to-[#021024] hover:from-[#1157b5] hover:to-[#041630] rounded-[10px] text-white shadow-md shadow-[#0E4B9C]/20 transition-all hover:scale-105 active:scale-95"
                   aria-label="Edit phone number"
                 >

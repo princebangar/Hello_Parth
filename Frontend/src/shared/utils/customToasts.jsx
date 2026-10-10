@@ -1,6 +1,7 @@
 import React from "react";
 import { Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { markBrandToastShown } from "./toastGuard";
 
 const WORDMARK_SIZES = {
   sm: "h-10 w-10 text-[11px]",
@@ -24,6 +25,7 @@ export const BrandToastIcon = ({ size = "lg" }) => (
 const NOTIF_TOAST_ID = "app-notification-toast";
 
 export const showNotificationToast = ({ title, message } = {}) => {
+  markBrandToastShown(6000);
   toast.dismiss(NOTIF_TOAST_ID);
   toast.custom(() => (
     <div className="w-[calc(100vw-32px)] sm:w-[380px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-3xl pointer-events-auto flex items-center gap-4 p-3.5 border border-gray-50 animate-in fade-in slide-in-from-top-4">
@@ -43,6 +45,7 @@ export const showNotificationToast = ({ title, message } = {}) => {
 };
 
 export const showHelloParthBrandedToast = ({ title, message, id = "helloparth-branded-toast", duration = 4000 } = {}) => {
+  markBrandToastShown(duration);
   toast.custom(
     () => (
       <div className="w-[calc(100vw-32px)] sm:w-[380px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-3xl pointer-events-auto flex items-center gap-4 p-3.5 border border-gray-50 animate-in fade-in slide-in-from-top-4 z-[11000]">

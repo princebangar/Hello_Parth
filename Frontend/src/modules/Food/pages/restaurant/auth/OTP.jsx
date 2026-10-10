@@ -12,6 +12,7 @@ import { checkOnboardingStatus, isRestaurantOnboardingComplete } from "@food/uti
 import { collectFcmTokenFast, persistModuleFcmToken, syncPendingPartnerFcmQuick } from "@food/utils/firebaseMessaging"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { hardNavigate } from '@/shared/utils/nativeShell'
+import { requestPhoneFocus } from '@/shared/utils/loginFocus'
 
 export default function RestaurantOTP() {
   const navigate = useNavigate()
@@ -421,7 +422,10 @@ export default function RestaurantOTP() {
             <div className="text-[13px] text-slate-500/90 dark:text-slate-400/90 font-['Outfit'] font-semibold tracking-[0.015em] leading-relaxed max-w-[300px] text-center px-4 mt-5 flex items-center justify-center gap-1.5">
               <span>We've sent a code to {contactInfo}</span>
               <button 
-                onClick={() => navigate("/food/restaurant/login")}
+                onClick={() => {
+                  requestPhoneFocus()
+                  navigate("/food/restaurant/login")
+                }}
                 className="p-1.5 ml-1 bg-gradient-to-r from-[#B80B3D] to-[#66001D] hover:from-[#90082E] hover:to-[#4A0014] rounded-[10px] text-white shadow-md shadow-[#B80B3D]/20 transition-all hover:scale-105 active:scale-95"
                 aria-label="Edit phone number"
               >

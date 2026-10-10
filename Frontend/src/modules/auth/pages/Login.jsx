@@ -7,6 +7,7 @@ import { setUnifiedAuthData, isUnifiedAuthenticated } from "@/shared/utils/modul
 import { rememberLoginReturnTo, ensureFoodGuestSession, resolveConsumerPostLoginRoute, consumeLoginReturnTo, CONSUMER_GUEST_HOME, prefetchConsumerAppsWhenIdle } from "@/shared/utils/activeModule.js"
 import { prefetchPolicyContentWhenIdle, warmPolicyPage, USER_POLICY_ENDPOINTS } from "@/shared/utils/policyPages"
 import { buildMessagingServiceWorkerUrl } from "@/shared/utils/firebaseServiceWorkerUrl"
+import { requestPhoneFocus, usePhoneFocusRequest } from '@/shared/utils/loginFocus'
 
 const BRAND_RED = "#C8161D"
 
@@ -58,6 +59,7 @@ export default function UnifiedOTPFastLogin() {
     [searchParams, location.state?.referralCode],
   )
   const submitting = useRef(false)
+  const phoneInputRef = useRef(null)
 
   // Each step after the phone screen gets its own history entry, so the
   // browser / Android back button returns to the phone screen instead of
@@ -98,6 +100,9 @@ export default function UnifiedOTPFastLogin() {
     if (location.state?.authStep) navigate(-1)
     else resetToPhoneStep()
   }
+
+  // back from the code screen with the pencil: cursor goes into the number box (never on a plain visit / after logout)
+  usePhoneFocusRequest(() => phoneInputRef.current, step === 1)
 
   // Dismiss soft keyboard on unmount & auto-redirect if already logged in
   useEffect(() => {
@@ -303,6 +308,7 @@ export default function UnifiedOTPFastLogin() {
   }
 
   const handleEditNumber = () => {
+    requestPhoneFocus()
     leaveStepViaHistory()
   }
 
@@ -784,6 +790,7 @@ export default function UnifiedOTPFastLogin() {
                 <span className="text-[16px] font-semibold text-[#1A1A1A] shrink-0">+91</span>
                 <div className="w-px h-6 bg-gray-200 mx-3 shrink-0" />
                 <input
+                  ref={phoneInputRef}
                   type="tel"
                   inputMode="numeric"
                   autoComplete="tel-national"

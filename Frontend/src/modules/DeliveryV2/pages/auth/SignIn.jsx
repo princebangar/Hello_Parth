@@ -9,6 +9,7 @@ import { collectFcmTokenFast, persistModuleFcmToken, finalizeDeliveryPendingSubm
 import { getUserFacingApiError, showUserFacingApiError } from "@/shared/utils/apiError"
 import { DEFAULT_BRAND_LOGO } from "@/shared/constants/brandLogo"
 import { prefetchPolicyContentWhenIdle } from "@/shared/utils/policyPages"
+import { requestPhoneFocus, usePhoneFocusRequest } from '@/shared/utils/loginFocus'
 
 const DEFAULT_COUNTRY_CODE = "+91"
 
@@ -74,6 +75,9 @@ export default function DeliverySignIn() {
   const [showRestorePopup, setShowRestorePopup] = useState(false)
   const [deletedAccountData, setDeletedAccountData] = useState(null)
   const inputRefs = useRef([])
+  const phoneInputRef = useRef(null)
+  // cursor into the number box only when coming back with the pencil (not after a logout / plain visit)
+  usePhoneFocusRequest(() => phoneInputRef.current, !isOtpStep)
   // iOS only opens the soft-keyboard from a focus() that happens *inside* a
   // user gesture. This hidden input is focused synchronously on the "Log in"
   // tap so the keyboard opens, then focus is transferred to the OTP boxes once
@@ -100,6 +104,7 @@ export default function DeliverySignIn() {
   }
 
   const handleBackToLogin = () => {
+    requestPhoneFocus()
     setInstantAuthTransition(true)
     navigate("/food/delivery/login", { replace: true })
   }
@@ -773,9 +778,9 @@ export default function DeliverySignIn() {
                       <span className="text-sm font-medium text-gray-500 dark:text-gray-400 pr-3 border-r border-gray-300 dark:border-gray-600">+91</span>
                     </div>
                     <input
+                      ref={phoneInputRef}
                       type="tel"
                       required
-                      autoFocus
                       onFocus={handleInputFocusScroll}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
