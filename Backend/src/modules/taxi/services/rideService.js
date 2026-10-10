@@ -19,7 +19,8 @@ import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
-import { getBidRideSettings } from './transportSettingsService.js';
+import { getBidRideSettings, getTransportRideSettings } from './transportSettingsService.js';
+import { getActiveSurgePercent } from './surgeService.js';
 import { FoodReferralLog } from '../../food/admin/models/referralLog.model.js';
 import { isReferralEnabled } from '../../../core/platform/referralSwitch.service.js';
 import { getAppSwitches } from '../../../core/platform/appSwitches.service.js';
@@ -897,7 +898,7 @@ export const calculateOutstationFare = (pricingRule, distanceKm) => {
 // Lower bound of what the server would charge: straight-line distance is never longer than the
 // road distance the client prices with, so a legitimate fare is always at or above this figure.
 const FARE_TOLERANCE = 0.9;
-const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, pickupCoords, dropCoords, isRouteBooking = true }) => {
+const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, pickupCoords, dropCoords, isRouteBooking = true, surgePercent = 0 }) => {
   // An intercity booking that is not on an admin route is priced by distance with the Outstation Ride fields.
   if (serviceType === 'intercity' && !isRouteBooking) {
     if (!isOutstationPricingEnabled(pricingRule)) {
@@ -913,7 +914,8 @@ const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, 
     const baseDistance = Math.max(0, Number(pricingRule.base_distance || 0));
     const extraKm = Math.max(0, straightLineKm(pickupCoords, dropCoords) - baseDistance);
     const subtotal = Math.max(0, Number(pricingRule.base_price || 0)) + extraKm * Math.max(0, Number(pricingRule.price_per_distance || 0));
-    const minimumFare = subtotal * (1 + Math.max(0, Number(pricingRule.service_tax || 0)) / 100);
+    // Surge Pricing slot at the pickup time raises the price before tax, same as the rider app shows it.
+    const minimumFare = subtotal * (1 + Math.max(0, Number(surgePercent || 0)) / 100) * (1 + Math.max(0, Number(pricingRule.service_tax || 0)) / 100);
     if (minimumFare > 0 && fare < Math.floor(minimumFare * FARE_TOLERANCE)) {
       throw new ApiError(400, 'Fare is lower than the configured price for this trip. Please refresh the fare and try again.');
     }
@@ -1053,6 +1055,7 @@ export const createRideRecord = async ({
     pickupCoords,
     dropCoords,
     isRouteBooking,
+    surgePercent: normalizedServiceType === 'ride' ? getActiveSurgePercent(pricingRule, normalizeScheduledAt(scheduledAt) || new Date()) : 0,
   });
   const bidRideSettings = await getBidRideSettings();
   const fareIncreaseWaitMinutes = toPositiveNumber(
@@ -1132,6 +1135,7 @@ export const createRideRecord = async ({
     free_waiting_before: Number(pricingRule?.free_waiting_before ?? 0),
     free_waiting_after: Number(pricingRule?.free_waiting_after ?? 0),
     service_tax: Math.max(0, Number(pricingRule?.service_tax ?? (normalizedServiceType === 'parcel' ? primaryVehicle?.service_tax : 0) ?? 0)) || 0,
+    surge_percentage: normalizedServiceType === 'ride' ? getActiveSurgePercent(pricingRule, normalizeScheduledAt(scheduledAt) || new Date()) : 0,
     allowed_payment_methods: allowedPaymentMethods,
     resolvedAt: pricingRule ? new Date() : null,
   };
@@ -1186,6 +1190,15 @@ export const createRideRecord = async ({
 
   if (scheduledAt && !normalizedScheduledAt) {
     throw new ApiError(400, 'scheduledAt is invalid');
+  }
+
+  // Admin > Transport Ride Settings > "Schedule Ride: Minimum Minutes Ahead". A pickup sooner than that is not a
+  // scheduled ride; 2 minutes of slack cover the time between picking the slot and pressing Book.
+  if (normalizedScheduledAt) {
+    const minMinutesAhead = Math.max(0, Number((await getTransportRideSettings())?.schedule_ride_min_minutes_ahead ?? 60) || 0);
+    if (normalizedScheduledAt.getTime() < Date.now() + (minMinutesAhead - 2) * 60 * 1000) {
+      throw new ApiError(400, `Rides can be scheduled at least ${minMinutesAhead} minutes ahead. Please pick a later time.`);
+    }
   }
 
   if (isSubscriptionCovered && promoCode) {

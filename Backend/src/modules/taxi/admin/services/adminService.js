@@ -74,6 +74,7 @@ import {
 } from './adminAccessService.js';
 import { getAdminModuleAccess } from '../../../../core/admin/adminHierarchy.service.js';
 import { invalidateUserActive } from '../../../../core/auth/userActiveCache.js';
+import { normalizeSurgePrices, SURGE_DAYS } from '../../services/surgeService.js';
 
 const PUBLIC_VEHICLE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 let publicVehicleCatalogCache = {
@@ -1505,6 +1506,9 @@ const serializeSetPrice = (item) => ({
   outstation_time_price: item.outstation_time_price ?? 0,
   free_waiting_before: item.free_waiting_before,
   free_waiting_after: item.free_waiting_after,
+
+  // Surge Pricing (per weekday time slots)
+  surge_prices: normalizeSurgePrices(item.surge_prices),
 
   // Settings
   enable_outstation_ride: Boolean(item.enable_outstation_ride),
@@ -5799,6 +5803,7 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
       'outstation_base_distance',
       'outstation_price_per_distance',
       'outstation_time_price',
+      'surge_prices',
       'createdAt',
       'updatedAt',
     ].join(' '))
@@ -5873,6 +5878,7 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
       outstation_base_distance: Number(item.outstation_base_distance ?? 0),
       outstation_price_per_distance: Number(item.outstation_price_per_distance ?? 0),
       outstation_time_price: Number(item.outstation_time_price ?? 0),
+      surge_prices: normalizeSurgePrices(item.surge_prices),
       updatedAt: item.updatedAt,
     };
   });
@@ -5946,7 +5952,14 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
     result,
     paginatorItem: paginatorData[index],
   })).filter((row) => {
-    if (normalizedTransportType && String(row.result.transport_type || '').toLowerCase() !== normalizedTransportType) {
+    // For the rider app a "both" rule (vehicle used for rides AND parcels) is also a taxi rule and a delivery rule;
+    // dropping it made such vehicles fall back to a made-up fare. The admin filter stays an exact match.
+    const rowTransportType = String(row.result.transport_type || '').toLowerCase();
+    if (
+      normalizedTransportType
+      && rowTransportType !== normalizedTransportType
+      && (currentAdmin || rowTransportType !== 'both')
+    ) {
       return false;
     }
 
@@ -6248,6 +6261,19 @@ export const updateSetPrice = async (id, payload, currentAdmin = null) => {
     'driver_cancellation_fee',
     'order_number',
   ]);
+
+  if (payload.surge_prices !== undefined) {
+    const incoming = Array.isArray(payload.surge_prices) ? payload.surge_prices : [payload.surge_prices];
+    const byDay = new Map(normalizeSurgePrices(setPrice.surge_prices).map((entry) => [entry.day, entry]));
+    incoming.forEach((entry) => {
+      const day = SURGE_DAYS.find((name) => name.toLowerCase() === String(entry?.day || '').toLowerCase());
+      if (!day) return;
+      const [normalized] = normalizeSurgePrices([{ day, slots: entry?.slots }]);
+      if (normalized) byDay.set(day, normalized); else byDay.delete(day);
+    });
+    setPrice.surge_prices = SURGE_DAYS.filter((day) => byDay.has(day)).map((day) => byDay.get(day));
+    setPrice.markModified('surge_prices');
+  }
 
   const requestedVehicleTypeId =
     payload.vehicle_type?._id || payload.vehicle_type?.id || payload.vehicle_type || payload.type_id;

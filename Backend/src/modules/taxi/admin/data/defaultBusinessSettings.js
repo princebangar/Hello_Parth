@@ -74,6 +74,8 @@ export const createDefaultBusinessSettings = () => ({
     bidding_ride_maximum_distance: '50',
     user_can_make_a_ride_after_x_miniutes: '15',
     minimum_time_for_search_drivers_for_schedule_ride: '1',
+    // Scheduled rides (ride / parcel / intercity): the earliest pickup time a rider may pick, in minutes from now.
+    schedule_ride_min_minutes_ahead: '60',
     minimum_time_for_starting_trip_drivers_for_schedule_ride: '15',
     can_round_the_bill_values: '1',
     enable_shipment_load_feature: '1',

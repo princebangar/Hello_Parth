@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
+import { formatBusTime } from '../../utils/busTime';
 
 const SORT_OPTIONS = [
   { id: 'recommended', label: 'Filter & Sort' },
@@ -439,9 +440,9 @@ const BusList = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-end gap-2">
-                            <p className="text-2xl font-black leading-none text-slate-900">{bus.departure}</p>
+                            <p className="text-2xl font-black leading-none text-slate-900">{formatBusTime(bus.departure)}</p>
                             <p className="pb-0.5 text-sm font-bold text-slate-400">→</p>
-                            <p className="text-2xl font-black leading-none text-slate-700">{bus.arrival}</p>
+                            <p className="text-2xl font-black leading-none text-slate-700">{formatBusTime(bus.arrival)}</p>
                           </div>
                           <p className="mt-1 text-xs font-semibold text-slate-500">
                             {formatDurationBrief(bus.duration)} {bus.availableSeats > 0 ? `• ${bus.availableSeats} Seats` : ''}

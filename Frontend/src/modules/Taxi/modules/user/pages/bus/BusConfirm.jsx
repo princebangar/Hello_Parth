@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Ticket, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
 import { scheduleBusBookingReminders } from '../../utils/upcomingRideReminderService';
+import { formatBusTime } from '../../utils/busTime';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -128,7 +129,7 @@ const BusConfirm = () => {
           <div className="p-6 space-y-8">
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1">
-                <p className="text-xl font-bold text-slate-900">{booking.bus?.departure}</p>
+                <p className="text-xl font-bold text-slate-900">{formatBusTime(booking.bus?.departure)}</p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate">{booking.bus?.fromCity || fromCity}</p>
               </div>
               <div className="flex flex-col items-center flex-1 px-2">
@@ -137,7 +138,7 @@ const BusConfirm = () => {
                 <span className="text-[9px] font-bold text-slate-400">{formatTravelDate(booking.travelDate || date)}</span>
               </div>
               <div className="flex-1 text-right">
-                <p className="text-xl font-bold text-slate-900">{booking.bus?.arrival}</p>
+                <p className="text-xl font-bold text-slate-900">{formatBusTime(booking.bus?.arrival)}</p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate">{booking.bus?.toCity || toCity}</p>
               </div>
             </div>

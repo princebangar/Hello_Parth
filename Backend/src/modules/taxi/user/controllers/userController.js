@@ -640,6 +640,12 @@ const parseBusDateTime = (travelDate, timeValue) => {
   return null;
 };
 
+// A bus whose departure on that date is already in the past cannot be found or booked any more.
+const hasBusDeparted = (travelDate, schedule, now = new Date()) => {
+  const departure = parseBusDateTime(travelDate, schedule?.departureTime);
+  return Boolean(departure && !Number.isNaN(departure.getTime()) && departure.getTime() <= now.getTime());
+};
+
 const normalizeBusCancellationRules = (rules = []) =>
   (Array.isArray(rules) ? rules : [])
     .map((rule, index) => ({
@@ -2658,7 +2664,7 @@ export const searchBuses = async (req, res) => {
     ).length;
 
     return schedules
-      .filter((schedule) => isScheduleAvailableOnDate(schedule, travelDate))
+      .filter((schedule) => isScheduleAvailableOnDate(schedule, travelDate) && !hasBusDeparted(travelDate, schedule))
       .map((schedule) => {
         const reservedSeats = reservedCountMap.get(`${String(busService._id)}:${String(schedule.id)}`) || 0;
         return serializeBusSearchResult({
@@ -2832,6 +2838,9 @@ export const createBusBookingOrder = async (req, res) => {
   const schedule = findBusSchedule(busService, scheduleId);
   if (!isScheduleAvailableOnDate(schedule, travelDate)) {
     throw new ApiError(404, 'Bus schedule not found for the selected date');
+  }
+  if (hasBusDeparted(travelDate, schedule)) {
+    throw new ApiError(400, 'This bus has already departed. Please choose another bus or date.');
   }
 
   const availableSeatCells = flattenBusBlueprintSeats(busService.blueprint).filter(
@@ -3013,7 +3022,7 @@ export const verifyBusBookingPayment = async (req, res) => {
 
   const busService = booking.busServiceId
     ? await BusService.findById(booking.busServiceId)
-        .select('registrationNumber driverName driverPhone cancellationPolicy cancellationRules schedules route rating ratingCount reviews')
+        .select('registrationNumber driverName driverPhone cancellationPolicy cancellationRules schedules route rating ratingCount reviews busDriverId ownerDriverId')
         .lean()
     : null;
 
@@ -3071,10 +3080,49 @@ export const verifyBusBookingPayment = async (req, res) => {
     },
   );
 
+  notifyBusBookingConfirmed(booking, busService);
+
   res.status(201).json({
     success: true,
     data: serializeBusBooking(booking, busService),
   });
+};
+
+// "05:00" -> "5:00 AM"
+const formatBusClock = (value) => {
+  const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return String(value || '');
+  const hours = Number(match[1]);
+  return `${hours % 12 || 12}:${match[2]} ${hours >= 12 ? 'PM' : 'AM'}`;
+};
+
+// Ticket confirmed: tell the rider, the bus driver and the bus owner (push; best effort, never blocks the booking).
+const notifyBusBookingConfirmed = (booking, busService) => {
+  const route = booking.routeSnapshot || {};
+  const from = route.originCity || busService?.route?.originCity || '';
+  const to = route.destinationCity || busService?.route?.destinationCity || '';
+  const when = [booking.travelDate, formatBusClock(route.departureTime)].filter(Boolean).join(', ');
+  const seats = (booking.seatLabels || booking.seatIds || []).join(', ');
+  const data = { type: 'bus_booking_confirmed', bookingId: String(booking._id), bookingCode: booking.bookingCode || '' };
+
+  sendPushNotificationToEntities({
+    userIds: [String(booking.userId)],
+    title: 'Bus ticket confirmed',
+    body: `${from} to ${to} - ${when}. Seats ${seats}. Booking ${booking.bookingCode || ''}`.trim(),
+    data: { ...data, targetUrl: '/taxi/user/profile/bus-bookings' },
+  }).catch(() => {});
+
+  const crewDriverIds = [busService?.ownerDriverId].filter(Boolean).map(String);
+  const busDriverIds = [busService?.busDriverId].filter(Boolean).map(String);
+  if (crewDriverIds.length || busDriverIds.length) {
+    sendPushNotificationToEntities({
+      driverIds: crewDriverIds,
+      busDriverIds,
+      title: 'New bus booking',
+      body: `${booking.passenger?.name || 'A passenger'} booked ${(booking.seatIds || []).length} seat(s) (${seats}) - ${from} to ${to}, ${when}.`,
+      data,
+    }).catch(() => {});
+  }
 };
 
 export const getMyBusBookingById = async (req, res) => {

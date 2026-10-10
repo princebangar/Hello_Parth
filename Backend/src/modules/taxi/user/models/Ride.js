@@ -513,6 +513,12 @@ const rideSchema = new mongoose.Schema(
         type: [String],
         default: ['cash', 'online'],
       },
+      // Surge Pricing % that was active at the pickup time (already included in the fare)
+      surge_percentage: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
       resolvedAt: {
         type: Date,
         default: null,

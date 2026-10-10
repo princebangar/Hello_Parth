@@ -259,6 +259,11 @@ const setPriceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Surge Pricing page: [{ day: 'Monday', slots: [{ start_time: '18:00', end_time: '21:00', surge_price: 20 }] }]
+    surge_prices: {
+      type: [Mixed],
+      default: [],
+    },
     support_outstation: {
       type: Number,
       default: 0,

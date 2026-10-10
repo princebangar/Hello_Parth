@@ -16,32 +16,52 @@ import useDirty from '../../../../../../shared/hooks/useDirty';
 const inputClass = "w-full border border-gray-200 rounded-md px-2 py-0.5 text-xs text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors shadow-sm";
 const labelClass = "block text-[10px] font-semibold text-gray-500 mb-0";
 
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const emptyWeek = () => Object.fromEntries(DAYS.map((day) => [day, []]));
+
+// Saved as [{ day, slots: [{ start_time, end_time, surge_price }] }] on the Set Price. A ride whose pickup time (now, or the
+// scheduled time) is inside a slot of that weekday costs surge_price % more (before tax); the rider sees it on the vehicle
+// list. A slot whose end is earlier than its start runs past midnight.
 const SurgePricing = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('Sunday');
-  const [surges, setSurges] = useState([]);
-  const { isDirty } = useDirty(surges, !loading);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => DAYS[new Date().getDay()]);
+  const [week, setWeek] = useState(emptyWeek);
+  const { isDirty, resetBaseline } = useDirty(week, !loading);
   const [details, setDetails] = useState({ zone_name: '', vehicle_type: '' });
+  const surges = week[activeTab] || [];
 
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const days = DAYS;
 
   useEffect(() => {
     const fetchPriceDetails = async () => {
       try {
         setLoading(true);
         const res = await api.get(`/admin/types/set-prices/${id}`);
-        const target = res.data || res.results || res;
+        const target = res?.data?.data || res?.data || res?.results || res;
 
         if (target) {
           setDetails({
-            zone_name: target.zone_id?.name || target.zone_name || 'Global',
+            zone_name: target.zone_id?.name || target.zone_name || 'All zones',
             vehicle_type: target.vehicle_type?.name || target.vehicle_type_name || 'Vehicle'
           });
+          const loaded = emptyWeek();
+          (Array.isArray(target.surge_prices) ? target.surge_prices : []).forEach((entry) => {
+            if (loaded[entry?.day]) {
+              loaded[entry.day] = (entry.slots || []).map((slot) => ({
+                start_time: slot.start_time || '',
+                end_time: slot.end_time || '',
+                surge_price: String(slot.surge_price ?? ''),
+              }));
+            }
+          });
+          setWeek(loaded);
         }
       } catch (err) {
         console.error('Fetch surge details failed:', err);
+        toast.error('Could not load this price rule');
       } finally {
         setLoading(false);
       }
@@ -49,42 +69,56 @@ const SurgePricing = () => {
     fetchPriceDetails();
   }, [id]);
 
+  const setDaySlots = (updater) => {
+    setWeek((current) => ({ ...current, [activeTab]: updater(current[activeTab] || []) }));
+  };
+
   const addSurge = () => {
-    const currentTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    setSurges([...surges, { start_time: currentTime, end_time: currentTime, surge_price: '' }]);
+    setDaySlots((slots) => [...slots, { start_time: '18:00', end_time: '21:00', surge_price: '' }]);
   };
 
   const removeSurge = (index) => {
-    setSurges(surges.filter((_, i) => i !== index));
+    setDaySlots((slots) => slots.filter((_, i) => i !== index));
   };
 
   const updateSurge = (index, field, value) => {
-    const newSurges = [...surges];
-    if (field === 'surge_price') {
-      newSurges[index][field] = Math.max(0, Number(value)).toString();
-    } else {
-      newSurges[index][field] = value;
-    }
-    setSurges(newSurges);
+    setDaySlots((slots) => slots.map((slot, i) => {
+      if (i !== index) return slot;
+      return { ...slot, [field]: field === 'surge_price' ? (value === '' ? '' : String(Math.min(500, Math.max(0, Number(value))))) : value };
+    }));
   };
 
   const handleUpdate = async () => {
+    for (const day of DAYS) {
+      const bad = (week[day] || []).find((slot) => !slot.start_time || !slot.end_time || !(Number(slot.surge_price) > 0));
+      if (bad) {
+        setActiveTab(day);
+        toast.error(`${day}: every slot needs a start time, an end time and a surge % above 0.`);
+        return;
+      }
+      const same = (week[day] || []).find((slot) => slot.start_time === slot.end_time);
+      if (same) {
+        setActiveTab(day);
+        toast.error(`${day}: start and end time cannot be the same.`);
+        return;
+      }
+    }
+
     try {
-      setLoading(true);
-      const payload = {
-        surge_prices: {
-          day: activeTab,
-          slots: surges
-        }
-      };
-      await api.patch(`/admin/types/set-prices/${id}`, payload);
-      toast.success(`${activeTab} surge prices updated!`);
-      navigate(-1);
+      setSaving(true);
+      await api.patch(`/admin/types/set-prices/${id}`, {
+        surge_prices: DAYS.map((day) => ({
+          day,
+          slots: (week[day] || []).map((slot) => ({ ...slot, surge_price: Number(slot.surge_price) })),
+        })),
+      });
+      resetBaseline?.(week);
+      toast.success('Surge pricing saved');
     } catch (err) {
       console.error('Update failed:', err);
-      toast.error('Failed to update surge prices');
+      toast.error(err?.message || 'Failed to update surge prices');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -155,6 +189,7 @@ const SurgePricing = () => {
                      className={`flex-1 min-w-[80px] h-10 flex items-center justify-center text-[10px] font-black uppercase tracking-widest transition-all relative ${activeTab === day ? 'text-indigo-600 bg-white' : 'text-gray-400 hover:text-gray-600'}`}
                    >
                       {day.substring(0, 3)}
+                      {(week[day] || []).length > 0 && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />}
                       {activeTab === day && <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-600" />}
                    </button>
                  ))}
@@ -162,10 +197,15 @@ const SurgePricing = () => {
 
               <div className="p-4 flex-grow">
                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                       {activeTab} Slots
-                    </h2>
+                    <div>
+                       <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                          {activeTab} Slots
+                       </h2>
+                       <p className="mt-1 text-[11px] text-gray-500">
+                          Rides picked up in a slot cost this % more (before tax). Riders see the higher fare and a "Surge" tag. End before start = runs past midnight.
+                       </p>
+                    </div>
                     <button onClick={addSurge} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-[11px] font-bold shadow-sm hover:bg-indigo-700 transition-all flex items-center gap-1.5 active:scale-95">
                        <Plus size={14} /> Add New Surge
                     </button>
@@ -231,8 +271,8 @@ const SurgePricing = () => {
               </div>
 
               <div className="p-3 border-t border-gray-100 flex justify-end bg-gray-50/20">
-                 <button onClick={handleUpdate} disabled={!isDirty} className="bg-indigo-600 text-white px-6 py-1.5 rounded text-[11px] font-black uppercase tracking-widest shadow hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100">
-                    Update Surge
+                 <button onClick={handleUpdate} disabled={!isDirty || saving} className="bg-indigo-600 text-white px-6 py-1.5 rounded text-[11px] font-black uppercase tracking-widest shadow hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100">
+                    {saving ? 'Saving...' : 'Update Surge'}
                  </button>
               </div>
            </div>

@@ -2,6 +2,7 @@ import { getFirebaseMessaging } from '../../../config/firebase.js';
 import { Driver } from '../driver/models/Driver.js';
 import { User } from '../user/models/User.js';
 import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
+import { BusDriver } from '../driver/models/BusDriver.js';
 import { listEntityPushTokens } from './pushTokenService.js';
 
 const INVALID_TOKEN_CODES = new Set([
@@ -218,7 +219,7 @@ const sendPushToTargets = async ({
   };
 };
 
-const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDriverIds = [] }) => {
+const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDriverIds = [], busDriverIds = [] }) => {
   const normalizedUserIds = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedPoolingIds = [...new Set((Array.isArray(poolingDriverIds) ? poolingDriverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
@@ -250,6 +251,23 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDrive
         targets.push({
           ...tokenEntry,
           entityId: String(user._id),
+        });
+      });
+    });
+  }
+
+  // bus drivers have their own account (TaxiBusDriver) and their own push tokens
+  const normalizedBusDriverIds = [...new Set((Array.isArray(busDriverIds) ? busDriverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (normalizedBusDriverIds.length) {
+    const busDrivers = await BusDriver.find({ _id: { $in: normalizedBusDriverIds } })
+      .select('_id fcmTokenWeb fcmTokenMobile')
+      .lean();
+
+    busDrivers.forEach((busDriver) => {
+      listEntityPushTokens(busDriver, 'driver').forEach((tokenEntry) => {
+        targets.push({
+          ...tokenEntry,
+          entityId: String(busDriver._id),
         });
       });
     });
@@ -390,12 +408,13 @@ export const sendPushNotificationToEntities = async ({
   userIds = [],
   driverIds = [],
   poolingDriverIds = [],
+  busDriverIds = [],
   title,
   body,
   image = '',
   data = {},
 }) => {
-  const targets = await collectDirectTargets({ userIds, driverIds, poolingDriverIds });
+  const targets = await collectDirectTargets({ userIds, driverIds, poolingDriverIds, busDriverIds });
   const results = [];
   for (const role of ['user', 'driver']) {
     const roleTargets = targets.filter((target) => target.role === role);

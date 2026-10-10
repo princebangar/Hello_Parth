@@ -26,6 +26,7 @@ import {
   Compass
 } from 'lucide-react';
 import { userService } from '../../services/userService';
+import { useSettings } from '../../../../shared/context/SettingsContext';
 import { GoogleMap } from '@react-google-maps/api';
 import { useAppGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY, INDIA_CENTER } from '../../../admin/utils/googleMaps';
 import toast from 'react-hot-toast';
@@ -105,15 +106,19 @@ const IntercityHome = () => {
   const [isQuoting, setIsQuoting] = useState(false);
   const [pickupCityName, setPickupCityName] = useState('');
 
-  // Date and Time State
-  const [travelDate, setTravelDate] = useState(() => {
-    return localDateKey(0);
-  });
+  // Date and Time State - the trip start defaults to the earliest time a ride may be scheduled
+  // (Admin > Transport Ride Settings > Schedule Ride: Minimum Minutes Ahead).
+  const { settings: appSettings } = useSettings();
+  const scheduleLeadMinutes = (() => {
+    const value = Number(appSettings?.transportRide?.schedule_ride_min_minutes_ahead);
+    return Number.isFinite(value) && value >= 0 ? value : 60;
+  })();
+  const earliestTripStart = new Date(Date.now() + scheduleLeadMinutes * 60 * 1000);
+  const [travelDate, setTravelDate] = useState(() => localDateKey(0, earliestTripStart));
 
-  const [travelTime, setTravelTime] = useState(() => {
-    const now = new Date(Date.now() + 60 * 60 * 1000); // Default to 1 hour from now
-    return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-  });
+  const [travelTime, setTravelTime] = useState(() => (
+    String(earliestTripStart.getHours()).padStart(2, '0') + ':' + String(earliestTripStart.getMinutes()).padStart(2, '0')
+  ));
 
   const [tripType, setTripType] = useState('One Way');
 
@@ -1118,7 +1123,7 @@ const IntercityHome = () => {
             <input
               ref={dateTimeInputRef}
               type="datetime-local"
-              min={localDateTimeMin()}
+              min={localDateTimeMin(earliestTripStart)}
               value={`${travelDate}T${travelTime}`}
               onChange={handleDateTimeChange}
               className="absolute pointer-events-none opacity-0 inset-0 w-full h-full"
@@ -1139,14 +1144,14 @@ const IntercityHome = () => {
       </div>
 
       {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg bg-white border-t border-slate-200 grid grid-cols-2 h-16 items-center z-40 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg bg-white border-t border-slate-200 grid grid-cols-2 gap-2 px-3 pt-2 items-stretch z-40 pb-[calc(env(safe-area-inset-bottom)+14px)] shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
 
         {/* ONE WAY */}
         <button
           onClick={() => {
             setTripType('One Way');
           }}
-          className={`flex flex-col items-center justify-center h-full border-r border-slate-100 transition-colors ${tripType === 'One Way' ? 'bg-[#1E90FF] text-white font-extrabold' : 'text-slate-500 hover:bg-slate-50'
+          className={`flex flex-col items-center justify-center h-14 rounded-xl transition-colors ${tripType === 'One Way' ? 'bg-[#1E90FF] text-white font-extrabold' : 'text-slate-500 hover:bg-slate-50'
             }`}
         >
           <Compass size={18} strokeWidth={2.5} className="mb-0.5" />
@@ -1158,7 +1163,7 @@ const IntercityHome = () => {
           onClick={() => {
             setTripType('Round Trip');
           }}
-          className={`flex flex-col items-center justify-center h-full border-r border-slate-100 transition-colors ${tripType === 'Round Trip' ? 'bg-[#1E90FF] text-white font-extrabold' : 'text-slate-500 hover:bg-slate-50'
+          className={`flex flex-col items-center justify-center h-14 rounded-xl transition-colors ${tripType === 'Round Trip' ? 'bg-[#1E90FF] text-white font-extrabold' : 'text-slate-500 hover:bg-slate-50'
             }`}
         >
           <Briefcase size={18} strokeWidth={2.5} className="mb-0.5" />

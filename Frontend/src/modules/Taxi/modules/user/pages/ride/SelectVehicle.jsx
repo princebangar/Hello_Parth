@@ -19,6 +19,7 @@ import LcvIcon from '../../../../assets/icons/LCV.png';
 import McvIcon from '../../../../assets/icons/mcv.png';
 import HcvIcon from '../../../../assets/icons/hcv.png';
 import { PendingCancellationDueNotice } from '../../components/CancellationFeeNotice';
+import { getActiveSurgePercent } from '../../utils/surge';
 import EhcvIcon from '../../../../assets/icons/ehcv.png';
 import ScootyIcon from '../../../../assets/icons/scooty.png';
 import HatchbackIcon from '../../../../assets/icons/Hatchback.png';
@@ -617,28 +618,9 @@ const estimateDurationMinutes = (distanceMeters = 0) => {
   return Math.max(1, Math.round(Number(distanceMeters) / metersPerMinute));
 };
 
-const getFallbackVehicleEstimate = (type) => {
-  const value = getIconValue(type);
-  const label = getTypeLabel(type).toLowerCase();
-
-  if (value.includes('bike') || label.includes('bike')) {
-    return 22;
-  }
-
-  if (value.includes('auto') || label.includes('auto')) {
-    return 40;
-  }
-
-  if (value.includes('premium') || value.includes('lux') || label.includes('premium') || label.includes('lux')) {
-    return 130;
-  }
-
-  if (value.includes('suv') || label.includes('suv')) {
-    return 150;
-  }
-
-  return 106;
-};
+// No Set Price for this vehicle in this area: there is no fare to show (0 = "Fare not set", the vehicle cannot be booked).
+// It used to invent one (bike Rs 22, auto Rs 40...), which the server then refused at booking time.
+const getFallbackVehicleEstimate = () => 0;
 
 const getSetPriceRows = (response) => {
   const data = unwrap(response);
@@ -845,7 +827,7 @@ const findBestPricingRule = ({ rules, vehicleTypeId, zoneId, serviceLocationId, 
   return candidates[0] || null;
 };
 
-const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, durationMinutes }) => {
+const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, durationMinutes, surgePercent = 0 }) => {
   const fallbackFare = getFallbackVehicleEstimate(vehicle?.raw || vehicle);
 
   if (!pricingRule) {
@@ -868,7 +850,9 @@ const calculateEstimatedFare = ({ vehicle, pricingRule, distanceMeters, duration
     return fallbackFare;
   }
 
-  const total = subtotal + (subtotal * serviceTax) / 100;
+  // Surge Pricing slot at the pickup time: % on the trip price, tax on top (the server checks the same).
+  const surgedSubtotal = subtotal * (1 + Math.max(0, Number(surgePercent || 0)) / 100);
+  const total = surgedSubtotal + (surgedSubtotal * serviceTax) / 100;
   return Math.max(0, Math.round(total));
 };
 
@@ -959,6 +943,10 @@ const getBidFareBounds = (vehicle, stepCount) => {
 };
 
 const formatVehicleFare = (vehicle, stepCount) => {
+  if (!(Number(vehicle?.price) > 0)) {
+    return 'Fare not set';
+  }
+
   if (!vehicle?.supportsBidding) {
     return formatCurrency(vehicle?.price);
   }
@@ -978,9 +966,22 @@ const formatDateTimeInputValue = (date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-const getMinScheduledDateTime = () => {
-  const next = new Date(Date.now() + 60 * 60 * 1000);
+// Earliest pickup a rider may schedule: Admin > Transport Ride Settings > Schedule Ride: Minimum Minutes Ahead.
+const getScheduleLeadMinutes = (settings) => {
+  const value = Number(settings?.transportRide?.schedule_ride_min_minutes_ahead);
+  return Number.isFinite(value) && value >= 0 ? value : 60;
+};
+
+const getMinScheduledDateTime = (leadMinutes = 60) => {
+  const next = new Date(Date.now() + leadMinutes * 60 * 1000);
   return formatDateTimeInputValue(next);
+};
+
+// A scheduled time handed over in router state is an ISO (UTC) string; the picker needs LOCAL "YYYY-MM-DDTHH:mm".
+// (Slicing the ISO string shifted the time by the UTC offset - 5 h 30 m in India.)
+const toLocalDateTimeInput = (value) => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : formatDateTimeInputValue(parsed);
 };
 
 const getMaxScheduledDateTime = () => {
@@ -1153,7 +1154,7 @@ const SelectVehicle = () => {
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [rideMode, setRideMode] = useState(() => (location.state?.rideMode === 'schedule' ? 'schedule' : 'now'));
   const [scheduledAt, setScheduledAt] = useState(() => (
-    location.state?.scheduledAt ? String(location.state.scheduledAt).slice(0, 16) : getMinScheduledDateTime()
+    (location.state?.scheduledAt && toLocalDateTimeInput(location.state.scheduledAt)) || getMinScheduledDateTime()
   ));
   const [scheduleError, setScheduleError] = useState('');
   const [bidStepCount, setBidStepCount] = useState(2);
@@ -1227,7 +1228,8 @@ const SelectVehicle = () => {
   const pickupPosition = useMemo(() => toLatLng(pickupCoords), [pickupCoords]);
   const dropPosition = useMemo(() => toLatLng(dropCoords, null), [dropCoords]);
   const { isLoaded: isMapLoaded, loadError: mapLoadError } = useBaseGoogleMapsLoader();
-  const minScheduledAt = useMemo(() => getMinScheduledDateTime(), []);
+  const scheduleLeadMinutes = getScheduleLeadMinutes(settings);
+  const minScheduledAt = useMemo(() => getMinScheduledDateTime(scheduleLeadMinutes), [scheduleLeadMinutes]);
   const maxScheduledAt = useMemo(() => getMaxScheduledDateTime(), []);
 
   // Never fabricate a ride between fake default points — if pickup/drop state
@@ -1566,11 +1568,13 @@ const SelectVehicle = () => {
           ),
         });
 
+        const surgePercent = getActiveSurgePercent(pricingRule, rideMode === 'schedule' && scheduledAt ? new Date(scheduledAt) : new Date());
         const calculatedPrice = calculateEstimatedFare({
           vehicle,
           pricingRule,
           distanceMeters: tripMetrics.distanceMeters,
           durationMinutes: tripMetrics.durationMinutes,
+          surgePercent,
         });
 
         // Dynamically scale max bidding steps to a realistic 15% of the actual calculated price
@@ -1581,10 +1585,11 @@ const SelectVehicle = () => {
           ...vehicle,
           pricingRule,
           price: calculatedPrice,
+          surgePercent,
           maxBidSteps: dynamicMaxBidSteps,
         };
       }),
-    [pricingRules, serviceLocationId, tripMetrics.distanceMeters, tripMetrics.durationMinutes, vehicles, zoneId],
+    [pricingRules, rideMode, scheduledAt, serviceLocationId, tripMetrics.distanceMeters, tripMetrics.durationMinutes, vehicles, zoneId],
   );
 
   const isFarePending = isResolvingTripMetrics || isLoadingPricingRules;
@@ -1653,7 +1658,7 @@ const SelectVehicle = () => {
   );
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
-  const canProceed = Boolean(selectedVehicle) && !isFarePending;
+  const canProceed = Boolean(selectedVehicle) && !isFarePending && Number(selectedVehicle?.price) > 0;
   // Every car (SUV, Sedan, ...) is booked as a "Car Taxi"; bike / auto keep their own name.
   const bookButtonName = selectedVehicle?.category === 'car' ? 'Car Taxi' : selectedVehicle?.name;
   const hasBookableVehicles = useMemo(
@@ -2161,8 +2166,9 @@ const SelectVehicle = () => {
         return;
       }
 
-      if (scheduledAt < minScheduledAt) {
-        setScheduleError('Schedule time cannot be earlier than now.');
+      // checked against the clock NOW, not when the page opened
+      if (scheduledAt < getMinScheduledDateTime(scheduleLeadMinutes)) {
+        setScheduleError(`Rides can be scheduled at least ${scheduleLeadMinutes} minutes ahead. Please pick a later time.`);
         return;
       }
 
@@ -2406,6 +2412,11 @@ const SelectVehicle = () => {
                           <span className="block text-[20px] font-semibold leading-none text-slate-900">
                             {fareLabel}
                           </span>
+                          {!isFarePending && Number(v.surgePercent) > 0 ? (
+                            <span className="mt-1 inline-block rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-600" title="Busy time: higher fare">
+                              Surge +{v.surgePercent}%
+                            </span>
+                          ) : null}
                           {isSelected && (
                             <div className="mt-1 flex items-center justify-end gap-2">
                               <button

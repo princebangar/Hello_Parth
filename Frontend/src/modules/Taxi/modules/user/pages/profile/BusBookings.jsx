@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import userBusService from '../../services/busService';
+import { formatBusTime } from '../../utils/busTime';
 
 const PAGE_SIZE = 8;
 const FILTERS = [
@@ -235,7 +236,7 @@ const BusBookings = () => {
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <div className="flex-1">
                       <p className="text-sm font-black text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
-                      <p className="text-[10px] font-bold text-slate-500 mt-0.5">{booking.bus?.departure || '--:--'}</p>
+                      <p className="text-[10px] font-bold text-slate-500 mt-0.5">{formatBusTime(booking.bus?.departure)}</p>
                     </div>
                     <div className="flex flex-col items-center px-1">
                       <div className="w-12 h-[1px] bg-slate-100 relative">

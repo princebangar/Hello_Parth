@@ -143,9 +143,21 @@ const TransportRideSettings = () => {
                       name="driver_search_radius" 
                       value={settings.driver_search_radius} 
                       onChange={handleChange} 
-                      type="number" 
+                      type="number"
                    />
 
+                   <div className="space-y-1.5">
+                      <InputField
+                         label="Schedule Ride: Minimum Minutes Ahead"
+                         name="schedule_ride_min_minutes_ahead"
+                         value={settings.schedule_ride_min_minutes_ahead ?? '60'}
+                         onChange={handleChange}
+                         type="number"
+                      />
+                      <p className="text-xs text-gray-500 ml-0.5">
+                         Riders can schedule a ride (ride, parcel, intercity) only for a pickup at least this many minutes from now. Drivers get the request at the pickup time.
+                      </p>
+                   </div>
                 </div>
              </div>
 

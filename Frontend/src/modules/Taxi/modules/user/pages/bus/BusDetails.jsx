@@ -6,6 +6,7 @@ import userBusService from '../../services/busService';
 import { userAuthService } from '../../services/authService';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
 import useTypingFocus from '../../../../shared/hooks/useTypingFocus';
+import { formatBusTime } from '../../utils/busTime';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -315,7 +316,8 @@ const BusDetails = () => {
 
   return (
     // pb-[26rem]: the fixed fare summary at the bottom is ~14rem tall; the last fields must scroll clear of it.
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-[26rem]">
+    // While the keyboard is open only the Pay button stays (the summary would cover the field), so the gap shrinks to fit it.
+    <div className={`min-h-screen bg-slate-50 max-w-lg mx-auto font-sans ${isTyping ? 'pb-28' : 'pb-[26rem]'}`}>
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -337,7 +339,7 @@ const BusDetails = () => {
         <div className="overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_58%,#334155_100%)] p-6 text-white shadow-xl shadow-slate-200">
           <div className="flex justify-between items-start gap-4">
             <div>
-              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {bus.departure}</p>
+              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {formatBusTime(bus.departure)}</p>
               <h3 className="text-xl font-bold leading-tight">{bus.operator}</h3>
               <p className="text-sm font-medium text-slate-300 mt-1">{bus.type}</p>
               <p className="mt-3 text-xs font-semibold text-slate-300">{displayRoute.fromCity} to {displayRoute.toCity}</p>
@@ -497,9 +499,9 @@ const BusDetails = () => {
         ) : null}
       </div>
 
-      {/* Hidden while the keyboard is open so it never covers the field being typed in. */}
-      <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30 ${isTyping ? 'hidden' : ''}`}>
-        <div className="mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm">
+      {/* While the keyboard is open only the Pay button shows, so it never covers the field being typed in. */}
+      <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 bg-white border-t border-slate-100 z-30 ${isTyping ? 'pb-3 pt-3' : 'pb-8 pt-4'}`}>
+        <div className={`mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm ${isTyping ? 'hidden' : ''}`}>
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fare Summary</p>

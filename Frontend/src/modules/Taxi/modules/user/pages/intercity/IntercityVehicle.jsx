@@ -24,8 +24,14 @@ const formatDateTimeInputValue = (date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-const getTomorrowLocalDateTime = () => {
-  const next = new Date(Date.now() + 60 * 60 * 1000);
+// Earliest pickup a rider may schedule: Admin > Transport Ride Settings > Schedule Ride: Minimum Minutes Ahead.
+const getScheduleLeadMinutes = (settings) => {
+  const value = Number(settings?.transportRide?.schedule_ride_min_minutes_ahead);
+  return Number.isFinite(value) && value >= 0 ? value : 60;
+};
+
+const getTomorrowLocalDateTime = (leadMinutes = 60) => {
+  const next = new Date(Date.now() + leadMinutes * 60 * 1000);
   return formatDateTimeInputValue(next);
 };
 
@@ -150,8 +156,9 @@ const IntercityVehicle = () => {
   );
   const [scheduledAt, setScheduledAt] = useState(
     initialRideMode === 'schedule' && location.state?.scheduledAt
-      ? String(location.state.scheduledAt).slice(0, 16)
-      : getTomorrowLocalDateTime()
+      // ISO (UTC) in router state -> local picker value (slicing it shifted the time by 5 h 30 m)
+      ? formatDateTimeInputValue(new Date(location.state.scheduledAt))
+      : getTomorrowLocalDateTime(getScheduleLeadMinutes(settings))
   );
   const [passengers, setPassengers] = useState(1);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
@@ -160,7 +167,8 @@ const IntercityVehicle = () => {
   const scheduledAtInputRef = useRef(null);
   const minTravelDate = useMemo(() => getTodayLocalDate(), []);
   const maxTravelDate = useMemo(() => getMaxAdvanceDate(), []);
-  const minScheduledAt = useMemo(() => getTomorrowLocalDateTime(), []);
+  const scheduleLeadMinutes = getScheduleLeadMinutes(settings);
+  const minScheduledAt = useMemo(() => getTomorrowLocalDateTime(scheduleLeadMinutes), [scheduleLeadMinutes]);
   const maxScheduledAt = useMemo(() => getMaxAdvanceDateTime(), []);
 
   const vehicles = useMemo(
@@ -270,8 +278,8 @@ const IntercityVehicle = () => {
         return;
       }
 
-      if (scheduledAt < minScheduledAt) {
-        setScheduleError('Schedule time cannot be earlier than now.');
+      if (scheduledAt < getTomorrowLocalDateTime(scheduleLeadMinutes)) {
+        setScheduleError(`Rides can be scheduled at least ${scheduleLeadMinutes} minutes ahead. Please pick a later time.`);
         return;
       }
 

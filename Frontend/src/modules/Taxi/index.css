@@ -634,6 +634,29 @@
   box-shadow: 0 0 0 1px var(--user-accent) !important;
 }
 
+/* A transparent field sits inside its own rounded box (icon + input): the gold focus ring goes on that box, not as a
+   second square inside it. */
+.user-app-theme input.bg-transparent:focus,
+.user-app-theme textarea.bg-transparent:focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.user-app-theme :has(> input.bg-transparent:focus),
+.user-app-theme :has(> textarea.bg-transparent:focus) {
+  border-color: var(--user-accent) !important;
+  box-shadow: 0 0 0 1px var(--user-accent) !important;
+}
+
+/* Browser autofill (saved e-mail / phone) painted the field light blue; keep the theme's own colours. */
+.user-app-theme input:-webkit-autofill,
+.user-app-theme input:-webkit-autofill:hover,
+.user-app-theme input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--user-text-primary) !important;
+  caret-color: var(--user-text-primary);
+  transition: background-color 9999s ease-out 0s;
+}
+
 /* Lighter grey badges, card inner sections, and alerts map to card-soft */
 .user-app-theme .bg-slate-100,
 .user-app-theme .bg-gray-100,

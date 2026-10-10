@@ -746,14 +746,14 @@ const SetPrices = ({ mode }) => {
                                  </button>
                                  <button 
                                    title="Surge Pricing"
-                                   onClick={() => navigate(`/admin/pricing/set-price/surge/${prize.id || prize._id}`)}
+                                   onClick={() => navigate(`/taxi/admin/pricing/set-price/surge/${prize.id || prize._id}`)}
                                    className="w-7 h-7 flex items-center justify-center bg-[#FEF2F2] text-[#EF4444] rounded transition-colors hover:bg-red-100"
                                  >
                                     <Zap size={12} />
                                  </button>
                                  <button 
                                    title="Driver Incentive"
-                                   onClick={() => navigate(`/admin/pricing/set-price/incentive/${prize.id || prize._id}`)}
+                                   onClick={() => navigate(`/taxi/admin/pricing/set-price/incentive/${prize.id || prize._id}`)}
                                    className="w-7 h-7 flex items-center justify-center bg-[#EEF2FF] text-[#6366F1] rounded transition-colors hover:bg-indigo-100"
                                  >
                                     <Cone size={12} />

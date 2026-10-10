@@ -15,6 +15,7 @@ import {
   Ticket,
 } from 'lucide-react';
 import { buildBusRouteState } from './busNavigationState';
+import { formatBusTime } from '../../utils/busTime';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -159,11 +160,11 @@ const BusPreview = () => {
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Departure</p>
-            <p className="mt-2 text-lg font-black text-slate-900">{bus.departure || 'NA'}</p>
+            <p className="mt-2 text-lg font-black text-slate-900">{formatBusTime(bus.departure, 'NA')}</p>
           </div>
           <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Arrival</p>
-            <p className="mt-2 text-lg font-black text-slate-900">{bus.arrival || 'NA'}</p>
+            <p className="mt-2 text-lg font-black text-slate-900">{formatBusTime(bus.arrival, 'NA')}</p>
           </div>
           <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Seats Left</p>
@@ -190,7 +191,7 @@ const BusPreview = () => {
               </div>
               <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                 <Clock3 size={14} className="text-slate-400" />
-                {bus.departure} to {bus.arrival}
+                {formatBusTime(bus.departure)} to {formatBusTime(bus.arrival)}
               </div>
             </div>
             <div className="flex items-center justify-between rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-3">
@@ -237,7 +238,7 @@ const BusPreview = () => {
                     <span className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${stopBadgeTone[stop.stopType] || stopBadgeTone.both}`}>
                       {stop.stopType === 'both' ? 'BP + DP' : stop.stopType === 'drop' ? 'DP' : 'BP'}
                     </span>
-                    <p className="mt-1 text-[11px] font-bold text-slate-500">{stop.arrivalTime || stop.departureTime || '--:--'}</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">{formatBusTime(stop.arrivalTime || stop.departureTime)}</p>
                   </div>
                 </div>
               </div>

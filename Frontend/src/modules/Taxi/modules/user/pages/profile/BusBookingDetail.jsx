@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import userBusService from '../../services/busService';
+import { formatBusTime } from '../../utils/busTime';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -259,7 +260,7 @@ const BusBookingDetail = () => {
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">
                     <p className="text-xl font-black text-slate-900 truncate">{booking.bus?.fromCity || 'From'}</p>
-                    <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">{booking.bus?.departure || '--:--'}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">{formatBusTime(booking.bus?.departure)}</p>
                   </div>
                   <div className="flex flex-col items-center flex-1 px-2">
                     <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
