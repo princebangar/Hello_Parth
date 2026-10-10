@@ -5,6 +5,7 @@ import { X, ShieldCheck, Phone, MessageCircle, Shield, CheckCircle2, Navigation,
 import { GoogleMap, OverlayView, Polyline } from '@react-google-maps/api';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
+import CancellationFeeNotice from '../../components/CancellationFeeNotice';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../services/currentRideService';
 import { useBaseGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../../admin/utils/googleMaps';
@@ -1425,9 +1426,10 @@ const SearchingDriver = () => {
                 <AlertTriangle size={26} className="text-red-400" strokeWidth={2} />
               </div>
               <h3 className="text-[18px] font-bold text-slate-900 mb-1.5">Cancel ride?</h3>
-              <p className="text-[13px] font-bold text-slate-400 mb-6 leading-relaxed">
+              <p className="text-[13px] font-bold text-slate-400 mb-4 leading-relaxed">
                 {"We're still searching. Stop looking?"}
               </p>
+              <CancellationFeeNotice rideId={activeRideIdRef.current} />
               <div className="space-y-2.5">
                 <motion.button whileTap={{ scale: 0.97 }} onClick={handleCancel}
                   className="w-full bg-slate-900 text-white py-3.5 rounded-[16px] text-[13px] font-bold uppercase tracking-widest">

@@ -37,6 +37,7 @@ import {
   withAreaHint,
 } from '../../utils/nearbyPlaces';
 import { loadRoadDistances } from '../../utils/preciseLocation';
+import { PendingCancellationDueNotice } from '../../components/CancellationFeeNotice';
 
 const Motion = motion;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
@@ -1489,6 +1490,8 @@ const SenderReceiverDetails = () => {
             </div>
           ) : null}
         </div>
+
+        <PendingCancellationDueNotice className="mt-5" />
 
         <motion.section 
           initial={{ opacity: 0 }} 

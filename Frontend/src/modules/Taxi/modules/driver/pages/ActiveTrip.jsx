@@ -1505,8 +1505,10 @@ const ActiveTrip = () => {
     const paymentModeLabel = selectedPaymentMode
         ? (selectedPaymentMode === 'cash' ? 'Cash' : 'Online')
         : (effectiveState?.paymentMethod || liveRequest?.payment || tripData.payment || 'Pending');
+    // The rider's earlier unpaid cancellation fee is part of the fare to collect, but not part of the trip earning.
+    const earlierFeeAmount = Math.max(0, Number(liveRaw?.cancellationDueCharge?.amount ?? effectiveState?.cancellationDueCharge?.amount ?? 0));
     const commissionSummary = computeCommissionSummary({
-        fare: fareAmount,
+        fare: Math.max(0, fareAmount - earlierFeeAmount),
         promoDiscount: Number(liveRaw?.promo?.discount_amount ?? effectiveState?.promo?.discount_amount ?? liveRequest?.raw?.promoDiscount ?? 0),
         pricingSnapshot: waitingPricing,
         explicitCommissionAmount: liveRaw?.commissionAmount ?? effectiveState?.commissionAmount,
@@ -2861,6 +2863,11 @@ const ActiveTrip = () => {
                                         <p className="mt-2 text-[14px] font-black text-white">{formatCurrencyAmount(commissionSummary.driverEarnings)}</p>
                                     </div>
                                 </div>
+                                {earlierFeeAmount > 0 ? (
+                                    <p className="border-t border-slate-100 px-5 py-3 text-[11px] font-bold leading-snug text-amber-600">
+                                        Trip Fare includes {formatCurrencyAmount(earlierFeeAmount)} the rider owed from an earlier cancelled ride. Collect it too - it goes to the platform and is not part of your earning.
+                                    </p>
+                                ) : null}
                             </div>
                             {driverPaymentStatus === 'pending' && (
                                 <div className="grid grid-cols-2 gap-3 mb-6">

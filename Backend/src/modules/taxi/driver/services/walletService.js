@@ -340,6 +340,39 @@ export const isRideReadyForWalletSettlement = (ride) =>
   Boolean(ride?.subscriptionUsage?.covered) ||
   isRideCollectionPaid(ride);
 
+// The cancellation fees this ride carried are paid now: mark them collected, and where the rider's cancel fee was set to
+// go to the DRIVER, credit the driver who was cancelled on (the ride settles once, so this runs once).
+const collectCancellationDues = async ({ ride, session }) => {
+  const dues = await Ride.find({
+    'cancellationFee.collectedByRideId': ride._id,
+    'cancellationFee.status': 'collecting',
+  }).select('cancellationFee').session(session).lean();
+
+  for (const due of dues) {
+    const fee = due.cancellationFee;
+    if (String(fee?.goesTo || 'admin') === 'driver' && fee?.driverId && Number(fee.amount) > 0) {
+      await applyDriverWalletAdjustment({
+        driverId: fee.driverId,
+        rideId: due._id,
+        amount: Number(fee.amount),
+        type: 'adjustment',
+        description: `Cancellation fee received for booking ${String(due._id).slice(-6)}`,
+        metadata: {
+          source: 'ride_cancellation_fee_collected',
+          collectedOnRideId: String(ride._id),
+          referenceKey: `ride-cancel:user:${String(due._id)}:driver-credit`,
+        },
+        session,
+      });
+    }
+    await Ride.updateOne(
+      { _id: due._id },
+      { $set: { 'cancellationFee.status': 'collected', 'cancellationFee.collectedAt': new Date() } },
+      { session },
+    );
+  }
+};
+
 // Safe to call any number of times (driver completion, rider payment, QR paid): the wallet moves at most once per ride.
 export const settleCompletedRideWallet = async ({ rideId }) => {
   const session = await mongoose.startSession();
@@ -358,17 +391,23 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     const fare = normalizeAmount(ride.fare || 0, 'fare');
     const promoDiscount = Math.max(normalizeAmount(ride.promo?.discount_amount || 0, 'promo discount'), 0);
     const grossFare = normalizeAmount(fare + promoDiscount, 'fare');
+    // The rider's earlier unpaid cancellation fee(s) ride along in this fare. That money is not the driver's trip
+    // earning: commission is taken on the trip part only, and the driver hands the fee over (cash) or never gets it
+    // (online) - it goes to the platform, or to the driver the rider cancelled on (credited below).
+    const dueCharge = Math.min(Math.max(Number(ride.cancellationDueCharge?.amount || 0), 0), fare);
+    const tripFare = Math.max(Math.round((grossFare - dueCharge) * 100) / 100, 0);
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
     const commissionAmount = computeCommissionAmount({
-      fare: grossFare,
+      fare: tripFare,
       type: commissionConfig.type,
       value: commissionConfig.value,
     });
     const paymentMethod = normalizePaymentMethod(ride.paymentMethod);
-    const driverEarnings = Math.max(Math.round((grossFare - commissionAmount) * 100) / 100, 0);
-    // Cash: the driver already holds the (discounted) fare, so the wallet gets the promo back and loses the commission.
+    const driverEarnings = Math.max(Math.round((tripFare - commissionAmount) * 100) / 100, 0);
+    // Cash: the driver already holds the (discounted) fare, so the wallet gets the promo back and loses the commission
+    // and the cancellation fee he collected for the platform.
     const amount = paymentMethod === 'cash'
-      ? Math.round((promoDiscount - commissionAmount) * 100) / 100
+      ? Math.round((promoDiscount - commissionAmount - dueCharge) * 100) / 100
       : driverEarnings;
     const type = amount < 0 ? 'commission_deduction' : 'ride_earning';
 
@@ -401,6 +440,10 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       { $set: { ...settledFields, walletSettledAt: new Date() } },
       { session },
     );
+
+    if (claim.modifiedCount && dueCharge > 0) {
+      await collectCancellationDues({ ride, session });
+    }
 
     if (!claim.modifiedCount || !amount) {
       await session.commitTransaction();

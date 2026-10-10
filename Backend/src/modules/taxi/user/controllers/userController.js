@@ -34,6 +34,11 @@ import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
+import { Vehicle } from '../../admin/models/Vehicle.js';
+import { Zone } from '../../driver/models/Zone.js';
+import { findZoneByPickup } from '../../services/matchingService.js';
+import { fetchRoadDistance } from '../../services/googleDistanceService.js';
+import { calculateOutstationFare, isOutstationPricingEnabled, resolveSetPriceForRide } from '../../services/rideService.js';
 import { applyDriverWalletAdjustment } from '../../driver/services/walletService.js';
 import { emitToDriver } from '../../services/dispatchService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
@@ -943,6 +948,77 @@ export const getIntercityPackageCatalog = async (_req, res) => {
   res.json({
     success: true,
     results,
+  });
+};
+
+// Intercity / outstation to ANY place (no admin route needed): one fare per vehicle from Set Price > Outstation Ride
+// (Out. Base Price + extra km over Out. Base Distance x Out. Price/km, + Service Tax) on the real road distance. Admin
+// routes (Package Pricing) stay as fixed-price shortcuts; this covers every other destination.
+export const getIntercityOutstationQuote = async (req, res) => {
+  const pickup = [Number(req.query.pickupLng), Number(req.query.pickupLat)];
+  const drop = [Number(req.query.dropLng), Number(req.query.dropLat)];
+  if (![...pickup, ...drop].every(Number.isFinite)) {
+    throw new ApiError(400, 'Pickup and destination locations are required');
+  }
+
+  const zone = await findZoneByPickup(pickup).catch(() => null);
+  if (!zone && (await Zone.countDocuments({ active: { $ne: false }, status: { $ne: 'inactive' } })) > 0) {
+    throw new ApiError(400, 'Service is not available at your pickup location yet');
+  }
+  const serviceLocationId = zone?.service_location_id ? String(zone.service_location_id) : null;
+
+  const road = await fetchRoadDistance({ lat: pickup[1], lng: pickup[0] }, { lat: drop[1], lng: drop[0] });
+  if (!road) {
+    throw new ApiError(502, 'Could not work out the distance to that place right now. Please try again in a moment.');
+  }
+
+  const vehicles = await Vehicle.find({ status: 1, active: { $ne: false }, transport_type: { $in: ['taxi', 'both'] } })
+    .select('name capacity icon map_icon image icon_types dispatch_type')
+    .sort({ capacity: 1, name: 1 })
+    .lean();
+
+  const priced = await Promise.all(vehicles.map(async (vehicle) => {
+    // Same lookup the ride will use when it is booked (no zone id is sent with an intercity booking).
+    const rule = await resolveSetPriceForRide({
+      zoneId: null,
+      serviceLocationId,
+      transportType: 'intercity',
+      vehicleTypeId: vehicle._id,
+    });
+    if (!isOutstationPricingEnabled(rule)) {
+      return null;
+    }
+    const fare = calculateOutstationFare(rule, road.km);
+    if (!(fare > 0)) {
+      return null;
+    }
+    return {
+      id: `outstation:${String(vehicle._id)}`,
+      vehicleTypeId: String(vehicle._id),
+      vehicleName: vehicle.name || 'Vehicle',
+      capacity: Number(vehicle.capacity || 0),
+      icon: vehicle.map_icon || vehicle.icon || vehicle.image || '',
+      iconType: vehicle.icon_types || vehicle.name || '',
+      dispatchType: String(vehicle.dispatch_type || 'normal').trim().toLowerCase(),
+      // IntercityVehicle prices a trip as its flat "basePrice"; this one already includes the service tax.
+      basePrice: fare,
+      freeDistance: 0,
+      distancePrice: 0,
+      freeTime: 0,
+      timePrice: 0,
+      serviceTax: 0,
+      cancellationFee: 0,
+    };
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      serviceLocationId,
+      distanceKm: road.km,
+      durationMinutes: road.minutes,
+      vehicles: priced.filter(Boolean),
+    },
   });
 };
 

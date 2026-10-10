@@ -336,16 +336,78 @@ const applyDriverWalletAdjustmentByReference = async ({
   return { status: 'applied', amount: normalizedAmount, walletResult };
 };
 
-const settleUserCancellationFee = async (ride, session) => {
+// What cancelling costs the rider RIGHT NOW (Set Price > Cancellation Fee for User): nothing while we are still looking
+// for a driver, the admin's fee once a driver has been assigned. Shared by the cancel popup preview and the real cancel.
+const quoteUserCancellationFee = async (ride, session = null) => {
+  const none = { applies: false, feeAmount: 0, feeType: '', feeValue: 0, goesTo: 'admin' };
+  if (!ride?.driverId) {
+    return none;
+  }
+
   const pricing = await resolveCancellationPricing(ride, session);
+  // An earlier cancellation fee already added to this ride's fare is not part of what the fee is a percentage of.
+  const earlierFeeInFare = Math.max(roundMoney(ride?.cancellationDueCharge?.amount || 0), 0);
   const feeAmount = computeCancellationFeeAmount({
-    ride,
+    ride: {
+      fare: Math.max(roundMoney(ride?.fare || 0) - earlierFeeInFare, 0),
+      baseFare: ride?.baseFare || 0,
+    },
     feeType: pricing?.user_cancellation_fee_type,
     feeValue: pricing?.user_cancellation_fee,
   });
 
-  if (feeAmount <= 0) {
-    return { feeAmount: 0, userDebitStatus: 'none', driverCreditStatus: 'none', driverWalletResult: null };
+  return {
+    applies: feeAmount > 0,
+    feeAmount,
+    feeType: String(pricing?.user_cancellation_fee_type || 'percentage').trim().toLowerCase(),
+    feeValue: Math.max(roundMoney(pricing?.user_cancellation_fee || 0), 0),
+    goesTo: String(pricing?.cancellation_fee_goes_to || 'admin').trim().toLowerCase() === 'driver' ? 'driver' : 'admin',
+  };
+};
+
+// Used by the rider app's cancel popup: the amount, who it goes to, and whether it is taken from the wallet now or
+// added to the next ride.
+export const previewUserCancellationFee = async ({ rideId, userId }) => {
+  const ride = await Ride.findOne({ _id: rideId, userId })
+    .select('userId driverId fare baseFare status liveStatus serviceType transport_type vehicleTypeId service_location_id cancellationDueCharge')
+    .lean();
+
+  if (!ride) {
+    return null;
+  }
+
+  const isOver = [RIDE_STATUS.COMPLETED, RIDE_STATUS.CANCELLED].includes(ride.status)
+    || [RIDE_LIVE_STATUS.COMPLETED, RIDE_LIVE_STATUS.CANCELLED].includes(ride.liveStatus);
+  const quote = isOver ? { applies: false, feeAmount: 0, feeType: '', feeValue: 0, goesTo: 'admin' } : await quoteUserCancellationFee(ride);
+  const wallet = quote.applies ? await UserWallet.findOne({ userId }).select('balance').lean() : null;
+  const walletBalance = roundMoney(wallet?.balance || 0);
+
+  return {
+    rideId: String(ride._id),
+    applies: quote.applies,
+    feeAmount: quote.feeAmount,
+    feeType: quote.feeType,
+    feeValue: quote.feeValue,
+    goesTo: quote.goesTo,
+    walletBalance,
+    // wallet covers it -> taken at cancel time; otherwise it waits and is added to the fare of the next ride
+    payFrom: quote.applies ? (walletBalance >= quote.feeAmount ? 'wallet' : 'next_ride') : 'none',
+  };
+};
+
+const settleUserCancellationFee = async (ride, session) => {
+  // If this ride had picked up an earlier unpaid cancellation fee, that fee goes back to "due" - it was never paid.
+  await Ride.updateMany(
+    { 'cancellationFee.collectedByRideId': ride._id, 'cancellationFee.status': 'collecting' },
+    { $set: { 'cancellationFee.status': 'due', 'cancellationFee.collectedByRideId': null } },
+    { session },
+  );
+
+  const quote = await quoteUserCancellationFee(ride, session);
+  const feeAmount = quote.feeAmount;
+
+  if (!quote.applies) {
+    return { feeAmount: 0, feeStatus: 'none', userDebitStatus: 'none', driverCreditStatus: 'none', driverWalletResult: null };
   }
 
   const feeReferenceBase = `ride-cancel:user:${String(ride._id)}`;
@@ -359,11 +421,10 @@ const settleUserCancellationFee = async (ride, session) => {
     requireSufficientFunds: true,
   });
 
+  const paidFromWallet = ['applied', 'existing'].includes(userDebit.status);
+
   let driverCredit = { status: 'skipped', walletResult: null };
-  const shouldCreditDriver =
-    ['applied', 'existing'].includes(userDebit.status) &&
-    String(pricing?.cancellation_fee_goes_to || 'admin').trim().toLowerCase() === 'driver' &&
-    ride.driverId;
+  const shouldCreditDriver = paidFromWallet && quote.goesTo === 'driver' && ride.driverId;
 
   if (shouldCreditDriver) {
     driverCredit = await applyDriverWalletAdjustmentByReference({
@@ -382,8 +443,22 @@ const settleUserCancellationFee = async (ride, session) => {
     });
   }
 
+  // Wallet could not cover it: the fee is not lost, it is added to the fare of the rider's next trip.
+  ride.cancellationFee = {
+    amount: feeAmount,
+    status: paidFromWallet ? 'paid' : 'due',
+    feeType: quote.feeType,
+    feeValue: quote.feeValue,
+    goesTo: quote.goesTo,
+    driverId: ride.driverId || null,
+    settledAt: new Date(),
+    collectedByRideId: null,
+    collectedAt: null,
+  };
+
   return {
     feeAmount,
+    feeStatus: paidFromWallet ? 'paid' : 'due',
     userDebitStatus: userDebit.status,
     driverCreditStatus: driverCredit.status,
     driverWalletResult: driverCredit.walletResult || null,

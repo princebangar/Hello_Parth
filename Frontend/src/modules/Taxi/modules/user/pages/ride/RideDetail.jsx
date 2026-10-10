@@ -87,7 +87,9 @@ const RideDetail = () => {
     // ride.fare is what the rider pays (after the promo). The receipt lists Ride fare + Taxes - Promo discount, so
     // the tax split has to start from the price BEFORE the discount or the lines would not add up to the total.
     const discount = Math.max(0, Number(ride?.promo?.discount_amount || 0));
-    const taxableFare = Math.max(0, fare - waitingAmount + discount);
+    // An earlier cancellation fee the rider owed is added to this fare when the trip starts; it is not taxed either.
+    const earlierFeeAmount = Math.max(0, Number(ride?.cancellationDueCharge?.amount || 0));
+    const taxableFare = Math.max(0, fare - waitingAmount - earlierFeeAmount + discount);
     // The fare already includes the tax % of the price the ride was booked with. Older rides did not record that
     // %, so they show only the total instead of a made-up split.
     const rawTaxPercent = ride?.pricingSnapshot?.service_tax;
@@ -119,6 +121,7 @@ const RideDetail = () => {
       tip,
       baseFare: taxes === null ? null : Math.max(Math.round((taxableFare - taxes) * 100) / 100, 0),
       waitingAmount,
+      earlierFeeAmount,
       waitingMinutes: Number(ride?.waitingCharge?.minutes || 0),
       timeSource,
       startTime: ride?.startedAt || ride?.acceptedAt || timeSource,
@@ -279,6 +282,12 @@ const RideDetail = () => {
               <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
                 <span>Waiting charge ({details.waitingMinutes} min)</span>
                 <span className="text-gray-900">Rs {formatMoney(details.waitingAmount)}</span>
+              </div>
+            ) : null}
+            {details.earlierFeeAmount > 0 ? (
+              <div className="flex justify-between items-center text-[13px] font-bold text-gray-500">
+                <span>Earlier cancellation fee</span>
+                <span className="text-gray-900">Rs {formatMoney(details.earlierFeeAmount)}</span>
               </div>
             ) : null}
             {details.discount > 0 ? (

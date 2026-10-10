@@ -1507,9 +1507,7 @@ const serializeSetPrice = (item) => ({
   free_waiting_after: item.free_waiting_after,
 
   // Settings
-  enable_airport_ride: Boolean(item.enable_airport_ride),
   enable_outstation_ride: Boolean(item.enable_outstation_ride),
-  support_airport_fee: item.support_airport_fee ?? (item.enable_airport_ride ? 1 : 0),
   support_outstation: item.support_outstation ?? (item.enable_outstation_ride ? 1 : 0),
 
   // Cancellation
@@ -6161,10 +6159,7 @@ export const createSetPrice = async (payload, currentAdmin = null) => {
     admin_commission_from_driver: Number(payload.admin_commission_from_driver ?? 0),
 
     service_tax: Number(payload.service_tax ?? 0),
-    airport_surge: Number(payload.airport_surge ?? 0),
-    support_airport_fee: Number(payload.support_airport_fee ?? 0),
     support_outstation: Number(payload.support_outstation ?? 0),
-    enable_airport_ride: payload.enable_airport_ride ?? !!payload.support_airport_fee,
     enable_outstation_ride: payload.enable_outstation_ride ?? !!payload.support_outstation,
 
     base_price: Number(payload.base_price ?? 0),
@@ -6217,8 +6212,7 @@ export const updateSetPrice = async (id, payload, currentAdmin = null) => {
     'payment_type', 'active', 'admin_commision_type', 'admin_commision',
     'admin_commission_type_for_owner', 'admin_commission_for_owner',
     'admin_commission_type_from_driver', 'admin_commission_from_driver',
-    'service_tax', 'airport_surge', 'support_airport_fee', 'support_outstation',
-    'enable_airport_ride', 'enable_outstation_ride',
+    'service_tax', 'support_outstation', 'enable_outstation_ride',
     'base_price', 'base_distance', 'price_per_distance', 'time_price',
     'waiting_charge', 'outstation_base_price', 'outstation_base_distance',
     'outstation_price_per_distance', 'outstation_time_price',
@@ -6235,8 +6229,6 @@ export const updateSetPrice = async (id, payload, currentAdmin = null) => {
     'admin_commission_for_owner',
     'admin_commission_from_driver',
     'service_tax',
-    'airport_surge',
-    'support_airport_fee',
     'support_outstation',
     'base_price',
     'base_distance',

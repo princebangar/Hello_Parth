@@ -630,6 +630,28 @@ const rideSchema = new mongoose.Schema(
       ratePerMinute: { type: Number, default: 0, min: 0 },
       amount: { type: Number, default: 0, min: 0 },
     },
+    // Fee the rider owes for cancelling AFTER a driver was assigned (Set Price > Cancellation Fee for User).
+    //   paid       -> taken from the rider's wallet at cancel time
+    //   due        -> wallet had too little: waits and is added to the fare of the rider's next ride
+    //   collecting -> a later ride has picked it up (added to that ride's fare when it started)
+    //   collected  -> that later ride was completed and the money moved
+    cancellationFee: {
+      amount: { type: Number, default: 0, min: 0 },
+      status: { type: String, enum: ['none', 'paid', 'due', 'collecting', 'collected'], default: 'none' },
+      feeType: { type: String, default: '' },
+      feeValue: { type: Number, default: 0, min: 0 },
+      goesTo: { type: String, enum: ['admin', 'driver'], default: 'admin' },
+      driverId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiDriver', default: null },
+      settledAt: { type: Date, default: null },
+      collectedByRideId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiRide', default: null },
+      collectedAt: { type: Date, default: null },
+    },
+    // Earlier cancellation fees added to THIS ride's fare when it started (already included in fare).
+    cancellationDueCharge: {
+      amount: { type: Number, default: 0, min: 0 },
+      rideIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+      addedAt: { type: Date, default: null },
+    },
     // set when the "starts in 15 minutes" push was sent to the driver of a scheduled ride
     driverReminderSentAt: {
       type: Date,
@@ -677,6 +699,8 @@ const rideSchema = new mongoose.Schema(
 );
 
 rideSchema.index({ userId: 1, createdAt: -1 });
+rideSchema.index({ userId: 1, 'cancellationFee.status': 1 });
+rideSchema.index({ 'cancellationFee.collectedByRideId': 1 });
 rideSchema.index({ driverId: 1, createdAt: -1 });
 rideSchema.index({ status: 1, liveStatus: 1, scheduledAt: 1, createdAt: -1 });
 rideSchema.index({ driverId: 1, scheduledAt: 1, status: 1, liveStatus: 1 });

@@ -4,6 +4,7 @@ import { localDateKey } from '../../../../shared/utils/localDate';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, ChevronRight, Clock3, Info, MapPin, Users } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import { PendingCancellationDueNotice } from '../../components/CancellationFeeNotice';
 
 const pad = (value) => String(value).padStart(2, '0');
 
@@ -132,6 +133,12 @@ const IntercityVehicle = () => {
     selectedPackages = [],
     pickupAddress = '',
     pickupCoords = null,
+    // set when the destination is a free place (not an admin route)
+    serviceLocationId = '',
+    destinationAddress = '',
+    destinationCoords = null,
+    distance: routeDistance = 0,
+    isOutstation = false,
   } = location.state || {};
 
   const [tripType, setTripType] = useState(initialTripType || 'One Way');
@@ -288,7 +295,8 @@ const IntercityVehicle = () => {
         selectedPackages,
         pickupAddress,
         pickupCoords,
-        distance: 0,
+        distance: Number(routeDistance || 0),
+        ...(isOutstation ? { isOutstation: true, serviceLocationId, destinationAddress, destinationCoords } : {}),
         vehicle: selectedVehicle,
         passengers,
         fare: finalFare,
@@ -542,6 +550,7 @@ const IntercityVehicle = () => {
       </div>
 
       <div className="fixed bottom-0 left-1/2 w-full max-w-lg -translate-x-1/2 border-t border-slate-200 bg-white px-5 py-4">
+        <PendingCancellationDueNotice className="mb-3" />
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-medium text-slate-500">{tripType} · {getDisplayDate(rideMode, travelDate)}</p>

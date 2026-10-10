@@ -20,6 +20,7 @@ import { GoogleMap, OverlayView, OverlayViewF, PolylineF } from '@react-google-m
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
+import CancellationFeeNotice, { announceCancellationFee } from '../../components/CancellationFeeNotice';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { subscribeRideRealtime } from '../../../../shared/services/rideRealtime';
 import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
@@ -1249,12 +1250,13 @@ const ParcelTracking = () => {
                 <AlertTriangle size={32} strokeWidth={2.5} />
               </div>
               <h3 className="text-xl font-black text-gray-900 mb-2">Cancel Delivery?</h3>
-              <p className="text-sm font-bold text-gray-400 mb-8 leading-relaxed">Your delivery agent is already moving. Cancellation may incur charges.</p>
+              <p className="text-sm font-bold text-gray-400 mb-5 leading-relaxed">Your delivery agent is already moving.</p>
+              <CancellationFeeNotice rideId={rideId} />
               <div className="flex flex-col gap-3">
                 <motion.button
                   whileTap={{ scale: 0.96 }}
                   onClick={() => {
-                    api.patch(`/rides/${rideId}/cancel`).finally(() => {
+                    api.patch(`/rides/${rideId}/cancel`).then(announceCancellationFee).catch(() => {}).finally(() => {
                       clearCurrentRide();
                       navigate(userHomeRoute, { replace: true });
                     });

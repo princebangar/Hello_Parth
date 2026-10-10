@@ -155,8 +155,6 @@ const NON_NEGATIVE_FORM_FIELDS = new Set([
   'waiting_charge',
   'free_waiting_before',
   'free_waiting_after',
-  'support_airport_fee',
-  'airport_surge',
   'outstation_base_price',
   'outstation_base_distance',
   'outstation_price_per_distance',
@@ -224,9 +222,6 @@ const initialFormState = {
   waiting_charge: '',
   free_waiting_before: '',
   free_waiting_after: '',
-  enable_airport_ride: false,
-  support_airport_fee: '',
-  airport_surge: '',
   enable_outstation_ride: false,
   outstation_base_price: '',
   outstation_base_distance: '',
@@ -441,10 +436,6 @@ const SetPrices = ({ mode }) => {
       { name: 'Waiting Charge', val: formData.waiting_charge },
       { name: 'User Cancellation Fee', val: formData.user_cancellation_fee },
       { name: 'Driver Cancellation Fee', val: formData.driver_cancellation_fee },
-      ...(formData.enable_airport_ride ? [
-        { name: 'Airport Surge Fee', val: formData.airport_surge },
-        { name: 'Support Airport Fee', val: formData.support_airport_fee }
-      ] : []),
       ...(formData.enable_outstation_ride ? [
         { name: 'Outstation Base Price', val: formData.outstation_base_price },
         { name: 'Outstation Base Distance', val: formData.outstation_base_distance },
@@ -457,6 +448,12 @@ const SetPrices = ({ mode }) => {
         alert(`${field.name} cannot be negative.`);
         return;
       }
+    }
+
+    if (formData.enable_outstation_ride
+      && !(Number(formData.outstation_base_price) > 0 || Number(formData.outstation_price_per_distance) > 0)) {
+      alert("Outstation Ride is on: enter the Out. Base Price and the Out. Price / km, or turn Outstation Ride off.");
+      return;
     }
 
     setSaving(true);
@@ -755,7 +752,7 @@ const SetPrices = ({ mode }) => {
                                     <Zap size={12} />
                                  </button>
                                  <button 
-                                   title="Airport/Outstation Setting"
+                                   title="Driver Incentive"
                                    onClick={() => navigate(`/admin/pricing/set-price/incentive/${prize.id || prize._id}`)}
                                    className="w-7 h-7 flex items-center justify-center bg-[#EEF2FF] text-[#6366F1] rounded transition-colors hover:bg-indigo-100"
                                  >
@@ -973,27 +970,22 @@ const SetPrices = ({ mode }) => {
                      </div>
                      <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-1 pt-1 border-t border-gray-100 mt-1">
                         <div className="flex items-center gap-1">
-                           <input type="checkbox" className="w-3 h-3 rounded border-gray-300" checked={formData.enable_airport_ride} onChange={e => setFormData(p=>({...p, enable_airport_ride: e.target.checked}))} />
-                           <span className="text-[10px] font-semibold text-gray-700">Airport Ride</span>
-                        </div>
-                        <div className="flex items-center gap-1">
                            <input type="checkbox" className="w-3 h-3 rounded border-gray-300" checked={formData.enable_outstation_ride} onChange={e => setFormData(p=>({...p, enable_outstation_ride: e.target.checked}))} />
-                           <span className="text-[10px] font-semibold text-gray-700">Outstation Ride</span>
+                           <span className="text-[10px] font-semibold text-gray-700">Outstation Ride (any destination)</span>
                         </div>
                      </div>
 
-                     {formData.enable_airport_ride && (
-                        <div className="col-span-1 sm:col-span-2 md:col-span-4 lg:col-span-6 flex gap-2">
-                           <div className="flex-1"><label className={labelClass}>Airport Surge</label><input type="number" className={inputClass + " py-1"} value={formData.airport_surge} onChange={e => setFormData(p=>({...p, airport_surge: e.target.value}))} /></div>
-                           <div className="flex-1"><label className={labelClass}>Support Fee</label><input type="number" className={inputClass + " py-1"} value={formData.support_airport_fee} onChange={e => setFormData(p=>({...p, support_airport_fee: e.target.value}))} /></div>
-                        </div>
-                     )}
-
                      {formData.enable_outstation_ride && (
-                        <div className="col-span-1 sm:col-span-2 md:col-span-4 lg:col-span-6 flex gap-2">
-                           <div className="flex-1"><label className={labelClass}>Out. Base</label><input type="number" className={inputClass + " py-1"} value={formData.outstation_base_price} onChange={e => setFormData(p=>({...p, outstation_base_price: e.target.value}))} /></div>
-                           <div className="flex-1"><label className={labelClass}>Out. Dist</label><input type="number" className={inputClass + " py-1"} value={formData.outstation_base_distance} onChange={e => setFormData(p=>({...p, outstation_base_distance: e.target.value}))} /></div>
-                           <div className="flex-1"><label className={labelClass}>Out. Price/Dist</label><input type="number" className={inputClass + " py-1"} value={formData.outstation_price_per_distance} onChange={e => setFormData(p=>({...p, outstation_price_per_distance: e.target.value}))} /></div>
+                        <div className="col-span-1 sm:col-span-2 md:col-span-4 lg:col-span-6 space-y-1">
+                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div><label className={labelClass}>Out. Base Price <span className="text-rose-500">*</span></label><input type="number" min="0" className={inputClass + " py-1"} value={formData.outstation_base_price} onChange={e => setFormData(p=>({...p, outstation_base_price: clampNonNegativeInput('outstation_base_price', e.target.value)}))} /></div>
+                              <div><label className={labelClass}>Out. Base Distance (km)</label><input type="number" min="0" className={inputClass + " py-1"} value={formData.outstation_base_distance} onChange={e => setFormData(p=>({...p, outstation_base_distance: clampNonNegativeInput('outstation_base_distance', e.target.value)}))} /></div>
+                              <div><label className={labelClass}>Out. Price / km <span className="text-rose-500">*</span></label><input type="number" min="0" className={inputClass + " py-1"} value={formData.outstation_price_per_distance} onChange={e => setFormData(p=>({...p, outstation_price_per_distance: clampNonNegativeInput('outstation_price_per_distance', e.target.value)}))} /></div>
+                           </div>
+                           <p className="text-[10px] leading-snug text-gray-500">
+                              Customers can book Intercity to any place. Fare = Out. Base Price + (road km - Out. Base Distance) x Out. Price / km, plus Service Tax above.
+                              A route made in Package Pricing keeps its own fixed price.
+                           </p>
                         </div>
                      )}
                   </div>
@@ -1080,8 +1072,8 @@ const SetPrices = ({ mode }) => {
                          <p className="leading-snug text-gray-500 pl-4.5">Charges applied if the user or driver cancels the ride.</p>
                        </div>
                        <div>
-                         <p className="font-bold text-gray-800 mb-0.5 flex items-center gap-1.5"><Globe size={12} className="text-[#00BFA5]"/> Airport / Outstation</p>
-                         <p className="leading-snug text-gray-500 pl-4.5">Enable toggles to add special pricing rules for airport trips or inter-city outstation rides.</p>
+                         <p className="font-bold text-gray-800 mb-0.5 flex items-center gap-1.5"><Globe size={12} className="text-[#00BFA5]"/> Outstation</p>
+                         <p className="leading-snug text-gray-500 pl-4.5">Turn on Outstation Ride to price Intercity trips to any destination by distance. Routes made in Package Pricing keep their fixed price.</p>
                        </div>
                      </div>
                    </motion.div>

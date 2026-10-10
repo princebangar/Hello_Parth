@@ -78,6 +78,7 @@ const IntercityConfirm = () => {
           drop: state.dropCoords,
           pickupAddress: state.pickup,
           dropAddress: state.drop,
+          service_location_id: state.serviceLocationId || '',
           fare: Number(state.fare || 0),
           vehicleTypeId: state.vehicleTypeId || state.vehicle?.vehicleTypeId || '',
           vehicleTypeIds: state.vehicleTypeId || state.vehicle?.vehicleTypeId ? [state.vehicleTypeId || state.vehicle?.vehicleTypeId] : [],
@@ -99,6 +100,7 @@ const IntercityConfirm = () => {
             passengers: state.passengers || 1,
             distance: Number(state.distance || 0),
             vehicleName: state.vehicle?.name || state.vehicle?.id || 'Intercity Cab',
+            packageId: state.vehicle?.packageId || '',
           },
         });
         setStatus('scheduled');

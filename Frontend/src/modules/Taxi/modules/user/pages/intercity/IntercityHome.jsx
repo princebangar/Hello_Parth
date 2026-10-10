@@ -99,6 +99,11 @@ const IntercityHome = () => {
   const [toCitySearch, setToCitySearch] = useState('');
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [isToFocused, setIsToFocused] = useState(false);
+  // Any other place (not an admin route): picked from Google, priced by distance on the next screen.
+  const [destinationPlace, setDestinationPlace] = useState(null);
+  const [placeSuggestions, setPlaceSuggestions] = useState([]);
+  const [isQuoting, setIsQuoting] = useState(false);
+  const [pickupCityName, setPickupCityName] = useState('');
 
   // Date and Time State
   const [travelDate, setTravelDate] = useState(() => {
@@ -197,6 +202,7 @@ const IntercityHome = () => {
     const cached = reverseGeocodeCacheRef.current.get(cacheKey);
     if (cached) {
       setPickupAddress(cached.address);
+      setPickupCityName(cached.cityName || '');
       if (cached.cityName) {
         const matched = packages.find((pkg) => pkg.serviceLocationName.toLowerCase() === cached.cityName.toLowerCase());
         if (matched) {
@@ -220,6 +226,7 @@ const IntercityHome = () => {
           c.types.includes('locality') || c.types.includes('administrative_area_level_2')
         );
         const cityName = cityObj?.long_name || '';
+        setPickupCityName(cityName);
         reverseGeocodeCacheRef.current.set(cacheKey, {
           address,
           cityName,
@@ -482,6 +489,76 @@ const IntercityHome = () => {
     };
   }, [isMapSearchFocused, mapCenter, mapSearchInput, pickupAddress, showMapPicker]);
 
+  // Places beyond the admin's routes: cities / towns matching what was typed (India only).
+  useEffect(() => {
+    const query = toCitySearch.trim();
+    if (selectedPackage || destinationPlace || query.length < 3 || !isLoaded || !autocompleteServiceRef.current) {
+      setPlaceSuggestions([]);
+      return undefined;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(() => {
+      autocompleteServiceRef.current.getPlacePredictions(
+        {
+          input: query,
+          componentRestrictions: { country: 'in' },
+          types: ['(cities)'],
+          sessionToken: getAutocompleteSessionToken() || undefined,
+        },
+        (predictions, status) => {
+          if (!active) return;
+          const routeNames = new Set(packages.map((pkg) => normalizeSearchValue(pkg.destination)));
+          setPlaceSuggestions(
+            status === 'OK' && Array.isArray(predictions)
+              ? predictions
+                .map((prediction) => ({
+                  placeId: prediction.place_id,
+                  title: prediction.structured_formatting?.main_text || prediction.description,
+                  subtitle: prediction.structured_formatting?.secondary_text || '',
+                }))
+                .filter((item) => !routeNames.has(normalizeSearchValue(item.title)))
+                .slice(0, 5)
+              : [],
+          );
+        },
+      );
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [toCitySearch, selectedPackage, destinationPlace, isLoaded, packages]);
+
+  const pickDestinationPlace = async (suggestion) => {
+    const geocoder = geocoderRef.current || (window.google?.maps?.Geocoder ? new window.google.maps.Geocoder() : null);
+    geocoderRef.current = geocoder;
+    if (!geocoder || !suggestion?.placeId) return;
+
+    const resolved = await new Promise((resolve) => {
+      geocoder.geocode({ placeId: suggestion.placeId }, (results, status) => {
+        const location = results?.[0]?.geometry?.location;
+        resolve(status === 'OK' && location ? {
+          address: cleanGroundAddress(results[0].formatted_address) || suggestion.title,
+          coords: [location.lng(), location.lat()],
+        } : null);
+      });
+    });
+    resetAutocompleteSessionToken();
+
+    if (!resolved) {
+      toast.error('Could not find that place. Please try another one.');
+      return;
+    }
+
+    setSelectedPackage(null);
+    setToCitySearch(suggestion.title);
+    setDestinationPlace({ title: suggestion.title, placeId: suggestion.placeId, address: resolved.address, coords: resolved.coords });
+    setPlaceSuggestions([]);
+    setIsToFocused(false);
+  };
+
   const filteredPackages = useMemo(() => {
     const query = normalizeSearchValue(toCitySearch);
 
@@ -561,6 +638,8 @@ const IntercityHome = () => {
       if (match) {
         setSelectedPackage(match);
         proceedWithPackage(match);
+      } else if (destinationPlace) {
+        proceedWithPlace(destinationPlace);
       } else {
         toast.error('Please select a valid Drop Location from the suggestions');
         setIsToFocused(true);
@@ -569,6 +648,65 @@ const IntercityHome = () => {
     }
 
     proceedWithPackage(selectedPackage);
+  };
+
+  // A place that is not an admin route: ask the server for the distance-priced fare of every vehicle that can go there.
+  const proceedWithPlace = async (place) => {
+    if (isQuoting) return;
+    if (!Array.isArray(pickupCoords) || pickupCoords.length !== 2) {
+      toast.error('Please set your Pickup Location on the map');
+      exploreAfterPickupRef.current = true;
+      setShowMapPicker(true);
+      return;
+    }
+
+    setIsQuoting(true);
+    try {
+      const quote = await userService.getIntercityQuote({
+        pickupLng: pickupCoords[0],
+        pickupLat: pickupCoords[1],
+        dropLng: place.coords[0],
+        dropLat: place.coords[1],
+      });
+      const vehicles = Array.isArray(quote?.vehicles) ? quote.vehicles : [];
+      if (vehicles.length === 0) {
+        toast.error('Outstation rides to this place are not available right now. Please try another place.');
+        return;
+      }
+
+      const combinedScheduledAt = new Date(`${travelDate}T${travelTime}`);
+      navigate(`${routePrefix}/intercity/vehicle`, {
+        state: {
+          fromCity: pickupCityName || fromCity || 'Pickup',
+          toCity: place.title,
+          tripType,
+          rideMode: 'schedule',
+          date: travelDate,
+          scheduledAt: combinedScheduledAt.toISOString(),
+          selectedPackages: [{
+            id: 'outstation',
+            serviceLocationId: quote?.serviceLocationId || '',
+            serviceLocationName: pickupCityName || fromCity || '',
+            packageTypeId: '',
+            packageTypeName: 'Outstation',
+            destination: place.title,
+            availability: 'available',
+            vehicles,
+          }],
+          pickupAddress,
+          pickupCoords,
+          serviceLocationId: quote?.serviceLocationId || '',
+          destinationAddress: place.address,
+          destinationCoords: place.coords,
+          distance: Number(quote?.distanceKm || 0),
+          isOutstation: true,
+        },
+      });
+    } catch (error) {
+      toast.error(error?.message || 'Could not get the fare for this place. Please try again.');
+    } finally {
+      setIsQuoting(false);
+    }
   };
 
   const proceedWithPackage = (pkg) => {
@@ -599,6 +737,8 @@ const IntercityHome = () => {
     const pkg = selectedPackage || packages.find((p) => p.destination.toLowerCase().trim() === toCitySearch.toLowerCase().trim());
     if (pkg) {
       proceedWithPackage(pkg);
+    } else if (destinationPlace) {
+      proceedWithPlace(destinationPlace);
     }
   }, [continueAfterPickup, pickupAddress]);
 
@@ -853,6 +993,9 @@ const IntercityHome = () => {
                     if (selectedPackage && selectedPackage.destination !== e.target.value) {
                       setSelectedPackage(null);
                     }
+                    if (destinationPlace && destinationPlace.title !== e.target.value) {
+                      setDestinationPlace(null);
+                    }
                   }}
                   onFocus={() => setIsToFocused(true)}
                   className="w-full bg-transparent border-0 outline-none p-0 font-bold text-[15px] text-slate-800 placeholder:text-slate-400 leading-snug mt-0.5"
@@ -864,6 +1007,7 @@ const IntercityHome = () => {
                   onClick={() => {
                     setToCitySearch('');
                     setSelectedPackage(null);
+                    setDestinationPlace(null);
                   }}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-200/50"
                 >
@@ -889,8 +1033,9 @@ const IntercityHome = () => {
                           <LoaderCircle size={18} className="animate-spin text-blue-500" />
                           <span className="text-[13px] font-medium">Loading routes...</span>
                         </div>
-                      ) : filteredPackages.length > 0 ? (
-                        filteredPackages.map((pkg) => (
+                      ) : (filteredPackages.length > 0 || placeSuggestions.length > 0) ? (
+                        <>
+                        {filteredPackages.map((pkg) => (
                           <button
                             key={pkg.id}
                             type="button"
@@ -917,7 +1062,28 @@ const IntercityHome = () => {
                               </p>
                             </div>
                           </button>
-                        ))
+                        ))}
+                        {placeSuggestions.length > 0 ? (
+                          <>
+                            <p className="px-5 pt-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Other places</p>
+                            {placeSuggestions.map((place) => (
+                              <button
+                                key={place.placeId}
+                                type="button"
+                                onClick={() => pickDestinationPlace(place)}
+                                className="w-full px-5 py-3 text-left hover:bg-slate-50 flex items-center gap-3 border-b border-slate-50 last:border-0 transition-colors group"
+                              >
+                                <MapPin size={16} className="shrink-0 text-slate-400 group-hover:text-blue-600" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-[14px] font-black text-slate-800 group-hover:text-blue-600">{place.title}</p>
+                                  {place.subtitle ? <p className="truncate text-[11px] font-semibold text-slate-400">{place.subtitle}</p> : null}
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fare by distance</span>
+                              </button>
+                            ))}
+                          </>
+                        ) : null}
+                        </>
                       ) : (
                         <div className="p-8 text-center text-slate-400">
                           <p className="text-[13px] font-bold">No routes matching query</p>
@@ -963,9 +1129,10 @@ const IntercityHome = () => {
           <button
             onClick={handleExploreCabs}
             type="button"
-            className="mt-5 w-full bg-[#FF7A1A] hover:bg-[#E06610] text-white font-extrabold text-[15px] py-4 rounded-xl tracking-widest shadow-md hover:shadow-lg active:scale-[0.98] transition-all text-center uppercase"
+            disabled={isQuoting}
+            className="mt-5 w-full bg-[#FF7A1A] hover:bg-[#E06610] text-white font-extrabold text-[15px] py-4 rounded-xl tracking-widest shadow-md hover:shadow-lg active:scale-[0.98] transition-all text-center uppercase disabled:opacity-70"
           >
-            EXPLORE CABS
+            {isQuoting ? 'GETTING FARES...' : 'EXPLORE CABS'}
           </button>
 
         </div>

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShieldCheck, Phone, MessageCircle, CheckCircle2, AlertTriangle, Star } from 'lucide-react';
 import { GoogleMap, OverlayView, Polyline } from '@react-google-maps/api';
 import api from '../../../../shared/api/axiosInstance';
+import CancellationFeeNotice from '../../components/CancellationFeeNotice';
 import { socketService } from '../../../../shared/api/socket';
 import { getLocalUserToken, userAuthService } from '../../services/authService';
 import { getCurrentRide, isActiveCurrentRide, saveCurrentRide } from '../../services/currentRideService';
@@ -1030,9 +1031,10 @@ const ParcelSearchingDriver = () => {
                 <AlertTriangle size={26} className="text-red-400" strokeWidth={2} />
               </div>
               <h3 className="text-[18px] font-bold text-slate-900 mb-1.5">Cancel parcel search?</h3>
-              <p className="text-[13px] font-bold text-slate-400 mb-6 leading-relaxed">
+              <p className="text-[13px] font-bold text-slate-400 mb-4 leading-relaxed">
                 We&apos;re still searching nearby captains. Stop looking?
               </p>
+              <CancellationFeeNotice rideId={activeRideIdRef.current} />
               <div className="space-y-2.5">
                 <motion.button
                   whileTap={{ scale: 0.97 }}

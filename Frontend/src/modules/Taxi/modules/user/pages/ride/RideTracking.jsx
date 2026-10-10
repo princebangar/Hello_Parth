@@ -6,6 +6,7 @@ import { GoogleMap, OverlayView, OverlayViewF, PolylineF } from '@react-google-m
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 import { socketService } from '../../../../shared/api/socket';
 import api from '../../../../shared/api/axiosInstance';
+import CancellationFeeNotice, { announceCancellationFee } from '../../components/CancellationFeeNotice';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import { subscribeRideRealtime } from '../../../../shared/services/rideRealtime';
 import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
@@ -594,7 +595,7 @@ const RideTracking = () => {
   const handleCancelRide = async () => {
     try {
       if (rideId) {
-        await api.patch(`/rides/${rideId}/cancel`);
+        announceCancellationFee(await api.patch(`/rides/${rideId}/cancel`));
       }
     } catch (_error) {
       // If the ride has already advanced or ended, we still clear the local state below.
@@ -1828,7 +1829,8 @@ const RideTracking = () => {
                 <AlertTriangle size={26} className="text-red-400" strokeWidth={2} />
               </div>
               <h3 className="text-[18px] font-bold text-slate-900 mb-1.5">Cancel your ride?</h3>
-              <p className="text-[13px] font-bold text-slate-400 mb-6 leading-relaxed">Your captain is already on the way.</p>
+              <p className="text-[13px] font-bold text-slate-400 mb-4 leading-relaxed">Your captain is already on the way.</p>
+              <CancellationFeeNotice rideId={rideId} />
               <div className="space-y-2.5">
                 <motion.button
                   whileTap={{ scale: 0.97 }}

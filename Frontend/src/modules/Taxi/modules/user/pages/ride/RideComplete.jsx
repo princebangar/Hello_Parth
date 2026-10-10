@@ -159,7 +159,8 @@ const RideComplete = () => {
   const receiptDiscount = Math.max(0, Number(serverRide?.promo?.discount_amount || 0));
   const receiptTaxPercentRaw = serverRide?.pricingSnapshot?.service_tax;
   const receiptTaxPercent = receiptTaxPercentRaw === null || receiptTaxPercentRaw === undefined || receiptTaxPercentRaw === '' ? null : Number(receiptTaxPercentRaw);
-  const receiptTaxable = Math.max(0, fare - receiptWaiting + receiptDiscount);
+  const receiptEarlierFee = Math.max(0, Number(serverRide?.cancellationDueCharge?.amount || 0));
+  const receiptTaxable = Math.max(0, fare - receiptWaiting - receiptEarlierFee + receiptDiscount);
   const receiptTax = Number.isFinite(receiptTaxPercent) && receiptTaxPercent > 0
     ? Math.round((receiptTaxable - receiptTaxable / (1 + receiptTaxPercent / 100)) * 100) / 100
     : 0;
@@ -657,6 +658,12 @@ const RideComplete = () => {
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-[12px] font-bold text-slate-500">Waiting charge ({Number(serverRide?.waitingCharge?.minutes || 0)} min)</span>
                   <span className="text-[13px] font-black text-slate-900">Rs {receiptWaiting.toFixed(2)}</span>
+                </div>
+              ) : null}
+              {receiptEarlierFee > 0 ? (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-slate-500">Earlier cancellation fee</span>
+                  <span className="text-[13px] font-black text-slate-900">Rs {receiptEarlierFee.toFixed(2)}</span>
                 </div>
               ) : null}
               {receiptDiscount > 0 ? (

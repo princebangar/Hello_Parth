@@ -9,6 +9,11 @@ export const userService = {
     const response = await api.get('/users/intercity-packages');
     return response;
   },
+  // Outstation / intercity to ANY destination: one distance-priced fare per vehicle (Set Price > Outstation Ride).
+  getIntercityQuote: async (params) => {
+    const response = await api.get('/users/intercity-quote', { params });
+    return response?.data || response;
+  },
   getServiceLocations: async () => {
     const response = await api.get('/users/service-locations');
     return response;

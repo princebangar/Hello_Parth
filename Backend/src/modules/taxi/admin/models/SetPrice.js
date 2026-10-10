@@ -200,10 +200,6 @@ const setPriceSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
-    enable_airport_ride: {
-      type: Boolean,
-      default: false,
-    },
     enable_outstation_ride: {
       type: Boolean,
       default: false,
@@ -260,14 +256,6 @@ const setPriceSchema = new mongoose.Schema(
       default: 0,
     },
     service_tax: {
-      type: Number,
-      default: 0,
-    },
-    airport_surge: {
-      type: Number,
-      default: 0,
-    },
-    support_airport_fee: {
       type: Number,
       default: 0,
     },

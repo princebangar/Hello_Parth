@@ -16,6 +16,7 @@ import {
   getActiveRideForIdentity,
   getRideDetails,
   getRideRoom,
+  getUserPendingCancellationDue,
   increaseRideBidCeiling,
   listRideBidsForUser,
   listRideHistoryForIdentity,
@@ -29,6 +30,7 @@ import {
   getSocketServer,
   notifyRideAccepted,
   notifyRideBiddingUpdated,
+  previewUserCancellationFee,
   restartRideDispatchWithLatestFare,
   startDispatchFlow,
 } from '../../services/dispatchService.js';
@@ -1084,8 +1086,31 @@ export const cancelRide = async (req, res) => {
       rideId: String(ride._id),
       status: ride.status,
       liveStatus: ride.liveStatus,
+      // what the cancel cost the rider: paid from the wallet, or added to the next ride ("due")
+      cancellationFee: Number(ride.cancellationFee?.amount || 0) > 0
+        ? { amount: Number(ride.cancellationFee.amount), status: ride.cancellationFee.status }
+        : null,
     },
   });
+};
+
+// Cancel popup: what cancelling this ride costs right now, and whether the wallet or the next ride pays it.
+export const getRideCancellationFee = async (req, res) => {
+  const preview = await previewUserCancellationFee({
+    rideId: req.params.rideId,
+    userId: req.auth.sub,
+  });
+
+  if (!preview) {
+    throw new ApiError(404, 'Ride not found');
+  }
+
+  res.json({ success: true, data: preview });
+};
+
+// Cancellation fee(s) the rider still owes (wallet was too low when cancelling): added to the fare of the next trip.
+export const getMyCancellationDue = async (req, res) => {
+  res.json({ success: true, data: await getUserPendingCancellationDue(req.auth.sub) });
 };
 
 export const listAvailableDrivers = async (req, res) => {

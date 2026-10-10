@@ -10,6 +10,7 @@ import {
 import {
   cancelMyBusBooking,
   createBusBookingOrder,
+  getIntercityOutstationQuote,
   createRazorpayWalletTopupOrder,
   createPhonePeWalletTopupOrder,
   handleUserRazorpayWalletTopupCallback,
@@ -68,6 +69,7 @@ userRouter.get('/bootstrap', asyncHandler(getAppBootstrap));
 userRouter.get('/app-modules', asyncHandler(getAppModules));
 userRouter.get('/settings/:category', asyncHandler(getGeneralSettingsCategory));
 userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
+userRouter.get('/intercity-quote', authenticate(['user']), asyncHandler(getIntercityOutstationQuote));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/set-prices', asyncHandler(getSetPrices));

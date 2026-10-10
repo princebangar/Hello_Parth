@@ -729,55 +729,22 @@ export const resolveSetPriceForRide = async ({ zoneId = null, serviceLocationId 
   }
 
   const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
+  // Set Price has no "intercity" transport type (only taxi / delivery / pooling / both), so an intercity or outstation
+  // ride is priced and settled with the rule of its taxi vehicle: intercity rows first, then BOTH, then taxi.
+  const transportCandidates = normalizedTransportType === 'intercity'
+    ? ['intercity', 'both', 'taxi']
+    : [normalizedTransportType, 'both'];
+  const scopedFilters = (scope) => transportCandidates.map((candidate) => ({
+    vehicle_type: vehicleTypeId,
+    active: 1,
+    status: 'active',
+    ...scope,
+    transport_type: candidate,
+  }));
   const filters = [
-    ...(zoneId
-      ? [
-          {
-            vehicle_type: vehicleTypeId,
-            active: 1,
-            status: 'active',
-            zone_id: zoneId,
-            transport_type: normalizedTransportType,
-          },
-          {
-            vehicle_type: vehicleTypeId,
-            active: 1,
-            status: 'active',
-            zone_id: zoneId,
-            transport_type: 'both',
-          },
-        ]
-      : []),
-    ...(serviceLocationId
-      ? [
-          {
-            vehicle_type: vehicleTypeId,
-            active: 1,
-            status: 'active',
-            service_location_id: serviceLocationId,
-            transport_type: normalizedTransportType,
-          },
-          {
-            vehicle_type: vehicleTypeId,
-            active: 1,
-            status: 'active',
-            service_location_id: serviceLocationId,
-            transport_type: 'both',
-          },
-        ]
-      : []),
-    {
-      vehicle_type: vehicleTypeId,
-      active: 1,
-      status: 'active',
-      transport_type: normalizedTransportType,
-    },
-    {
-      vehicle_type: vehicleTypeId,
-      active: 1,
-      status: 'active',
-      transport_type: 'both',
-    },
+    ...(zoneId ? scopedFilters({ zone_id: zoneId }) : []),
+    ...(serviceLocationId ? scopedFilters({ service_location_id: serviceLocationId }) : []),
+    ...scopedFilters({}),
   ];
 
   const cacheKey = [
@@ -911,10 +878,37 @@ const straightLineKm = (from = [], to = []) => {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+// Outstation / intercity to ANY destination (no admin route): Set Price > Outstation Ride fields.
+//   fare = (Out. Base Price + extra km over Out. Base Distance x Out. Price/km) + Service Tax %
+export const isOutstationPricingEnabled = (pricingRule) => (
+  Boolean(pricingRule?.enable_outstation_ride)
+  && (Number(pricingRule?.outstation_base_price || 0) > 0 || Number(pricingRule?.outstation_price_per_distance || 0) > 0)
+);
+
+export const calculateOutstationFare = (pricingRule, distanceKm) => {
+  const base = Math.max(0, Number(pricingRule?.outstation_base_price || 0));
+  const baseDistance = Math.max(0, Number(pricingRule?.outstation_base_distance || 0));
+  const perKm = Math.max(0, Number(pricingRule?.outstation_price_per_distance || 0));
+  const tax = Math.max(0, Number(pricingRule?.service_tax || 0));
+  const subtotal = base + Math.max(0, Number(distanceKm || 0) - baseDistance) * perKm;
+  return Math.round(subtotal * (1 + tax / 100));
+};
+
 // Lower bound of what the server would charge: straight-line distance is never longer than the
 // road distance the client prices with, so a legitimate fare is always at or above this figure.
 const FARE_TOLERANCE = 0.9;
-const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, pickupCoords, dropCoords }) => {
+const assertFareIsNotBelowMinimum = ({ fare, serviceType, pricingRule, vehicle, pickupCoords, dropCoords, isRouteBooking = true }) => {
+  // An intercity booking that is not on an admin route is priced by distance with the Outstation Ride fields.
+  if (serviceType === 'intercity' && !isRouteBooking) {
+    if (!isOutstationPricingEnabled(pricingRule)) {
+      throw new ApiError(400, 'Outstation booking to this place is not available for the selected vehicle. Please choose another vehicle or an available route.');
+    }
+    const minimumFare = calculateOutstationFare(pricingRule, straightLineKm(pickupCoords, dropCoords));
+    if (minimumFare > 0 && fare < Math.floor(minimumFare * FARE_TOLERANCE)) {
+      throw new ApiError(400, 'Fare is lower than the configured outstation price for this trip. Please refresh the fare and try again.');
+    }
+  }
+
   if (serviceType === 'ride' && pricingRule) {
     const baseDistance = Math.max(0, Number(pricingRule.base_distance || 0));
     const extraKm = Math.max(0, straightLineKm(pickupCoords, dropCoords) - baseDistance);
@@ -1035,6 +1029,22 @@ export const createRideRecord = async ({
       Number(intercity?.distance || 0) ||
       (normalizedServiceType === 'intercity' ? Math.round(safeEstimatedDistanceMeters / 100) / 10 : 0),
   });
+  // An intercity booking is a ROUTE booking when it carries the id of a live admin route (Package Pricing) or goes to a
+  // destination such an admin route exists for (the scheduled flow does not send the id); anything else is a
+  // distance-priced outstation trip.
+  let isRouteBooking = normalizedServiceType !== 'intercity';
+  if (!isRouteBooking) {
+    const claimedPackageId = String(intercity?.packageId || '').trim();
+    const claimedToCity = String(intercity?.toCity || '').trim();
+    const liveRoute = { pricing_scope: 'package', active: 1, status: 'active' };
+    // every character that is not a letter, digit or space becomes the regex wildcard ".", which still matches itself
+    const escapedToCity = claimedToCity.replace(/[^a-zA-Z0-9 ]/g, '.');
+    isRouteBooking = (mongoose.Types.ObjectId.isValid(claimedPackageId) && Boolean(await SetPrice.exists({ _id: claimedPackageId, ...liveRoute })))
+      || (Boolean(claimedToCity) && Boolean(await SetPrice.exists({
+        ...liveRoute,
+        package_destination: { $regex: `^${escapedToCity}$`, $options: 'i' },
+      })));
+  }
   assertFareIsNotBelowMinimum({
     fare: safeFare,
     serviceType: normalizedServiceType,
@@ -1042,6 +1052,7 @@ export const createRideRecord = async ({
     vehicle: primaryVehicle,
     pickupCoords,
     dropCoords,
+    isRouteBooking,
   });
   const bidRideSettings = await getBidRideSettings();
   const fareIncreaseWaitMinutes = toPositiveNumber(
@@ -1352,6 +1363,9 @@ export const serializeRideRealtime = (ride) => ({
   waitingCharge: Number(ride.waitingCharge?.amount || 0) > 0
     ? { minutes: Number(ride.waitingCharge.minutes || 0), ratePerMinute: Number(ride.waitingCharge.ratePerMinute || 0), amount: Number(ride.waitingCharge.amount || 0) }
     : null,
+  cancellationDueCharge: Number(ride.cancellationDueCharge?.amount || 0) > 0
+    ? { amount: Number(ride.cancellationDueCharge.amount) }
+    : null,
   baseFare: Number(ride.baseFare || ride.fare || 0),
   bookingMode: ride.bookingMode || 'normal',
   pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
@@ -1571,6 +1585,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
       'intercity',
       'pricingSnapshot',
       'waitingCharge',
+      'cancellationDueCharge',
       'commissionAmount',
       'driverEarnings',
       'vehicleIconType',
@@ -1621,6 +1636,7 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
     liveStatus: ride.liveStatus,
     fare: ride.fare,
     waitingCharge: Number(ride.waitingCharge?.amount || 0) > 0 ? ride.waitingCharge : null,
+    cancellationDueCharge: Number(ride.cancellationDueCharge?.amount || 0) > 0 ? { amount: Number(ride.cancellationDueCharge.amount) } : null,
     baseFare: Number(ride.baseFare || ride.fare || 0),
     bookingMode: ride.bookingMode || 'normal',
     biddingStatus: ride.biddingStatus || 'none',
@@ -1795,6 +1811,58 @@ const applyPickupWaitingCharge = (ride, startedAt) => {
   ride.waitingCharge = { minutes: billableMinutes, ratePerMinute: rate, amount };
 };
 
+// A cancellation fee the rider could not pay from the wallet (status "due") is added to the fare of the rider's next trip
+// once it starts - the same moment the pickup waiting charge is added - so every payment path (cash, Razorpay, wallet,
+// QR) already charges it, and the driver app shows the real amount to collect. Settlement takes it out of the driver's
+// commission base again (see settleCompletedRideWallet): it belongs to the platform / the driver who was cancelled on.
+const roundMoney2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+const applyPendingCancellationDue = async (ride) => {
+  if (!ride?.userId || ride?.subscriptionUsage?.covered || Number(ride?.cancellationDueCharge?.amount || 0) > 0) {
+    return;
+  }
+
+  // Fees that an earlier trip picked up but that trip was cancelled before finishing are free to be collected again.
+  const held = await Ride.find({ userId: ride.userId, 'cancellationFee.status': 'collecting' })
+    .select('cancellationFee.collectedByRideId')
+    .lean();
+  const holderIds = [...new Set(held.map((item) => String(item.cancellationFee?.collectedByRideId || '')).filter(Boolean))]
+    .filter((id) => id !== String(ride._id));
+  if (holderIds.length) {
+    const cancelledHolders = await Ride.find({ _id: { $in: holderIds }, status: RIDE_STATUS.CANCELLED }).select('_id').lean();
+    if (cancelledHolders.length) {
+      await Ride.updateMany(
+        { userId: ride.userId, 'cancellationFee.status': 'collecting', 'cancellationFee.collectedByRideId': { $in: cancelledHolders.map((item) => item._id) } },
+        { $set: { 'cancellationFee.status': 'due', 'cancellationFee.collectedByRideId': null } },
+      );
+    }
+  }
+
+  await Ride.updateMany(
+    { userId: ride.userId, _id: { $ne: ride._id }, 'cancellationFee.status': 'due' },
+    { $set: { 'cancellationFee.status': 'collecting', 'cancellationFee.collectedByRideId': ride._id } },
+  );
+  const claimed = await Ride.find({ 'cancellationFee.collectedByRideId': ride._id, 'cancellationFee.status': 'collecting' })
+    .select('cancellationFee.amount')
+    .lean();
+  const amount = roundMoney2(claimed.reduce((sum, item) => sum + Number(item.cancellationFee?.amount || 0), 0));
+  if (!amount) {
+    return;
+  }
+
+  ride.fare = roundMoney2(Number(ride.fare || 0) + amount);
+  ride.cancellationDueCharge = { amount, rideIds: claimed.map((item) => item._id), addedAt: new Date() };
+};
+
+// What the rider still owes from earlier cancelled rides (shown before booking and in the cancel popup).
+export const getUserPendingCancellationDue = async (userId) => {
+  const dues = await Ride.find({ userId, 'cancellationFee.status': { $in: ['due', 'collecting'] } })
+    .select('cancellationFee.amount cancellationFee.status')
+    .lean();
+  const amount = roundMoney2(dues.reduce((sum, item) => sum + Number(item.cancellationFee?.amount || 0), 0));
+  return { amount, count: dues.length };
+};
+
 export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod, otp }) => {
   const config = rideStatusConfig[nextStatus];
 
@@ -1838,6 +1906,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
   if (nextStatus === RIDE_LIVE_STATUS.STARTED && !ride.startedAt) {
     ride.startedAt = new Date();
     applyPickupWaitingCharge(ride, ride.startedAt);
+    await applyPendingCancellationDue(ride);
   }
 
   if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim()) {

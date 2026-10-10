@@ -16,7 +16,9 @@ import {
   getRideAppTipSettings,
   getMyActiveRide,
   getMyUnpaidRide,
+  getMyCancellationDue,
   getRideById,
+  getRideCancellationFee,
   listMyRides,
   listAvailableDrivers,
   payRideCompletionWithWallet,
@@ -37,6 +39,8 @@ rideRouter.get('/app-settings/tip', asyncHandler(getRideAppTipSettings));
 rideRouter.get('/available-drivers', authenticate(['user']), availableDriversRateLimit, asyncHandler(listAvailableDrivers));
 rideRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getMyActiveRide));
 rideRouter.get('/unpaid/me', authenticate(['user']), asyncHandler(getMyUnpaidRide));
+rideRouter.get('/cancellation-due/me', authenticate(['user']), asyncHandler(getMyCancellationDue));
+rideRouter.get('/:rideId/cancellation-fee', authenticate(['user']), asyncHandler(getRideCancellationFee));
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
 rideRouter.post('/:rideId/share', authenticate(['user']), asyncHandler(createRideShareLink));
 rideRouter.get('/:rideId/bids', authenticate(['user']), asyncHandler(getRideBids));

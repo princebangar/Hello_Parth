@@ -18,6 +18,7 @@ import TruckIcon from '../../../../assets/icons/truck.png';
 import LcvIcon from '../../../../assets/icons/LCV.png';
 import McvIcon from '../../../../assets/icons/mcv.png';
 import HcvIcon from '../../../../assets/icons/hcv.png';
+import { PendingCancellationDueNotice } from '../../components/CancellationFeeNotice';
 import EhcvIcon from '../../../../assets/icons/ehcv.png';
 import ScootyIcon from '../../../../assets/icons/scooty.png';
 import HatchbackIcon from '../../../../assets/icons/Hatchback.png';
@@ -2525,6 +2526,8 @@ const SelectVehicle = () => {
               )}
             </div>
           )}
+
+          <PendingCancellationDueNotice className="mt-3" />
 
           <motion.button
             whileHover={canProceed ? { scale: 1.01 } : {}}
