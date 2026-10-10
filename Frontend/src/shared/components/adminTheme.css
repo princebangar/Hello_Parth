@@ -375,13 +375,13 @@ html.admin-dark .hover\:text-slate-300:hover,
 html.admin-dark .text-gray-300,
 html.admin-dark .hover\:text-gray-300:hover,
 html.admin-dark .text-zinc-300,
-html.admin-dark .hover\:text-zinc-300:hover { color: #52525c; }
+html.admin-dark .hover\:text-zinc-300:hover { color: #6a6a76; }
 html.admin-dark .text-slate-200,
 html.admin-dark .hover\:text-slate-200:hover,
 html.admin-dark .text-gray-200,
 html.admin-dark .hover\:text-gray-200:hover,
 html.admin-dark .text-zinc-200,
-html.admin-dark .hover\:text-zinc-200:hover { color: #3a3a42; }
+html.admin-dark .hover\:text-zinc-200:hover { color: #54545e; }
 html.admin-dark .placeholder\:text-slate-400::placeholder,
 html.admin-dark .placeholder\:text-gray-400::placeholder,
 html.admin-dark .placeholder-black::placeholder,
@@ -1104,3 +1104,189 @@ html.admin-theme-transition *, html.admin-theme-transition *::before, html.admin
 .admin-theme-icon { transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease; }
 .admin-theme-sun { transform: rotate(90deg) scale(0); opacity: 0; } .admin-theme-moon { transform: rotate(0) scale(1); opacity: 1; }
 html.admin-dark .admin-theme-sun { transform: rotate(0) scale(1); opacity: 1; } html.admin-dark .admin-theme-moon { transform: rotate(-90deg) scale(0); opacity: 0; }
+
+/* Taxi admin (modules/Taxi/index.css, ".redigo-admin-root") forces its light palette with !important - heading, table
+ * text, borders, thead and form fields - which beat every mapping above and left dark text on a dark page. These are the
+ * dark twins of those rules; they carry the same !important and a higher specificity so they win only in dark mode. */
+html.admin-dark .redigo-admin-root .text-slate-900,
+html.admin-dark .redigo-admin-root .text-gray-900 { color: #f4f4f6 !important; }
+html.admin-dark .redigo-admin-root .text-slate-800,
+html.admin-dark .redigo-admin-root .text-gray-800 { color: #e4e4e8 !important; }
+html.admin-dark .redigo-admin-root .text-slate-700,
+html.admin-dark .redigo-admin-root .text-gray-700 { color: #cacad2 !important; }
+html.admin-dark .redigo-admin-root .text-slate-500,
+html.admin-dark .redigo-admin-root .text-gray-500 { color: #9a9aa6 !important; }
+html.admin-dark .redigo-admin-root .text-slate-400,
+html.admin-dark .redigo-admin-root .text-gray-400 { color: #8b8b97 !important; }
+html.admin-dark .redigo-admin-root .border-slate-200,
+html.admin-dark .redigo-admin-root .border-gray-200 { border-color: #2c2c32 !important; }
+html.admin-dark .redigo-admin-root .border-slate-100,
+html.admin-dark .redigo-admin-root .border-gray-100 { border-color: #232328 !important; }
+html.admin-dark .redigo-admin-root thead { background-color: #1a1a1e !important; border-bottom-color: #2c2c32 !important; }
+html.admin-dark .redigo-admin-root th { color: #9a9aa6 !important; }
+html.admin-dark .redigo-admin-root td { border-color: #232328 !important; }
+html.admin-dark .redigo-admin-root input[type="text"]:not(.admin-sidebar-search),
+html.admin-dark .redigo-admin-root input[type="number"],
+html.admin-dark .redigo-admin-root input[type="email"],
+html.admin-dark .redigo-admin-root input[type="tel"],
+html.admin-dark .redigo-admin-root input[type="password"],
+html.admin-dark .redigo-admin-root select,
+html.admin-dark .redigo-admin-root textarea { background-color: #0e0e11 !important; border-color: #34343b !important; color: #f4f4f6 !important; }
+
+/* Food admin injects a back button before the page title (AdminLayout). When the title's block also holds a subtitle line,
+ * the header is a two-column grid: button on the left, title and subtitle stacked on the right. */
+.global-back-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; row-gap: 0; }
+.global-back-grid > .global-back-btn { grid-column: 1; grid-row: 1 / span 20; align-self: center; }
+.global-back-grid > :not(.global-back-btn) { grid-column: 2; }
+
+/* ---- Colours that were written as raw hex / inline styles and had no dark twin (found by scanning every admin page) ---- */
+html.admin-dark [class~="bg-[#E5E7EB]" i],
+html.admin-dark [class~="bg-[#E9E9E9]" i],
+html.admin-dark [class~="bg-[#F0F2F5]" i],
+html.admin-dark [class~="bg-[#F6F8FC]" i],
+html.admin-dark [class~="bg-[#F8F9FA]" i],
+html.admin-dark [class~="bg-[#FAFBFD]" i],
+html.admin-dark [class~="bg-[#FBFCFF]" i],
+html.admin-dark [class~="bg-[#FCFCFD]" i],
+html.admin-dark [class~="bg-[#FDFAFC]" i],
+html.admin-dark [class~="hover:bg-[#F9FAFC]" i]:hover { background-color: #1a1a1e; }
+html.admin-dark [class~="bg-[#FFFDF5]" i] { background-color: #09090b; }
+html.admin-dark [class~="bg-[#F6EFE4]" i],
+html.admin-dark [class~="bg-[#FFF7ED]" i] { background-color: rgba(249, 115, 22, 0.12); }
+html.admin-dark [class~="bg-[#EEF2FF]" i],
+html.admin-dark [class~="bg-[#EEF4FF]" i] { background-color: rgba(99, 102, 241, 0.14); }
+html.admin-dark [class~="bg-[#F0FDFA]" i] { background-color: rgba(20, 184, 166, 0.12); }
+html.admin-dark [class~="bg-[#FEF2F2]" i] { background-color: rgba(239, 68, 68, 0.12); }
+html.admin-dark [class~="text-[#006FBD]" i] { color: #60a5fa; }
+html.admin-dark [class~="text-[#2D3A6E]" i] { color: #c7d2fe; }
+html.admin-dark [class~="text-[#4A5671]" i] { color: #b4b4bd; }
+html.admin-dark [class~="text-[#635BFF]" i],
+html.admin-dark [class~="text-[#6366F1]" i] { color: #a5b4fc; }
+html.admin-dark [class~="text-[#CB202D]" i],
+html.admin-dark [class~="text-[#DC2626]" i] { color: #f87171; }
+html.admin-dark [class~="border-[#D1D7E6]" i] { border-color: #34343b; }
+/* inline style="background-color: ..." that a class cannot reach */
+html.admin-dark [style*="background-color: rgb(255, 248, 225)"],
+html.admin-dark [style*="background-color: rgb(255, 251, 235)"] { background-color: rgba(245, 158, 11, 0.12) !important; border-color: rgba(245, 158, 11, 0.4) !important; }
+html.admin-dark [style*="background-color: rgb(241, 245, 249)"],
+html.admin-dark [style*="background-color: rgb(229, 231, 235)"] { background-color: #1a1a1e !important; }
+/* Material UI fields (restaurant form) paint their own white */
+html.admin-dark .MuiOutlinedInput-root { background-color: #0e0e11 !important; color: #f4f4f6 !important; }
+html.admin-dark .MuiOutlinedInput-root fieldset { border-color: #34343b !important; }
+html.admin-dark .MuiInputBase-input, html.admin-dark .MuiAutocomplete-input { color: #f4f4f6 !important; -webkit-text-fill-color: #f4f4f6 !important; }
+html.admin-dark .MuiInputLabel-root, html.admin-dark .MuiSvgIcon-root { color: #9a9aa6 !important; }
+html.admin-dark .MuiPaper-root { background-color: #141417 !important; color: #f4f4f6 !important; }
+html.admin-dark .MuiAutocomplete-option[aria-selected="true"], html.admin-dark .MuiAutocomplete-option.Mui-focused { background-color: #26262b !important; }
+/* Solid hex-yellow buttons (bg-[#FFC400] / bg-[#F4B400]) keep dark text in dark mode; the generic "dark text becomes light" mapping made them unreadable.
+   (bg-yellow-400 and friends already have their own dark look above, so they are not touched.) */
+html.admin-dark [class~="bg-[#FFC400]" i],
+html.admin-dark [class~="bg-[#F4B400]" i] { color: #0b1220 !important; }
+html.admin-dark [class~="bg-[#FFC400]" i] :where(svg, span, p),
+html.admin-dark [class~="bg-[#F4B400]" i] :where(svg, span, p) { color: inherit; }
+
+/* Remaining Tailwind colour utilities found by scanning every admin page (alpha, focus:, disabled:, group-hover: variants). */
+html.admin-dark .focus\:bg-white:focus { background-color: #141417; }
+html.admin-dark .focus\:border-slate-300:focus { border-color: #3a3a42; }
+html.admin-dark .border-slate-200\/80 { border-color: #2c2c32; }
+html.admin-dark .text-indigo-950 { color: #a5b4fc; }
+html.admin-dark .hover\:bg-amber-100\/50:hover { background-color: rgba(245,158,11, 0.16); }
+html.admin-dark .bg-blue-50\/50 { background-color: rgba(59,130,246, 0.1); }
+html.admin-dark .focus\:text-slate-900:focus { color: #cacad2; }
+html.admin-dark .hover\:bg-indigo-50\/40:hover { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .bg-orange-200\/40 { background-color: rgba(249,115,22, 0.18); }
+html.admin-dark .bg-blue-200\/40 { background-color: rgba(59,130,246, 0.18); }
+html.admin-dark .bg-emerald-200\/40 { background-color: rgba(16,185,129, 0.18); }
+html.admin-dark .focus\:border-gray-300:focus { border-color: #3a3a42; }
+html.admin-dark .bg-rose-50\/20 { background-color: rgba(244,63,94, 0.1); }
+html.admin-dark .disabled\:bg-slate-100:disabled { background-color: #222227; }
+html.admin-dark .bg-blue-50\/30 { background-color: rgba(59,130,246, 0.1); }
+html.admin-dark .border-amber-200\/50 { border-color: rgba(245,158,11, 0.3); }
+html.admin-dark .bg-teal-200\/40 { background-color: rgba(20,184,166, 0.18); }
+html.admin-dark .bg-sky-200\/40 { background-color: rgba(14,165,233, 0.18); }
+html.admin-dark .bg-indigo-200\/40 { background-color: rgba(99,102,241, 0.18); }
+html.admin-dark .bg-gray-50\/20 { background-color: #1a1a1e; }
+html.admin-dark .hover\:bg-yellow-50\/30:hover { background-color: rgba(234,179,8, 0.1); }
+html.admin-dark .focus\:bg-slate-100:focus { background-color: #222227; }
+html.admin-dark .hover\:bg-blue-50\/50:hover { background-color: rgba(59,130,246, 0.1); }
+html.admin-dark .bg-emerald-50\/60 { background-color: rgba(16,185,129, 0.1); }
+html.admin-dark .bg-emerald-50\/70 { background-color: rgba(16,185,129, 0.1); }
+html.admin-dark .text-amber-900\/70 { color: #fcd34d; }
+html.admin-dark .bg-amber-50\/60 { background-color: rgba(245,158,11, 0.1); }
+html.admin-dark .bg-red-50\/60 { background-color: rgba(239,68,68, 0.1); }
+html.admin-dark .bg-violet-200\/40 { background-color: rgba(139,92,246, 0.18); }
+html.admin-dark .bg-rose-200\/40 { background-color: rgba(244,63,94, 0.18); }
+html.admin-dark .bg-green-200\/40 { background-color: rgba(34,197,94, 0.18); }
+html.admin-dark .bg-red-200\/40 { background-color: rgba(239,68,68, 0.18); }
+html.admin-dark .disabled\:bg-indigo-200:disabled { background-color: rgba(99,102,241, 0.18); }
+html.admin-dark .bg-gray-50\/10 { background-color: #1a1a1e; }
+html.admin-dark .hover\:bg-gray-50\/20:hover { background-color: #1a1a1e; }
+html.admin-dark .bg-white\/50 { background-color: #141417; }
+html.admin-dark .bg-white\/40 { background-color: #141417; }
+html.admin-dark .disabled\:bg-gray-50:disabled { background-color: #1a1a1e; }
+html.admin-dark .bg-purple-200\/40 { background-color: rgba(168,85,247, 0.18); }
+html.admin-dark .bg-rose-50\/40 { background-color: rgba(244,63,94, 0.1); }
+html.admin-dark .bg-red-50\/50 { background-color: rgba(239,68,68, 0.1); }
+html.admin-dark .focus\:bg-neutral-100:focus { background-color: #222227; }
+html.admin-dark .focus\:text-neutral-900:focus { color: #cacad2; }
+html.admin-dark .group:hover .group-hover\:text-neutral-700 { color: #cacad2; }
+html.admin-dark .focus\:bg-orange-50:focus { background-color: rgba(249,115,22, 0.1); }
+html.admin-dark .hover\:bg-indigo-50\/50:hover { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .bg-amber-200\/50 { background-color: rgba(245,158,11, 0.18); }
+html.admin-dark .bg-amber-50\/40 { background-color: rgba(245,158,11, 0.1); }
+html.admin-dark .bg-indigo-50\/70 { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .bg-blue-50\/60 { background-color: rgba(59,130,246, 0.1); }
+html.admin-dark .bg-fuchsia-200\/40 { background-color: rgba(217,70,239, 0.18); }
+html.admin-dark .bg-indigo-50\/60 { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .group:hover .group-hover\:bg-yellow-50\/30 { background-color: rgba(234,179,8, 0.1); }
+html.admin-dark .border-gray-150 { border-color: #2c2c32; }
+html.admin-dark .hover\:bg-indigo-50\/30:hover { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .focus\:border-indigo-300:focus { border-color: rgba(99,102,241, 0.3); }
+html.admin-dark .bg-rose-50\/60 { background-color: rgba(244,63,94, 0.1); }
+html.admin-dark .focus\:border-rose-300:focus { border-color: rgba(244,63,94, 0.3); }
+html.admin-dark .focus\:border-orange-300:focus { border-color: rgba(249,115,22, 0.3); }
+html.admin-dark .disabled\:bg-slate-50:disabled { background-color: #1a1a1e; }
+html.admin-dark .bg-indigo-50\/50 { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .group:hover .group-hover\:bg-indigo-50 { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .group:hover .group-hover\:border-indigo-100 { border-color: rgba(99,102,241, 0.3); }
+html.admin-dark .bg-yellow-50\/50 { background-color: rgba(234,179,8, 0.1); }
+html.admin-dark .group:hover .group-hover\:bg-yellow-50 { background-color: rgba(234,179,8, 0.1); }
+html.admin-dark .bg-amber-200\/40 { background-color: rgba(245,158,11, 0.18); }
+html.admin-dark .bg-yellow-200\/40 { background-color: rgba(234,179,8, 0.18); }
+html.admin-dark .bg-pink-200\/40 { background-color: rgba(236,72,153, 0.18); }
+html.admin-dark .bg-cyan-200\/40 { background-color: rgba(6,182,212, 0.18); }
+html.admin-dark .bg-lime-200\/40 { background-color: rgba(132,204,22, 0.18); }
+html.admin-dark .group:hover .group-hover\:text-neutral-900 { color: #cacad2; }
+html.admin-dark .text-emerald-800\/80 { color: #6ee7b7; }
+html.admin-dark .text-emerald-700\/80 { color: #6ee7b7; }
+html.admin-dark .text-amber-800\/80 { color: #fcd34d; }
+html.admin-dark .text-amber-700\/80 { color: #fcd34d; }
+html.admin-dark .text-blue-950 { color: #93c5fd; }
+html.admin-dark .text-blue-700\/70 { color: #93c5fd; }
+html.admin-dark .text-blue-900\/70 { color: #93c5fd; }
+html.admin-dark .text-blue-900\/80 { color: #93c5fd; }
+html.admin-dark .text-blue-700\/80 { color: #93c5fd; }
+html.admin-dark .border-blue-100\/50 { border-color: rgba(59,130,246, 0.3); }
+html.admin-dark .bg-red-50\/30 { background-color: rgba(239,68,68, 0.1); }
+html.admin-dark .border-red-200\/80 { border-color: rgba(239,68,68, 0.3); }
+html.admin-dark .hover\:bg-red-50\/50:hover { background-color: rgba(239,68,68, 0.1); }
+html.admin-dark .bg-rose-50\/50 { background-color: rgba(244,63,94, 0.1); }
+html.admin-dark .border-rose-200\/80 { border-color: rgba(244,63,94, 0.3); }
+html.admin-dark .hover\:bg-rose-50\/50:hover { background-color: rgba(244,63,94, 0.1); }
+html.admin-dark .border-blue-100\/30 { border-color: rgba(59,130,246, 0.3); }
+html.admin-dark .bg-emerald-50\/30 { background-color: rgba(16,185,129, 0.1); }
+html.admin-dark .border-emerald-100\/30 { border-color: rgba(16,185,129, 0.3); }
+html.admin-dark .bg-indigo-50\/30 { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .border-indigo-100\/30 { border-color: rgba(99,102,241, 0.3); }
+html.admin-dark .bg-indigo-50\/40 { background-color: rgba(99,102,241, 0.1); }
+html.admin-dark .bg-amber-50\/70 { background-color: rgba(245,158,11, 0.1); }
+html.admin-dark .bg-yellow-100\/70 { background-color: rgba(234,179,8, 0.16); }
+html.admin-dark .bg-blue-50\/70 { background-color: rgba(59,130,246, 0.1); }
+html.admin-dark .border-blue-100\/80 { border-color: rgba(59,130,246, 0.3); }
+html.admin-dark .focus\:bg-red-50:focus { background-color: rgba(239,68,68, 0.1); }
+html.admin-dark .focus\:text-red-700:focus { color: #fca5a5; }
+html.admin-dark .group:hover .group-hover\:bg-white { background-color: #141417; }
+html.admin-dark .bg-blue-200\/70 { background-color: rgba(59,130,246, 0.18); }
+html.admin-dark .bg-green-200\/70 { background-color: rgba(34,197,94, 0.18); }
+html.admin-dark .bg-red-200\/70 { background-color: rgba(239,68,68, 0.18); }
+html.admin-dark .bg-amber-200\/70 { background-color: rgba(245,158,11, 0.18); }
+html.admin-dark .bg-white\/75 { background-color: #141417; }

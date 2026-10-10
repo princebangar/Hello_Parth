@@ -43,7 +43,7 @@ const DriverBottomNav = () => {
 
   const navItems = isOwner
     ? [
-        { Icon: Home, label: "Dashboard", path: `${routePrefix}/dashboard` },
+        { Icon: Home, label: "Home", path: `${routePrefix}/dashboard` },
         { Icon: Users, label: "Drivers", path: `${routePrefix}/manage-drivers` },
         { Icon: Car, label: "Vehicle", path: `${routePrefix}/vehicle-fleet` },
         { Icon: Briefcase, label: "Pooling", path: `${routePrefix}/pooling-vehicles` },

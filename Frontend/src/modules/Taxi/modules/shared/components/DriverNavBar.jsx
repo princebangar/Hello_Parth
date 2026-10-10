@@ -17,7 +17,7 @@ const DriverNavBar = ({ items = [] }) => {
   const activeIndex = items.findIndex((item) => item.active);
 
   const nav = (
-    <nav className="driver-nav" aria-label="Main navigation" style={{ fontFamily: "'Outfit', sans-serif" }}>
+    <nav className="driver-nav" data-count={items.length} aria-label="Main navigation" style={{ fontFamily: "'Outfit', sans-serif" }}>
       <div className="driver-nav-bar">
         <div
           className="driver-nav-pill"
@@ -43,7 +43,7 @@ const DriverNavBar = ({ items = [] }) => {
                 <Icon size={21} strokeWidth={active ? 2.4 : 2} aria-hidden="true" />
                 {badge ? <span className="driver-nav-badge">{badge}</span> : null}
               </span>
-              <span className="text-[9px] font-bold uppercase leading-none tracking-[0.02em]">{label}</span>
+              <span className="driver-nav-label text-[9px] font-bold uppercase leading-none tracking-[0.02em]">{label}</span>
             </span>
           </button>
         ))}

@@ -148,3 +148,19 @@
 .driver-page-gap > :first-child {
   border-top: 0 solid transparent;
 }
+
+/* A label must stay inside its own tab: on a narrow phone six tabs (the owner bar) get ~42px each, and a long word
+   used to spill into the neighbouring tab and the sliding pill ("DASHBOARD" over "DRIVERS"). */
+.driver-nav-label {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.driver-nav-item > span { max-width: 100%; }
+.driver-nav[data-count="6"] .driver-nav-label { font-size: 8.5px; letter-spacing: 0; }
+@media (max-width: 380px) {
+  .driver-nav { width: calc(100% - 24px) !important; }
+  .driver-nav[data-count="6"] .driver-nav-label { font-size: 8px; }
+}

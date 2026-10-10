@@ -121,6 +121,12 @@ export default function AdminLayout() {
     // 1. Clean up any existing global back button in the DOM first
     const existing = document.querySelectorAll(".global-back-btn");
     existing.forEach(el => el.remove());
+    document.querySelectorAll(".global-back-grid").forEach(el => el.classList.remove("global-back-grid"));
+    document.querySelectorAll("[data-back-h1]").forEach(el => {
+      el.style.display = "";
+      el.style.alignItems = "";
+      el.removeAttribute("data-back-h1");
+    });
 
     if (!showBackButton) {
       return;
@@ -155,8 +161,9 @@ export default function AdminLayout() {
     const updateTarget = () => {
       if (typeof document === "undefined") return false;
 
-      // Find the h1 inside main
-      const h1 = document.querySelector("main h1");
+      // Find the h1 inside THIS panel's main (Food and Taxi admin stay mounted side by side, so a document-wide
+      // "main h1" could pick the hidden Taxi page's heading).
+      const h1 = mainRef.current?.querySelector("h1");
       if (!h1) return false;
 
       const container = findHeaderContainer(h1);
@@ -171,9 +178,32 @@ export default function AdminLayout() {
           return true; // Already has back button, stop
         }
 
-        // Enforce flex layout and alignment on container
-        container.style.display = "flex";
-        container.style.alignItems = "center";
+        // A header that is a plain block holding the title AND more lines (e.g. a subtitle under the h1) must keep
+        // those lines stacked: turning it into a flex row put the subtitle beside the title. Such a header becomes
+        // a two-column grid instead (button | all the text, stacked); a header that is already a flex row stays one.
+        const displayBefore = window.getComputedStyle(container).display;
+        const wasFlexRow = displayBefore === "flex" || displayBefore === "inline-flex";
+        // When the h1 sits straight in a page-sized wrapper (title, filters, a whole form...) the wrapper is not a
+        // header, so it is left alone and the button goes inside the h1 itself, before the title text.
+        // A real header only holds the title and plain text lines (a subtitle); filters, search boxes, tabs or a form
+        // beside it mean the block is page content.
+        const hasControls = Array.from(container.children).some(
+          (child) => child !== h1 && !child.contains(h1) && (child.matches("input,select,textarea,button,form,table,img") || child.querySelector("input,select,textarea,button,form,table,img"))
+        );
+        const isPageWrapper = hasControls || container.children.length > 3 || container.getBoundingClientRect().height > 200;
+        let insertInto = container;
+        if (!wasFlexRow && container.children.length > 1 && !isPageWrapper) {
+          container.classList.add("global-back-grid");
+        } else if (!wasFlexRow && isPageWrapper) {
+          insertInto = h1;
+          h1.setAttribute("data-back-h1", "");
+          h1.style.display = "flex";
+          h1.style.alignItems = "center";
+        } else {
+          // Enforce flex layout and alignment on container
+          container.style.display = "flex";
+          container.style.alignItems = "center";
+        }
         
         // Ensure flex layout handles children spacing
         Array.from(container.children).forEach(child => {
@@ -190,7 +220,7 @@ export default function AdminLayout() {
         btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>`;
 
         // Insert at the beginning of the container
-        container.insertBefore(btn, container.firstChild);
+        insertInto.insertBefore(btn, insertInto.firstChild);
         return true;
       }
       return false;
@@ -200,7 +230,7 @@ export default function AdminLayout() {
     if (updateTarget()) return;
 
     // Set up MutationObserver to detect when the heading mounts in the DOM subtree
-    const mainElement = document.querySelector("main");
+    const mainElement = mainRef.current;
     const observer = new MutationObserver(() => {
       if (updateTarget()) {
         observer.disconnect();
