@@ -3,6 +3,7 @@ import * as adminService from "../services/adminService.js";
 import ExcelJS from 'exceljs';
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { normalizeCurrencyCode } from '../../../../utils/helpers.js';
 import { User } from '../../user/models/User.js';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
@@ -921,7 +922,7 @@ export const getAdminBusBookings = asyncHandler(async (req, res) => {
       route: bus.route || {},
       seatPrice: Number(bus.seatPrice || 0),
       variantPricing: bus.variantPricing || null,
-      fareCurrency: bus.fareCurrency || 'INR',
+      fareCurrency: normalizeCurrencyCode(bus.fareCurrency),
       schedules: Array.isArray(bus.schedules) ? bus.schedules : [],
     })),
     selectedBus: selectedBus
@@ -1093,7 +1094,7 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     passenger,
     amount,
     bookingSource: 'admin',
-    currency: busService.fareCurrency || 'INR',
+    currency: normalizeCurrencyCode(busService.fareCurrency),
     status: 'confirmed',
     expiresAt: null,
     routeSnapshot: {

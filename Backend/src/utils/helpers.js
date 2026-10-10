@@ -20,3 +20,10 @@ export const buildPaginatedResult = ({ docs, total, page, limit }) => {
     };
 };
 
+
+// A currency code is exactly 3 letters (ISO 4217). A stored value such as "INR 1500" or "Rs" makes Razorpay refuse the
+// order ("currency: the length must be exactly 3"), so anything that does not start with a clean 3-letter code falls back.
+export const normalizeCurrencyCode = (value, fallback = 'INR') => {
+    const match = String(value ?? '').trim().toUpperCase().match(/^([A-Z]{3})(?![A-Z])/);
+    return match ? match[1] : fallback;
+};

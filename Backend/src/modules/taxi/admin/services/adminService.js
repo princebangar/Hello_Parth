@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { randomBytes } from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { normalizeCurrencyCode } from '../../../../utils/helpers.js';
 import { env } from '../../../../config/env.js';
 import { Admin } from '../models/Admin.js';
 import { User } from '../../user/models/User.js';
@@ -875,8 +876,10 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
       payload.variantPricing ?? existing.variantPricing ?? {},
       sanitizeBusSeatPrice(payload.seatPrice, existing.seatPrice || 0),
     ),
-    fareCurrency:
-      sanitizeBusText(payload.fareCurrency, existing.fareCurrency || 'INR').toUpperCase() || 'INR',
+    fareCurrency: normalizeCurrencyCode(
+      sanitizeBusText(payload.fareCurrency, existing.fareCurrency || 'INR'),
+      normalizeCurrencyCode(existing.fareCurrency),
+    ),
     boardingPolicy: sanitizeBusText(payload.boardingPolicy, existing.boardingPolicy || ''),
     cancellationPolicy: sanitizeBusText(payload.cancellationPolicy, existing.cancellationPolicy || ''),
     cancellationRules,
@@ -931,7 +934,7 @@ const serializeBusService = (item = {}) => ({
       ? String(item.serviceTaxPercentage)
       : '0',
   variantPricing: normalizeBusVariantPricing(item.variantPricing || {}, item.seatPrice ?? 0),
-  fareCurrency: item.fareCurrency || 'INR',
+  fareCurrency: normalizeCurrencyCode(item.fareCurrency),
   boardingPolicy: item.boardingPolicy || '',
   cancellationPolicy: item.cancellationPolicy || '',
   cancellationRules: Array.isArray(item.cancellationRules)

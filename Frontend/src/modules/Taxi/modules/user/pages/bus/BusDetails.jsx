@@ -362,41 +362,35 @@ const BusDetails = () => {
             ) : null}
           </div>
 
+          {/* Selected = accent border + soft fill + tick. (A solid dark card is turned into the yellow accent button by the
+              theme, which left its white hint text unreadable on yellow.) */}
           <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={applySelfProfile}
-              className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                travellerMode === 'self'
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
-              }`}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Self</p>
-              <p className={`mt-1 text-sm font-black ${travellerMode === 'self' ? 'text-white' : 'text-slate-900'}`}>
-                Use my profile
-              </p>
-              <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'self' ? 'text-white/70' : 'text-slate-500'}`}>
-                Name, phone, and email auto-fill from your account.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={switchToSomeoneElse}
-              className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                travellerMode === 'other'
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
-              }`}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Other</p>
-              <p className={`mt-1 text-sm font-black ${travellerMode === 'other' ? 'text-white' : 'text-slate-900'}`}>
-                Book for someone else
-              </p>
-              <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'other' ? 'text-white/70' : 'text-slate-500'}`}>
-                Enter passenger details manually.
-              </p>
-            </button>
+            {[
+              { mode: 'self', label: 'Self', title: 'Use my profile', hint: 'Name, phone, and email auto-fill from your account.', onSelect: applySelfProfile },
+              { mode: 'other', label: 'Other', title: 'Book for someone else', hint: 'Enter passenger details manually.', onSelect: switchToSomeoneElse },
+            ].map(({ mode, label, title, hint, onSelect }) => {
+              const selected = travellerMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={onSelect}
+                  aria-pressed={selected}
+                  className={`relative rounded-2xl border px-4 py-3 text-left transition-all ${
+                    selected ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-400' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  {selected ? (
+                    <span className="absolute right-3 top-3 grid h-5 w-5 place-items-center rounded-full bg-amber-400">
+                      <Check size={12} strokeWidth={3} />
+                    </span>
+                  ) : null}
+                  <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${selected ? 'text-amber-600' : 'text-slate-400'}`}>{label}</p>
+                  <p className="mt-1 pr-5 text-sm font-black text-slate-900">{title}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">{hint}</p>
+                </button>
+              );
+            })}
           </div>
 
           {travellerMode === 'self' && profileData ? (

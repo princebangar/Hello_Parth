@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLoginDetails } from '@phonepe-pg/pg-sdk-node';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { normalizeCurrencyCode } from '../../../../utils/helpers.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { User } from '../models/User.js';
 import { UserWallet } from '../models/UserWallet.js';
@@ -862,7 +863,7 @@ const serializeBusSearchResult = ({ busService, schedule, availableSeats, travel
   price: Number(busService.seatPrice || 0),
   variantPricing: busService.variantPricing || null,
   serviceTaxPercentage: Math.max(0, Number(busService.serviceTaxPercentage || 0)),
-  fareCurrency: busService.fareCurrency || 'INR',
+  fareCurrency: normalizeCurrencyCode(busService.fareCurrency),
   rating: Number(busService.rating || 0),
   ratingCount: Number(busService.ratingCount || 0),
   amenities: Array.isArray(busService.amenities) ? busService.amenities : [],
@@ -2794,7 +2795,7 @@ export const createBusBookingOrder = async (req, res) => {
     path: '/orders',
     body: {
       amount: amountPaise,
-      currency: busService.fareCurrency || 'INR',
+      currency: normalizeCurrencyCode(busService.fareCurrency),
       receipt,
       notes: {
         userId: String(userId || ''),
@@ -2820,7 +2821,7 @@ export const createBusBookingOrder = async (req, res) => {
     seatAmounts,
     passenger,
     amount,
-    currency: busService.fareCurrency || 'INR',
+    currency: normalizeCurrencyCode(busService.fareCurrency),
     status: 'pending',
     expiresAt,
     routeSnapshot: {
@@ -2877,7 +2878,7 @@ export const createBusBookingOrder = async (req, res) => {
       keyId,
       orderId: order.id,
       amount: order.amount,
-      currency: order.currency || busService.fareCurrency || 'INR',
+      currency: order.currency || normalizeCurrencyCode(busService.fareCurrency),
       expiresAt,
       booking: serializeBusBooking(booking, busService),
     },

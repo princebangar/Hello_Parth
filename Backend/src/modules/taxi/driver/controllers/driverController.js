@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLoginDetails } from "@phonepe-pg/pg-sdk-node";
 import { env } from "../../../../config/env.js";
 import { ApiError } from "../../../../utils/ApiError.js";
+import { normalizeCurrencyCode } from "../../../../utils/helpers.js";
 import { normalizePoint, toPoint } from "../../../../utils/geo.js";
 import { Driver } from "../models/Driver.js";
 import { BusDriver } from "../models/BusDriver.js";
@@ -1059,7 +1060,7 @@ const serializeBusDriverProfile = async (busDriver) => {
           busCategory: busService.busCategory || "",
           seatPrice: Number(busService.seatPrice || 0),
           variantPricing: busService.variantPricing || {},
-          fareCurrency: busService.fareCurrency || "INR",
+          fareCurrency: normalizeCurrencyCode(busService.fareCurrency),
           driverName: busService.driverName || "",
           driverPhone: busService.driverPhone || "",
           route: busService.route || {},
@@ -3758,7 +3759,7 @@ export const createBusDriverReservation = async (req, res) => {
     amount,
     bookingSource: "bus_driver",
     reservedByDriverId: busDriver._id,
-    currency: busService.fareCurrency || "INR",
+    currency: normalizeCurrencyCode(busService.fareCurrency),
     status: "confirmed",
     expiresAt: null,
     routeSnapshot: {
@@ -7042,7 +7043,7 @@ export const getOwnerBusBookings = async (req, res) => {
         route: bus.route || {},
         seatPrice: Number(bus.seatPrice || 0),
         variantPricing: bus.variantPricing || null,
-        fareCurrency: bus.fareCurrency || "INR",
+        fareCurrency: normalizeCurrencyCode(bus.fareCurrency),
         schedules: Array.isArray(bus.schedules) ? bus.schedules : [],
       })),
       selectedBus: selectedBus
