@@ -29,10 +29,14 @@ import { clearParcelPickerResult, peekParcelPickerResult } from '../../utils/par
 import {
   dedupePlaces,
   formatDistance,
+  isAreaPlace,
   keepNearbyPredictions,
+  loadAreaHints,
   loadPopularPlaces,
   nearbyAutocompleteRequest,
+  withAreaHint,
 } from '../../utils/nearbyPlaces';
+import { loadRoadDistances } from '../../utils/preciseLocation';
 
 const Motion = motion;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
@@ -649,6 +653,61 @@ const SenderReceiverDetails = () => {
       cancelled = true;
     };
   }, [isGoogleMapsLoaded, popularOriginLat, popularOriginLng]);
+
+  // Landmark for area results ("Vijay Nagar" -> near Bhawarkua Square), so two areas with one name can be told apart.
+  const [areaHints, setAreaHints] = useState({});
+  useEffect(() => {
+    if (!isGoogleMapsLoaded || !window.google?.maps) return undefined;
+    const wanted = googleSuggestions.filter((item) => item.placeId && isAreaPlace(item.types) && areaHints[item.placeId] === undefined);
+    if (wanted.length === 0) return undefined;
+    let cancelled = false;
+    loadAreaHints(window.google, wanted).then((found) => {
+      if (cancelled) return;
+      setAreaHints((prev) => {
+        const next = { ...prev };
+        wanted.forEach((item) => { next[item.placeId] = found[item.placeId] || ''; });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleSuggestions, isGoogleMapsLoaded]);
+
+  // The distance on a row is the road distance from the pickup (what Google Maps shows, same as the ride screen), not
+  // the straight line. null = Google has no road route / the service is off: the straight-line figure is shown then.
+  const [roadMeters, setRoadMeters] = useState({});
+  const roadKey = (item) => String(item?.placeId || (Array.isArray(item?.coords) ? item.coords.join(',') : item?.title || ''));
+  useEffect(() => { setRoadMeters({}); }, [popularOriginLat, popularOriginLng]);
+  useEffect(() => {
+    if (!isGoogleMapsLoaded || !window.google?.maps
+      || !Number.isFinite(Number(popularOriginLat)) || !Number.isFinite(Number(popularOriginLng))) {
+      return undefined;
+    }
+    const wanted = [...googleSuggestions, ...popularNearby]
+      .filter((item) => (item.placeId || Array.isArray(item.coords)) && roadMeters[roadKey(item)] === undefined)
+      .slice(0, 10);
+    if (wanted.length === 0) return undefined;
+    let cancelled = false;
+    loadRoadDistances(window.google, [Number(popularOriginLng), Number(popularOriginLat)], wanted).then((meters) => {
+      if (cancelled) return;
+      setRoadMeters((prev) => {
+        const next = { ...prev };
+        wanted.forEach((item, index) => {
+          next[roadKey(item)] = meters && Number.isFinite(meters[index]) ? meters[index] : null;
+        });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleSuggestions, popularNearby, isGoogleMapsLoaded, popularOriginLat, popularOriginLng]);
+  const distanceTextFor = (item) => {
+    const meters = roadMeters[roadKey(item)];
+    if (Number.isFinite(meters)) return meters < 1000 ? `${Math.max(10, Math.round(meters / 10) * 10)} m` : `${(meters / 1000).toFixed(1)} km`;
+    return meters === null ? item.distanceLabel || '' : '';
+  };
+  const selectedAreaHint = (suggestion) => (suggestion?.placeId && isAreaPlace(suggestion.types) ? areaHints[suggestion.placeId] || '' : '');
+
   const selectedVehicles = useMemo(() => {
     if (Array.isArray(recoveredSelectedVehicles) && recoveredSelectedVehicles.length) {
       return recoveredSelectedVehicles;
@@ -1036,6 +1095,7 @@ const SenderReceiverDetails = () => {
                 secondaryText: prediction.structured_formatting?.secondary_text || '',
                 description: prediction.description || '',
                 placeId: prediction.place_id || '',
+                types: prediction.types || [],
                 distanceLabel: Number.isFinite(prediction.distance_meters) ? formatDistance(prediction.distance_meters / 1000) : '',
                 source: 'google',
               }))).slice(0, 5)
@@ -1055,7 +1115,9 @@ const SenderReceiverDetails = () => {
   }, [query, isGoogleMapsLoaded, pickupCoords, activeInput]);
 
   const applySuggestion = async (type, suggestion) => {
-    const value = typeof suggestion === 'string' ? suggestion : suggestion?.title || suggestion?.label || suggestion?.description || '';
+    const baseValue = typeof suggestion === 'string' ? suggestion : suggestion?.title || suggestion?.label || suggestion?.description || '';
+    // "Vijay Nagar" at Bhawarkua is saved as "Vijay Nagar, near Bhawarkua Square", never as the bare ambiguous name.
+    const value = withAreaHint(baseValue, selectedAreaHint(suggestion));
 
     if (type === 'pickup') {
       setPickup(value);
@@ -1386,8 +1448,10 @@ const SenderReceiverDetails = () => {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-black text-slate-800">{item.label}</p>
                     {item.secondaryText || item.distanceLabel ? (
-                      <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
-                        {item.distanceLabel ? `${item.distanceLabel} • ` : ''}{item.secondaryText}
+                      <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                        {distanceTextFor(item) ? `${distanceTextFor(item)} • ` : ''}
+                        {selectedAreaHint(item) ? `Near ${selectedAreaHint(item)} • ` : ''}
+                        {item.secondaryText}
                       </p>
                     ) : null}
                   </div>
@@ -1411,7 +1475,7 @@ const SenderReceiverDetails = () => {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-black text-slate-800">{item.title}</p>
                     <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
-                      {item.distanceLabel ? `${item.distanceLabel} • ` : ''}{item.address}
+                      {distanceTextFor(item) ? `${distanceTextFor(item)} • ` : ''}{item.address}
                     </p>
                   </div>
                 </button>

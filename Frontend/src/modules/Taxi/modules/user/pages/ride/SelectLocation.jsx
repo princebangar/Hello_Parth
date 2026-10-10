@@ -10,9 +10,12 @@ import {
   dedupePlaces,
   distanceBetweenKm,
   formatDistance,
+  isAreaPlace,
   keepNearbyPredictions,
+  loadAreaHints,
   loadPopularPlaces,
   nearbyAutocompleteRequest,
+  withAreaHint,
 } from '../../utils/nearbyPlaces';
 import { cleanGroundAddress, cleanRecentPlace, getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
@@ -705,6 +708,7 @@ const SelectLocation = () => {
           title: prediction.structured_formatting?.main_text || prediction.description,
           address: prediction.description,
           placeId: prediction.place_id,
+          types: prediction.types || [],
           distanceLabel: Number.isFinite(prediction.distance_meters) ? formatDistance(prediction.distance_meters / 1000) : '',
         }))).slice(0, 6);
 
@@ -724,6 +728,26 @@ const SelectLocation = () => {
     () => dedupePlaces([...remoteResults, ...localSearchResults]),
     [localSearchResults, remoteResults],
   );
+
+  // Landmark for area results ("Vijay Nagar" -> near Bhawarkua Square), so two areas with one name can be told apart.
+  const [areaHints, setAreaHints] = useState({});
+  useEffect(() => {
+    if (!isLoaded || !window.google?.maps) return undefined;
+    const wanted = searchResults.filter((place) => place.placeId && isAreaPlace(place.types) && areaHints[place.placeId] === undefined);
+    if (wanted.length === 0) return undefined;
+    let cancelled = false;
+    loadAreaHints(window.google, wanted).then((found) => {
+      if (cancelled) return;
+      setAreaHints((prev) => {
+        const next = { ...prev };
+        wanted.forEach((place) => { next[place.placeId] = found[place.placeId] || ''; });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchResults, isLoaded]);
+  const areaHintFor = (place) => (place?.placeId && isAreaPlace(place.types) ? areaHints[place.placeId] || '' : '');
 
   // The distance on each row is the road distance from the pickup (what Google Maps shows), not the straight line.
   const [roadMeters, setRoadMeters] = useState({});
@@ -1120,7 +1144,8 @@ const SelectLocation = () => {
       ? { title: result, address: result, coords: selectedCoords }
       : result;
     const resolvedSelection = await resolvePlaceSelection(normalizedResult);
-    const finalTitle = resolvedSelection.title || resolvedSelection.address;
+    // "Vijay Nagar" at Bhawarkua is saved as "Vijay Nagar, near Bhawarkua Square", never as the bare ambiguous name.
+    const finalTitle = withAreaHint(resolvedSelection.title || resolvedSelection.address, areaHintFor(normalizedResult));
     const resolvedCoords = selectedCoords || resolvedSelection.coords;
 
     resetAutocompleteSessionToken();
@@ -1544,7 +1569,7 @@ const SelectLocation = () => {
                 <div className="min-w-0">
                   <h4 className="text-[15px] font-semibold text-slate-900 leading-tight">{result.title}</h4>
                   <p className="text-[13px] text-slate-500 font-medium mt-1 line-clamp-1">
-                    {distanceTextFor(result) ? `${distanceTextFor(result)} • ` : ''}{result.address}
+                    {distanceTextFor(result) ? `${distanceTextFor(result)} • ` : ''}{areaHintFor(result) ? `Near ${areaHintFor(result)} • ` : ''}{result.address}
                   </p>
                 </div>
               </motion.button>

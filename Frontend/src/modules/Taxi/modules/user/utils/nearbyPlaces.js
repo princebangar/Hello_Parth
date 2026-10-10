@@ -218,3 +218,77 @@ export const nearbyAutocompleteRequest = (google, origin) => {
 export const keepNearbyPredictions = (predictions) => predictions.filter((prediction) => (
   !Number.isFinite(prediction.distance_meters) || prediction.distance_meters <= SEARCH_MAX_DISTANCE_METERS
 ));
+
+// ---- Which "Vijay Nagar" is this? ----------------------------------------------------------------------------
+// Google lists several areas under one name (the small "Vijay Nagar" at Bhawarkua, pincode 452001, and the big one,
+// 452010). An area result therefore gets the best-known landmark at its centre ("Near Bhawarkua Square"), so two
+// areas with the same name can be told apart. Each area costs two geocoder calls once, then it is cached on the device.
+const AREA_TYPES = ['sublocality', 'sublocality_level_1', 'sublocality_level_2', 'sublocality_level_3', 'neighborhood'];
+const LANDMARK_TYPES = ['transit_station', 'point_of_interest', 'establishment', 'neighborhood'];
+const AREA_HINT_CACHE_PREFIX = 'taxi:areahint:v1:';
+const MAX_AREA_LOOKUPS = 5;
+
+export const isAreaPlace = (types) => Array.isArray(types) && types.some((type) => AREA_TYPES.includes(type));
+
+// "QV8V+97M UMT GARDEN" -> "UMT GARDEN"; plot numbers, bare numbers and plus codes are not landmarks.
+const landmarkNameOf = (formattedAddress, areaTitle = '') => {
+  const name = String(formattedAddress || '').split(',')[0].trim().replace(/^[A-Z0-9]{4}\+[A-Z0-9]{2,3}\s*/, '').trim();
+  if (name.length < 4 || !/[a-z]{3}/i.test(name)) return '';
+  if (/^\d|\bplot\b|\bno\.?\s*\d/i.test(name)) return '';
+  if (areaTitle && name.toLowerCase().includes(String(areaTitle).trim().toLowerCase())) return '';
+  return name;
+};
+
+const readHintCache = (placeId) => {
+  try {
+    const value = window.localStorage.getItem(AREA_HINT_CACHE_PREFIX + placeId);
+    return value === null ? undefined : value;
+  } catch {
+    return undefined;
+  }
+};
+
+const writeHintCache = (placeId, hint) => {
+  try {
+    window.localStorage.setItem(AREA_HINT_CACHE_PREFIX + placeId, hint);
+  } catch {
+    // storage full / blocked - the hint still shows this time
+  }
+};
+
+const geocode = (geocoder, request) => new Promise((resolve) => {
+  geocoder.geocode(request, (results, status) => resolve(status === 'OK' && Array.isArray(results) ? results : []));
+});
+
+/**
+ * { [placeId]: 'Bhawarkua Square' } for the area-type items (`{ placeId, title, types }`) of a result list.
+ * Items that are not areas, or have no recognisable landmark, are left out.
+ */
+export const loadAreaHints = async (google, items) => {
+  const hints = {};
+  if (!google?.maps?.Geocoder || !Array.isArray(items)) return hints;
+  const areas = items.filter((item) => item?.placeId && isAreaPlace(item.types)).slice(0, MAX_AREA_LOOKUPS);
+  if (areas.length === 0) return hints;
+
+  const geocoder = new google.maps.Geocoder();
+  await Promise.all(areas.map(async (area) => {
+    const cached = readHintCache(area.placeId);
+    if (cached !== undefined) {
+      if (cached) hints[area.placeId] = cached;
+      return;
+    }
+    const centre = (await geocode(geocoder, { placeId: area.placeId }))[0]?.geometry?.location;
+    if (!centre) return;
+    const around = await geocode(geocoder, { location: centre });
+    const landmark = around
+      .filter((result) => (result.types || []).some((type) => LANDMARK_TYPES.includes(type)))
+      .map((result) => landmarkNameOf(result.formatted_address, area.title))
+      .find(Boolean) || '';
+    writeHintCache(area.placeId, landmark);
+    if (landmark) hints[area.placeId] = landmark;
+  }));
+  return hints;
+};
+
+// "Vijay Nagar" + "Bhawarkua Square" -> "Vijay Nagar, near Bhawarkua Square"
+export const withAreaHint = (title, hint) => (hint ? `${title}, near ${hint}` : title);
