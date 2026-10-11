@@ -276,6 +276,8 @@ const SetPrices = ({ mode }) => {
   
   const [zones, setZones] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  // vehicle types that have no Set Price in any zone yet (shown at the end of the list so none is forgotten)
+  const [unpricedVehicles, setUnpricedVehicles] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
   // Declared before the effects below so its baseline is taken first (effects run in declaration order).
   const { isDirty, resetBaseline } = useDirty(formData, !loading);
@@ -298,7 +300,7 @@ const SetPrices = ({ mode }) => {
 
   useEffect(() => {
     if (mode === 'create') {
-      setFormData({ ...initialFormState });
+      setFormData({ ...initialFormState, vehicle_type: location.state?.vehicleTypeId || '' });
     }
   }, [mode]);
 
@@ -322,6 +324,31 @@ const SetPrices = ({ mode }) => {
       resetBaseline({ ...formData, transport_type: nextTransportType });
     }
   }, [selectedVehicleType]);
+
+  // The commission / tax (and, for delivery vehicles, the distance pricing) entered on the vehicle type is filled in here;
+  // a field that already has a value (an edited price) is left alone.
+  useEffect(() => {
+    if (!selectedVehicleType || loading) return;
+    const vehicle = selectedVehicleType;
+    const pricing = vehicle.delivery_distance_pricing || {};
+    const hasValue = (value) => value !== '' && value !== null && value !== undefined;
+    setFormData((previous) => {
+      const next = { ...previous };
+      const fill = (key, value) => {
+        if (!hasValue(previous[key]) && hasValue(value) && !Number.isNaN(Number(value))) next[key] = String(value);
+      };
+      fill('admin_commission_from_driver', vehicle.admin_commission_from_driver);
+      fill('admin_commission_for_owner', vehicle.admin_commission_for_owner);
+      fill('service_tax', typeof vehicle.service_tax === 'object' ? vehicle.service_tax?.percentage : vehicle.service_tax);
+      if (pricing.enabled) {
+        fill('base_price', pricing.base_price);
+        fill('base_distance', pricing.free_distance);
+        fill('price_per_distance', pricing.distance_price);
+        fill('time_price', pricing.time_price);
+      }
+      return JSON.stringify(next) === JSON.stringify(previous) ? previous : next;
+    });
+  }, [selectedVehicleType, loading]);
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -368,6 +395,21 @@ const SetPrices = ({ mode }) => {
 
         setZones(safeZoneItems);
         setVehicleTypes(Array.isArray(vehicleItems) ? vehicleItems : []);
+
+        // Which vehicle types have a price anywhere? (one wide read, only when the list is not filtered)
+        const filtered = Boolean(searchTerm || statusFilter || zoneFilter || vehicleFilter || transportFilter);
+        if (filtered) {
+          setUnpricedVehicles([]);
+        } else {
+          try {
+            const everything = await adminService.getSetPrices({ scope: 'ride', page: 1, limit: 1000 });
+            const allRows = everything?.data?.results || everything?.data?.data?.results || [];
+            const priced = new Set(allRows.map((row) => String(row.vehicle_type?._id || row.vehicle_type || row.type_id || '')));
+            setUnpricedVehicles((Array.isArray(vehicleItems) ? vehicleItems : []).filter((vehicle) => !priced.has(String(vehicle._id || vehicle.id))));
+          } catch {
+            setUnpricedVehicles([]);
+          }
+        }
 
         return;
       }
@@ -707,10 +749,10 @@ const SetPrices = ({ mode }) => {
                    <tbody className="divide-y divide-gray-50">
                     {loading && prizes.length === 0 ? (
                        <tr><td colSpan="5" className="py-12 text-center text-slate-300 font-bold uppercase tracking-widest text-xs animate-pulse">Syncing Price Matrix...</td></tr>
-                    ) : prizes.length === 0 ? (
+                    ) : prizes.length === 0 && unpricedVehicles.length === 0 ? (
                        <tr><td colSpan="5" className="py-12 text-center text-slate-400 italic text-xs">No price rules matched the current search or filters.</td></tr>
                     ) : (
-                      prizes.map((prize) => (
+                      [...prizes.map((prize) => (
                         <tr key={prize.id || prize._id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-4 py-2 text-xs font-semibold text-slate-700 capitalize">{(prize.zone_name || 'India').toLowerCase()}</td>
                           <td className="px-4 py-2 text-xs text-slate-600 font-medium">
@@ -768,7 +810,25 @@ const SetPrices = ({ mode }) => {
                              </div>
                           </td>
                         </tr>
-                      ))
+                      )), ...unpricedVehicles.map((vehicle) => (
+                        <tr key={`unpriced-${vehicle._id || vehicle.id}`} className="bg-amber-50/40">
+                          <td className="px-4 py-2 text-xs italic text-slate-400">-</td>
+                          <td className="px-4 py-2 text-xs text-slate-600 font-medium">
+                            {vehicle.transport_type === 'both' ? 'All' : (vehicle.transport_type === 'taxi' ? 'Ride Hailing' : (vehicle.transport_type || 'All'))}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-slate-800 font-bold capitalize">{String(vehicle.name || '').toLowerCase()}</td>
+                          <td className="px-4 py-2"><span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700">Price not set</span></td>
+                          <td className="px-4 py-2 text-right pr-6">
+                            <button
+                              type="button"
+                              onClick={() => navigate('/taxi/admin/pricing/set-price/create', { state: { vehicleTypeId: String(vehicle._id || vehicle.id) } })}
+                              className="rounded-lg bg-yellow-400 px-3 py-1.5 text-[11px] font-bold text-black hover:bg-yellow-500"
+                            >
+                              Set price
+                            </button>
+                          </td>
+                        </tr>
+                      ))]
                    )}
                    </tbody>
                  </table>
@@ -923,7 +983,7 @@ const SetPrices = ({ mode }) => {
                               <option value="1">%</option>
                               <option value="2">Fixed</option>
                            </select>
-                           <input type="number" min="0" required className={inputClass + " py-1"} value={formData.admin_commission_from_driver} onChange={e => setFormData(p=>({...p, admin_commission_from_driver: clampNonNegativeInput('admin_commission_from_driver', e.target.value)}))} />
+                           <input type="number" min="0" className={inputClass + " py-1"} value={formData.admin_commission_from_driver} onChange={e => setFormData(p=>({...p, admin_commission_from_driver: clampNonNegativeInput('admin_commission_from_driver', e.target.value)}))} />
                         </div>
                      </div>
                      <div>
@@ -933,40 +993,40 @@ const SetPrices = ({ mode }) => {
                               <option value="1">%</option>
                               <option value="2">Fixed</option>
                            </select>
-                           <input type="number" min="0" required className={inputClass + " py-1"} value={formData.admin_commission_for_owner} onChange={e => setFormData(p=>({...p, admin_commission_for_owner: clampNonNegativeInput('admin_commission_for_owner', e.target.value)}))} />
+                           <input type="number" min="0" className={inputClass + " py-1"} value={formData.admin_commission_for_owner} onChange={e => setFormData(p=>({...p, admin_commission_for_owner: clampNonNegativeInput('admin_commission_for_owner', e.target.value)}))} />
                         </div>
                      </div>
                      <div>
                         <label className={labelClass}>Service Tax (%) <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.service_tax} onChange={e => setFormData(p=>({...p, service_tax: clampNonNegativeInput('service_tax', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.service_tax} onChange={e => setFormData(p=>({...p, service_tax: clampNonNegativeInput('service_tax', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Base Price <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.base_price} onChange={e => setFormData(p=>({...p, base_price: clampNonNegativeInput('base_price', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.base_price} onChange={e => setFormData(p=>({...p, base_price: clampNonNegativeInput('base_price', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Base Distance <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.base_distance} onChange={e => setFormData(p=>({...p, base_distance: clampNonNegativeInput('base_distance', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.base_distance} onChange={e => setFormData(p=>({...p, base_distance: clampNonNegativeInput('base_distance', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Price / Distance <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.price_per_distance} onChange={e => setFormData(p=>({...p, price_per_distance: clampNonNegativeInput('price_per_distance', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.price_per_distance} onChange={e => setFormData(p=>({...p, price_per_distance: clampNonNegativeInput('price_per_distance', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Time Price / Min <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.time_price} onChange={e => setFormData(p=>({...p, time_price: clampNonNegativeInput('time_price', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.time_price} onChange={e => setFormData(p=>({...p, time_price: clampNonNegativeInput('time_price', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Waiting Charge <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.waiting_charge} onChange={e => setFormData(p=>({...p, waiting_charge: clampNonNegativeInput('waiting_charge', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.waiting_charge} onChange={e => setFormData(p=>({...p, waiting_charge: clampNonNegativeInput('waiting_charge', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Free Wait (Before) <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.free_waiting_before} onChange={e => setFormData(p=>({...p, free_waiting_before: clampNonNegativeInput('free_waiting_before', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.free_waiting_before} onChange={e => setFormData(p=>({...p, free_waiting_before: clampNonNegativeInput('free_waiting_before', e.target.value)}))} />
                      </div>
                      <div>
                         <label className={labelClass}>Free Wait (After) <span className="text-rose-500">*</span></label>
-                        <input type="number" min="0" required className={inputClass + " py-1"} value={formData.free_waiting_after} onChange={e => setFormData(p=>({...p, free_waiting_after: clampNonNegativeInput('free_waiting_after', e.target.value)}))} />
+                        <input type="number" min="0" className={inputClass + " py-1"} value={formData.free_waiting_after} onChange={e => setFormData(p=>({...p, free_waiting_after: clampNonNegativeInput('free_waiting_after', e.target.value)}))} />
                      </div>
                      <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-2 gap-y-1 pt-1 border-t border-gray-100 mt-1">
                         <div className="flex items-center gap-1">

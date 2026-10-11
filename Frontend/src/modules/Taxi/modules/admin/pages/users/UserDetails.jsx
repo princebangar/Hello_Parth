@@ -35,6 +35,7 @@ const UserDetails = () => {
   
   const [user, setUser] = useState(null);
   const [requests, setRequests] = useState([]);
+  const [requestTotals, setRequestTotals] = useState({});
   const [walletHistory, setWalletHistory] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -131,11 +132,15 @@ const UserDetails = () => {
           date: r.trip_start_time ? new Date(r.trip_start_time).toLocaleDateString() : 'N/A',
           user: userData.data?.name || 'User',
           driver: r.driver_id?.name || 'Pending',
-          status: r.is_completed ? 'Completed' : r.is_cancelled ? 'Cancelled' : 'Ongoing',
+          status: r.is_completed ? 'Completed' : r.is_cancelled ? 'Cancelled' : (r.service_type === 'Bus' ? 'Booked' : 'Ongoing'),
           paid: r.is_paid ? 'Paid' : 'Not Paid',
-          payment: r.payment_type || 'CASH'
+          payment: r.payment_type || 'CASH',
+          type: r.service_type || 'Ride',
+          route: r.route || '',
+          amount: Number(r.amount || 0),
         }));
         setRequests(mappedRequests);
+        setRequestTotals(reqData.data?.totals || {});
         
         // Update stats
         if (userData.success) {
@@ -144,7 +149,7 @@ const UserDetails = () => {
             stats: {
               completed: mappedRequests.filter(r => r.status === 'Completed').length,
               cancelled: mappedRequests.filter(r => r.status === 'Cancelled').length,
-              upcoming: mappedRequests.filter(r => r.status === 'Ongoing').length
+              upcoming: mappedRequests.filter(r => r.status === 'Ongoing' || r.status === 'Booked').length
             }
           }));
         }
@@ -330,7 +335,7 @@ const UserDetails = () => {
 
         {/* PILL TABS */}
         <div className="mt-6 flex items-center gap-2 overflow-x-auto whitespace-nowrap hide-scrollbar border-t border-gray-100 pt-5">
-          {['Request List', 'User Payment History', 'Review History', 'Subscriptions'].map(tab => (
+          {['Request List', 'User Payment History', 'Review History'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -355,7 +360,10 @@ const UserDetails = () => {
               {[
                 { label: 'Completed Rides', val: user.stats.completed, icon: CheckCircle2, color: 'emerald' },
                 { label: 'Cancelled Rides', val: user.stats.cancelled, icon: AlertCircle, color: 'rose' },
-                { label: 'Upcoming Rides', val: user.stats.upcoming, icon: Clock, color: 'yellow' }
+                { label: 'Upcoming Rides', val: user.stats.upcoming, icon: Clock, color: 'yellow' },
+                { label: 'Bus Trips', val: requestTotals.bus_trips || 0, icon: Car, color: 'emerald' },
+                { label: 'Outstation Trips', val: requestTotals.outstation_trips || 0, icon: Car, color: 'yellow' },
+                { label: 'Paid For Bus Tickets', val: `Rs ${Number(requestTotals.bus_amount_paid || 0).toLocaleString('en-IN')}`, icon: CheckCircle2, color: 'emerald' }
               ].map((s, i) => (
                 <div key={i} className="bg-white p-4 rounded-xl border border-gray-200 flex items-center justify-between shadow-sm">
                   <div>
@@ -424,7 +432,9 @@ const UserDetails = () => {
                     <tr className="bg-gray-50 text-xs font-semibold text-gray-600 border-b border-gray-200">
                       <th className="px-4 py-3">Request Id</th>
                       <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">User Name</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Route</th>
+                      <th className="px-4 py-3">Amount</th>
                       <th className="px-4 py-3">Driver Name</th>
                       <th className="px-4 py-3">Trip Status</th>
                       <th className="px-4 py-3">Paid</th>
@@ -436,7 +446,9 @@ const UserDetails = () => {
                       <tr key={i} className="hover:bg-gray-50 transition-colors text-sm">
                         <td className="px-4 py-3 font-medium text-gray-600">#{r.id.slice(-8).toUpperCase()}</td>
                         <td className="px-4 py-3 text-gray-600">{r.date}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-900">{r.user}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">{r.type}</td>
+                        <td className="px-4 py-3 max-w-[260px] truncate text-gray-600" title={r.route}>{r.route || '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">Rs {Number(r.amount || 0).toLocaleString('en-IN')}</td>
                         <td className="px-4 py-3 font-semibold text-gray-900">{r.driver}</td>
                         <td className="px-4 py-3">
                           <span className={`font-semibold ${
@@ -453,7 +465,7 @@ const UserDetails = () => {
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan="7" className="px-4 py-8 text-center text-gray-500 font-medium text-sm">
+                        <td colSpan="9" className="px-4 py-8 text-center text-gray-500 font-medium text-sm">
                           <div className="flex flex-col items-center gap-2">
                             <Car size={24} className="text-gray-300" />
                             No requests found for this user

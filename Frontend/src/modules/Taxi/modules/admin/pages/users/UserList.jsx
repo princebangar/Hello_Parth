@@ -101,37 +101,6 @@ const UserList = () => {
   }, [itemsPerPage, page, referralSource, searchTerm, selectedEmployeeId]);
 
   useEffect(() => {
-    let mounted = true;
-
-    const loadEmployees = async () => {
-      try {
-        const resData = await adminService.getEmployees(1, 100, '');
-        if (!mounted || !resData?.success) return;
-
-        setEmployeeOptions(
-          Array.isArray(resData.data?.results)
-            ? resData.data.results.map((employee) => ({
-                id: employee._id,
-                name: employee.name || 'Unnamed employee',
-                code: employee.employeeCode || '',
-              }))
-            : [],
-        );
-      } catch (err) {
-        if (mounted) {
-          setEmployeeOptions([]);
-        }
-      }
-    };
-
-    loadEmployees();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
     const trimmedSearch = String(searchTerm || '').trim();
     const timeoutId = window.setTimeout(() => {
       fetchUsers({
@@ -181,6 +150,48 @@ const UserList = () => {
 
     await handleToggleStatus(user.id, user.status);
     setActiveMenu(null);
+  };
+
+  // Downloads every user that matches the current search (all pages, not just the 10 on screen) as a CSV file.
+  const [isExporting, setIsExporting] = useState(false);
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const rows = [];
+      const csvCell = (value) => {
+        const text = String(value ?? '').replace(/"/g, '""');
+        return `"${text}"`;
+      };
+      for (let exportPage = 1; exportPage <= 100; exportPage += 1) {
+        const resData = await adminService.getUsers(exportPage, 100, String(searchTerm || '').trim(), {});
+        const chunk = resData?.data?.results || [];
+        chunk.forEach((u) => rows.push([
+          u.name || '', GENDER_LABELS[u.gender] || '', u.mobile || '', u.email || '',
+          u.active ? 'Active' : 'Blocked', u.acquiredByEmployeeName || '', u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN') : '',
+        ]));
+        if (exportPage >= Number(resData?.data?.paginator?.last_page || 1)) break;
+      }
+      if (!rows.length) {
+        toast.error('There are no users to export');
+        return;
+      }
+      const csv = [['Name', 'Gender', 'Mobile', 'Email', 'Status', 'Employee referral', 'Joined'], ...rows]
+        .map((row) => row.map(csvCell).join(','))
+        .join('\r\n');
+      const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`${rows.length} users exported`);
+    } catch (err) {
+      toast.error(err?.message || 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleAddUser = () => { navigate('/taxi/admin/users/create'); };
@@ -246,6 +257,17 @@ const UserList = () => {
   const startIndex = (safePage - 1) * perPage;
   const showingFrom = totalEntries === 0 ? 0 : startIndex + 1;
   const showingTo = totalEntries === 0 ? 0 : Math.min(startIndex + users.length, totalEntries);
+  // 1 2 3 ... 12 : the current page with its neighbours, the first and the last
+  const pageNumbers = (() => {
+    const wanted = new Set([1, totalPages, safePage - 1, safePage, safePage + 1]);
+    const sorted = [...wanted].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
+    const result = [];
+    sorted.forEach((n, i) => {
+      if (i > 0 && n - sorted[i - 1] > 1) result.push('...');
+      result.push(n);
+    });
+    return result;
+  })();
 
   if (isLoading) {
     return (
@@ -257,7 +279,7 @@ const UserList = () => {
   }
 
   return (
-    <div className="p-4 lg:p-6 bg-gray-50 min-h-screen">
+    <div className="flex min-h-screen flex-col bg-gray-50 p-4 lg:p-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
         <span>Users</span>
@@ -269,8 +291,13 @@ const UserList = () => {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg text-gray-900 font-bold">Passengers</h1>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
-            <Download size={14} /> Export
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Export
           </button>
           <button 
             onClick={handleAddUser}
@@ -317,46 +344,6 @@ const UserList = () => {
             <span>Entries</span>
           </div>
         </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-gray-500">Referral Source</label>
-            <select
-              value={referralSource}
-              onChange={(e) => {
-                const nextValue = e.target.value;
-                setReferralSource(nextValue);
-                if (nextValue !== 'employee') {
-                  setSelectedEmployeeId('');
-                }
-                setPage(1);
-              }}
-              className="min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
-            >
-              <option value="all">All Users</option>
-              <option value="employee">Employee Referred Only</option>
-              <option value="organic">No Employee Referral</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-gray-500">Employee</label>
-            <select
-              value={selectedEmployeeId}
-              onChange={(e) => {
-                setSelectedEmployeeId(e.target.value);
-                setReferralSource('employee');
-                setPage(1);
-              }}
-              className="min-w-[260px] border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-800 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors"
-            >
-              <option value="">All Employees</option>
-              {employeeOptions.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}{employee.code ? ` (${employee.code})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
       </div>
 
       {error && (
@@ -366,8 +353,8 @@ const UserList = () => {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
-        <div className="overflow-x-auto overflow-y-visible">
+      <div className="flex flex-1 flex-col rounded-xl border border-gray-200 bg-white overflow-visible">
+        <div className="flex-1 overflow-x-auto overflow-y-visible">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
@@ -375,7 +362,6 @@ const UserList = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Gender</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Mobile</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">ID Proof</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Employee Referral</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-900">Status</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-900">Action</th>
@@ -408,22 +394,6 @@ const UserList = () => {
                   <td className="px-4 py-3 text-sm text-gray-700">{user.phone}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{user.email}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    {user.governmentIdProof?.imageUrl ? (
-                      <a
-                        href={user.governmentIdProof.imageUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <FileText size={13} />
-                        {String(user.governmentIdProof.type || 'ID').replace(/_/g, ' ')}
-                      </a>
-                    ) : (
-                      <span className="text-xs font-medium text-rose-500">Missing</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
                     {user.acquiredByEmployeeName ? (
                       <div className="flex flex-col">
                         <span className="font-medium text-gray-900">{user.acquiredByEmployeeName}</span>
@@ -454,23 +424,36 @@ const UserList = () => {
           </table>
         </div>
         {!isLoading && (
-          <div className="border-t border-gray-100 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500">
+          <div className="mt-auto border-t border-gray-100 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500">
             <span>Showing {showingFrom} to {showingTo} of {totalEntries} entries</span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={safePage <= 1}
-                className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-500 disabled:opacity-60"
+                className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-600 font-bold disabled:opacity-50 hover:bg-gray-50"
               >
                 Prev
               </button>
-              <span className="px-3 py-1.5 rounded bg-black text-white text-xs font-bold">{safePage}</span>
+              {pageNumbers.map((entry, index) => (
+                entry === '...' ? (
+                  <span key={`gap-${index}`} className="px-1 text-gray-400">...</span>
+                ) : (
+                  <button
+                    key={entry}
+                    type="button"
+                    onClick={() => setPage(entry)}
+                    className={`min-w-[32px] px-2.5 py-1.5 rounded text-xs font-bold ${entry === safePage ? 'bg-black text-white' : 'border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    {entry}
+                  </button>
+                )
+              ))}
               <button
                 type="button"
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 disabled={safePage >= totalPages}
-                className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-700 font-bold disabled:opacity-60 hover:bg-gray-50"
+                className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-700 font-bold disabled:opacity-50 hover:bg-gray-50"
               >
                 Next
               </button>

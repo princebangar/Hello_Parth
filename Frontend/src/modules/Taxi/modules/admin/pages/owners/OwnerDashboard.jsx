@@ -55,10 +55,11 @@ const OwnerDashboard = () => {
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
+    let firstLoad = true;
     const fetchDashboard = async () => {
       try {
-        setIsLoading(true);
-        const token = localStorage.getItem('token') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
+        if (firstLoad) setIsLoading(true);
+        const token = localStorage.getItem('adminToken') || '';
         
         const response = await fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/owner-management/dashboard', {
           headers: {
@@ -75,10 +76,14 @@ const OwnerDashboard = () => {
       } catch (err) {
         setError('Network error');
       } finally {
+        firstLoad = false;
         setIsLoading(false);
       }
     };
     fetchDashboard();
+    // the numbers keep up with new rides / approvals without a page refresh
+    const timer = window.setInterval(fetchDashboard, 30000);
+    return () => window.clearInterval(timer);
   }, []);
 
   if (isLoading) {
@@ -134,22 +139,22 @@ const OwnerDashboard = () => {
             <div className="lg:col-span-1 bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col">
                <p className="text-sm font-bold text-gray-900 mb-6">Today Trips</p>
                <div className="flex-1 flex flex-col items-center justify-center relative min-h-[200px]">
-                  <div className="w-32 h-32 border-[8px] border-gray-50 rounded-full flex flex-col items-center justify-center">
-                     <p className="text-2xl font-black text-gray-200">0</p>
+                  <div className="w-32 h-32 border-[8px] border-gray-100 rounded-full flex flex-col items-center justify-center">
+                     <p className="text-2xl font-black text-gray-900">{data?.today_trips?.total || 0}</p>
                      <p className="text-[10px] font-bold text-gray-400">Total Rides</p>
                   </div>
                   <div className="mt-6 w-full space-y-2">
                      <div className="flex items-center justify-between px-4">
                         <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-yellow-400"></div><span className="text-xs font-bold text-gray-500">Completed Rides</span></div>
-                        <span className="text-xs font-black text-gray-900">0</span>
+                        <span className="text-xs font-black text-gray-900">{data?.today_trips?.completed || 0}</span>
                      </div>
                      <div className="flex items-center justify-between px-4">
                         <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500"></div><span className="text-xs font-bold text-gray-500">Cancelled Rides</span></div>
-                        <span className="text-xs font-black text-gray-900">0</span>
+                        <span className="text-xs font-black text-gray-900">{data?.today_trips?.cancelled || 0}</span>
                      </div>
                      <div className="flex items-center justify-between px-4">
                         <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-sky-500"></div><span className="text-xs font-bold text-gray-500">Scheduled Rides</span></div>
-                        <span className="text-xs font-black text-gray-900">0</span>
+                        <span className="text-xs font-black text-gray-900">{data?.today_trips?.scheduled || 0}</span>
                      </div>
                   </div>
                </div>
@@ -178,21 +183,28 @@ const OwnerDashboard = () => {
              {/* Chart Placeholder */}
              <div className="lg:col-span-1 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                 <p className="text-sm font-bold text-gray-900 mb-4">Overall Earnings</p>
-                <div className="h-40 flex items-end justify-between gap-2 pl-8 pr-2 relative border-b-2 border-gray-100">
-                   <div className="flex-1 bg-emerald-500/10 h-0.5 rounded-t-sx transition-all"></div>
-                   <div className="flex-1 bg-emerald-500/10 h-0.5 rounded-t-sx transition-all"></div>
-                   <div className="flex-1 bg-emerald-500/10 h-0.5 rounded-t-sx transition-all"></div>
-                   
-                   {/* Values axis */}
-                   <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-[8px] font-bold text-gray-300">
-                      <span>2</span><span>1.6</span><span>1.2</span><span>0.8</span><span>0.4</span><span>0</span>
-                   </div>
-                </div>
-                <div className="flex justify-between mt-4 pl-8 pr-2">
-                   <span className="text-[10px] font-bold text-gray-400">January</span>
-                   <span className="text-[10px] font-bold text-gray-400">February</span>
-                   <span className="text-[10px] font-bold text-gray-400">March</span>
-                </div>
+                {(() => {
+                  const rows = data?.monthly_earnings || [];
+                  const max = Math.max(1, ...rows.map((row) => row.total));
+                  const label = (month) => new Date(`${month}-01T00:00:00`).toLocaleString('en-IN', { month: 'short' });
+                  return rows.length === 0 ? (
+                    <p className="flex h-40 items-center justify-center text-xs font-bold text-gray-400">No completed fleet rides yet</p>
+                  ) : (
+                    <>
+                      <div className="h-40 flex items-end justify-between gap-2 border-b-2 border-gray-100">
+                        {rows.map((row) => (
+                          <div key={row.month} className="flex flex-1 flex-col items-center justify-end">
+                            <span className="mb-1 text-[9px] font-bold text-gray-500">{row.total}</span>
+                            <div className="w-full rounded-t bg-emerald-500" style={{ height: `${Math.max(4, (row.total / max) * 120)}px` }} />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex justify-between gap-2">
+                        {rows.map((row) => <span key={row.month} className="flex-1 text-center text-[10px] font-bold text-gray-400">{label(row.month)}</span>)}
+                      </div>
+                    </>
+                  );
+                })()}
              </div>
           </div>
         </div>

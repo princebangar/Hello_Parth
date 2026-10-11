@@ -276,7 +276,7 @@ const VEHICLE_CATEGORY_OPTIONS = [
 const TRANSPORT_TYPE_OPTIONS = [
   { id: 'taxi', name: 'taxi', display_name: 'Ride' },
   { id: 'delivery', name: 'delivery', display_name: 'Delivery' },
-  { id: 'both', name: 'both', display_name: 'Both' },
+  { id: 'both', name: 'both', display_name: 'All' },
 ];
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -410,7 +410,7 @@ const VehicleType = ({ mode: propMode }) => {
         name: value,
         display_name:
           value === 'both'
-            ? 'Both'
+            ? 'All'
             : (item?.display_name || item?.label || value.charAt(0).toUpperCase() + value.slice(1)),
       });
     });
@@ -764,7 +764,7 @@ const VehicleType = ({ mode: propMode }) => {
                             ? 'bg-emerald-50 text-emerald-600'
                             : 'bg-blue-50 text-blue-600'
                       }`}>
-                        {vehicle.transport_type}
+                        {String(vehicle.transport_type || '').toLowerCase() === 'both' ? 'All' : vehicle.transport_type}
                       </span>
                     </td>
                     <td className="px-6 py-5 text-sm font-medium text-slate-700">{vehicle.trip_dispatch_type || vehicle.dispatch_type || 'normal'}</td>

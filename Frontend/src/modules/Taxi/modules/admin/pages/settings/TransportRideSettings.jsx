@@ -155,7 +155,20 @@ const TransportRideSettings = () => {
                          type="number"
                       />
                       <p className="text-xs text-gray-500 ml-0.5">
-                         Riders can schedule a ride (ride, parcel, intercity) only for a pickup at least this many minutes from now. Drivers get the request at the pickup time.
+                         Riders can schedule a ride (ride, parcel, intercity) only for a pickup at least this many minutes from now. Rides booked for a later time are sent to drivers shortly before the pickup (see next field).
+                      </p>
+                   </div>
+
+                   <div className="space-y-1.5">
+                      <InputField
+                         label="Schedule Ride: Drivers Get The Request X Minutes Before Pickup"
+                         name="schedule_ride_dispatch_minutes_before"
+                         value={settings.schedule_ride_dispatch_minutes_before ?? '30'}
+                         onChange={handleChange}
+                         type="number"
+                      />
+                      <p className="text-xs text-gray-500 ml-0.5">
+                         A scheduled ride is sent to nearby drivers this many minutes before the pickup time, so one can accept it ahead. Booked later than that? It is sent at once.
                       </p>
                    </div>
                 </div>

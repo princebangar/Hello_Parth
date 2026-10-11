@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PasswordInput from '../../components/ui/PasswordInput';
 import { Check, ChevronRight, Loader2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -72,8 +73,8 @@ const OwnerPasswordUpdate = () => {
               <label className="mb-2 block text-sm font-semibold text-gray-950">
                 Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
+              <PasswordInput
+                
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
@@ -86,8 +87,8 @@ const OwnerPasswordUpdate = () => {
               <label className="mb-2 block text-sm font-semibold text-gray-950">
                 Confirm Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
+              <PasswordInput
+                
                 name="password_confirmation"
                 value={formData.password_confirmation}
                 onChange={handleChange}

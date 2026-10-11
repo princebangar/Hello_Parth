@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PasswordInput from '../../components/ui/PasswordInput';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -216,8 +217,8 @@ const UserCreate = () => {
                   <Lock size={12} className="inline mr-1 text-gray-400" />
                   Password *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
+                  
                   name="password"
                   required
                   value={formData.password}
@@ -232,8 +233,8 @@ const UserCreate = () => {
                   <CheckCircle2 size={12} className="inline mr-1 text-gray-400" />
                   Confirm Password *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
+                  
                   name="confirmPassword"
                   required
                   value={formData.confirmPassword}
