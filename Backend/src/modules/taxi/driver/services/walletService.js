@@ -4,6 +4,7 @@ import { ApiError } from '../../../../utils/ApiError.js';
 import { SetPrice } from '../../admin/models/SetPrice.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { Driver } from '../models/Driver.js';
+import { Owner } from '../../admin/models/Owner.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
 import { Ride } from '../../user/models/Ride.js';
 import { getWalletSettings } from '../../services/appSettingsService.js';
@@ -180,6 +181,37 @@ export const serializeDriverWallet = async (driver) => {
   };
 };
 
+// A fleet driver works on the owner's account, so it is the OWNER's wallet that must meet the minimum balance (the same
+// admin rule "minimum amount to get an order" as for a solo driver). Returns the ids of the given drivers whose owner is
+// below it - they get no ride request and cannot accept.
+// What the admin set as the minimum wallet balance to get an order (shown to owners on their wallet screen).
+export const getMinimumBalanceForOrders = async () => (await resolveWalletRules()).minimumBalanceForOrders;
+
+export const getDriverIdsBlockedByOwnerWallet = async (driverIds = []) => {
+  const ids = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '')).filter(Boolean))];
+  if (!ids.length) return new Set();
+
+  const fleetDrivers = await Driver.find({ _id: { $in: ids }, owner_id: { $ne: null } }).select('_id owner_id').lean();
+  if (!fleetDrivers.length) return new Set();
+
+  const rules = await resolveWalletRules();
+  if (!rules.isWalletEnabled) return new Set(fleetDrivers.map((driver) => String(driver._id)));
+
+  const owners = await Owner.find({ _id: { $in: [...new Set(fleetDrivers.map((driver) => String(driver.owner_id)))] } })
+    .select('_id wallet.balance')
+    .lean();
+  const belowMinimum = new Set(
+    owners
+      .filter((owner) => Number(owner?.wallet?.balance || 0) < rules.minimumBalanceForOrders)
+      .map((owner) => String(owner._id)),
+  );
+  return new Set(
+    fleetDrivers
+      .filter((driver) => belowMinimum.has(String(driver.owner_id)))
+      .map((driver) => String(driver._id)),
+  );
+};
+
 export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = {}) => {
   const driver =
     typeof driverOrId === 'object' && driverOrId?._id
@@ -196,6 +228,11 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
   if (driver.owner_id) {
     if (driver?.wallet?.isBlocked) {
       await Driver.findByIdAndUpdate(driver._id, { 'wallet.isBlocked': false });
+    }
+    // ...but the OWNER's wallet must meet the minimum balance for the fleet to get rides.
+    const ownerBlocked = await getDriverIdsBlockedByOwnerWallet([driver._id]);
+    if (ownerBlocked.has(String(driver._id))) {
+      throw new ApiError(403, 'Your owner wallet is below the minimum balance, so this fleet cannot take rides right now. Please ask the owner to contact the admin.');
     }
     return wallet;
   }

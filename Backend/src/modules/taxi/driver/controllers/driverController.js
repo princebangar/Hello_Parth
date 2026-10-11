@@ -33,12 +33,14 @@ import {
 } from "../services/authService.js";
 import { cancelScheduledRideByDriver, emitToDriver } from "../../services/dispatchService.js";
 import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
+import { sendPushNotificationToEntities } from "../../services/pushNotificationService.js";
 import { alertTaxiAdmins } from "../../services/adminAlertService.js";
 import { findZoneByPickup } from "../services/locationService.js";
 import { listDriverServiceLocations } from "../services/serviceLocationService.js";
 import {
   applyDriverWalletAdjustment,
   ensureDriverWalletCanAcceptRide,
+  getMinimumBalanceForOrders,
   serializeDriverWallet,
   settleCompletedRideWallet,
   topUpDriverWallet,
@@ -151,11 +153,12 @@ const toIstDayKey = (value = new Date()) =>
   new Date(new Date(value).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 
 const toCleanString = (value = "") => String(value || "").trim();
-const normalizeBusPassengerPhone = (value = "") =>
-  String(value || "")
-    .replace(/\D/g, "")
-    .trim()
-    .slice(-10);
+const normalizeBusPassengerPhone = (value = "") => {
+  const digits = String(value || "").replace(/\D/g, "");
+  // +91 98xxxxxxxx / 0098xxxxxxxx / 098xxxxxxxx: the country code or trunk 0 is not part of the number
+  const national = digits.length > 10 ? digits.replace(/^(?:00)?(?:91|0)(?=\d{10}$)/, "") : digits;
+  return national.slice(-10);
+};
 const normalizeEmail = (value = "") => String(value || "").trim().toLowerCase();
 const BUS_DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 
@@ -999,6 +1002,12 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
   };
 };
 
+// A seat sold on the bus desk / by the admin can be left unpaid (cash is collected later); everything else is paid.
+const isBusBookingPaid = (booking = {}) => {
+  const status = String(booking.payment?.status || "").toLowerCase();
+  return !["manual_unpaid", "pending", "failed", "refunded", "cancelled"].includes(status) && booking.status !== "pending";
+};
+
 const serializeBusDriverBooking = (booking = {}) => ({
   id: String(booking._id || ""),
   bookingCode: booking.bookingCode || "",
@@ -1013,6 +1022,7 @@ const serializeBusDriverBooking = (booking = {}) => ({
   passenger: booking.passenger || {},
   notes: booking.notes || "",
   payment: booking.payment || {},
+  paymentStatus: isBusBookingPaid(booking) ? "paid" : "unpaid",
   routeSnapshot: booking.routeSnapshot || {},
   createdAt: booking.createdAt || null,
 });
@@ -1900,11 +1910,13 @@ const serializeDriverScheduledRide = (ride = {}, currentDriverId = "") => ({
   user: ride.userId
     ? {
         id: String(ride.userId._id || ""),
-        name: ride.userId.name || "Customer",
-        phone: ride.userId.phone || "",
-        countryCode: ride.userId.countryCode || "",
+        // booked for someone else: the driver sees (and calls) that passenger
+        name: ride.bookedFor?.name || ride.userId.name || "Customer",
+        phone: ride.bookedFor?.phone || ride.userId.phone || "",
+        countryCode: ride.bookedFor?.phone ? "+91" : (ride.userId.countryCode || ""),
       }
     : null,
+  riderPreferences: Array.isArray(ride.riderPreferences) ? ride.riderPreferences : [],
   createdAt: ride.createdAt || null,
   updatedAt: ride.updatedAt || null,
 });
@@ -3713,6 +3725,8 @@ export const createBusDriverReservation = async (req, res) => {
     email: normalizeEmail(req.body?.passenger?.email),
   };
   const notes = toCleanString(req.body?.notes);
+  // the driver says whether the fare was collected (default: collected)
+  const reservePaid = String(req.body?.paymentStatus || "paid").toLowerCase() !== "unpaid";
 
   if (!scheduleId || seatIds.length === 0) {
     throw new ApiError(400, "scheduleId and seatIds are required");
@@ -3778,8 +3792,8 @@ export const createBusDriverReservation = async (req, res) => {
       orderId: "",
       paymentId: "",
       signature: "",
-      status: "manual_reserved",
-      paidAt: new Date(),
+      status: reservePaid ? "manual_reserved" : "manual_unpaid",
+      paidAt: reservePaid ? new Date() : null,
     },
     notes,
   });
@@ -3811,6 +3825,31 @@ export const createBusDriverReservation = async (req, res) => {
     success: true,
     data: serializeBusDriverBooking(booking),
   });
+};
+
+// The bus driver collected the fare of a seat he reserved on the desk (or the admin reserved): paid from now on.
+export const markBusDriverBookingPaid = async (req, res) => {
+  const busDriver = await BusDriver.findById(req.auth.sub).lean();
+  if (!busDriver?.assignedBusServiceId) {
+    throw new ApiError(404, "No bus is assigned to this driver");
+  }
+  const bookingId = toCleanString(req.params?.bookingId);
+  if (!mongoose.isValidObjectId(bookingId)) {
+    throw new ApiError(400, "A valid booking id is required");
+  }
+  const booking = await BusBooking.findOne({ _id: bookingId, busServiceId: busDriver.assignedBusServiceId });
+  if (!booking) {
+    throw new ApiError(404, "Booking not found");
+  }
+  if (booking.bookingSource === "user") {
+    throw new ApiError(409, "This ticket was paid online");
+  }
+  if (booking.payment?.status === "manual_unpaid") {
+    booking.payment.status = "manual_reserved";
+    booking.payment.paidAt = new Date();
+    await booking.save();
+  }
+  res.json({ success: true, data: serializeBusDriverBooking(booking.toObject()) });
 };
 
 export const updateBusDriverSchedules = async (req, res) => {
@@ -4040,6 +4079,31 @@ export const updateBusDriverLiveTripStatus = async (req, res) => {
   }
 
   await busService.save();
+
+  // Reached the destination: every rider on this run is told the trip is completed (push, best effort).
+  if (action === "complete") {
+    BusBooking.find({
+      busServiceId: busService._id,
+      scheduleId: liveTracking.scheduleId,
+      travelDate: liveTracking.travelDate,
+      status: "confirmed",
+      bookingSource: "user",
+    })
+      .select("userId seatLabels routeSnapshot bookingCode")
+      .lean()
+      .then((rides) => {
+        const userIds = [...new Set(rides.map((item) => String(item.userId)))];
+        if (!userIds.length) return null;
+        const route = rides[0]?.routeSnapshot || {};
+        return sendPushNotificationToEntities({
+          userIds,
+          title: "Trip completed",
+          body: `Your bus from ${route.originCity || "origin"} to ${route.destinationCity || "destination"} has reached its destination. Thank you for travelling with us!`,
+          data: { type: "bus_trip_completed", targetUrl: "/taxi/user/profile/bus-bookings" },
+        });
+      })
+      .catch(() => {});
+  }
 
   res.json({
     success: true,
@@ -5529,11 +5593,11 @@ export const getDriverDocumentTemplates = async (_req, res) => {
     requestedRole === "fleet" ||
     requestedRole === "owner_vehicle" ||
     requestedRole === "owner-vehicle";
+  const isFleetDriverRequest = requestedRole === "fleet_driver" || requestedRole === "fleet-driver";
   const results = isFleetRequest
-    ? await listDriverNeededDocuments({
-        activeOnly: true,
-        includeFields: true,
-      })
+    ? await getFleetDocumentTemplates("vehicle")
+    : isFleetDriverRequest
+    ? await getFleetDocumentTemplates("person")
     : isOwnerRequest
     ? await listOwnerNeededDocuments()
     : await listDriverNeededDocuments({
@@ -5653,25 +5717,10 @@ export const addOwnerVehicle = async (req, res) => {
   const normalizedPlate = String(number).trim().toUpperCase();
 
   const normalizedDocuments = normalizeFleetVehicleDocuments(documents, rcFile);
-  const configuredFleetDocuments = await listDriverNeededDocuments({
-    activeOnly: true,
-    includeFields: true,
-  });
-  const requiredFleetDocumentKeys = configuredFleetDocuments.flatMap((template) =>
-    (Array.isArray(template.fields) ? template.fields : [])
-      .filter((field) => (field.required ?? template.is_required ?? false))
-      .map((field) => String(field.key || "").trim())
-      .filter(Boolean),
-  );
-  const missingFleetDocuments = requiredFleetDocumentKeys.filter(
-    (key) => !normalizedDocuments[key],
-  );
-
-  if (missingFleetDocuments.length > 0) {
-    throw new ApiError(
-      400,
-      `Missing required fleet documents: ${missingFleetDocuments.join(", ")}`,
-    );
+  const fleetVehicleTemplates = await getFleetDocumentTemplates("vehicle");
+  const fleetVehicleDocumentError = validateFleetDocuments(fleetVehicleTemplates, normalizedDocuments);
+  if (fleetVehicleDocumentError) {
+    throw new ApiError(400, fleetVehicleDocumentError);
   }
 
   // Check for duplicate license plate for this owner
@@ -5699,10 +5748,19 @@ export const addOwnerVehicle = async (req, res) => {
     serviceLocationId = defaultLocation._id;
   }
 
+  // The owner is not asked for a transport type: it is the one the admin set on the chosen vehicle type
+  // (ride / delivery / both), so the vehicle is dispatched exactly like that type.
+  const chosenVehicleType = vehicleTypeId && mongoose.isValidObjectId(vehicleTypeId)
+    ? await Vehicle.findById(vehicleTypeId).select("transport_type").lean()
+    : null;
+  const fleetTransportType = ["taxi", "delivery", "both"].includes(String(chosenVehicleType?.transport_type || "").toLowerCase())
+    ? String(chosenVehicleType.transport_type).toLowerCase()
+    : "taxi";
+
   const vehicle = await FleetVehicle.create({
     owner_id: owner._id,
     service_location_id: serviceLocationId,
-    transport_type: "taxi",
+    transport_type: fleetTransportType,
     vehicle_type_id:
       vehicleTypeId && String(vehicleTypeId).trim() ? vehicleTypeId : null,
     car_brand: String(make).trim(),
@@ -5712,6 +5770,15 @@ export const addOwnerVehicle = async (req, res) => {
     status: "pending",
     active: true,
     documents: normalizedDocuments,
+  });
+
+  // Bell + push for the admin: a fleet vehicle is waiting for approval.
+  alertTaxiAdmins({
+    type: "fleet_vehicle_registration",
+    title: `${[String(make).trim(), String(model).trim()].filter(Boolean).join(" ")} is waiting for approval`,
+    body: `Fleet vehicle · ${normalizedPlate} · ${owner.owner_name || owner.company_name || owner.name || "owner"}`,
+    link: "/taxi/admin/fleet/manage?status=pending",
+    id: String(vehicle._id),
   });
 
   const populated = await FleetVehicle.findById(vehicle._id)
@@ -5832,9 +5899,52 @@ export const getOwnerFleetWallet = async (req, res) => {
     throw new ApiError(403, "Owner wallet is only available for owner accounts");
   }
 
+  // The wallet (admin credits / debits) + what the fleet earned: every completed ride with the driver, the vehicle and the
+  // commission the admin kept, so the owner can reconcile the settlements.
+  const wallet = await listOwnerWalletHistory(owner._id);
+  const fleetDriverIds = await Driver.find({ owner_id: owner._id }).distinct("_id");
+  const rides = fleetDriverIds.length
+    ? await Ride.find({ driverId: { $in: fleetDriverIds }, status: RIDE_STATUS.COMPLETED })
+        .sort({ completedAt: -1 })
+        .limit(60)
+        .select("serviceType fare commissionAmount driverEarnings completedAt paymentMethod pickupAddress dropAddress driverId")
+        .populate("driverId", "name vehicleMake vehicleModel vehicleNumber")
+        .lean()
+    : [];
+  const totals = rides.reduce(
+    (sum, ride) => ({
+      fare: sum.fare + Number(ride.fare || 0),
+      commission: sum.commission + Number(ride.commissionAmount || 0),
+      earnings: sum.earnings + Number(ride.driverEarnings || 0),
+    }),
+    { fare: 0, commission: 0, earnings: 0 },
+  );
+
   res.json({
     success: true,
-    data: await listOwnerWalletHistory(owner._id),
+    data: {
+      ...wallet,
+      minimumBalanceForOrders: await getMinimumBalanceForOrders(),
+      fleetTotals: {
+        rides: rides.length,
+        fare: Math.round(totals.fare * 100) / 100,
+        commission: Math.round(totals.commission * 100) / 100,
+        earnings: Math.round(totals.earnings * 100) / 100,
+      },
+      fleetRides: rides.map((ride) => ({
+        id: String(ride._id),
+        serviceType: ride.serviceType || "ride",
+        completedAt: ride.completedAt || null,
+        fare: Number(ride.fare || 0),
+        commission: Number(ride.commissionAmount || 0),
+        driverEarnings: Number(ride.driverEarnings || 0),
+        paymentMethod: ride.paymentMethod || "cash",
+        pickup: ride.pickupAddress || "",
+        drop: ride.dropAddress || "",
+        driverName: ride.driverId?.name || "",
+        vehicle: [[ride.driverId?.vehicleMake, ride.driverId?.vehicleModel].filter(Boolean).join(" "), ride.driverId?.vehicleNumber].filter(Boolean).join(" - "),
+      })),
+    },
   });
 };
 
@@ -5975,6 +6085,10 @@ export const updateOwnerFleetVehicle = async (req, res) => {
   }
 
   vehicle.vehicle_type_id = vehicleTypeId;
+  const editedVehicleType = await Vehicle.findById(vehicleTypeId).select("transport_type").lean();
+  if (["taxi", "delivery", "both"].includes(String(editedVehicleType?.transport_type || "").toLowerCase())) {
+    vehicle.transport_type = String(editedVehicleType.transport_type).toLowerCase();
+  }
   vehicle.car_brand = make;
   vehicle.car_model = model;
   vehicle.license_plate_number = number;
@@ -6333,6 +6447,13 @@ export const createOwnerFleetDriver = async (req, res) => {
 
   const tempPassword = crypto.randomUUID().slice(0, 12);
 
+  const fleetDriverTemplates = await getFleetDocumentTemplates("person");
+  const fleetDriverDocuments = sanitizeOwnerFleetDriverDocuments(req.body?.documents, fleetDriverTemplates);
+  const fleetDriverDocumentError = validateFleetDocuments(fleetDriverTemplates, fleetDriverDocuments);
+  if (fleetDriverDocumentError) {
+    throw new ApiError(400, fleetDriverDocumentError);
+  }
+
   const driver = new Driver({
     owner_id: owner._id,
     service_location_id: owner.service_location_id || null,
@@ -6351,10 +6472,18 @@ export const createOwnerFleetDriver = async (req, res) => {
     approve: false,
     status: "pending",
     location: toPoint(coordinates, "location"),
-    documents: sanitizeOwnerFleetDriverDocuments(req.body?.documents),
+    documents: fleetDriverDocuments,
   });
   applyOwnerFleetAssignment(driver, assignment);
   await driver.save();
+
+  alertTaxiAdmins({
+    type: "fleet_driver_registration",
+    title: `${name} is waiting for approval`,
+    body: `Fleet driver · ${phone} · ${owner.owner_name || owner.company_name || owner.name || "owner"}`,
+    link: `/taxi/admin/fleet/drivers/${driver._id}`,
+    id: String(driver._id),
+  });
 
   res.status(201).json({
     success: true,
@@ -7410,24 +7539,68 @@ const applyOwnerFleetAssignment = (driver, { assignedVehicle, assignedZone }) =>
 };
 
 // Only these identity documents are collected on the owner "add driver" form; anything else is ignored.
-const OWNER_FLEET_DRIVER_DOCUMENT_KEYS = ["aadhaar_front", "dl_front"];
+// The documents an owner must collect come from Admin > Fleet Needed Documents, not from a fixed list:
+// "vehicle" = the vehicle's papers (RC, insurance...), "person" = the fleet driver's own (licence, ID...).
+async function getFleetDocumentTemplates(kind) {
+  const templates = await listDriverNeededDocuments({ activeOnly: true, includeFields: true });
+  return templates.filter((template) => (
+    kind === "vehicle"
+      ? template.document_for === "vehicle"
+      : template.document_for !== "vehicle" && ["fleet_drivers", "both"].includes(template.account_type)
+  ));
+}
 
-const sanitizeOwnerFleetDriverDocuments = (documents = {}) =>
-  Object.fromEntries(
-    OWNER_FLEET_DRIVER_DOCUMENT_KEYS.flatMap((key) => {
-      const url = String(documents?.[key]?.secureUrl || documents?.[key]?.url || "").trim();
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+// Checks the uploaded documents against the admin's templates: every required file, plus the document number and
+// the (not yet passed) expiry date wherever the template asks for them. Returns an error message or "".
+const validateFleetDocuments = (templates = [], documents = {}) => {
+  const missing = [];
+  for (const template of templates) {
+    const fields = Array.isArray(template.fields) ? template.fields : [];
+    const uploaded = fields.filter((field) => documents?.[field.key]);
+    for (const field of fields) {
+      if ((field.required ?? template.is_required ?? false) && !documents?.[field.key]) {
+        missing.push(field.label || template.name);
+      }
+    }
+    if (!uploaded.length) continue;
+    const sample = documents[uploaded[0].key] || {};
+    if (template.has_identify_number && !String(sample.identifyNumber || sample.documentNumber || sample.identify_number || sample.document_number || "").trim()) {
+      return `${template.name}: document number is required`;
+    }
+    if (template.has_expiry_date) {
+      const expiry = String(sample.expiryDate || sample.expiry_date || "").trim().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return `${template.name}: expiry date is required`;
+      if (expiry < todayIso()) return `${template.name}: the expiry date has already passed`;
+    }
+  }
+  return missing.length ? `Missing required documents: ${missing.join(", ")}` : "";
+};
+
+const sanitizeOwnerFleetDriverDocuments = (documents = {}, templates = []) => {
+  const allowedKeys = new Set(templates.flatMap((template) => (template.fields || []).map((field) => field.key)));
+  return Object.fromEntries(
+    Object.entries(documents || {}).flatMap(([key, value]) => {
+      if (!allowedKeys.has(key)) return [];
+      const url = String(value?.secureUrl || value?.url || value?.previewUrl || "").trim();
       if (!/^https?:\/\//i.test(url)) {
         return [];
       }
+      const expiryDate = String(value.expiryDate || value.expiry_date || "").trim().slice(0, 10);
+      const identifyNumber = String(value.identifyNumber || value.documentNumber || value.identify_number || value.document_number || "").trim().slice(0, 60);
       return [[key, {
         secureUrl: url,
         previewUrl: url,
-        fileName: String(documents[key].fileName || "").slice(0, 200),
-        mimeType: String(documents[key].mimeType || "").slice(0, 100),
+        fileName: String(value.fileName || "").slice(0, 200),
+        mimeType: String(value.mimeType || "").slice(0, 100),
         uploaded: true,
+        ...(expiryDate ? { expiryDate, expiry_date: expiryDate } : {}),
+        ...(identifyNumber ? { identifyNumber, identify_number: identifyNumber, documentNumber: identifyNumber, document_number: identifyNumber } : {}),
       }]];
     }),
   );
+};
 
 export const updateOwnerFleetDriver = async (req, res) => {
   const owner = await resolveAuthenticatedOwner(req);
@@ -7751,7 +7924,14 @@ export const getDriverIncentives = async (req, res) => {
 
   res.json({
     success: true,
-    data: snapshot,
+    data: {
+      ...snapshot,
+      // what a friend invite pays (Admin > Global > Referral) - the milestone screen shows exactly this
+      referral: {
+        enabled: Boolean(driverSettings.enabled),
+        amount: Number(driverSettings.amount || 0),
+      },
+    },
   });
 };
 

@@ -53,6 +53,14 @@ const driverNeededDocumentSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    // Who the document belongs to in an owner's fleet: the driver (licence, ID) or the vehicle (RC, insurance).
+    // Empty = decided from the name / verification type (see adminService.resolveDocumentFor).
+    document_for: {
+      type: String,
+      enum: ['', 'person', 'vehicle'],
+      default: '',
+      trim: true,
+    },
     is_editable: {
       type: Boolean,
       default: false,

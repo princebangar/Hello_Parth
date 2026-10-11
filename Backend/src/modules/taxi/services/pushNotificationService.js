@@ -219,7 +219,8 @@ const sendPushToTargets = async ({
   };
 };
 
-const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDriverIds = [], busDriverIds = [] }) => {
+const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDriverIds = [], busDriverIds = [], ownerIds = [] }) => {
+  const normalizedOwnerIds = [...new Set((Array.isArray(ownerIds) ? ownerIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedUserIds = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedPoolingIds = [...new Set((Array.isArray(poolingDriverIds) ? poolingDriverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
@@ -236,6 +237,23 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDrive
         targets.push({
           ...tokenEntry,
           entityId: String(vehicle._id),
+        });
+      });
+    });
+  }
+
+  if (normalizedOwnerIds.length) {
+    // a fleet owner uses the partner app: the token sits on the owner document and is delivered like a driver's
+    const { Owner } = await import('../admin/models/Owner.js');
+    const owners = await Owner.find({ _id: { $in: normalizedOwnerIds } })
+      .select('_id fcmTokenWeb fcmTokenMobile')
+      .lean();
+
+    owners.forEach((owner) => {
+      listEntityPushTokens(owner, 'driver').forEach((tokenEntry) => {
+        targets.push({
+          ...tokenEntry,
+          entityId: String(owner._id),
         });
       });
     });
@@ -409,12 +427,13 @@ export const sendPushNotificationToEntities = async ({
   driverIds = [],
   poolingDriverIds = [],
   busDriverIds = [],
+  ownerIds = [],
   title,
   body,
   image = '',
   data = {},
 }) => {
-  const targets = await collectDirectTargets({ userIds, driverIds, poolingDriverIds, busDriverIds });
+  const targets = await collectDirectTargets({ userIds, driverIds, poolingDriverIds, busDriverIds, ownerIds });
   const results = [];
   for (const role of ['user', 'driver']) {
     const roleTargets = targets.filter((target) => target.role === role);

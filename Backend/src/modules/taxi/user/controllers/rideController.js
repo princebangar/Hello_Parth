@@ -370,7 +370,7 @@ export const assertNoUnpaidOnlineRide = async (userId) => {
 export const createRide = async (req, res) => {
   await assertNoUnpaidOnlineRide(req.auth.sub);
 
-  const { pickup, drop, pickupAddress, dropAddress, stops, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, zone_id, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount } =
+  const { pickup, drop, pickupAddress, dropAddress, stops, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, zone_id, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount, preferences, bookedFor } =
     req.body;
 
   if (!pickup || !drop) {
@@ -415,6 +415,14 @@ export const createRide = async (req, res) => {
     bookingMode,
     userMaxBidFare,
     bidStepAmount,
+    bookedFor: {
+      name: String(bookedFor?.name || '').trim().slice(0, 40),
+      phone: String(bookedFor?.phone || '').replace(/\D/g, '').slice(-10),
+    },
+    riderPreferences: (Array.isArray(preferences) ? preferences : [])
+      .map((item) => String(item || '').trim().slice(0, 40))
+      .filter(Boolean)
+      .slice(0, 12),
   });
 
   await startDispatchFlow(ride);

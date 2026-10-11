@@ -20,6 +20,7 @@ import { OwnerNeededDocument } from '../models/OwnerNeededDocument.js';
 import { OwnerBooking } from '../models/OwnerBooking.js';
 import { Owner } from '../models/Owner.js';
 import { FleetVehicle } from '../models/FleetVehicle.js';
+import { BusBooking } from '../../user/models/BusBooking.js';
 import { ReferralTranslation } from '../models/ReferralTranslation.js';
 import { AdminThirdPartySetting } from '../models/AdminThirdPartySetting.js';
 import { createDefaultThirdPartySettings } from '../data/defaultThirdPartySettings.js';
@@ -1701,6 +1702,15 @@ const serializeDriverVehicleField = (item) => {
   };
 };
 
+// Vehicle papers (RC, insurance, permit...) belong to the vehicle, everything else (licence, ID...) to the driver,
+// unless the admin chose explicitly.
+export const resolveDocumentFor = (item = {}) => {
+  const explicit = String(item.document_for || '').trim().toLowerCase();
+  if (explicit === 'person' || explicit === 'vehicle') return explicit;
+  if (String(item.verification_type || '').toLowerCase() === 'rc') return 'vehicle';
+  return /\b(rc|registration|insurance|permit|fitness|pollution|puc|vehicle)\b/i.test(String(item.name || '')) ? 'vehicle' : 'person';
+};
+
 const serializeDriverNeededDocument = (item) => ({
   _id: item._id,
   id: item._id,
@@ -1712,6 +1722,10 @@ const serializeDriverNeededDocument = (item) => ({
   has_identify_number: Boolean(item.has_identify_number),
   identify_number_key: item.identify_number_key || '',
   verification_type: item.verification_type || 'none',
+  document_for: resolveDocumentFor(item),
+  key: item.key || '',
+  front_key: item.front_key || '',
+  back_key: item.back_key || '',
   is_editable: Boolean(item.is_editable),
   is_required: Boolean(item.is_required),
   active: item.active !== false,
@@ -2801,6 +2815,8 @@ export const getOwnerDashboardData = async () => {
     totalDrivers,
     approvedDrivers,
     money,
+    tripCounts,
+    monthlyEarnings,
   ] = await Promise.all([
     Owner.countDocuments({ deletedAt: null }),
     Owner.countDocuments({ deletedAt: null, approve: true }),
@@ -2820,6 +2836,29 @@ export const getOwnerDashboardData = async () => {
         },
       ])
       : [{ today: [], overall: [] }],
+    // today's trips of the fleet drivers by state (the donut on the dashboard)
+    fleetDriverIds.length
+      ? Ride.aggregate([
+        { $match: { driverId: { $in: fleetDriverIds }, $or: [{ createdAt: { $gte: todayStart } }, { scheduledAt: { $gte: todayStart } }] } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+            cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+            scheduled: { $sum: { $cond: [{ $and: [{ $ne: ['$scheduledAt', null] }, { $gt: ['$scheduledAt', new Date()] }, { $nin: ['$status', ['completed', 'cancelled']] }] }, 1, 0] } },
+          },
+        },
+      ])
+      : [],
+    // last 6 months of fleet earnings (the bar chart)
+    fleetDriverIds.length
+      ? Ride.aggregate([
+        { $match: { driverId: { $in: fleetDriverIds }, status: 'completed', completedAt: { $gte: new Date(Date.now() - 183 * 24 * 60 * 60 * 1000) } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$completedAt', timezone: 'Asia/Kolkata' } }, total: { $sum: { $ifNull: ['$fare', 0] } } } },
+        { $sort: { _id: 1 } },
+      ])
+      : [],
   ]);
 
   const r2 = (n) => Number(Number(n || 0).toFixed(2));
@@ -2848,6 +2887,13 @@ export const getOwnerDashboardData = async () => {
     overall_online: r2(overall.online),
     overall_admin_comm: r2(overall.commission),
     overall_owner_earnings: r2(overall.driverEarnings),
+    today_trips: {
+      total: tripCounts?.[0]?.total || 0,
+      completed: tripCounts?.[0]?.completed || 0,
+      cancelled: tripCounts?.[0]?.cancelled || 0,
+      scheduled: tripCounts?.[0]?.scheduled || 0,
+    },
+    monthly_earnings: (monthlyEarnings || []).map((row) => ({ month: row._id, total: r2(row.total) })),
   };
 };
 
@@ -3049,28 +3095,67 @@ export const listUserRequests = async (id) => {
     throw new ApiError(404, 'User not found');
   }
 
-  const rides = await Ride.find({ userId: id }).sort({ createdAt: -1 }).populate('driverId', 'name').lean();
+  const [rides, busBookings] = await Promise.all([
+    Ride.find({ userId: id }).sort({ createdAt: -1 }).populate('driverId', 'name').lean(),
+    BusBooking.find({ userId: id, bookingSource: 'user', status: { $in: ['confirmed', 'cancelled'] } }).sort({ createdAt: -1 }).lean(),
+  ]);
 
-  return {
-    results: rides.map((ride) => ({
+  const typeLabel = (ride) => {
+    const type = String(ride.serviceType || 'ride').toLowerCase();
+    if (type === 'parcel') return 'Parcel';
+    if (type === 'intercity') return 'Outstation';
+    return 'Ride';
+  };
+
+  const rideRows = rides.map((ride) => {
+    const status = String(ride.status || '').toLowerCase();
+    return {
       request_id: String(ride._id),
-      trip_start_time: ride.createdAt,
-      user_id: {
-        _id: String(id),
-        name: user.name || '',
-      },
+      trip_start_time: ride.scheduledAt || ride.createdAt,
+      service_type: typeLabel(ride),
+      route: [ride.pickupAddress, ride.dropAddress].filter(Boolean).join('  ->  '),
+      amount: Number(ride.fare || 0),
+      user_id: { _id: String(id), name: user.name || '' },
       driver_id: ride.driverId
-        ? {
-          _id: ride.driverId._id || ride.driverId,
-          name: ride.driverId.name || 'Pending',
-        }
+        ? { _id: ride.driverId._id || ride.driverId, name: ride.driverId.name || 'Pending' }
         : null,
-      is_completed: String(ride.status).toLowerCase() === 'completed',
-      is_cancelled: String(ride.status).toLowerCase() === 'cancelled',
-      is_paid: String(ride.status).toLowerCase() === 'completed',
-      payment_type: 'cash',
+      is_completed: status === 'completed',
+      is_cancelled: status === 'cancelled',
+      is_paid: status === 'completed',
+      payment_type: String(ride.paymentMethod || 'cash').toUpperCase(),
       status: ride.status,
-    })),
+    };
+  });
+
+  // Bus tickets are trips too: what the rider paid for them is shown here (it used to be nowhere in the admin panel).
+  const busRows = busBookings.map((booking) => {
+    const cancelled = booking.status === 'cancelled';
+    const refunded = Number(booking.cancellation?.refundAmount || 0);
+    return {
+      request_id: String(booking._id),
+      trip_start_time: booking.createdAt,
+      service_type: 'Bus',
+      route: [booking.routeSnapshot?.originCity, booking.routeSnapshot?.destinationCity].filter(Boolean).join('  ->  ') + (booking.travelDate ? `  (${booking.travelDate})` : ''),
+      amount: Number(booking.amount || 0),
+      paid_amount: Math.max(0, Number(booking.amount || 0) - refunded),
+      user_id: { _id: String(id), name: user.name || '' },
+      driver_id: booking.routeSnapshot?.driverName ? { name: booking.routeSnapshot.driverName } : null,
+      is_completed: false,
+      is_cancelled: cancelled,
+      is_paid: ['paid', 'partially_refunded', 'refunded'].includes(String(booking.payment?.status || '')),
+      payment_type: String(booking.payment?.provider || 'online').toUpperCase(),
+      status: booking.status,
+    };
+  });
+
+  const busPaid = busRows.filter((row) => row.is_paid).reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
+  return {
+    results: [...rideRows, ...busRows].sort((a, b) => new Date(b.trip_start_time) - new Date(a.trip_start_time)),
+    totals: {
+      bus_trips: busRows.filter((row) => !row.is_cancelled).length,
+      bus_amount_paid: Math.round(busPaid * 100) / 100,
+      outstation_trips: rideRows.filter((row) => row.service_type === 'Outstation').length,
+    },
   };
 };
 
@@ -4205,6 +4290,18 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
   if (!driver) throw new ApiError(404, 'Driver not found');
 
+  // A fleet captain approved: the owner who added the driver is told too.
+  if (update.approve === true && !wasApproved && driver.owner_id) {
+    import('../../services/pushNotificationService.js')
+      .then(({ sendPushNotificationToEntities }) => sendPushNotificationToEntities({
+        ownerIds: [String(driver.owner_id)],
+        title: 'Driver approved',
+        body: `${driver.name || 'Your driver'} is approved and can start taking rides.`,
+        data: { type: 'fleet_driver_approved', notificationId: `fleet-driver-${String(driver._id)}-approved`, targetUrl: '/taxi/owner/manage-drivers' },
+      }))
+      .catch(() => {});
+  }
+
   // Newly approved: tell the captain right away, even if the app is closed.
   if (update.approve === true && !wasApproved) {
     import('../../services/pushNotificationService.js')
@@ -4290,8 +4387,34 @@ export const getDriverProfile = async (id) => {
   const [lng, lat] = coordinates;
   const hasValidLocation = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 
+  // A fleet driver works for an owner: who the owner is and which of the owner's vehicles the driver was given.
+  const [fleetOwner, fleetVehicle] = await Promise.all([
+    driver.owner_id ? Owner.findById(driver.owner_id).select('company_name owner_name name full_name email mobile status approve').lean() : null,
+    driver.assignedFleetVehicleId ? FleetVehicle.findById(driver.assignedFleetVehicleId).select('car_brand car_model license_plate_number car_color status').lean() : null,
+  ]);
+
   return {
     ...serializeDriver(driver),
+    owner_details: fleetOwner
+      ? {
+        id: String(fleetOwner._id),
+        name: fleetOwner.owner_name || fleetOwner.full_name || fleetOwner.name || '',
+        company_name: fleetOwner.company_name || '',
+        email: fleetOwner.email || '',
+        mobile: fleetOwner.mobile || '',
+        status: fleetOwner.status || (fleetOwner.approve ? 'approved' : 'pending'),
+      }
+      : null,
+    assigned_fleet_vehicle: fleetVehicle
+      ? {
+        id: String(fleetVehicle._id),
+        brand: fleetVehicle.car_brand || '',
+        model: fleetVehicle.car_model || '',
+        number: fleetVehicle.license_plate_number || '',
+        color: fleetVehicle.car_color || '',
+        status: fleetVehicle.status || '',
+      }
+      : null,
     joined_at: driver.createdAt ? new Date(driver.createdAt).toLocaleString('en-IN') : 'N/A',
     vehicle: {
       type: driver.vehicleType || driver.registerFor || '',
@@ -6823,11 +6946,29 @@ export const updateFleetVehicle = async (id, payload = {}) => {
   if (payload.car_model !== undefined) item.car_model = String(payload.car_model || '').trim();
   if (payload.license_plate_number !== undefined) item.license_plate_number = String(payload.license_plate_number || '').trim().toUpperCase();
   if (payload.car_color !== undefined) item.car_color = String(payload.car_color || '').trim();
+  const originalStatus = String(item.status || '').toLowerCase();
   if (payload.status !== undefined) item.status = String(payload.status || 'pending').trim().toLowerCase();
   if (payload.reason !== undefined) item.reason = String(payload.reason || '').trim();
   if (payload.active !== undefined) item.active = normalizeBoolean(payload.active);
 
+  const previousStatus = originalStatus;
   await item.save();
+
+  // The owner is told when the admin decides on a vehicle, even with the app closed.
+  if (payload.status !== undefined && ['approved', 'rejected'].includes(item.status) && item.status !== previousStatus && item.owner_id) {
+    const approved = item.status === 'approved';
+    const plate = item.license_plate_number || 'Your vehicle';
+    import('../../services/pushNotificationService.js')
+      .then(({ sendPushNotificationToEntities }) => sendPushNotificationToEntities({
+        ownerIds: [String(item.owner_id)],
+        title: approved ? 'Vehicle approved' : 'Vehicle rejected',
+        body: approved
+          ? `${plate} is approved. You can now assign it to a driver.`
+          : `${plate} was rejected${item.reason ? ': ' + item.reason : '.'} Open the vehicle to correct it.`,
+        data: { type: approved ? 'fleet_vehicle_approved' : 'fleet_vehicle_rejected', notificationId: `fleet-vehicle-${String(item._id)}-${item.status}`, targetUrl: '/taxi/owner/vehicle-fleet' },
+      }))
+      .catch(() => {});
+  }
 
   const populated = await FleetVehicle.findById(item._id)
     .populate('owner_id', 'company_name owner_name name email mobile')
@@ -8235,6 +8376,9 @@ export const createDriverNeededDocument = async (payload) => {
       ? String(payload.identify_number_key || '').trim()
       : '',
     verification_type: verificationType,
+    document_for: ['person', 'vehicle'].includes(String(payload.document_for || '').trim().toLowerCase())
+      ? String(payload.document_for).trim().toLowerCase()
+      : '',
     is_editable: normalizeBoolean(payload.is_editable),
     is_required: normalizeBoolean(payload.is_required),
     active: payload.active !== undefined ? normalizeBoolean(payload.active) : true,
@@ -8322,6 +8466,10 @@ export const updateDriverNeededDocument = async (id, payload) => {
   }
   if (payload.verification_type !== undefined) {
     item.verification_type = normalizeDriverDocumentVerificationType(payload.verification_type);
+  }
+  if (payload.document_for !== undefined) {
+    const nextFor = String(payload.document_for || '').trim().toLowerCase();
+    item.document_for = ['person', 'vehicle'].includes(nextFor) ? nextFor : '';
   }
   if (payload.is_editable !== undefined) {
     item.is_editable = normalizeBoolean(payload.is_editable);
@@ -9477,7 +9625,7 @@ export const seedTransportTypes = async () => {
     { name: 'taxi', display_name: 'Taxi' },
     { name: 'delivery', display_name: 'Delivery' },
     { name: 'pooling', display_name: 'Pooling' },
-    { name: 'both', display_name: 'Both' }
+    { name: 'both', display_name: 'All' }
   ];
 
   const results = [];

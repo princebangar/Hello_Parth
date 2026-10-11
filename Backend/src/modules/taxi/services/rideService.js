@@ -967,6 +967,8 @@ export const createRideRecord = async ({
   bookingMode,
   userMaxBidFare,
   bidStepAmount,
+  riderPreferences = [],
+  bookedFor = null,
 }) => {
   const user = await User.findById(userId);
 
@@ -1241,6 +1243,8 @@ export const createRideRecord = async ({
       parcel: normalizeParcelPayload(parcel),
       intercity: resolvedIntercity,
       scheduledAt: normalizedScheduledAt,
+      riderPreferences,
+      ...(bookedFor?.name && bookedFor?.phone ? { bookedFor } : {}),
       status: RIDE_STATUS.SEARCHING,
       liveStatus: RIDE_LIVE_STATUS.SEARCHING,
     });

@@ -8,7 +8,8 @@ import { User } from '../../user/models/User.js';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
-import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
+import { getPublicActivePaymentGateway, resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
+import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 import { getOrLoadCachedValue } from '../../../../utils/cache.js';
 
 const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
@@ -1142,6 +1143,18 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     throw error;
   }
 
+  // The bus crew is told about a seat the admin sold (push, best effort).
+  if (busService.busDriverId || busService.ownerDriverId) {
+    const seatLabels = (booking.seatLabels || booking.seatIds || []).join(', ');
+    sendPushNotificationToEntities({
+      driverIds: [busService.ownerDriverId].filter(Boolean).map(String),
+      busDriverIds: [busService.busDriverId].filter(Boolean).map(String),
+      title: 'New bus booking',
+      body: `${passenger.name || 'A passenger'} - seat ${seatLabels} (${busService.route?.originCity || ''} to ${busService.route?.destinationCity || ''}, ${travelDate}) booked from the admin panel.`,
+      data: { type: 'bus_booking_confirmed', bookingId: String(booking._id), bookingCode: booking.bookingCode || '' },
+    }).catch(() => {});
+  }
+
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate('userId', 'name phone email')
     .populate('busServiceId', 'busName operatorName serviceNumber coachType busCategory route schedules blueprint')
@@ -1153,6 +1166,34 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     message: 'Seat booked successfully from admin panel',
   });
 });
+
+const adminRazorpayRefund = async ({ paymentId, amount, notes }) => {
+  const { keyId, keySecret } = await resolveConfiguredGatewayCredentials('razor_pay');
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ amount: Math.round(amount * 100), notes }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(502, payload?.error?.description || 'The refund could not be started');
+  }
+  return payload;
+};
+
+// What each seat of a booking cost (equal share when the booking has no per-seat prices).
+const adminSeatAmountMap = (booking) => {
+  const seatIds = (Array.isArray(booking.seatIds) ? booking.seatIds : []).map((item) => toCleanString(item));
+  const stored = Array.isArray(booking.seatAmounts) ? booking.seatAmounts.map((item) => Number(item)) : [];
+  if (seatIds.length && stored.length === seatIds.length && stored.every((item) => Number.isFinite(item) && item >= 0)) {
+    return new Map(seatIds.map((seatId, index) => [seatId, stored[index]]));
+  }
+  const share = seatIds.length ? Math.round((Number(booking.amount || 0) / seatIds.length) * 100) / 100 : 0;
+  return new Map(seatIds.map((seatId) => [seatId, share]));
+};
 
 export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
   const bookingId = toCleanString(req.params?.id);
@@ -1200,16 +1241,33 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
   }
 
   const cancelledAt = new Date();
+
+  // The operator takes the seat back, so the passenger gets the full price of those seats back (no cancellation charge).
+  // Only a ticket that was paid online has money to return; a seat reserved by the admin / bus driver has none.
+  const seatAmounts = adminSeatAmountMap(booking);
+  const refundTotal = Math.round(seatsToCancel.reduce((sum, item) => sum + Number(seatAmounts.get(item.seatId) || 0), 0) * 100) / 100;
+  const paidOnline = String(booking.payment?.provider || '') === 'razorpay'
+    && Boolean(toCleanString(booking.payment?.paymentId))
+    && ['paid', 'partially_refunded'].includes(String(booking.payment?.status || ''));
+  let refundPayload = null;
+  if (paidOnline && refundTotal > 0) {
+    refundPayload = await adminRazorpayRefund({
+      paymentId: toCleanString(booking.payment.paymentId),
+      amount: refundTotal,
+      notes: { bookingCode: booking.bookingCode || '', reason: 'seat released by admin', seats: seatsToCancel.map((item) => item.seatLabel).join(', ') },
+    });
+  }
+
   booking.cancelledSeats = [
     ...cancelledSeats,
     ...seatsToCancel.map((item) => ({
       seatId: item.seatId,
       seatLabel: item.seatLabel,
       cancelledAt,
-      refundAmount: 0,
+      refundAmount: refundPayload ? Number(seatAmounts.get(item.seatId) || 0) : 0,
       chargeAmount: 0,
-      refundStatus: 'admin_cancelled',
-      refundId: '',
+      refundStatus: refundPayload ? (refundPayload.status || 'processed') : 'admin_cancelled',
+      refundId: refundPayload?.id || '',
       refundProcessedAt: cancelledAt,
       notes: adminNote,
     })),
@@ -1222,13 +1280,17 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
     allowed: remainingActiveSeatCount > 0,
     appliedRuleId: '',
     appliedRuleLabel: 'Admin seat release',
-    refundType: 'none',
+    refundType: refundPayload ? 'full' : 'none',
     refundValue: 0,
     hoursBeforeDeparture: 0,
-    refundAmount: 0,
+    refundAmount: refundPayload ? refundTotal : 0,
     chargeAmount: 0,
     notes: adminNote,
   };
+  if (refundPayload) {
+    booking.payment.refundId = refundPayload.id || booking.payment.refundId || '';
+    booking.payment.status = remainingActiveSeatCount <= 0 ? 'refunded' : 'partially_refunded';
+  }
   if (!booking.notes?.includes(adminNote)) {
     booking.notes = [booking.notes, adminNote].filter(Boolean).join(' | ');
   }
@@ -1239,6 +1301,29 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
     status: { $in: ['held', 'booked'] },
     seatId: { $in: seatsToCancel.map((item) => item.seatId) },
   });
+
+  // The rider and the bus crew see the change at once (push, best effort).
+  const seatText = seatsToCancel.map((item) => item.seatLabel || item.seatId).join(', ');
+  const routeText = [booking.routeSnapshot?.originCity, booking.routeSnapshot?.destinationCity].filter(Boolean).join(' to ');
+  const pushData = { type: 'bus_booking_cancelled', bookingId: String(booking._id), bookingCode: booking.bookingCode || '' };
+  if (booking.bookingSource === 'user') {
+    sendPushNotificationToEntities({
+      userIds: [String(booking.userId)],
+      title: remainingActiveSeatCount <= 0 ? 'Bus booking cancelled' : 'Bus seat cancelled',
+      body: `Seat ${seatText} (${routeText}, ${booking.travelDate}) was cancelled by the operator.${refundPayload ? ` Rs ${refundTotal} will be refunded to your payment method.` : ''}`,
+      data: { ...pushData, targetUrl: '/taxi/user/profile/bus-bookings' },
+    }).catch(() => {});
+  }
+  const crewService = await BusService.findById(booking.busServiceId).select('busDriverId ownerDriverId').lean();
+  if (crewService?.busDriverId || crewService?.ownerDriverId) {
+    sendPushNotificationToEntities({
+      driverIds: [crewService.ownerDriverId].filter(Boolean).map(String),
+      busDriverIds: [crewService.busDriverId].filter(Boolean).map(String),
+      title: 'Bus seat released',
+      body: `Seat ${seatText} (${routeText}, ${booking.travelDate}) was unbooked by the admin.`,
+      data: pushData,
+    }).catch(() => {});
+  }
 
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate('userId', 'name phone email')

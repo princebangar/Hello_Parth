@@ -15,7 +15,7 @@ import {
 import { Delivery } from '../user/models/Delivery.js';
 import { getRideRoom, resolveSetPriceForRide } from './rideService.js';
 import { SOCKET_EVENTS } from '../socket/events.js';
-import { resolveTransportDispatchConfig } from './transportSettingsService.js';
+import { getTransportRideSettings, resolveTransportDispatchConfig } from './transportSettingsService.js';
 import { sendPushNotificationToEntities } from './pushNotificationService.js';
 
 const activeDispatches = new Map();
@@ -855,9 +855,10 @@ const emitRideRequestToDrivers = async ({
       userId: String(ride.userId),
       user: {
         id: ride.userId?._id ? String(ride.userId._id) : String(ride.userId || ''),
-        name: ride.userId?.name || 'Customer',
-        phone: ride.userId?.phone || '',
-        countryCode: ride.userId?.countryCode || '',
+        // a ride booked for someone else shows that person to the driver
+        name: ride.bookedFor?.name || ride.userId?.name || 'Customer',
+        phone: ride.bookedFor?.phone || ride.userId?.phone || '',
+        countryCode: ride.bookedFor?.phone ? '+91' : (ride.userId?.countryCode || ''),
       },
       pickupLocation: ride.pickupLocation,
       pickupAddress: ride.pickupAddress || '',
@@ -865,6 +866,7 @@ const emitRideRequestToDrivers = async ({
       dropAddress: ride.dropAddress || '',
       stops: Array.isArray(ride.stops) ? ride.stops.map((stop) => ({ address: stop?.address || '' })) : [],
       scheduledAt: ride.scheduledAt || null,
+      riderPreferences: Array.isArray(ride.riderPreferences) ? ride.riderPreferences : [],
       estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
       estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
       vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
@@ -1477,7 +1479,12 @@ export const startDispatchFlow = async (ride, { forceRestart = false } = {}) => 
   }
 
   const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
-  const delayMs = scheduledAt ? scheduledAt.getTime() - Date.now() : 0;
+  // Drivers are asked ahead of the pickup time (Admin > Transport Ride Settings), so the ride is already accepted
+  // when the time comes. Asking only AT the pickup time meant no driver was found for most scheduled rides.
+  const leadMinutes = scheduledAt
+    ? Math.max(0, Number((await getTransportRideSettings().catch(() => ({})))?.schedule_ride_dispatch_minutes_before ?? 30) || 0)
+    : 0;
+  const delayMs = scheduledAt ? scheduledAt.getTime() - leadMinutes * 60 * 1000 - Date.now() : 0;
   const bookingMode = String(ride?.bookingMode || 'normal').trim().toLowerCase();
   const shouldDispatchImmediately = bookingMode === 'bidding';
 

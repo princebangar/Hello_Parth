@@ -172,6 +172,11 @@ const busBookingSchema = new mongoose.Schema(
       registrationNumber: { type: String, default: '' },
       driverName: { type: String, default: '' },
       driverPhone: { type: String, default: '' },
+      // the bill at booking time (the tax % can change later, the ticket must keep what was charged)
+      serviceTaxPercentage: { type: Number, default: null },
+      baseAmount: { type: Number, default: null },
+      serviceTaxAmount: { type: Number, default: null },
+      totalAmount: { type: Number, default: null },
     },
     payment: {
       provider: { type: String, default: 'razorpay' },

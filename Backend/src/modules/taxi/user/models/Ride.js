@@ -199,6 +199,16 @@ const rideSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // what the rider asked for on the vehicle (Admin > Preferences: AC, pet friendly, luggage...), shown to the driver
+    riderPreferences: {
+      type: [String],
+      default: [],
+    },
+    // someone else is travelling: the driver sees this name / number instead of the booking account's
+    bookedFor: {
+      name: { type: String, default: '', trim: true },
+      phone: { type: String, default: '', trim: true },
+    },
     status: {
       type: String,
       enum: Object.values(RIDE_STATUS),

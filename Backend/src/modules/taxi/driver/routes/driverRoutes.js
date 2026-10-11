@@ -34,6 +34,7 @@ import {
   goOffline,
   goOnline,
   createBusDriverReservation,
+  markBusDriverBookingPaid,
   getBusDriverLiveTrip,
   updateBusDriverSchedules,
   startBusDriverLiveTrip,
@@ -212,6 +213,11 @@ driverRouter.post(
   "/bus/reservations",
   authenticate(["bus_driver"]),
   asyncHandler(createBusDriverReservation),
+);
+driverRouter.patch(
+  "/bus/bookings/:bookingId/paid",
+  authenticate(["bus_driver"]),
+  asyncHandler(markBusDriverBookingPaid),
 );
 driverRouter.get(
   "/bus/live-trip",

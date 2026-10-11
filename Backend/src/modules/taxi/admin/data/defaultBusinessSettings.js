@@ -76,6 +76,8 @@ export const createDefaultBusinessSettings = () => ({
     minimum_time_for_search_drivers_for_schedule_ride: '1',
     // Scheduled rides (ride / parcel / intercity): the earliest pickup time a rider may pick, in minutes from now.
     schedule_ride_min_minutes_ahead: '60',
+    // Drivers get the request of a scheduled ride this many minutes before the pickup time (they accept it ahead).
+    schedule_ride_dispatch_minutes_before: '30',
     minimum_time_for_starting_trip_drivers_for_schedule_ride: '15',
     can_round_the_bill_values: '1',
     enable_shipment_load_feature: '1',

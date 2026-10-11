@@ -5,6 +5,7 @@ import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
 import { Zone } from '../driver/models/Zone.js';
 import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
+import { getDriverIdsBlockedByOwnerWallet } from '../driver/services/walletService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -341,6 +342,8 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     drivers.map((driver) => String(driver?._id || '')),
   );
   drivers = drivers.filter((driver) => !blockedDriverIds.has(String(driver?._id || '')));
+  const ownerWalletBlocked = await getDriverIdsBlockedByOwnerWallet(drivers.map((driver) => String(driver?._id || '')));
+  drivers = drivers.filter((driver) => !ownerWalletBlocked.has(String(driver?._id || '')));
 
   if (allowCrossZoneFallback && drivers.length === 0 && zone?._id) {
     drivers = await findDriversForZone({
@@ -364,6 +367,8 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       drivers.map((driver) => String(driver?._id || '')),
     );
     drivers = drivers.filter((driver) => !fallbackBlockedDriverIds.has(String(driver?._id || '')));
+    const fallbackOwnerBlocked = await getDriverIdsBlockedByOwnerWallet(drivers.map((driver) => String(driver?._id || '')));
+    drivers = drivers.filter((driver) => !fallbackOwnerBlocked.has(String(driver?._id || '')));
   }
 
   return {

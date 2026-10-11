@@ -1122,6 +1122,26 @@ const serializeBusBooking = (booking, busService = null) => {
   seatLabels: Array.isArray(booking.seatLabels) ? booking.seatLabels : [],
   seatAmounts: originalSeatIds.map((seatId) => Number(seatAmountMap.get(toCleanString(seatId)) || 0)),
   amount: Number(booking.amount || 0),
+  // Bill of the ticket: seats (before tax) + service tax = total paid. Tickets made before the bill was saved are worked
+  // out from the total with the bus's tax; seats sold by the admin / bus driver carry no tax.
+  fare: (() => {
+    const total = Number(booking.amount || 0);
+    const snapshot = booking.routeSnapshot || {};
+    const savedTax = snapshot.serviceTaxPercentage;
+    const taxPercentage = Number.isFinite(Number(savedTax)) && savedTax !== null
+      ? Number(savedTax)
+      : (String(booking.bookingSource || 'user') === 'user' ? Math.max(0, Number(busService?.serviceTaxPercentage || 0)) : 0);
+    const subtotal = Number.isFinite(Number(snapshot.baseAmount)) && snapshot.baseAmount !== null
+      ? Number(snapshot.baseAmount)
+      : Math.round((total / (1 + taxPercentage / 100)) * 100) / 100;
+    return {
+      seatSubtotal: subtotal,
+      serviceTaxPercentage: taxPercentage,
+      serviceTaxAmount: Math.round((total - subtotal) * 100) / 100,
+      total,
+      seatCount: originalSeatIds.length,
+    };
+  })(),
   currency: booking.currency || 'INR',
   passenger: booking.passenger || {},
   notes: booking.notes || '',
