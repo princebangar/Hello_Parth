@@ -693,6 +693,8 @@ const SearchingDriver = () => {
           userMaxBidFare: routeState.userMaxBidFare || routeState.fare || routeState.vehicle?.price || 0,
           bidStepAmount: routeState.bidStepAmount || 10,
           scheduledAt: routeState.scheduledAt || null,
+          preferences: Array.isArray(routeState.preferences) ? routeState.preferences : [],
+          bookedFor: routeState.bookedFor || null,
         };
 
         const response = await api.post('/rides', requestPayload, rideRequestConfig);

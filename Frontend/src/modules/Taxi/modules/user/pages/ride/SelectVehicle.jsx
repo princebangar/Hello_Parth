@@ -1142,6 +1142,15 @@ const SelectVehicle = () => {
   const [selected, setSelected] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  // Who is travelling: the person booking ("Myself") or someone else (name + number are sent to the driver)
+  const [rideFor, setRideFor] = useState({ mode: 'self', name: '', phone: '' });
+  const [showRideForModal, setShowRideForModal] = useState(false);
+  const [rideForDraft, setRideForDraft] = useState({ mode: 'self', name: '', phone: '' });
+  // What the rider asks for on the vehicle (the chips the admin set on the vehicle type)
+  const [selectedPreferences, setSelectedPreferences] = useState([]);
+  // The vehicle sheet can be pulled up (more vehicles visible) or down (bigger map): 0 = map big, 1 = normal, 2 = sheet high
+  const [sheetStep, setSheetStep] = useState(1);
+  const sheetDragRef = useRef(null);
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [showBidModal, setShowBidModal] = useState(false);
   const [previewVehicleId, setPreviewVehicleId] = useState('');
@@ -2141,6 +2150,10 @@ const SelectVehicle = () => {
         estimatedDistanceMeters: tripMetrics.distanceMeters,
         estimatedDurationMinutes: tripMetrics.durationMinutes,
         rideMode,
+        preferences: selectedPreferences,
+        bookedFor: rideFor.mode === 'other' && rideFor.name.trim() && rideFor.phone.trim()
+          ? { name: rideFor.name.trim(), phone: rideFor.phone.trim() }
+          : null,
         scheduledAt: rideMode === 'schedule' ? new Date(scheduledAt).toISOString() : null,
         allowedPaymentMethods,
         searchNonce: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -2213,7 +2226,9 @@ const SelectVehicle = () => {
       </header>
 
       {/* MAP STRIP (Mobile) / RIGHT COLUMN (Desktop) */}
-      <div className="relative h-[30dvh] min-h-[180px] w-full shrink-0 bg-gray-200 lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:h-full lg:min-h-0 lg:rounded-r-3xl lg:overflow-hidden lg:z-0">
+      <div
+        style={{ height: ['42dvh', '30dvh', '12dvh'][sheetStep] }}
+        className="relative w-full shrink-0 bg-gray-200 transition-[height] duration-300 ease-out lg:!h-full lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:h-full lg:min-h-0 lg:rounded-r-3xl lg:overflow-hidden lg:z-0">
         <VehicleMapPreview
           center={pickupPosition}
           dropPosition={dropPosition}
@@ -2239,7 +2254,30 @@ const SelectVehicle = () => {
           </div>
         </div>
 
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2.5 mb-2 shrink-0 lg:hidden" />
+        <div
+          className="mx-auto flex w-full shrink-0 cursor-grab touch-none select-none items-center justify-center py-2.5 lg:hidden"
+          role="button"
+          aria-label="Pull the vehicle list up or down"
+          onPointerDown={(event) => {
+            sheetDragRef.current = { y: event.clientY, moved: false };
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (sheetDragRef.current && Math.abs(event.clientY - sheetDragRef.current.y) > 6) sheetDragRef.current.moved = true;
+          }}
+          onPointerUp={(event) => {
+            const drag = sheetDragRef.current;
+            sheetDragRef.current = null;
+            if (!drag) return;
+            const delta = event.clientY - drag.y;
+            if (delta < -30) setSheetStep((step) => Math.min(2, step + 1));
+            else if (delta > 30) setSheetStep((step) => Math.max(0, step - 1));
+            else if (!drag.moved) setSheetStep((step) => (step === 1 ? 2 : 1));
+          }}
+          onPointerCancel={() => { sheetDragRef.current = null; }}
+        >
+          <div className="h-1.5 w-12 rounded-full bg-slate-300" />
+        </div>
 
         <div className="shrink-0 border-b border-slate-100 px-4 pb-3">
           {routeState.selectedCategory && (() => {
@@ -2501,10 +2539,11 @@ const SelectVehicle = () => {
             </button>
             <button
               type="button"
-              className="flex items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-medium text-slate-700"
+              onClick={() => { setRideForDraft(rideFor); setShowRideForModal(true); }}
+              className="flex min-w-0 items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-medium text-slate-700"
             >
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[10px] text-slate-600">•</span>
-              <span>Myself</span>
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] text-slate-600">{rideFor.mode === 'other' ? '+' : '•'}</span>
+              <span className="truncate">{rideFor.mode === 'other' && rideFor.name ? rideFor.name : 'Myself'}</span>
             </button>
           </div>
 
@@ -2537,6 +2576,27 @@ const SelectVehicle = () => {
               )}
             </div>
           )}
+
+          {selectedVehicle && Array.isArray(selectedVehicle.preferences) && selectedVehicle.preferences.length > 0 ? (
+            <div className="mt-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Your preferences (optional)</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {selectedVehicle.preferences.map((pref) => {
+                  const active = selectedPreferences.includes(pref.name);
+                  return (
+                    <button
+                      key={pref.id || pref.name}
+                      type="button"
+                      onClick={() => setSelectedPreferences((current) => (active ? current.filter((item) => item !== pref.name) : [...current, pref.name]))}
+                      className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition ${active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
+                    >
+                      {active ? '✓ ' : ''}{pref.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <PendingCancellationDueNotice className="mt-3" />
 
@@ -2851,6 +2911,54 @@ const SelectVehicle = () => {
             </motion.div>
           </React.Fragment>
         )}
+        {showRideForModal && (
+          <React.Fragment key="ride-for-modal">
+            <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm" onClick={() => setShowRideForModal(false)} />
+            <div className="fixed bottom-0 left-0 right-0 z-[101] mx-auto max-w-lg rounded-t-[28px] bg-white px-5 pb-8 pt-4">
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-200" />
+              <h3 className="text-[18px] font-bold text-slate-900">Who is travelling?</h3>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {[{ id: 'self', label: 'Myself' }, { id: 'other', label: 'Someone else' }].map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setRideForDraft((current) => ({ ...current, mode: option.id }))}
+                    className={`rounded-[14px] border px-3 py-3 text-[13px] font-bold ${rideForDraft.mode === option.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700'}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {rideForDraft.mode === 'other' ? (
+                <div className="mt-3 space-y-2">
+                  <input
+                    value={rideForDraft.name}
+                    onChange={(event) => setRideForDraft((current) => ({ ...current, name: event.target.value.slice(0, 40) }))}
+                    placeholder="Passenger name"
+                    className="w-full rounded-[14px] border border-slate-200 px-4 py-3 text-[13px] font-semibold text-slate-900 outline-none focus:border-slate-400"
+                  />
+                  <input
+                    value={rideForDraft.phone}
+                    onChange={(event) => setRideForDraft((current) => ({ ...current, phone: event.target.value.replace(/\D/g, '').slice(-10) }))}
+                    placeholder="Passenger mobile number"
+                    inputMode="tel"
+                    className="w-full rounded-[14px] border border-slate-200 px-4 py-3 text-[13px] font-semibold text-slate-900 outline-none focus:border-slate-400"
+                  />
+                  <p className="text-[11px] font-medium text-slate-500">The driver sees this name and number, so they can call the person who is travelling.</p>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                disabled={rideForDraft.mode === 'other' && (!rideForDraft.name.trim() || rideForDraft.phone.length !== 10)}
+                onClick={() => { setRideFor(rideForDraft.mode === 'other' ? rideForDraft : { mode: 'self', name: '', phone: '' }); setShowRideForModal(false); }}
+                className="mt-4 w-full rounded-[14px] bg-slate-900 px-4 py-3.5 text-[14px] font-bold text-white disabled:opacity-40"
+              >
+                Done
+              </button>
+            </div>
+          </React.Fragment>
+        )}
+
         {showPaymentModal && (
           <React.Fragment key="payment-modal">
             <motion.div

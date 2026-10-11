@@ -53,10 +53,21 @@ export function useScrollFocusedFieldIntoView() {
       if (!isTypingElement(target)) return;
       clearTimeout(timer);
       // Wait for the keyboard to finish opening (viewport resize) before scrolling.
-      timer = setTimeout(() => {
-        if (document.activeElement !== target || typeof target.scrollIntoView !== 'function') return;
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }, 350);
+      const bringIntoView = () => {
+        if (document.activeElement !== target) return;
+        const viewport = window.visualViewport;
+        if (viewport && typeof target.getBoundingClientRect === 'function') {
+          // Centre the field in the part of the screen the keyboard leaves free (a bottom bar sits above the keyboard).
+          const rect = target.getBoundingClientRect();
+          const freeTop = viewport.offsetTop;
+          const freeHeight = Math.max(160, viewport.height - 96);
+          const delta = rect.top + rect.height / 2 - (freeTop + freeHeight / 2);
+          if (Math.abs(delta) > 24) window.scrollBy({ top: delta, behavior: 'smooth' });
+          return;
+        }
+        if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      };
+      timer = setTimeout(bringIntoView, 350);
     };
 
     document.addEventListener('focusin', handleFocusIn);

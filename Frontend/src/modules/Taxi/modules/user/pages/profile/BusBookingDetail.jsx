@@ -443,6 +443,37 @@ const BusBookingDetail = () => {
               )}
             </div>
 
+            {/* Fare details: what was charged for this ticket */}
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+              <h2 className="text-lg font-black text-slate-900">Fare details</h2>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span className="font-semibold">Seat subtotal ({booking.fare?.seatCount || (booking.seatIds || []).length} seat{(booking.fare?.seatCount || (booking.seatIds || []).length) === 1 ? '' : 's'})</span>
+                  <span className="font-black text-slate-900">{formatMoney(booking.fare?.seatSubtotal ?? booking.amount, booking.currency)}</span>
+                </div>
+                {Number(booking.fare?.serviceTaxAmount || 0) > 0 ? (
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="font-semibold">Service tax ({Number(booking.fare?.serviceTaxPercentage || 0)}%)</span>
+                    <span className="font-black text-slate-900">{formatMoney(booking.fare.serviceTaxAmount, booking.currency)}</span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-3">
+                  <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Total paid</span>
+                  <span className="text-xl font-black text-slate-900">{formatMoney(booking.fare?.total ?? booking.amount, booking.currency)}</span>
+                </div>
+                {Number(booking.cancellation?.refundAmount || 0) > 0 ? (
+                  <div className="flex items-center justify-between text-emerald-700">
+                    <span className="font-semibold">Refunded</span>
+                    <span className="font-black">{formatMoney(booking.cancellation.refundAmount, booking.currency)}</span>
+                  </div>
+                ) : null}
+                <p className="text-[11px] font-semibold text-slate-400">
+                  Payment: {String(booking.payment?.status || 'paid').replace(/_/g, ' ')}
+                  {booking.payment?.paymentId ? ` - ${booking.payment.paymentId}` : ''}
+                </p>
+              </div>
+            </div>
+
             {/* Rating Section */}
             <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-6">

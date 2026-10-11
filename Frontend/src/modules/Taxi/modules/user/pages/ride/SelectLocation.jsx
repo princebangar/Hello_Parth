@@ -20,6 +20,7 @@ import {
 import { cleanGroundAddress, cleanRecentPlace, getBestPosition, loadRoadDistances, pickBestGeocodeResult } from '../../utils/preciseLocation';
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
 import { saveParcelPickerResult } from '../../utils/parcelPickerResult';
+import LocationOffDialog from '../../components/LocationOffDialog';
 
 const MAP_REVERSE_GEOCODE_DEBOUNCE_MS = 500;
 const getLatLngCacheKey = (coords, precision = 5) =>
@@ -225,6 +226,8 @@ const SelectLocation = () => {
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  // 'denied' | 'off' while the 'turn on location' dialog is open
+  const [locationOffReason, setLocationOffReason] = useState(null);
   const [zones, setZones] = useState([]);
   const [zonePaths, setZonePaths] = useState([]);
   const [remoteResults, setRemoteResults] = useState([]);
@@ -923,7 +926,10 @@ const SelectLocation = () => {
       }
     };
 
-    getBestPosition({ maxWaitMs: 7000 }).then(handleSuccess, () => setIsLocating(false));
+    getBestPosition({ maxWaitMs: 7000 }).then(handleSuccess, (error) => {
+      setIsLocating(false);
+      setLocationOffReason(error?.code === 1 ? 'denied' : 'off');
+    });
   };
 
   const handleConfirmNavigate = async (optionalDrop, optionalDropCoords = null) => {
@@ -1074,7 +1080,10 @@ const SelectLocation = () => {
   };
 
   const handleUseCurrentLocationResult = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setLocationOffReason('off');
+      return;
+    }
     setIsLocating(true);
 
     const handleSuccess = (pos) => {
@@ -1554,6 +1563,16 @@ const SelectLocation = () => {
               </div>
               <ChevronRight size={16} className="text-slate-300" />
             </motion.button>
+
+            <LocationOffDialog
+              open={Boolean(locationOffReason)}
+              reason={locationOffReason}
+              onClose={() => setLocationOffReason(null)}
+              onRetry={() => {
+                setLocationOffReason(null);
+                handleUseCurrentLocationResult();
+              }}
+            />
 
             {searchResults.map((result, idx) => (
               <motion.button

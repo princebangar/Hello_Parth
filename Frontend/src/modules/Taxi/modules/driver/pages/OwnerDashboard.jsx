@@ -66,12 +66,12 @@ const statusTone = (value = '') => {
 const StatCard = ({ icon, label, value, sub, tone = 'slate' }) => {
   const toneClass =
     tone === 'emerald'
-      ? 'from-emerald-500 to-teal-500 text-white'
+      ? 'from-[#1d4ed8] to-[#3b82f6] text-white'
       : tone === 'blue'
-        ? 'from-blue-600 to-indigo-600 text-white'
+        ? 'from-[#12348c] to-[#2563eb] text-white'
         : tone === 'amber'
-          ? 'from-amber-500 to-orange-500 text-white'
-          : 'from-slate-900 to-slate-800 text-white';
+          ? 'from-[#2563eb] to-[#60a5fa] text-white'
+          : 'from-[#12348c] to-[#1d4ed8] text-white';
 
   return (
     <div className={`rounded-[28px] bg-gradient-to-br ${toneClass} p-5 shadow-xl`}>
@@ -151,7 +151,7 @@ const OwnerDashboard = () => {
   return (
     <div className="min-h-screen bg-[#f8f9fb] pb-32">
       <div className="mx-auto max-w-lg px-5 pt-10">
-        <header className="rounded-[32px] bg-slate-900 px-5 py-6 text-white shadow-2xl">
+        <header className="rounded-[32px] bg-gradient-to-br from-[#12348c] to-[#3b82f6] px-5 py-6 text-white shadow-2xl">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-400">Owner Dashboard</p>
@@ -230,7 +230,7 @@ const OwnerDashboard = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/taxi/owner/bus-service')}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-[11px] font-black text-white"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-3 py-2 text-[11px] font-black text-white"
                 >
                   <Bus size={14} />
                   Open Bus
