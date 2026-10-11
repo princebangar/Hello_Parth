@@ -1002,12 +1002,16 @@ const BusDriverLiveRoute = () => {
               {['in_progress', 'paused'].includes(String(liveTracking?.status || '')) ? (
                 <button
                   type="button"
-                  onClick={() => handleTripStatusChange('complete', 'Journey completed')}
+                  onClick={() => {
+                    if (window.confirm('Has the bus reached its destination? This completes the trip and tells the passengers.')) {
+                      handleTripStatusChange('complete', 'Trip completed - passengers are notified');
+                    }
+                  }}
                   disabled={tripActionPending}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Square size={15} />
-                  Complete
+                  Reached destination
                 </button>
               ) : null}
               {String(liveTracking?.status || '') === 'completed' ? (

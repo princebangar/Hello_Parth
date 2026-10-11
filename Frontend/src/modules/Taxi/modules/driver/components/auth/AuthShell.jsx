@@ -64,7 +64,7 @@ const AuthShell = ({ eyebrow, title, subtitle, onBack, backLabel = 'Back', child
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-[rgba(9,12,28,0.94)] via-[rgba(9,12,28,0.6)] to-[rgba(9,12,28,0.4)]" />
           <div className="relative">
-            <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-11 w-auto object-contain" />
+            <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-16 w-auto object-contain" />
           </div>
           <div className="relative max-w-md space-y-8">
             <FleetStrip tone="dark" />
@@ -90,11 +90,11 @@ const AuthShell = ({ eyebrow, title, subtitle, onBack, backLabel = 'Back', child
 
       <div className="relative flex min-h-dvh flex-col lg:bg-[#ffffff]">
         {/* Hero strip — phones and tablets */}
-        <div className="relative h-32 shrink-0 overflow-hidden sm:h-48 lg:hidden">
+        <div className="relative h-40 shrink-0 overflow-hidden sm:h-52 lg:hidden">
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-[rgba(9,12,28,0.6)] via-[rgba(9,12,28,0.45)] to-[#f6f7fb]" />
           <div className="relative flex h-full flex-col justify-between px-5 pb-4 pt-5 sm:px-8 sm:pt-7">
-            <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-9 w-auto object-contain sm:h-10" />
+            <img src={DEFAULT_BRAND_LOGO} alt="Hello Parth" className="h-14 w-auto object-contain sm:h-16" />
             <FleetStrip tone="dark" />
           </div>
         </div>

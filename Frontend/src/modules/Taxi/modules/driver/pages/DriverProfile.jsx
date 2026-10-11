@@ -543,7 +543,7 @@ Processing Time: Refunds are typically credited back to the original payment met
             {/* Legal Modal */}
             <AnimatePresence>
                 {legalModal && (
-                    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/45 backdrop-blur-sm px-4 pb-8 sm:items-center sm:pb-0">
+                    <div data-driver-overlay="1" className="fixed inset-0 z-[200] flex items-end justify-center bg-black/45 backdrop-blur-sm px-4 pb-8 sm:items-center sm:pb-0">
                         <Motion.motion.div
                             initial={{ opacity: 0, y: 100 }}
                             animate={{ opacity: 1, y: 0 }}

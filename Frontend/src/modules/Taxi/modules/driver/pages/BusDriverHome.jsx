@@ -28,11 +28,18 @@ import {
   createBusDriverReservation,
   getBusDriverBookings,
   getBusDriverSeatLayout,
+  markBusDriverBookingPaid,
   updateBusDriverSchedules,
 } from '../services/busDriverService';
 import { formatClockTime } from '../../../shared/utils/clockTime';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
+// "+91 98765 43210", "09876543210", "919876543210" -> "9876543210"
+const toTenDigitPhone = (value = '') => {
+  const digits = String(value || '').replace(/\D/g, '');
+  const national = digits.length > 10 ? digits.replace(/^(?:00)?(?:91|0)(?=\d{10}$)/, '') : digits;
+  return national.slice(-10);
+};
 const unwrapResults = (response) => response?.data?.results || response?.results || [];
 const formatDateKey = (value) => {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
@@ -205,7 +212,7 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
                     isBooked
                       ? 'cursor-not-allowed border-slate-200 bg-slate-200 text-slate-500'
                       : isSelected
-                        ? 'border-slate-950 bg-slate-950 text-white'
+                        ? 'border-blue-600 bg-blue-600 text-white'
                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
                   }`}
                 >
@@ -222,7 +229,7 @@ const SeatDeck = ({ title, rows, selectedSeatIds, onToggle }) => {
 };
 
 const StatCard = ({ label, value, tone = 'light', Icon }) => (
-  <div className={`rounded-2xl p-4 ${tone === 'dark' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-900'} shadow-sm`}>
+  <div className={`rounded-2xl p-4 ${tone === 'dark' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-900'} shadow-sm`}>
     <div className="flex items-center justify-between gap-3">
       <div>
         <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${tone === 'dark' ? 'text-white/55' : 'text-slate-400'}`}>{label}</p>
@@ -273,6 +280,7 @@ const BusDriverHome = () => {
     phone: '',
     email: '',
     notes: '',
+    paymentStatus: 'paid',
   });
 
   const confirmLogout = useCallback(() => {
@@ -781,6 +789,11 @@ const BusDriverHome = () => {
       toast.error('Pick at least one seat');
       return;
     }
+    const phoneNumber = toTenDigitPhone(passenger.phone);
+    if (phoneNumber.length !== 10) {
+      toast.error('Enter the 10 digit mobile number of the passenger');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -792,10 +805,11 @@ const BusDriverHome = () => {
           name: passenger.name,
           age: Number(passenger.age || 0),
           gender: passenger.gender,
-          phone: passenger.phone,
+          phone: phoneNumber,
           email: passenger.email,
         },
         notes: passenger.notes,
+        paymentStatus: passenger.paymentStatus,
       });
 
       toast.success('Seat reservation created');
@@ -806,6 +820,7 @@ const BusDriverHome = () => {
         phone: '',
         email: '',
         notes: '',
+        paymentStatus: 'paid',
       });
       setSelectedSeats([]);
       setIsRunDetailsOpen(false);
@@ -880,7 +895,7 @@ const BusDriverHome = () => {
               {formatDisplayDate(travelDate)} {selectedSchedule?.departureTime ? `· ${formatClockTime(selectedSchedule.departureTime)}` : ''}
             </p>
           </div>
-          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
+          <div className="rounded-2xl bg-blue-600 px-4 py-3 text-white">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">Tap To Open</p>
             <p className="mt-1 text-sm font-black">Live Details</p>
           </div>
@@ -941,7 +956,7 @@ const BusDriverHome = () => {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
                         <MapPin size={16} />
                       </div>
                       <div className="min-w-0">
@@ -979,7 +994,7 @@ const BusDriverHome = () => {
           <button
             type="button"
             onClick={() => setActiveTab('desk')}
-            className="rounded-2xl bg-slate-950 px-4 py-4 text-left text-white shadow-lg"
+            className="rounded-2xl bg-blue-600 px-4 py-4 text-left text-white shadow-lg"
           >
             <p className="text-sm font-black">Open Seat Desk</p>
             <p className="mt-1 text-xs text-white/70">Reserve seats, manage availability, and book passengers.</p>
@@ -1011,7 +1026,7 @@ const BusDriverHome = () => {
             onClick={handleSaveSchedules}
             disabled={isSavingSchedules}
             className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] transition ${
-              isSavingSchedules ? 'bg-slate-200 text-slate-500' : 'bg-slate-950 text-white shadow-lg'
+              isSavingSchedules ? 'bg-slate-200 text-slate-500' : 'bg-blue-600 text-white shadow-lg'
             }`}
           >
             <Save size={15} />
@@ -1089,7 +1104,7 @@ const BusDriverHome = () => {
                 selectScheduleForOps(schedule);
               }}
               className={`w-full rounded-[28px] border p-4 text-left transition ${isPersisted && !active ? 'cursor-pointer' : ''} ${
-                active ? 'border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
+                active ? 'border-blue-600 bg-blue-600 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -1184,7 +1199,7 @@ const BusDriverHome = () => {
                         enabled
                           ? active
                             ? 'border-white bg-white text-slate-900'
-                            : 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-blue-600 bg-blue-600 text-white'
                           : active
                             ? 'border-white/15 bg-white/10 text-white'
                             : 'border-slate-200 bg-white text-slate-500'
@@ -1201,6 +1216,43 @@ const BusDriverHome = () => {
       </section>
     </div>
   );
+
+  // Was the fare collected for this reservation? (shown on every booking as Paid / Unpaid)
+  const renderPaymentToggle = () => (
+    <div className="sm:col-span-2">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Fare</p>
+      <div className="grid grid-cols-2 gap-2">
+        {[{ id: 'paid', label: 'Collected (Paid)' }, { id: 'unpaid', label: 'Not collected yet' }].map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setPassenger((current) => ({ ...current, paymentStatus: option.id }))}
+            className={`h-11 rounded-2xl text-[12px] font-black transition ${
+              passenger.paymentStatus === option.id ? (option.id === 'paid' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white') : 'bg-slate-50 text-slate-500'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const [markingPaidId, setMarkingPaidId] = useState('');
+  const handleMarkPaid = async (booking) => {
+    setMarkingPaidId(booking.id);
+    try {
+      await markBusDriverBookingPaid(booking.id);
+      toast.success('Marked as paid');
+      await refreshDesk();
+      if (bookingScope !== 'run') setBookingScope((value) => value);
+      setScopedBookings((items) => items.map((item) => (item.id === booking.id ? { ...item, paymentStatus: 'paid' } : item)));
+    } catch (error) {
+      toast.error(error?.message || 'Could not update the payment');
+    } finally {
+      setMarkingPaidId('');
+    }
+  };
 
   const renderDeskTab = () => (
     <div className="space-y-5">
@@ -1275,8 +1327,9 @@ const BusDriverHome = () => {
           />
           <input
             value={passenger.phone}
-            onChange={(event) => setPassenger((current) => ({ ...current, phone: event.target.value.replace(/\D/g, '').slice(0, 10) }))}
-            placeholder="Passenger phone"
+            onChange={(event) => setPassenger((current) => ({ ...current, phone: event.target.value.replace(/[^\d+\s-]/g, '').slice(0, 16) }))}
+            placeholder="Passenger phone (10 digits, +91 is fine)"
+            inputMode="tel"
             className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
           />
           <input
@@ -1306,6 +1359,7 @@ const BusDriverHome = () => {
             placeholder="Notes for this reservation"
             className="min-h-[92px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none sm:col-span-2"
           />
+          {renderPaymentToggle()}
         </div>
 
         {selectedSeats.length > 0 ? (
@@ -1329,7 +1383,7 @@ const BusDriverHome = () => {
           className={`mt-4 flex h-12 w-full items-center justify-center rounded-2xl text-sm font-black transition ${
             submitting || !selectedSeats.length
               ? 'bg-slate-200 text-slate-500'
-              : 'bg-slate-950 text-white shadow-lg'
+              : 'bg-blue-600 text-white shadow-lg'
           }`}
         >
           {submitting ? 'Reserving Seats...' : 'Reserve Seats'}
@@ -1352,6 +1406,13 @@ const BusDriverHome = () => {
             {loadingScoped ? '...' : `${filteredBookings.length} of ${listedBookings.length}`}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('desk')}
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 text-sm font-black text-white shadow-lg active:scale-95"
+        >
+          <Users size={16} /> Add passenger
+        </button>
         <div className="mt-4 grid grid-cols-3 gap-2">
           {[
             { id: 'run', label: 'This run' },
@@ -1363,7 +1424,7 @@ const BusDriverHome = () => {
               type="button"
               onClick={() => setBookingScope(option.id)}
               className={`rounded-2xl px-3 py-3 text-[11px] font-black uppercase tracking-[0.12em] transition ${
-                bookingScope === option.id ? 'bg-slate-950 text-white shadow-md' : 'bg-slate-50 text-slate-500'
+                bookingScope === option.id ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'
               }`}
             >
               {option.label}
@@ -1425,7 +1486,7 @@ const BusDriverHome = () => {
                     type="button"
                     onClick={() => setBookingFilter(option.id)}
                     className={`rounded-2xl px-3 py-3 text-[11px] font-black uppercase tracking-[0.12em] transition ${
-                      active ? 'bg-slate-950 text-white shadow-md' : 'bg-slate-50 text-slate-500'
+                      active ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'
                     }`}
                   >
                     {option.label}
@@ -1443,50 +1504,78 @@ const BusDriverHome = () => {
             No bookings match this search.
           </div>
         ) : (
-          filteredBookings.map((booking, index) => (
-            <article key={booking.id} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">Passenger {index + 1}</p>
-                  <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    <Ticket size={14} />
-                    {booking.bookingCode}
-                  </p>
-                  <h3 className="mt-2 text-sm font-black text-slate-900">{booking.passenger?.name || 'Passenger'}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{booking.seatLabels?.join(', ') || 'No seats'}</p>
+          filteredBookings.map((booking, index) => {
+            const passengerInfo = booking.passenger || {};
+            const isPaid = booking.paymentStatus !== 'unpaid';
+            const isManual = booking.bookingSource !== 'user';
+            const initial = String(passengerInfo.name || 'P').trim().charAt(0).toUpperCase();
+            return (
+              <article key={booking.id} className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-blue-50/60 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-600 text-lg font-black text-white">{initial}</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">Passenger {index + 1}</p>
+                      <h3 className="truncate text-base font-black text-slate-900">{passengerInfo.name || 'Passenger'}</h3>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {isPaid ? 'Paid' : 'Unpaid'}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                      {isManual ? 'Booked at desk' : booking.status}
+                    </span>
+                  </div>
                 </div>
-                <span className="rounded-full bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">
-                  {booking.bookingSource === 'bus_driver' ? 'Manual Reserve' : booking.status}
-                </span>
-              </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><CalendarDays size={13} /> Travel</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.travelDate || 'NA'}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><Clock3 size={13} /> Departure</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{formatClockTime(booking.routeSnapshot?.departureTime)}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><UserRound size={13} /> Fare</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{formatCurrency(booking.amount, booking.currency)}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><Phone size={13} /> Contact</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.passenger?.phone || 'NA'}</p>
-                </div>
-              </div>
+                <div className="space-y-3 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {passengerInfo.age ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">Age {passengerInfo.age}</span> : null}
+                    {passengerInfo.gender ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{passengerInfo.gender}</span> : null}
+                    {(booking.seatLabels || []).map((label) => (
+                      <span key={label} className="rounded-full bg-blue-600 px-3 py-1 text-xs font-black text-white">Seat {label}</span>
+                    ))}
+                  </div>
 
-              <div className="mt-3 rounded-2xl bg-slate-50 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Trip Notes</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {booking.notes || booking.passenger?.email || 'No extra notes for this passenger.'}
-                </p>
-              </div>
-            </article>
-          ))
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                      <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><CalendarDays size={13} /> Travel</p>
+                      <p className="mt-1 text-sm font-black text-slate-900">{booking.travelDate || 'NA'} - {formatClockTime(booking.routeSnapshot?.departureTime)}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                      <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><UserRound size={13} /> Fare</p>
+                      <p className="mt-1 text-sm font-black text-slate-900">{formatCurrency(booking.amount, booking.currency)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400"><Phone size={13} /> Contact</p>
+                      <p className="mt-1 truncate text-sm font-black text-slate-900">{passengerInfo.phone || 'NA'}</p>
+                    </div>
+                    {passengerInfo.phone ? (
+                      <a href={`tel:${passengerInfo.phone}`} className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white active:scale-95">Call</a>
+                    ) : null}
+                  </div>
+
+                  <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-300"><Ticket size={13} /> {booking.bookingCode}</p>
+                  {booking.notes ? <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">{booking.notes}</p> : null}
+
+                  {!isPaid && isManual ? (
+                    <button
+                      type="button"
+                      disabled={markingPaidId === booking.id}
+                      onClick={() => handleMarkPaid(booking)}
+                      className="h-11 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white active:scale-95 disabled:opacity-60"
+                    >
+                      {markingPaidId === booking.id ? 'Saving...' : 'Mark fare as collected'}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })
         )}
       </section>
     </div>
@@ -1505,9 +1594,9 @@ const BusDriverHome = () => {
   return (
     <div className="min-h-screen bg-[#f6f7fb] px-4 pb-28 pt-6" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
       {isRunDetailsOpen ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/45 p-4">
+        <div data-driver-overlay="1" className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/45 p-4">
           <div ref={runDetailsPopoverRef} className="mx-auto w-full max-w-4xl rounded-[32px] border border-slate-200 bg-[#f6f7fb] p-4 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
-            <section className="rounded-[28px] bg-[#10213b] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+            <section className="rounded-[28px] bg-gradient-to-br from-[#12348c] to-[#3b82f6] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Today's Bus Run</p>
@@ -1615,7 +1704,7 @@ const BusDriverHome = () => {
                             key={`selected-seat-${seat.id}`}
                             type="button"
                             onClick={() => handleToggleSeat(seat)}
-                            className="rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white"
+                            className="rounded-full bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white"
                           >
                             {seat.label} · Remove
                           </button>
@@ -1681,8 +1770,9 @@ const BusDriverHome = () => {
                     />
                     <input
                       value={passenger.phone}
-                      onChange={(event) => setPassenger((current) => ({ ...current, phone: event.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                      placeholder="Passenger phone"
+                      onChange={(event) => setPassenger((current) => ({ ...current, phone: event.target.value.replace(/[^\d+\s-]/g, '').slice(0, 16) }))}
+                      placeholder="Passenger phone (10 digits, +91 is fine)"
+            inputMode="tel"
                       className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 outline-none"
                     />
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -1714,6 +1804,7 @@ const BusDriverHome = () => {
                       placeholder="Notes for this reservation"
                       className="min-h-[92px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none"
                     />
+                    {renderPaymentToggle()}
                   </div>
 
                   <button
@@ -1723,7 +1814,7 @@ const BusDriverHome = () => {
                     className={`mt-4 flex h-12 w-full items-center justify-center rounded-2xl text-sm font-black transition ${
                       submitting || !selectedSeats.length
                         ? 'bg-slate-200 text-slate-500'
-                        : 'bg-slate-950 text-white shadow-lg'
+                        : 'bg-blue-600 text-white shadow-lg'
                     }`}
                   >
                     {submitting ? 'Reserving Seats...' : 'Reserve Selected Seats'}
@@ -1735,7 +1826,7 @@ const BusDriverHome = () => {
         </div>
       ) : null}
       {isCalendarOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+        <div data-driver-overlay="1" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
           <div
             ref={calendarPopoverRef}
             className="w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_30px_80px_rgba(15,23,42,0.28)]"
@@ -1807,7 +1898,7 @@ const BusDriverHome = () => {
                     onClick={() => handleTravelDateSelect(cell.value)}
                     className={`h-11 rounded-2xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-30 ${
                       isSelected
-                        ? 'bg-slate-950 text-white shadow-md'
+                        ? 'bg-blue-600 text-white shadow-md'
                         : isToday
                           ? 'border border-slate-300 bg-white text-slate-900'
                           : 'bg-slate-50 text-slate-600'
@@ -1823,25 +1914,8 @@ const BusDriverHome = () => {
       ) : null}
       <div className="mx-auto max-w-lg space-y-5">
         {activeTab === 'overview' ? (
-          <section className="rounded-[32px] bg-[#10213b] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-            <div className="flex items-start justify-between gap-3">
-              <button
-                type="button"
-                onClick={confirmLogout}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white transition active:scale-95"
-              >
-                <ArrowLeft size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={confirmLogout}
-                className="rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/80"
-              >
-                Logout
-              </button>
-            </div>
-
-            <div className="mt-5 flex items-start gap-4">
+          <section className="rounded-[32px] bg-gradient-to-br from-[#12348c] to-[#3b82f6] p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+            <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-[#2f67f6] text-white">
                 <Bus size={26} />
               </div>
@@ -1895,20 +1969,44 @@ const BusDriverHome = () => {
                   <ArrowLeft size={16} />
                 </button>
                 <h2 className="text-lg font-black text-slate-900">
-                  {{ schedule: 'Schedule', desk: 'Seat desk', bookings: 'Bookings' }[activeTab] || activeTab}
+                  {{ schedule: 'Schedule', desk: 'Seat desk', bookings: 'Bookings', profile: 'Account' }[activeTab] || activeTab}
                 </h2>
              </div>
-              <button
-                 type="button"
-                 onClick={confirmLogout}
-                 className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-rose-500"
-               >
-                 Logout
-              </button>
           </div>
         )}
 
-        {!busService ? (
+        {activeTab === 'profile' ? (
+          <section className="space-y-4">
+            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-blue-600 text-white">
+                  <Bus size={26} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-black text-slate-900">{profile?.name || 'Bus Driver'}</p>
+                  <p className="text-sm font-semibold text-slate-500">{profile?.phone || ''}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Bus</p>
+                  <p className="mt-1 font-black text-slate-900">{busService?.busName || 'Not assigned'}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Service no.</p>
+                  <p className="mt-1 font-black text-slate-900">{busService?.serviceNumber || '-'}</p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={confirmLogout}
+              className="h-12 w-full rounded-2xl border border-rose-200 bg-white text-sm font-black uppercase tracking-[0.14em] text-rose-600 active:scale-95"
+            >
+              Log out
+            </button>
+          </section>
+        ) : !busService ? (
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 text-center shadow-sm">
             <p className="text-lg font-black text-slate-900">No bus assigned yet</p>
             <p className="mt-2 text-sm text-slate-500">Assign this driver from the admin bus service page using driver name and phone.</p>
@@ -1925,7 +2023,6 @@ const BusDriverHome = () => {
       <BusDriverBottomNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        onLogout={confirmLogout}
       />
     </div>
   );

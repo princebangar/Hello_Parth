@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PasswordInput from '../../components/ui/PasswordInput';
 import { X, User, Mail, Phone, Lock, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react';
 import useDirty from '../../../../../../shared/hooks/useDirty';
 
@@ -164,8 +165,7 @@ const UserModal = ({ isOpen, onClose, onSubmit, editingUser = null, isLoading = 
                 </label>
                 <div className="relative group">
                   <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-yellow-500 transition-colors" />
-                  <input 
-                    type="password" 
+                  <PasswordInput
                     name="password"
                     value={formData.password}
                     onChange={handleChange}

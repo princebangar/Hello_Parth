@@ -80,28 +80,7 @@ const DriverIncentives = () => {
     [claimedRewards],
   );
 
-  // Simple Level System
-  const levelData = useMemo(() => {
-    const totalTrips = Number(summary.totalTrips || summary.currentWeekTrips || 0);
-    const level = Math.floor(totalTrips / 50) + 1;
-    const currentXP = totalTrips % 50;
-    const targetXP = 50;
-    
-    const levels = [
-      { name: 'Bronze', color: '#B45309' },
-      { name: 'Silver', color: '#64748B' },
-      { name: 'Gold', color: '#D97706' },
-      { name: 'Platinum', color: '#4F46E5' },
-    ];
-    
-    return {
-      level,
-      percent: (currentXP / targetXP) * 100,
-      currentXP,
-      targetXP,
-      ...levels[Math.min(level - 1, levels.length - 1)]
-    };
-  }, [summary]);
+  const referralOffer = data?.referral && data.referral.enabled && Number(data.referral.amount) > 0 ? Number(data.referral.amount) : 0;
 
   if (loading) {
     // same skeleton as any screen still loading (no spinner page in between)
@@ -129,38 +108,25 @@ const DriverIncentives = () => {
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Bonus earned</p>
-            <p className="text-lg font-bold text-black">{formatCurrency(bonusEarnings)}</p>
+            <p className="text-lg font-bold text-blue-700">{formatCurrency(bonusEarnings)}</p>
           </div>
         </div>
       </header>
 
       <main className="px-6 pt-6 space-y-8">
         {/* Level Overview */}
-        <section className="bg-gray-50 rounded-3xl p-6">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm">
-              <Trophy size={24} style={{ color: levelData.color }} />
+        <section className="bg-gradient-to-br from-[#12348c] to-[#3b82f6] rounded-3xl p-6 text-white">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-white/15 flex items-center justify-center">
+              <Trophy size={24} className="text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">{levelData.name} Partner</h2>
-              <p className="text-sm font-medium text-gray-500">Level {levelData.level}</p>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs font-bold">
-              <span className="text-gray-400">Next Level</span>
-              <span className="text-gray-900">{levelData.currentXP} / {levelData.targetXP} trips</span>
-            </div>
-            <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-black rounded-full transition-all duration-1000" 
-                style={{ width: `${levelData.percent}%` }}
-              />
+              <h2 className="text-lg font-bold">Your progress</h2>
+              <p className="text-sm font-medium text-white/70">{Number(summary.totalTrips || 0)} trips completed</p>
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-4 pt-6 border-t border-gray-200/50">
+          <div className="mt-6 grid grid-cols-3 gap-4 pt-6 border-t border-white/20 [&_p]:!text-white [&_.text-gray-400]:!text-white/60">
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Streak</p>
               <p className="text-base font-bold text-gray-900 flex items-center gap-1">
@@ -185,6 +151,13 @@ const DriverIncentives = () => {
           <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Active Quests</h3>
           
           <div className="space-y-3">
+            {milestones.length === 0 && features.filter((feature) => feature.enabled).length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-gray-200 bg-gray-50 px-5 py-8 text-center">
+                <Trophy size={26} className="mx-auto text-gray-300" />
+                <p className="mt-3 text-sm font-bold text-gray-700">No milestone offers right now</p>
+                <p className="mt-1 text-xs font-medium text-gray-500">When the admin starts a milestone or bonus programme it shows up here with your progress and a Claim button.</p>
+              </div>
+            ) : null}
             {milestones.map((milestone) => {
               const claimKey = `milestone:${milestone.id}`;
               const progress = progressPercent(milestone.progress?.qualifyingDays, milestone.progress?.targetDays);
@@ -218,13 +191,13 @@ const DriverIncentives = () => {
                     onClick={() => handleClaim('milestone', milestone.id)}
                     className={`w-full py-3 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all ${
                       canClaim 
-                        ? 'bg-black text-white shadow-lg shadow-gray-200' 
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
                         : milestone.isClaimed 
                         ? 'bg-green-50 text-green-600 border border-green-100' 
                         : 'bg-gray-50 text-gray-400 border border-gray-100'
                     }`}
                   >
-                    {claimingKey === claimKey ? 'Claiming...' : milestone.isClaimed ? 'Reward Claimed' : 'Ongoing'}
+                    {claimingKey === claimKey ? 'Claiming...' : milestone.isClaimed ? 'Reward claimed' : canClaim ? `Claim ${formatCurrency(milestone.payout_amount)}` : 'In progress'}
                   </button>
                 </div>
               );
@@ -233,19 +206,21 @@ const DriverIncentives = () => {
         </section>
 
         {/* Referral Card */}
-        <section className="bg-black rounded-3xl p-6 text-white overflow-hidden relative">
+        {referralOffer > 0 ? (
+        <section className="bg-blue-600 rounded-3xl p-6 text-white overflow-hidden relative">
           <div className="relative z-10">
             <h3 className="text-lg font-bold mb-2">Invite a Friend</h3>
-            <p className="text-sm text-gray-400 mb-6">Earn {formatCurrency(data?.referralRewardAmount || 500)} for every new driver you refer.</p>
-            <button 
+            <p className="text-sm text-white/80 mb-6">Earn {formatCurrency(referralOffer)} for every new driver you refer.</p>
+            <button
               onClick={() => navigate('/taxi/driver/referral')}
-              className="px-6 py-3 bg-white text-black rounded-2xl text-xs font-bold uppercase tracking-widest"
+              className="px-6 py-3 bg-white text-blue-700 rounded-2xl text-xs font-bold uppercase tracking-widest"
             >
               Invite Now
             </button>
           </div>
           <Gift className="absolute -right-4 -bottom-4 text-white/10" size={120} />
         </section>
+        ) : null}
 
         {/* Boosters */}
         <section className="space-y-4 pb-10">
@@ -273,7 +248,7 @@ const DriverIncentives = () => {
                       disabled={!canClaim || claimingKey === claimKey}
                       onClick={() => handleClaim('feature', feature.key)}
                       className={`px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                        canClaim ? 'bg-black text-white' : 'text-gray-300'
+                        canClaim ? 'bg-blue-600 text-white' : 'text-gray-300'
                       }`}
                     >
                       {feature.isClaimed ? 'Done' : 'Claim'}
