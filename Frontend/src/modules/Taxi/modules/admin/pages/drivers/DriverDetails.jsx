@@ -449,6 +449,8 @@ const DriverDetails = () => {
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [documentActionKey, setDocumentActionKey] = useState('');
 
+  // Opened from Fleet Management (Owner Mode): the owner's details are shown and there is no subscription for a fleet driver.
+  const isFleetView = location.pathname.includes('/fleet/drivers/');
   const tabs = [
     'Driver Profile',
     'Request List',
@@ -456,7 +458,6 @@ const DriverDetails = () => {
     'Withdrawal History',
     'Review History',
     'Documents',
-    'Subscription',
   ];
 
   const fetchProfile = async () => {
@@ -530,7 +531,7 @@ const DriverDetails = () => {
   const wallet = profile?.wallet || {};
   const requests = profile?.requests || [];
   const withdrawals = profile?.withdrawals || [];
-  const backRoute = location.state?.from || '/admin/drivers';
+  const backRoute = location.state?.from || (location.pathname.includes('/fleet/drivers/') ? '/taxi/admin/fleet/drivers' : '/admin/drivers');
   const onboardingVehicle = profile?.onboarding?.vehicle || {};
   const vehicleFieldSummary = useMemo(() => ([
     {
@@ -683,7 +684,7 @@ const DriverDetails = () => {
     <div className="min-h-screen bg-[#F8FAFC] p-4 lg:p-6 font-sans text-gray-900">
       <div className="mb-6">
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
-          <span>Drivers</span>
+          <span>{isFleetView ? 'Fleet Drivers' : 'Drivers'}</span>
           <ChevronRight size={12} />
           <span className="text-gray-700">Driver Profile</span>
         </div>
@@ -743,6 +744,35 @@ const DriverDetails = () => {
             </div>
           </div>
         </div>
+
+        {profile.owner_details ? (
+          <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Owner</p>
+              <p className="mt-1 text-sm font-bold text-gray-900">{profile.owner_details.name || 'Owner'}</p>
+              {profile.owner_details.company_name ? <p className="text-xs font-semibold text-gray-600">{profile.owner_details.company_name}</p> : null}
+              <p className="mt-1 text-xs text-gray-600">{[profile.owner_details.mobile, profile.owner_details.email].filter(Boolean).join('  |  ') || 'No contact saved'}</p>
+              <button
+                type="button"
+                onClick={() => navigate(`/taxi/admin/owners/${profile.owner_details.id}`)}
+                className="mt-2 text-xs font-bold text-indigo-600 hover:underline"
+              >
+                View owner
+              </button>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Assigned vehicle</p>
+              {profile.assigned_fleet_vehicle ? (
+                <>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{[profile.assigned_fleet_vehicle.brand, profile.assigned_fleet_vehicle.model].filter(Boolean).join(' ') || 'Vehicle'}</p>
+                  <p className="text-xs text-gray-600">{[profile.assigned_fleet_vehicle.number, profile.assigned_fleet_vehicle.color].filter(Boolean).join('  |  ')}</p>
+                </>
+              ) : (
+                <p className="mt-1 text-xs font-semibold text-gray-500">No vehicle assigned yet</p>
+              )}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap items-start gap-3 border-t border-gray-100 pt-4">
           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${profile.isOnline ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>

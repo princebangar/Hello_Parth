@@ -190,15 +190,11 @@ const AdminUserCreate = lazy(() => import('./modules/admin/pages/users/UserCreat
 const AdminUserDetails = lazy(() => import('./modules/admin/pages/users/UserDetails'));
 const AdminUserBulkUpload = lazy(() => import('./modules/admin/pages/users/UserBulkUpload'));
 const AdminUserImportCreate = lazy(() => import('./modules/admin/pages/users/UserImportCreate'));
-const AdminUserSubscriptions = lazy(() => import('./modules/admin/pages/users/UserSubscriptions'));
-const AdminUserSubscriptionCreate = lazy(() => import('./modules/admin/pages/users/UserSubscriptionCreate'));
 
 // DRIVER MANAGEMENT IMPORTS
 const AdminDriverList = lazy(() => import('./modules/admin/pages/drivers/DriverList'));
 const AdminDriverDetails = lazy(() => import('./modules/admin/pages/drivers/DriverDetails'));
 const AdminPendingDrivers = lazy(() => import('./modules/admin/pages/drivers/PendingDrivers'));
-const AdminDriverSubscriptions = lazy(() => import('./modules/admin/pages/drivers/DriverSubscriptions'));
-const AdminDriverSubscriptionCreate = lazy(() => import('./modules/admin/pages/drivers/DriverSubscriptionCreate'));
 const AdminDriverRatings = lazy(() => import('./modules/admin/pages/drivers/DriverRatings'));
 const AdminDriverRatingDetail = lazy(() => import('./modules/admin/pages/drivers/DriverRatingDetail'));
 const AdminNegativeBalanceDrivers = lazy(() => import('./modules/admin/pages/drivers/NegativeBalanceDrivers'));
@@ -1195,8 +1191,6 @@ function TaxiApp() {
                 <Route path="wallet/payment" element={<AdminWalletPayment />} />
                 <Route path="users" element={<AdminUserList />} />
                 <Route path="users/create" element={<AdminUserCreate />} />
-                <Route path="users/subscriptions" element={<AdminUserSubscriptions />} />
-                <Route path="users/subscriptions/create" element={<AdminUserSubscriptionCreate />} />
                 <Route path="users/:id" element={<AdminUserDetails />} />
                 <Route
                   path="users/bulk-upload"
@@ -1215,14 +1209,6 @@ function TaxiApp() {
                 <Route
                   path="drivers/pending"
                   element={<AdminPendingDrivers />}
-                />
-                <Route
-                  path="drivers/subscription"
-                  element={<AdminDriverSubscriptions />}
-                />
-                <Route
-                  path="drivers/subscription/create"
-                  element={<AdminDriverSubscriptionCreate />}
                 />
                 <Route
                   path="drivers/ratings"
@@ -1334,6 +1320,8 @@ function TaxiApp() {
                   element={<AdminWithdrawalRequestOwnerDetail />}
                 />
                 <Route path="fleet/drivers" element={<AdminFleetDrivers />} />
+                {/* a fleet driver opens inside Owner Mode (owner details, no subscription), not in the taxi-driver admin */}
+                <Route path="fleet/drivers/:id" element={<AdminDriverDetails />} />
                 <Route
                   path="fleet/drivers/create"
                   element={<AdminFleetDriverCreate />}

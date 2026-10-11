@@ -959,7 +959,6 @@ const AdminLayout = () => {
             label: 'Customer Management',
             subItems: [
               { label: 'User List', path: '/taxi/admin/users', permission: 'users.view' },
-              { label: 'Subscription Management', path: '/taxi/admin/users/subscriptions', permission: 'users.view' },
               { label: 'User Bulk Upload', path: '/taxi/admin/users/bulk-upload', permission: 'users.view' },
             ],
           },
@@ -971,7 +970,6 @@ const AdminLayout = () => {
               { label: 'Pending Drivers', path: '/taxi/admin/drivers/pending', permission: 'drivers.view' },
               { label: 'Approved Drivers', path: '/taxi/admin/drivers', permission: 'drivers.view' },
               { label: 'Active Drivers', path: '/taxi/admin/drivers/active', permission: 'drivers.view' },
-              { label: 'Subscription', path: '/taxi/admin/drivers/subscription', permission: 'drivers.view' },
               { label: 'Drivers Ratings', path: '/taxi/admin/drivers/ratings', permission: 'drivers.view' },
               {
                 label: 'Driver Wallet',
