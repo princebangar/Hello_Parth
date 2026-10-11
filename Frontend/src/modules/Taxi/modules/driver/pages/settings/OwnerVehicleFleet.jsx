@@ -19,6 +19,7 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getCurrentDriver,
+  getDriverDocumentTemplates,
   getDriverVehicleTypes,
   deleteDriverVehicle,
   getOwnerFleetVehicles,
@@ -26,9 +27,15 @@ import {
   deleteOwnerFleetVehicle,
 } from "../../services/registrationService";
 import { uploadService } from "../../../../shared/services/uploadService";
+import { normalizeDriverDocumentTemplates } from "../../utils/documentTemplates";
+import FleetDocumentFields, {
+  buildFleetDocumentsPayload,
+  readSavedDocumentMeta,
+  validateFleetDocumentInputs,
+} from "../../components/FleetDocumentFields";
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-orange-300 focus:ring-2 focus:ring-orange-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-blue-300 focus:ring-2 focus:ring-blue-100";
 const labelClass = "mb-2 block text-[12px] font-bold text-slate-700";
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -126,6 +133,10 @@ const OwnerVehicleFleet = () => {
     rcFile: null,
     existingRcUrl: "",
   });
+  // Vehicle papers asked by the admin (Fleet Needed Documents). New files / number / expiry typed while editing:
+  const [documentTemplates, setDocumentTemplates] = useState([]);
+  const [docFiles, setDocFiles] = useState({});
+  const [docMeta, setDocMeta] = useState({});
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState(""); // 'success' or 'error'
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -188,6 +199,7 @@ const OwnerVehicleFleet = () => {
               isPrimary: false,
               status: fleetVehicle.status || "pending",
               reason: getVehicleReason(fleetVehicle),
+              documents: fleetVehicle.documents || {},
               rcDocument:
                 fleetVehicle.rc_document ||
                 fleetVehicle.documents?.rc ||
@@ -219,6 +231,43 @@ const OwnerVehicleFleet = () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    getDriverDocumentTemplates("fleet")
+      .then((response) => {
+        if (!active) return;
+        const results = response?.data?.data?.results || response?.data?.results || [];
+        setDocumentTemplates(normalizeDriverDocumentTemplates(results));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // opening a vehicle: the saved number / expiry of every document is put into the form
+  useEffect(() => {
+    if (!editingVehicle) {
+      setDocFiles({});
+      setDocMeta({});
+      return;
+    }
+    setDocFiles({});
+    setDocMeta(
+      Object.fromEntries(
+        documentTemplates.map((template) => [template.id, readSavedDocumentMeta(editingVehicle.documents || {}, template)]),
+      ),
+    );
+  }, [editingVehicle, documentTemplates]);
+
+  const editableTemplates = useMemo(
+    () => documentTemplates.filter((template) => template.is_editable !== false),
+    [documentTemplates],
+  );
+  const documentError = editingVehicle
+    ? validateFleetDocumentInputs(editableTemplates, docFiles, docMeta, editingVehicle.documents || {})
+    : "";
 
   const selectedType = useMemo(() => {
     return vehicleTypes.find(
@@ -333,6 +382,11 @@ const OwnerVehicleFleet = () => {
       setMessageType("error");
       return;
     }
+    if (documentError) {
+      setMessage(documentError);
+      setMessageType("error");
+      return;
+    }
 
     setIsSaving(true);
     setMessage("");
@@ -340,20 +394,10 @@ const OwnerVehicleFleet = () => {
       String(editingVehicle?.status || "").toLowerCase() === "rejected";
 
     try {
-      let rcFileUrl = formData.existingRcUrl || "";
-
-      if (formData.rcFile) {
-        if (!String(formData.rcFile.type || "").startsWith("image/")) {
-          throw new Error("RC upload currently supports image files only.");
-        }
-
-        const dataUrl = await fileToDataUrl(formData.rcFile);
-        const uploadResult = await uploadService.uploadImage(
-          dataUrl,
-          "fleet-vehicle-documents",
-        );
-        rcFileUrl = uploadResult?.url || uploadResult?.secureUrl || "";
-      }
+      // only the papers the admin allows to be edited are sent; the rest of the saved ones stay as they are
+      const savedDocuments = editingVehicle.documents || {};
+      const sentDocuments = await buildFleetDocumentsPayload(editableTemplates, docFiles, docMeta, savedDocuments);
+      const rcFileUrl = "";
 
       const response = await updateOwnerFleetVehicle(editingVehicle._id, {
         vehicleTypeId: formData.vehicleTypeId,
@@ -361,7 +405,7 @@ const OwnerVehicleFleet = () => {
         vehicleModel: formData.vehicleModel,
         vehicleNumber: formData.vehicleNumber,
         vehicleColor: formData.vehicleColor,
-        rcFile: rcFileUrl || undefined,
+        documents: sentDocuments,
       });
       const updated = unwrap(response);
 
@@ -384,10 +428,10 @@ const OwnerVehicleFleet = () => {
                   updated.status === "pending"
                     ? ""
                     : getVehicleReason(updated) || v.reason || "",
+                documents: updated.documents || v.documents || {},
                 rcDocument:
                   updated.rc_document ||
                   updated.documents?.rc ||
-                  rcFileUrl ||
                   v.rcDocument ||
                   "",
                 createdAt: updated.createdAt || v.createdAt,
@@ -447,7 +491,7 @@ const OwnerVehicleFleet = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoaderCircle size={32} className="animate-spin text-indigo-600" />
+        <LoaderCircle size={32} className="animate-spin text-blue-600" />
       </div>
     );
   }
@@ -539,25 +583,25 @@ const OwnerVehicleFleet = () => {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Car Brand *</label>
+                  <label className={labelClass}>Vehicle Brand *</label>
                   <input
                     value={formData.vehicleMake}
                     onChange={(event) =>
                       handleChange("vehicleMake", event.target.value)
                     }
-                    placeholder="Maruti, Hyundai, Tata..."
+                    placeholder="Brand name, e.g. Honda, Hyundai, Bajaj"
                     className={inputClass}
                   />
                 </div>
 
                 <div>
-                  <label className={labelClass}>Car Model *</label>
+                  <label className={labelClass}>Vehicle Model *</label>
                   <input
                     value={formData.vehicleModel}
                     onChange={(event) =>
                       handleChange("vehicleModel", event.target.value)
                     }
-                    placeholder="Swift, WagonR, Nexon..."
+                    placeholder="Model name, e.g. Activa, Swift, RE"
                     className={inputClass}
                   />
                 </div>
@@ -602,9 +646,9 @@ const OwnerVehicleFleet = () => {
 
                 {selectedType ? (
                   <div className="p-6">
-                    <div className="rounded-[24px] border border-orange-100 bg-gradient-to-br from-white via-orange-50/40 to-slate-50 p-4 shadow-sm">
+                    <div className="rounded-[24px] border border-blue-100 bg-gradient-to-br from-white via-blue-50/40 to-slate-50 p-4 shadow-sm">
                       <div className="mb-4 flex items-center gap-4">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm text-orange-500">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm text-blue-500">
                           <ActiveIcon size={30} />
                         </div>
                         <div className="min-w-0">
@@ -661,7 +705,7 @@ const OwnerVehicleFleet = () => {
 
                       <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                          <Users size={16} className="text-orange-500" />
+                          <Users size={16} className="text-blue-500" />
                           Service Notes
                         </div>
                         <div className="space-y-2 text-sm text-slate-600">
@@ -683,7 +727,7 @@ const OwnerVehicleFleet = () => {
 
                     <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
                       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <FileText size={16} className="text-orange-500" />
+                        <FileText size={16} className="text-blue-500" />
                         Edit Summary
                       </div>
                       <div className="space-y-2 text-sm text-slate-600">
@@ -714,13 +758,10 @@ const OwnerVehicleFleet = () => {
                           </span>
                         </p>
                         <p>
-                          RC Document:{" "}
+                          Documents:{" "}
                           <span className="font-semibold text-slate-900">
-                            {formData.rcFile?.name
-                              ? `Replacing with ${formData.rcFile.name}`
-                              : formData.existingRcUrl
-                                ? "Current file attached"
-                                : "No file attached"}
+                            {Object.keys(editingVehicle.documents || {}).length} saved
+                            {Object.keys(docFiles).length ? `, ${Object.keys(docFiles).length} being replaced` : ""}
                           </span>
                         </p>
                       </div>
@@ -729,7 +770,7 @@ const OwnerVehicleFleet = () => {
                 ) : (
                   <div className="p-6">
                     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-6 text-center">
-                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-500 shadow-sm">
                         <Car size={24} />
                       </div>
                       <p className="text-base font-semibold text-slate-800">
@@ -745,92 +786,31 @@ const OwnerVehicleFleet = () => {
 
               <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-lg font-bold text-slate-900">RC Document</h2>
+                  <h2 className="text-lg font-bold text-slate-900">Vehicle Documents</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Keep the vehicle proof up to date by reviewing the current RC file and uploading a replacement when needed.
+                    Review the saved papers and replace or update the ones the admin allows to be edited.
                   </p>
                 </div>
 
-                <div className="space-y-4 p-6">
-                  {formData.existingRcUrl ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
-                        Current RC File
-                      </p>
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-emerald-800">
-                          A document is already attached for this vehicle.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            window.open(
-                              formData.existingRcUrl,
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                          className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
-                        >
-                          View File
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                      No RC file is attached to this vehicle yet.
-                    </div>
-                  )}
-
-                  <div>
-                    <label className={labelClass}>Replace RC Document</label>
-                    <div className="rounded-2xl border border-dashed border-slate-300 p-4">
-                      <label className="relative flex min-h-[180px] cursor-pointer items-center justify-center overflow-hidden rounded-2xl bg-slate-50">
-                        <input
-                          type="file"
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                          onChange={handleRcUpload}
-                          accept="image/*"
-                        />
-                        <div className="flex flex-col items-center gap-3 text-center">
-                          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
-                            <Upload size={20} />
-                          </span>
-                          <span className="text-sm font-semibold text-slate-700">
-                            Upload new RC image
-                          </span>
-                          <span className="text-xs text-slate-400">
-                            JPG, PNG, WEBP
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {formData.rcFile ? (
-                    <div className="flex items-center justify-between rounded-2xl border border-orange-200 bg-orange-50 p-4">
-                      <div>
-                        <p className="text-sm font-semibold text-orange-800">
-                          {formData.rcFile.name}
-                        </p>
-                        <p className="text-xs text-orange-600">
-                          This file will replace the current RC document after save.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            rcFile: null,
-                          }))
-                        }
-                        className="rounded-xl p-2 text-orange-700 transition hover:bg-white hover:text-rose-500"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ) : null}
+                <div className="p-6">
+                  <FleetDocumentFields
+                    lockUneditable
+                    templates={documentTemplates}
+                    files={docFiles}
+                    existing={editingVehicle.documents || {}}
+                    meta={docMeta}
+                    onFile={(key, file) => setDocFiles((prev) => ({ ...prev, [key]: file }))}
+                    onClear={(key) =>
+                      setDocFiles((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      })
+                    }
+                    onMeta={(templateId, field, value) =>
+                      setDocMeta((prev) => ({ ...prev, [templateId]: { ...(prev[templateId] || {}), [field]: value } }))
+                    }
+                  />
                 </div>
               </div>
 
@@ -844,7 +824,7 @@ const OwnerVehicleFleet = () => {
                 <button
                   onClick={handleSave}
                   disabled={!canSave || isSaving}
-                  className="flex-1 rounded-2xl bg-[#ff6b4a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex-1 rounded-2xl bg-[#2563eb] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSaving ? "Saving..." : "Save Changes"}
                 </button>
@@ -867,16 +847,16 @@ const OwnerVehicleFleet = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => navigate(`${routePrefix}/profile`)}
-                className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 flex items-center justify-center hover:shadow-md transition-all flex-shrink-0">
-                <ArrowLeft size={16} className="text-indigo-600" />
+                className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-50 to-blue-50 rounded-xl border border-blue-200 flex items-center justify-center hover:shadow-md transition-all flex-shrink-0">
+                <ArrowLeft size={16} className="text-blue-600" />
               </motion.button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h1 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight">
                     My Vehicles
                   </h1>
-                  <div className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 flex-shrink-0">
-                    <span className="text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                  <div className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 flex-shrink-0">
+                    <span className="text-[10px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider">
                       {vehicles.length}
                     </span>
                   </div>
@@ -891,7 +871,7 @@ const OwnerVehicleFleet = () => {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleAddFleetVehicle}
-                className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all"
+                className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all"
               >
                 <Plus size={16} />
                 Add Vehicle
@@ -931,7 +911,7 @@ const OwnerVehicleFleet = () => {
             <button
               type="button"
               onClick={handleAddFleetVehicle}
-              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:brightness-105"
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:brightness-105"
             >
               <Plus size={16} />
               Add Fleet Vehicle
@@ -971,7 +951,7 @@ const OwnerVehicleFleet = () => {
                   animate={{ opacity: 1, x: 0 }}
                   className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow flex items-start gap-4">
                   {/* Vehicle Icon */}
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg flex items-center justify-center border border-indigo-100 flex-shrink-0">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-blue-50 to-blue-50 rounded-lg flex items-center justify-center border border-blue-100 flex-shrink-0">
                     {vehicle.vehicleImage ? (
                       <img
                         src={vehicle.vehicleImage}
@@ -979,7 +959,7 @@ const OwnerVehicleFleet = () => {
                         className="w-full h-full object-cover rounded-lg"
                       />
                     ) : (
-                      <VehicleIcon size={28} className="text-indigo-400" />
+                      <VehicleIcon size={28} className="text-blue-400" />
                     )}
                   </div>
 
@@ -1068,7 +1048,7 @@ const OwnerVehicleFleet = () => {
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => handleEdit(vehicle)}
-                      className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors">
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
                       <Edit3 size={16} />
                     </motion.button>
                     <motion.button
@@ -1094,7 +1074,7 @@ const OwnerVehicleFleet = () => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setDeleteConfirm(null)}
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+                data-driver-overlay="1" className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
               />
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}

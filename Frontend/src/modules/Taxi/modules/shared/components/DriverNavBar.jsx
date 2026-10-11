@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import useTypingFocus from "../../../shared/hooks/useTypingFocus";
+import useKeyboardOffset from "../../../shared/hooks/useKeyboardOffset";
 import "./driverChrome.css";
 
 /**
@@ -10,14 +10,19 @@ import "./driverChrome.css";
  * never blinks (a pill that is unmounted and mounted again leaves white text on white for a moment).
  */
 const DriverNavBar = ({ items = [] }) => {
-  // Hidden while the keyboard is open so it never covers the field being typed in.
-  const isTyping = useTypingFocus();
-  if (isTyping) return null;
+  // While the keyboard is open the bar rides on top of it (it used to vanish, so a tester could not reach the tabs
+  // or the page's own buttons while a field was focused).
+  const keyboardOffset = useKeyboardOffset();
 
   const activeIndex = items.findIndex((item) => item.active);
 
   const nav = (
-    <nav className="driver-nav" data-count={items.length} aria-label="Main navigation" style={{ fontFamily: "'Outfit', sans-serif" }}>
+    <nav
+      className="driver-nav"
+      data-count={items.length}
+      aria-label="Main navigation"
+      style={{ fontFamily: "'Outfit', sans-serif", ...(keyboardOffset ? { "--driver-nav-bottom": `${keyboardOffset + 8}px` } : {}) }}
+    >
       <div className="driver-nav-bar">
         <div
           className="driver-nav-pill"

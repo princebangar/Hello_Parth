@@ -431,7 +431,7 @@ const VehicleFleet = () => {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsEditing(false)}
-                            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[90]"
+                            data-driver-overlay="1" className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[90]"
                         />
                         <motion.div
                             initial={{ y: '100%' }}

@@ -4,6 +4,8 @@ import {
   AlertCircle,
   ArrowLeft,
   Bike,
+  Bus,
+  Car,
   Calendar,
   CheckCircle2,
   Clock,
@@ -15,8 +17,8 @@ import {
   TrendingUp,
   User,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { getDriverRideHistory, readDriverCache, writeDriverCache } from '../services/registrationService';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getDriverRideHistory, getOwnerBusBookings, readDriverCache, writeDriverCache } from '../services/registrationService';
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -146,9 +148,19 @@ const normalizeRide = (ride) => {
   // A cancelled trip earned nothing (the old fallback showed the full fare).
   const earnings = status === 'Cancelled' ? 0 : getDriverEarnings(ride);
 
+  // An owner reads the history of the whole fleet: which driver drove it, in which vehicle, and what the admin kept.
+  const fleetDriver = ride?.driver && typeof ride.driver === 'object' ? ride.driver : null;
+  const fleetVehicle = fleetDriver
+    ? [[fleetDriver.vehicleMake, fleetDriver.vehicleModel].filter(Boolean).join(' '), fleetDriver.vehicleNumber].filter(Boolean).join(' - ')
+    : '';
+  const commission = Number(ride?.commissionAmount || 0);
+
   return {
     id: ride?.rideId || ride?._id || '',
     type,
+    driverName: fleetDriver?.name || '',
+    driverVehicle: fleetVehicle,
+    commissionLabel: commission > 0 && status !== 'Cancelled' ? formatCurrency(commission) : '',
     title: type === 'parcel' ? 'Delivery job' : 'Ride trip',
     subtitle: `Customer: ${passengerName}`,
     dateLabel: formatDateLabel(timeSource),
@@ -164,8 +176,38 @@ const normalizeRide = (ride) => {
   };
 };
 
+// A bus ticket sold on the owner's bus: shown in the same history with its route, seats and amount.
+const normalizeBusBooking = (booking) => {
+  const route = booking?.routeSnapshot || {};
+  const status = booking?.status === 'cancelled' ? 'Cancelled' : booking?.status === 'confirmed' ? 'Booked' : formatStatus(booking?.status);
+  const paid = ['paid', 'partially_refunded', 'manual_reserved'].includes(String(booking?.payment?.status || '').toLowerCase());
+  const seats = (booking?.activeSeats || []).map((seat) => seat.seatLabel || seat.seatId).filter(Boolean).join(', ');
+  const timeSource = booking?.travelDate ? `${booking.travelDate}T00:00:00` : booking?.createdAt;
+  const amount = status === 'Cancelled' ? 0 : Number(booking?.amount || 0);
+  return {
+    id: `bus-${booking?.id}`,
+    type: 'bus',
+    driverName: '',
+    driverVehicle: [route.busName, route.coachType].filter(Boolean).join(' - '),
+    commissionLabel: '',
+    title: 'Bus trip',
+    subtitle: `Passenger: ${booking?.passenger?.name || booking?.user?.name || 'Passenger'}${seats ? ` - Seats ${seats}` : ''}`,
+    dateLabel: `Travel ${formatShortDate(timeSource)} - ${route.departureTime || ''}`.trim(),
+    shortDate: formatShortDate(timeSource),
+    earnings: amount,
+    earningsLabel: formatCurrency(amount),
+    fareLabel: formatCurrency(booking?.amount || 0),
+    pickup: route.originCity || 'Origin',
+    drop: route.destinationCity || 'Destination',
+    status,
+    paymentMethod: paid ? 'PAID' : 'UNPAID',
+    distanceKm: 0,
+    sortTime: new Date(booking?.createdAt || 0).getTime() || 0,
+  };
+};
+
 const statusBadgeClass = (status) => {
-  if (status === 'Completed' || status === 'Delivered') {
+  if (status === 'Completed' || status === 'Delivered' || status === 'Booked') {
     return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   }
 
@@ -178,7 +220,9 @@ const statusBadgeClass = (status) => {
 
 const RideRequests = () => {
   const navigate = useNavigate();
+  const isOwnerView = useLocation().pathname.startsWith('/taxi/owner');
   const [activeTab, setActiveTab] = useState('all');
+  const [busTrips, setBusTrips] = useState([]);
   // The list from the last visit shows at once; the fresh one replaces it.
   const [rides, setRides] = useState(() => (readDriverCache('history') || []).map(normalizeRide).filter((ride) => ride.id));
   const [loading, setLoading] = useState(() => !readDriverCache('history'));
@@ -202,6 +246,16 @@ const RideRequests = () => {
 
         writeDriverCache('history', results);
         setRides(results.map(normalizeRide).filter((ride) => ride.id));
+
+        if (isOwnerView) {
+          try {
+            const busResponse = await getOwnerBusBookings();
+            const list = busResponse?.data?.data?.bookings || busResponse?.data?.bookings || busResponse?.data?.data?.results || [];
+            if (active) setBusTrips((Array.isArray(list) ? list : []).map(normalizeBusBooking).filter((trip) => trip.id));
+          } catch {
+            if (active) setBusTrips([]);
+          }
+        }
       } catch (loadError) {
         if (!active) {
           return;
@@ -223,9 +277,16 @@ const RideRequests = () => {
     };
   }, []);
 
+  const allTrips = useMemo(
+    () => (isOwnerView && busTrips.length
+      ? [...rides, ...busTrips].sort((a, b) => (b.sortTime || 0) - (a.sortTime || 0))
+      : rides),
+    [busTrips, isOwnerView, rides],
+  );
+
   const filteredHistory = useMemo(
     () => {
-      const byType = activeTab === 'all' ? rides : rides.filter((item) => item.type === activeTab);
+      const byType = activeTab === 'all' ? allTrips : allTrips.filter((item) => item.type === activeTab);
 
       if (statusFilter === 'completed') {
         return byType.filter((item) => ['Completed', 'Delivered'].includes(item.status));
@@ -241,16 +302,16 @@ const RideRequests = () => {
 
       return byType;
     },
-    [activeTab, rides, statusFilter],
+    [activeTab, allTrips, statusFilter],
   );
 
   const categoryHistory = useMemo(
-    () => (activeTab === 'all' ? rides : rides.filter((item) => item.type === activeTab)),
-    [activeTab, rides],
+    () => (activeTab === 'all' ? allTrips : allTrips.filter((item) => item.type === activeTab)),
+    [activeTab, allTrips],
   );
 
   const stats = useMemo(() => {
-    const completedTrips = categoryHistory.filter((item) => ['Completed', 'Delivered'].includes(item.status));
+    const completedTrips = categoryHistory.filter((item) => ['Completed', 'Delivered', 'Booked'].includes(item.status));
     const totalEarnings = completedTrips.reduce((sum, item) => sum + item.earnings, 0);
     const completionRate = categoryHistory.length ? Math.round((completedTrips.length / categoryHistory.length) * 100) : 0;
 
@@ -322,7 +383,7 @@ const RideRequests = () => {
       ) : null}
 
       <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
-        {TABS.map((tab) => (
+        {(isOwnerView ? [...TABS, { id: 'bus', label: 'Bus' }] : TABS).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -397,8 +458,8 @@ const RideRequests = () => {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.type === 'parcel' ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-900'}`}>
-                    {item.type === 'parcel' ? <Package size={18} strokeWidth={2.5} /> : <Bike size={18} strokeWidth={2.5} />}
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.type === 'parcel' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-900'}`}>
+                    {item.type === 'parcel' ? <Package size={18} strokeWidth={2.5} /> : item.type === 'bus' ? <Bus size={18} strokeWidth={2.5} /> : item.driverName ? <Car size={18} strokeWidth={2.5} /> : <Bike size={18} strokeWidth={2.5} />}
                   </div>
                   <div className="space-y-0.5">
                     <h4 className="text-[14px] font-black text-slate-900 uppercase tracking-tight leading-none">{item.title}</h4>
@@ -407,7 +468,7 @@ const RideRequests = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">You earned</p>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{item.type === 'bus' ? 'Ticket amount' : isOwnerView ? 'Driver earned' : 'You earned'}</p>
                   <p className="text-base font-black text-slate-900 leading-none">{item.earningsLabel}</p>
                   <div className="flex items-center gap-1 justify-end mt-1">
                     <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full border ${statusBadgeClass(item.status)}`}>
@@ -416,6 +477,14 @@ const RideRequests = () => {
                   </div>
                 </div>
               </div>
+
+              {item.driverName || item.driverVehicle ? (
+                <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2.5 text-[11px]">
+                  {item.driverName ? <p className="font-black text-slate-900">Driver: {item.driverName}</p> : null}
+                  {item.driverVehicle ? <p className="mt-0.5 font-bold text-slate-600">{item.type === 'bus' ? 'Bus' : 'Vehicle'}: {item.driverVehicle}</p> : null}
+                  {item.commissionLabel ? <p className="mt-0.5 font-bold text-slate-600">Admin commission: {item.commissionLabel}</p> : null}
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3 text-[10px]">
                 <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
@@ -457,7 +526,7 @@ const RideRequests = () => {
                   <span>{item.subtitle}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <span className="flex items-center gap-1"><MapPin size={12} /> {item.distanceKm.toFixed(1)} km</span>
+                  {item.type === 'bus' ? null : <span className="flex items-center gap-1"><MapPin size={12} /> {item.distanceKm.toFixed(1)} km</span>}
                   <span className="flex items-center gap-1">Fare {item.fareLabel}</span>
                 </div>
               </div>
