@@ -6,6 +6,7 @@ import { getSavedLocation, saveLocation, LOCATION_UPDATED_EVENT } from '../servi
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import { markLocationSessionFetched, hasLocationSessionFetched, locationPartsFromGoogleResult } from '@/shared/utils/sharedUserLocation';
 import { watchBestPosition, pickBestGeocodeResult } from '../utils/preciseLocation';
+import LocationOffDialog from './LocationOffDialog';
 import { acquirePersistentMap, hasPersistentMap, releasePersistentMap } from '../utils/persistentMap';
 
 const DEFAULT_CENTER = { lat: 17.385, lon: 78.4867 };
@@ -111,6 +112,8 @@ const LocationMapSection = () => {
     }
   };
   const [isDragging, setIsDragging] = useState(false);
+  // 'denied' | 'off' while the 'turn on location' dialog is open
+  const [locationOffReason, setLocationOffReason] = useState(null);
   const [map, setMap] = useState(null);
   const [tilesLoaded, setTilesLoaded] = useState(() => hasPersistentMap());
   const mapHostRef = useRef(null);
@@ -220,7 +223,10 @@ const LocationMapSection = () => {
 
   const requestLocation = ({ silent = false } = {}) => {
     if (!navigator.geolocation) {
-      if (!silent) setStatus('error');
+      if (!silent) {
+        setStatus('error');
+        setLocationOffReason('off');
+      }
       return;
     }
 
@@ -261,7 +267,10 @@ const LocationMapSection = () => {
       if (error?.code === 1) {
         // Permission denied: do not ask again on every return to this screen.
         if (silent) markLocationSessionFetched();
-        if (!silent) setStatus('denied');
+        if (!silent) {
+          setStatus('denied');
+          setLocationOffReason('denied');
+        }
         return;
       }
       // Fall back to a coarse (network) fix before giving up.
@@ -271,7 +280,10 @@ const LocationMapSection = () => {
           // A silent background refresh failing shouldn't blow away an
           // already-good "ready" state with an error one (and is not retried on every return either).
           if (silent) markLocationSessionFetched();
-          if (!silent) setStatus('error');
+          if (!silent) {
+            setStatus('error');
+            setLocationOffReason('off');
+          }
         },
         { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
       );
@@ -603,6 +615,15 @@ const LocationMapSection = () => {
           </div>
         </div>
       </div>
+      <LocationOffDialog
+        open={Boolean(locationOffReason)}
+        reason={locationOffReason}
+        onClose={() => setLocationOffReason(null)}
+        onRetry={() => {
+          setLocationOffReason(null);
+          requestLocation();
+        }}
+      />
     </motion.section>
   );
 };

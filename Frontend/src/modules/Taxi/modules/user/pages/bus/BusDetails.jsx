@@ -5,6 +5,7 @@ import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2 } from 'luci
 import userBusService from '../../services/busService';
 import { userAuthService } from '../../services/authService';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
+import useKeyboardOffset from '../../../../shared/hooks/useKeyboardOffset';
 import useTypingFocus from '../../../../shared/hooks/useTypingFocus';
 import { formatBusTime } from '../../utils/busTime';
 
@@ -58,6 +59,8 @@ const formatMoney = (value) => Number(value || 0).toLocaleString('en-IN');
 
 const BusDetails = () => {
   const isTyping = useTypingFocus();
+  // the Pay bar rides on top of the keyboard instead of staying hidden behind it
+  const keyboardOffset = useKeyboardOffset();
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
@@ -317,7 +320,7 @@ const BusDetails = () => {
   return (
     // pb-[26rem]: the fixed fare summary at the bottom is ~14rem tall; the last fields must scroll clear of it.
     // While the keyboard is open only the Pay button stays (the summary would cover the field), so the gap shrinks to fit it.
-    <div className={`min-h-screen bg-slate-50 max-w-lg mx-auto font-sans ${isTyping ? 'pb-28' : 'pb-[26rem]'}`}>
+    <div className={`min-h-screen bg-slate-50 max-w-lg mx-auto font-sans ${isTyping || keyboardOffset ? 'pb-28' : 'pb-[26rem]'}`}>
       <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -500,8 +503,8 @@ const BusDetails = () => {
       </div>
 
       {/* While the keyboard is open only the Pay button shows, so it never covers the field being typed in. */}
-      <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 bg-white border-t border-slate-100 z-30 ${isTyping ? 'pb-3 pt-3' : 'pb-8 pt-4'}`}>
-        <div className={`mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm ${isTyping ? 'hidden' : ''}`}>
+      <div style={{ bottom: keyboardOffset }} className={`fixed left-1/2 -translate-x-1/2 w-full max-w-lg px-5 bg-white border-t border-slate-100 z-30 ${isTyping || keyboardOffset ? 'pb-3 pt-3' : 'pb-8 pt-4'}`}>
+        <div className={`mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm ${isTyping || keyboardOffset ? 'hidden' : ''}`}>
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fare Summary</p>

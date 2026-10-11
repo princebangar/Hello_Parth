@@ -598,7 +598,7 @@ const IntercityDetails = () => {
   }, [activeMapField, fromCity, mapSearchInput, showMapPicker, toCity]);
 
   return (
-    <div className="min-h-screen bg-[#FAFBFF] max-w-lg mx-auto font-sans pb-32 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#FAFBFF] max-w-lg mx-auto font-sans pb-72 relative overflow-x-hidden">
       <AnimatePresence>
         {showMapPicker && (
           <motion.div
@@ -887,17 +887,6 @@ const IntercityDetails = () => {
               <MapPinned size={14} /> Map Selection
             </motion.button>
 
-          </div>
-        </div>
-
-        {/* Feature Tip */}
-        <div className="bg-slate-900 rounded-[32px] p-6 text-white flex items-center gap-5 shadow-xl shadow-slate-200">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center shrink-0 border border-white/5">
-            <ShieldCheck size={28} className="text-blue-400" />
-          </div>
-          <div>
-            <h4 className="text-[15px] font-black leading-tight">Doorstep Service</h4>
-            <p className="text-[11px] font-bold text-white/50 mt-1 uppercase tracking-widest leading-relaxed">Exact locations help drivers navigate directly to you.</p>
           </div>
         </div>
       </div>

@@ -105,6 +105,10 @@ const BusList = () => {
   const [selectedCompany, setSelectedCompany] = useState('all');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const sortMenuRef = useRef(null);
+  // a journey can be booked from today up to 90 days ahead (local dates)
+  const dateKey = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  const todayKey = dateKey(new Date());
+  const maxDateKey = dateKey(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000));
 
   useEffect(() => {
     if (!fromCity || !toCity || !date) {
@@ -246,9 +250,22 @@ const BusList = () => {
             </h1>
             <p className="mt-0.5 text-xs font-semibold text-slate-500">{visibleBuses.length || 0} buses</p>
           </div>
-          <div className="rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-right">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">{formatTravelDate(date)}</p>
-          </div>
+          <label className="relative cursor-pointer rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-500">{formatTravelDate(date)}</p>
+            <p className="text-[9px] font-bold text-orange-400">Change date</p>
+            <input
+              type="date"
+              value={date || ''}
+              min={todayKey}
+              max={maxDateKey}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next && next !== date) navigate(location.pathname, { replace: true, state: { ...state, date: next } });
+              }}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label="Change travel date"
+            />
+          </label>
         </div>
       </div>
 
@@ -280,13 +297,16 @@ const BusList = () => {
         {!loading && !error && buses.length > 0 ? (
           <>
             <div className="grid grid-cols-3 gap-3">
-              <div className="overflow-hidden rounded-[22px] bg-[linear-gradient(135deg,#f59e0b_0%,#f97316_100%)] p-4 text-white shadow-[0_10px_24px_rgba(249,115,22,0.18)]">
+              <div
+                style={{ background: 'linear-gradient(135deg,#f59e0b 0%,#f97316 100%)', color: '#ffffff' }}
+                className="overflow-hidden rounded-[22px] p-4 shadow-[0_10px_24px_rgba(249,115,22,0.18)]"
+              >
                 <div className="flex items-center justify-between">
                   <BusFront size={22} />
                   <Sparkles size={16} className="text-white/80" />
                 </div>
-                <p className="mt-6 text-lg font-black leading-none">Bus</p>
-                <p className="mt-1 text-xs font-semibold text-white/80">Best routes today</p>
+                <p className="mt-6 text-lg font-black leading-none" style={{ color: '#ffffff' }}>Bus</p>
+                <p className="mt-1 text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>Best routes today</p>
               </div>
               <div className="rounded-[22px] border border-rose-100 bg-[radial-gradient(circle_at_top_left,#ffe4e6_0%,#fff1f2_45%,#ffffff_100%)] p-4 shadow-sm">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-100 text-rose-500">

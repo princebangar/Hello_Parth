@@ -493,6 +493,21 @@ const SenderReceiverDetails = () => {
   const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
   const [isLocatingPickup, setIsLocatingPickup] = useState(false);
   const [errors, setErrors] = useState({});
+  // "What are you sending?" - the goods types the admin created (Admin > Goods Types). The choice decides which vehicles fit.
+  const [goodsTypes, setGoodsTypes] = useState([]);
+  const [selectedGoodsId, setSelectedGoodsId] = useState(() => String(parcelState.selectedGoodsType?._id || parcelState.selectedGoodsType?.id || ''));
+  useEffect(() => {
+    let active = true;
+    api.get('/users/goods-types')
+      .then((response) => {
+        const payload = response?.data?.data || response?.data || response;
+        const list = Array.isArray(payload?.results) ? payload.results : (Array.isArray(payload) ? payload : []);
+        if (active) setGoodsTypes(list.filter((item) => Number(item.active ?? 1) === 1 && (item.name || item.goods_type_name)));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+  const selectedGoods = goodsTypes.find((item) => String(item._id || item.id) === selectedGoodsId) || null;
   const [recoveredSelectedVehicles, setRecoveredSelectedVehicles] = useState([]);
   const [googleSuggestions, setGoogleSuggestions] = useState([]);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
@@ -809,6 +824,7 @@ const SenderReceiverDetails = () => {
     if (!PHONE_REGEX.test(receiverMobile)) nextErrors.receiverMobile = 'Enter a valid 10-digit number';
     if (!pickup.trim()) nextErrors.pickup = 'Pickup location is required';
     if (!drop.trim()) nextErrors.drop = 'Drop location is required';
+    if (goodsTypes.length > 0 && !selectedGoods) nextErrors.goods = 'Select what you are sending';
     setErrors(nextErrors);
     return {
       isValid: Object.keys(nextErrors).length === 0,
@@ -1159,6 +1175,9 @@ const SenderReceiverDetails = () => {
       if (fromContactSheet) {
         setIsContactSheetOpen(false);
       }
+      if (nextErrors.goods) {
+        document.getElementById('parcel-goods-types')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -1209,11 +1228,11 @@ const SenderReceiverDetails = () => {
         deliveryScope: parcelState.deliveryScope || 'city',
         isOutstation: Boolean(parcelState.isOutstation || parcelState.deliveryScope === 'outstation'),
         parcel: {
-          category: parcelState.parcelType || 'Parcel',
+          category: selectedGoods ? (selectedGoods.name || selectedGoods.goods_type_name) : (parcelState.parcelType || 'Parcel'),
           weight: parcelState.weight || 'Under 5kg',
           description: parcelState.description || '',
           deliveryCategory: parcelState.deliveryCategory || parcelState.parcel?.deliveryCategory || '',
-          goodsTypeFor: parcelState.goodsTypeFor || parcelState.parcel?.goodsTypeFor || '',
+          goodsTypeFor: (selectedGoods && selectedGoods.goods_types_for) || parcelState.goodsTypeFor || parcelState.parcel?.goodsTypeFor || '',
           deliveryScope: parcelState.deliveryScope || 'city',
           isOutstation: Boolean(parcelState.isOutstation || parcelState.deliveryScope === 'outstation'),
           senderName,
@@ -1490,6 +1509,29 @@ const SenderReceiverDetails = () => {
             </div>
           ) : null}
         </div>
+
+        {goodsTypes.length > 0 ? (
+          <section id="parcel-goods-types" className={`mt-6 rounded-[24px] border bg-white p-4 shadow-sm ${errors.goods ? 'border-red-300' : 'border-slate-100'}`}>
+            <h3 className="text-[13px] font-black uppercase tracking-[0.14em] text-slate-500">What are you sending?</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {goodsTypes.map((item) => {
+                const id = String(item._id || item.id);
+                const active = id === selectedGoodsId;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => { setSelectedGoodsId(id); clearError('goods'); }}
+                    className={`rounded-full border px-4 py-2 text-[13px] font-bold transition ${active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700'}`}
+                  >
+                    {item.name || item.goods_type_name}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.goods ? <p className="mt-2 text-[11px] font-black text-red-500">{errors.goods}</p> : null}
+          </section>
+        ) : null}
 
         <PendingCancellationDueNotice className="mt-5" />
 
