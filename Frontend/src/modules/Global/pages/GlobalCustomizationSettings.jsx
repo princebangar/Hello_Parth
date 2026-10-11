@@ -46,6 +46,16 @@ const APP_CONTROL_SWITCHES = [
   },
 ]
 
+// Taxi captain test tool: a fake GPS that drives the captain along the trip route (ride, parcel, intercity). Off by default.
+const SIMULATION_SWITCH = [
+  {
+    key: "trip_simulation_enabled",
+    label: "Trip Simulation (test tool)",
+    description:
+      "Shows a Simulation panel on the Taxi captain trip screen that moves the captain along the route, so a ride or parcel can be tested without driving. Keep it OFF for real drivers.",
+  },
+]
+
 // Food "My Store" (brand stores). On unless switched off here.
 const MY_STORE_SWITCH = [
   {
@@ -114,7 +124,7 @@ export default function GlobalCustomizationSettings() {
         setAppSwitches(next)
         setPageCache(CUSTOMIZATION_CACHE_KEY, { ...(getPageCache(CUSTOMIZATION_CACHE_KEY) || {}), appSwitches: next })
       }
-      if (item.key === "maintenance_mode_enabled" || item.key === "default_location_enabled" || item.key === "my_store_enabled") {
+      if (item.key === "maintenance_mode_enabled" || item.key === "default_location_enabled" || item.key === "my_store_enabled" || item.key === "trip_simulation_enabled") {
         // Keep this browser's copy of the public settings in step so the customer app reacts straight away.
         // The public settings call the all-apps maintenance switch "global_maintenance_enabled".
         const publicKey = item.key === "maintenance_mode_enabled" ? "global_maintenance_enabled" : item.key
@@ -258,7 +268,7 @@ export default function GlobalCustomizationSettings() {
         title: "App Controls",
         note: "Apply to the whole app — Food and Taxi.",
         loadingNow: loading || !appSwitches,
-        tiles: appSwitchTiles(APP_CONTROL_SWITCHES),
+        tiles: appSwitchTiles([...APP_CONTROL_SWITCHES, ...SIMULATION_SWITCH]),
       })}
 
       {renderSection({

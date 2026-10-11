@@ -382,15 +382,15 @@ const BusDetails = () => {
                   onClick={onSelect}
                   aria-pressed={selected}
                   className={`relative rounded-2xl border px-4 py-3 text-left transition-all ${
-                    selected ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-400' : 'border-slate-200 bg-white'
+                    selected ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 bg-white'
                   }`}
                 >
                   {selected ? (
-                    <span className="absolute right-3 top-3 grid h-5 w-5 place-items-center rounded-full bg-amber-400">
+                    <span className="absolute right-3 top-3 grid h-5 w-5 place-items-center rounded-full bg-blue-500 text-white">
                       <Check size={12} strokeWidth={3} />
                     </span>
                   ) : null}
-                  <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${selected ? 'text-amber-600' : 'text-slate-400'}`}>{label}</p>
+                  <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${selected ? 'text-blue-600' : 'text-slate-400'}`}>{label}</p>
                   <p className="mt-1 pr-5 text-sm font-black text-slate-900">{title}</p>
                   <p className="mt-1 text-[11px] font-semibold text-slate-500">{hint}</p>
                 </button>

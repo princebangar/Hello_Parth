@@ -318,7 +318,7 @@ const AddVehicle = () => {
             </div>
             <h1 className="text-2xl font-bold text-slate-900">Add Vehicle</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Match the approved vehicle catalog, enter the fleet details, and upload the RC proof.
+              Match the approved vehicle catalog, enter the fleet details, and upload the vehicle documents.
             </p>
           </div>
         </div>

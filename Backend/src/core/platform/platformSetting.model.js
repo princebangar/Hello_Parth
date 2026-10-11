@@ -29,6 +29,8 @@ const platformSettingSchema = new mongoose.Schema(
       default_location_enabled: { type: Boolean },
       // Food "My Store" (brand stores). No schema default: absent means ON, so nothing changes until the Global admin turns it off.
       my_store_enabled: { type: Boolean },
+      // Taxi captain "route simulation" test tool (fake GPS along the route). Off unless the Global admin turns it on.
+      trip_simulation_enabled: { type: Boolean },
     },
     // Customer payment methods for every customer app. Off here beats any per-app (Food) switch.
     user_payments: {

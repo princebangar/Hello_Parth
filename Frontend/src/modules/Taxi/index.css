@@ -1558,3 +1558,26 @@ body.splash-active {
 .driver-cms-fit pre {
   white-space: pre-wrap;
 }
+
+/* One button colour across the captain, owner, bus and pooling apps: the Taxi blue. Black, purple, indigo, orange and
+   yellow primary buttons made every partner screen look like a different app. (Cards that are only built as a <button>
+   carry data-card and keep their own colour.) */
+.driver-theme button.bg-slate-900:not([data-card]),
+.driver-theme a.bg-slate-900:not([data-card]),
+.driver-theme button.bg-slate-950:not([data-card]),
+.driver-theme button.bg-black:not([data-card]),
+.driver-theme button.bg-indigo-600:not([data-card]),
+.driver-theme button.bg-violet-600:not([data-card]),
+.driver-theme button.bg-purple-600:not([data-card]),
+.driver-theme button.bg-orange-500:not([data-card]),
+.driver-theme button.bg-yellow-400:not([data-card]),
+.driver-theme button[class*="bg-[#FFC400]"]:not([data-card]),
+.driver-theme button[class*="bg-[#ff6b4a]"]:not([data-card]) {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+.driver-theme button.bg-slate-900:not([data-card]) *,
+.driver-theme button.bg-yellow-400:not([data-card]) *,
+.driver-theme button[class*="bg-[#FFC400]"]:not([data-card]) * {
+  color: inherit;
+}

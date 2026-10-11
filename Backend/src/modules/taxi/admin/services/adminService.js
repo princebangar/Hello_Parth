@@ -2846,7 +2846,7 @@ export const getOwnerDashboardData = async () => {
             total: { $sum: 1 },
             completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
             cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
-            scheduled: { $sum: { $cond: [{ $and: [{ $ne: ['$scheduledAt', null] }, { $gt: ['$scheduledAt', new Date()] }, { $nin: ['$status', ['completed', 'cancelled']] }] }, 1, 0] } },
+            scheduled: { $sum: { $cond: [{ $and: [{ $ne: ['$scheduledAt', null] }, { $gt: ['$scheduledAt', new Date()] }, { $not: [{ $in: ['$status', ['completed', 'cancelled']] }] }] }, 1, 0] } },
           },
         },
       ])

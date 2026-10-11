@@ -814,7 +814,7 @@ const SetPrices = ({ mode }) => {
                         <tr key={`unpriced-${vehicle._id || vehicle.id}`} className="bg-amber-50/40">
                           <td className="px-4 py-2 text-xs italic text-slate-400">-</td>
                           <td className="px-4 py-2 text-xs text-slate-600 font-medium">
-                            {vehicle.transport_type === 'both' ? 'All' : (vehicle.transport_type === 'taxi' ? 'Ride Hailing' : (vehicle.transport_type || 'All'))}
+                            {vehicle.transport_type === 'both' ? 'All' : (vehicle.transport_type === 'taxi' ? 'Ride Hailing' : (vehicle.transport_type === 'delivery' ? 'Delivery' : (vehicle.transport_type || 'All')))}
                           </td>
                           <td className="px-4 py-2 text-xs text-slate-800 font-bold capitalize">{String(vehicle.name || '').toLowerCase()}</td>
                           <td className="px-4 py-2"><span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700">Price not set</span></td>

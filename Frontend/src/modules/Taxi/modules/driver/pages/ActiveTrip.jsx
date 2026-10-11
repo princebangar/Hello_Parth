@@ -31,6 +31,7 @@ import bikeIcon from '../../../assets/icons/bike.png';
 import carIcon from '../../../assets/icons/car.png';
 import { getLocalDriverToken } from '../services/registrationService';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
+import useTripSimulationEnabled from '@/shared/hooks/useTripSimulationEnabled';
 
 const MAP_CONTAINER_STYLE = {
     width: '100%',
@@ -1064,6 +1065,7 @@ const ActiveTrip = () => {
     const [driverHeading, setDriverHeading] = useState(null);
     const [routePath, setRoutePath] = useState([]);
     const [routeError, setRouteError] = useState('');
+    const isSimulationAllowed = useTripSimulationEnabled();
     const [isSimulationEnabled, setIsSimulationEnabled] = useState(false);
     const [isSimulationRunning, setIsSimulationRunning] = useState(false);
     const [simulationStep, setSimulationStep] = useState(0);
@@ -2447,8 +2449,8 @@ const ActiveTrip = () => {
                     </div>
                 )}
 
-                {/* Fake-GPS test tool: dev builds only, so real drivers can't simulate a trip. */}
-                {import.meta.env.DEV && (
+                {/* Fake-GPS test tool: dev builds, or when the Global admin turned "Trip Simulation" on (off by default). */}
+                {(import.meta.env.DEV || isSimulationAllowed) && (
                 <div className="absolute top-44 left-4 z-40 w-[190px] rounded-2xl border border-white/80 bg-white/94 px-3 py-3 shadow-lg backdrop-blur-md">
                     <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="min-w-0">
