@@ -289,7 +289,7 @@ const ManageOwners = () => {
                       placeholder="Search name, company, email, phone"
                       value={searchTerm}
                       onChange={(e) => { setSearchTerm(e.target.value); setListPage(1); }}
-                      className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-56 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-72 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
                     />
                   </div>
                 </div>

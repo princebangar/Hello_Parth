@@ -18,6 +18,7 @@ const initialDocumentForm = {
   has_identify_number: '',
   identify_number_key: '',
   verification_type: 'none',
+  document_for: '',
   is_editable: false,
   is_required: false,
   active: true,
@@ -158,6 +159,7 @@ const fromDocumentResponse = (payload = {}) => ({
     payload.has_identify_number === true ? '1' : payload.has_identify_number === false ? '0' : '',
   identify_number_key: payload.identify_number_key || '',
   verification_type: payload.verification_type || 'none',
+  document_for: payload.document_for || '',
   is_editable: normalizeBooleanLike(payload.is_editable, false),
   is_required: normalizeBooleanLike(payload.is_required, false),
   active: normalizeBooleanLike(payload.active, true),
@@ -332,6 +334,7 @@ const DriverDocumentForm = () => {
           identify_number_key:
             documentForm.has_identify_number === '1' ? String(documentForm.identify_number_key || '').trim() : '',
           verification_type: documentForm.verification_type || 'none',
+          document_for: documentForm.document_for || '',
           is_editable: Boolean(documentForm.is_editable),
           is_required: Boolean(documentForm.is_required),
           active: Boolean(documentForm.active),
@@ -642,6 +645,20 @@ const DriverDocumentForm = () => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Document Belongs To</label>
+              <select
+                value={documentForm.document_for}
+                onChange={(event) => handleDocumentChange('document_for', event.target.value)}
+                className={inputClass}
+              >
+                <option value="">Automatic (RC, insurance, permit = vehicle; others = driver)</option>
+                <option value="person">Driver (licence, ID proof...)</option>
+                <option value="vehicle">Vehicle (RC, insurance...)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">An owner adding a fleet driver is asked only for driver papers, and adding a vehicle only for vehicle papers.</p>
             </div>
 
             <div>

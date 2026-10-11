@@ -14,6 +14,7 @@ const FleetNeededDocumentsCreate = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    document_for: '',
     image_type: '',
     has_expiry_date: '',
     has_identify_number: '',
@@ -27,7 +28,7 @@ const FleetNeededDocumentsCreate = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.name || !formData.image_type || formData.has_expiry_date === '' || formData.has_identify_number === '') {
+    if (!formData.name || !formData.document_for || !formData.image_type || formData.has_expiry_date === '' || formData.has_identify_number === '') {
       alert('Please fill all required fields');
       return;
     }
@@ -42,6 +43,8 @@ const FleetNeededDocumentsCreate = () => {
         },
         body: JSON.stringify({
           ...formData,
+          // fleet papers are asked from owners only: person = fleet driver's papers, vehicle = the vehicle's papers
+          account_type: formData.document_for === 'person' ? 'fleet_drivers' : 'both',
           has_expiry_date: formData.has_expiry_date === '1',
           has_identify_number: formData.has_identify_number === '1',
         }),
@@ -103,6 +106,25 @@ const FleetNeededDocumentsCreate = () => {
                   <option value="">Select</option>
                   <option value="front">Front</option>
                   <option value="front_back">Front & Back</option>
+                </select>
+                <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Document Belongs To <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  required
+                  value={formData.document_for}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, document_for: e.target.value }))}
+                  className={`${inputClass} appearance-none pr-10`}
+                >
+                  <option value="">Select</option>
+                  <option value="person">Fleet driver (licence, ID proof...)</option>
+                  <option value="vehicle">Vehicle (RC, insurance...)</option>
                 </select>
                 <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
               </div>

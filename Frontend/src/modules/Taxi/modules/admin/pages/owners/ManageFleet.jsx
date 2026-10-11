@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import FleetDocumentsModal from '../../components/FleetDocumentsModal';
 import { BACKEND_ORIGIN } from '../../../../shared/api/runtimeConfig';
 import useDirty from '../../../../../../shared/hooks/useDirty';
 
@@ -391,17 +392,15 @@ const ManageFleet = () => {
   const showingFrom = totalEntries === 0 ? 0 : (safePage - 1) * itemsPerPage + 1;
   const showingTo = totalEntries === 0 ? 0 : Math.min(showingFrom + fleet.length - 1, totalEntries);
 
+  // All the documents open in one window, each with its own name (browsers block several new tabs at once,
+  // which is why only the first file used to open).
+  const [docsModal, setDocsModal] = useState(null);
   const handleViewDocuments = (item) => {
-    const urls = getFleetDocumentUrls(item?.documents);
-
-    if (urls.length === 0) {
+    if (getFleetDocumentUrls(item?.documents).length === 0) {
       window.alert('No documents uploaded for this fleet vehicle.');
       return;
     }
-
-    urls.forEach((url) => {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    });
+    setDocsModal({ title: `${item?.car_brand || ''} ${item?.car_model || ''} ${item?.license_plate_number ? '- ' + item.license_plate_number : ''}`.trim() + ' documents', documents: item.documents });
   };
 
   /* ── Status badge ── */
@@ -688,7 +687,7 @@ const ManageFleet = () => {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search brand, model, plate, owner..."
-                    className="h-10 w-full rounded border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 md:w-64"
+                    className="h-10 w-full rounded border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-950 outline-none transition-colors focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 md:w-96"
                   />
                 </div>
                 <div className="relative">
@@ -904,6 +903,7 @@ const ManageFleet = () => {
         </div>
         </MotionDiv>
       </AnimatePresence>
+      <FleetDocumentsModal open={Boolean(docsModal)} title={docsModal?.title} documents={docsModal?.documents} onClose={() => setDocsModal(null)} />
     </div>
   );
 };

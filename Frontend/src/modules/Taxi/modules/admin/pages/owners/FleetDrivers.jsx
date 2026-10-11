@@ -10,12 +10,14 @@ import {
   List,
   Loader2,
   Menu,
+  Ban,
   Plus,
   Search,
   Star,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminPageHeader from '../../components/ui/AdminPageHeader';
+import { adminService } from '../../services/adminService';
 
 const BASE = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin`;
 
@@ -52,6 +54,9 @@ const FleetDrivers = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  // 'list' = table, 'grid' = cards (the two buttons at the top left)
+  const [layout, setLayout] = useState('list');
+  const [blockingId, setBlockingId] = useState('');
   const [filters, setFilters] = useState({
     serviceLocation: '',
     transportType: '',
@@ -77,7 +82,8 @@ const FleetDrivers = () => {
         if (response.ok && json.success) {
           const allDrivers = json.data?.results || [];
           const fleetDrivers = allDrivers.filter((driver) => driver.owner_id || driver.fleet_id);
-          setDrivers(fleetDrivers);
+          // blocked drivers live on the Blocked Fleet Drivers page
+          setDrivers(fleetDrivers.filter((driver) => !['blocked', 'inactive', 'disapproved', 'rejected'].includes(String(driver.status || '').toLowerCase())));
         }
       } catch (error) {
         console.error('Failed to fetch fleet drivers:', error);
@@ -92,6 +98,20 @@ const FleetDrivers = () => {
   useEffect(() => {
     setPage(1);
   }, [itemsPerPage]);
+
+  // Blocking stops the driver from working; the driver moves to Blocked Fleet Drivers, where it can be approved again.
+  const handleBlock = async (driver) => {
+    if (!window.confirm(`Block ${getDriverName(driver)}? The driver will not be able to take any ride until you approve again.`)) return;
+    setBlockingId(driver._id);
+    try {
+      await adminService.updateDriverStatus(driver._id, { approve: false, active: false, status: 'blocked' });
+      setDrivers((current) => current.filter((item) => item._id !== driver._id));
+    } catch (error) {
+      alert(error?.response?.data?.message || error?.message || 'Could not block this driver');
+    } finally {
+      setBlockingId('');
+    }
+  };
 
   const filteredDrivers = useMemo(() => {
     return drivers.filter(driver => {
@@ -123,10 +143,20 @@ const FleetDrivers = () => {
         <div className="relative rounded border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-5 px-5 py-8 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
-              <button className="flex h-11 w-14 items-center justify-center rounded bg-teal-500 text-white transition-colors hover:bg-teal-600">
+              <button
+                type="button"
+                onClick={() => setLayout('list')}
+                title="List view"
+                className={`flex h-11 w-14 items-center justify-center rounded transition-colors ${layout === 'list' ? 'bg-teal-500 text-white hover:bg-teal-600' : 'bg-gray-200 text-indigo-950 hover:bg-gray-300'}`}
+              >
                 <List size={17} />
               </button>
-              <button className="flex h-11 w-14 items-center justify-center rounded bg-gray-200 text-indigo-950 transition-colors hover:bg-gray-300">
+              <button
+                type="button"
+                onClick={() => setLayout('grid')}
+                title="Card view"
+                className={`flex h-11 w-14 items-center justify-center rounded transition-colors ${layout === 'grid' ? 'bg-teal-500 text-white hover:bg-teal-600' : 'bg-gray-200 text-indigo-950 hover:bg-gray-300'}`}
+              >
                 <LayoutGrid size={16} />
               </button>
 
@@ -231,6 +261,39 @@ const FleetDrivers = () => {
             </div>
           )}
 
+          {layout === 'grid' ? (
+            <div className="grid gap-4 px-5 pb-6 sm:grid-cols-2 xl:grid-cols-3">
+              {isLoading ? (
+                <p className="col-span-full py-16 text-center text-sm font-semibold text-slate-400">Loading fleet drivers...</p>
+              ) : pagedDrivers.length === 0 ? (
+                <p className="col-span-full py-16 text-center text-xl font-medium text-slate-700">No Data Found</p>
+              ) : (
+                pagedDrivers.map((driver) => (
+                  <div key={driver._id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-bold text-gray-950">{getDriverName(driver)}</p>
+                        <p className="mt-0.5 text-sm text-gray-600">{getMobile(driver)}</p>
+                        <p className="truncate text-xs text-gray-500">{getEmail(driver)}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${isApproved(driver) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {isApproved(driver) ? 'Approved' : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
+                      <span className="capitalize">{getTransportType(driver)}</span>
+                      <span className="inline-flex items-center gap-1 font-semibold text-yellow-500"><Star size={13} fill="currentColor" />{Number(driver.rating || 0).toFixed(1)}</span>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2">
+                      <button type="button" onClick={() => navigate(`/taxi/admin/fleet/drivers/${driver._id}?tab=Documents`)} className="flex-1 rounded bg-yellow-50 px-3 py-2 text-xs font-bold text-yellow-700 hover:bg-yellow-100">Documents</button>
+                      <button type="button" onClick={() => navigate(`/taxi/admin/fleet/drivers/${driver._id}`)} className="flex-1 rounded bg-gray-100 px-3 py-2 text-xs font-bold text-gray-800 hover:bg-gray-200">View</button>
+                      <button type="button" disabled={blockingId === driver._id} onClick={() => handleBlock(driver)} className="flex-1 rounded bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-60">Block</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
           <div className="px-5">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -275,7 +338,12 @@ const FleetDrivers = () => {
                         <td className="px-3 py-4 text-sm text-gray-700">{getMobile(driver)}</td>
                         <td className="px-3 py-4 text-sm capitalize text-gray-700">{getTransportType(driver)}</td>
                         <td className="px-3 py-4">
-                          <button className="text-yellow-500 transition-colors hover:text-yellow-600 bg-yellow-50 p-1.5 rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/taxi/admin/fleet/drivers/${driver._id}?tab=Documents`)}
+                            title="View documents"
+                            className="text-yellow-500 transition-colors hover:text-yellow-600 bg-yellow-50 p-1.5 rounded-lg"
+                          >
                             <FileText size={18} fill="currentColor" strokeWidth={1.5} />
                           </button>
                         </td>
@@ -291,14 +359,25 @@ const FleetDrivers = () => {
                           </span>
                         </td>
                         <td className="px-3 py-4">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/admin/drivers/${driver._id}`)}
-                            className="inline-flex h-8 w-9 items-center justify-center rounded bg-yellow-50 text-yellow-600 transition-colors hover:bg-yellow-100"
-                            title="View driver"
-                          >
-                            <Eye size={16} />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/taxi/admin/fleet/drivers/${driver._id}`)}
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-yellow-50 text-yellow-600 transition-colors hover:bg-yellow-100"
+                              title="View driver"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={blockingId === driver._id}
+                              onClick={() => handleBlock(driver)}
+                              className="inline-flex h-8 w-9 items-center justify-center rounded bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-60"
+                              title="Block driver"
+                            >
+                              <Ban size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -307,6 +386,7 @@ const FleetDrivers = () => {
               </table>
             </div>
           </div>
+          )}
         </div>
 
         <div className="mt-4 flex items-center justify-between pb-6">

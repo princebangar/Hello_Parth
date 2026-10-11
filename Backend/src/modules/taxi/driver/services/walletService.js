@@ -184,8 +184,22 @@ export const serializeDriverWallet = async (driver) => {
 // A fleet driver works on the owner's account, so it is the OWNER's wallet that must meet the minimum balance (the same
 // admin rule "minimum amount to get an order" as for a solo driver). Returns the ids of the given drivers whose owner is
 // below it - they get no ride request and cannot accept.
-// What the admin set as the minimum wallet balance to get an order (shown to owners on their wallet screen).
-export const getMinimumBalanceForOrders = async () => (await resolveWalletRules()).minimumBalanceForOrders;
+// The owner's own rule (Admin > Wallet Settings): "Owner wallet minimum amount to get an order", on only while the
+// owner wallet feature is shown.
+const resolveOwnerWalletRules = async () => {
+  const walletSettings = await getWalletSettings();
+  const configured = Number(walletSettings.owner_wallet_minimum_amount_to_get_an_order);
+  return {
+    minimumBalanceForOrders: Number.isFinite(configured) ? Math.round(configured * 100) / 100 : 0,
+    isEnforced: isEnabledSetting(walletSettings.show_wallet_feature_for_owner, true),
+  };
+};
+
+// Shown to owners on their wallet screen (null = no minimum is asked).
+export const getMinimumBalanceForOrders = async () => {
+  const rules = await resolveOwnerWalletRules();
+  return rules.isEnforced ? rules.minimumBalanceForOrders : null;
+};
 
 export const getDriverIdsBlockedByOwnerWallet = async (driverIds = []) => {
   const ids = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '')).filter(Boolean))];
@@ -194,8 +208,8 @@ export const getDriverIdsBlockedByOwnerWallet = async (driverIds = []) => {
   const fleetDrivers = await Driver.find({ _id: { $in: ids }, owner_id: { $ne: null } }).select('_id owner_id').lean();
   if (!fleetDrivers.length) return new Set();
 
-  const rules = await resolveWalletRules();
-  if (!rules.isWalletEnabled) return new Set(fleetDrivers.map((driver) => String(driver._id)));
+  const rules = await resolveOwnerWalletRules();
+  if (!rules.isEnforced) return new Set();
 
   const owners = await Owner.find({ _id: { $in: [...new Set(fleetDrivers.map((driver) => String(driver.owner_id)))] } })
     .select('_id wallet.balance')

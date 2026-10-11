@@ -25,6 +25,7 @@ const FleetNeededDocuments = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    document_for: '',
     image_type: '',
     has_expiry_date: '',
     has_identify_number: '',
@@ -65,6 +66,7 @@ const FleetNeededDocuments = () => {
   const resetForm = () => {
     setFormData({
       name: '',
+      document_for: '',
       image_type: '',
       has_expiry_date: '',
       has_identify_number: '',
@@ -77,7 +79,7 @@ const FleetNeededDocuments = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.image_type || formData.has_expiry_date === '' || formData.has_identify_number === '') {
+    if (!formData.name || !formData.document_for || !formData.image_type || formData.has_expiry_date === '' || formData.has_identify_number === '') {
         alert("Please fill all required fields");
         return;
     }
@@ -95,6 +97,7 @@ const FleetNeededDocuments = () => {
         },
         body: JSON.stringify({
             ...formData,
+            account_type: formData.document_for === 'person' ? 'fleet_drivers' : 'both',
             has_expiry_date: formData.has_expiry_date === '1' ? true : false,
             has_identify_number: formData.has_identify_number === '1' ? true : false
         })
@@ -134,6 +137,7 @@ const FleetNeededDocuments = () => {
     setEditingId(doc._id);
     const nextFormData = {
       name: doc.name,
+      document_for: doc.document_for || '',
       image_type: doc.image_type,
       has_expiry_date: doc.has_expiry_date ? '1' : '0',
       has_identify_number: doc.has_identify_number ? '1' : '0',
@@ -244,6 +248,7 @@ const FleetNeededDocuments = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-3 py-3 text-sm font-bold text-gray-950">Name</th>
+                        <th className="px-3 py-3 text-sm font-bold text-gray-950">Belongs To</th>
                         <th className="px-3 py-3 text-sm font-bold text-gray-950">Document Type</th>
                         <th className="px-3 py-3 text-sm font-bold text-gray-950">Has Expiry Date</th>
                         <th className="px-3 py-3 text-sm font-bold text-gray-950">Status</th>
@@ -253,7 +258,7 @@ const FleetNeededDocuments = () => {
                     <tbody className="divide-y divide-gray-200">
                       {isLoading ? (
                         <tr>
-                          <td colSpan="5" className="px-3 py-24 text-center">
+                          <td colSpan="6" className="px-3 py-24 text-center">
                             <div className="flex flex-col items-center gap-4 text-slate-400">
                               <Loader2 size={34} className="animate-spin text-teal-500" />
                               <p className="text-sm font-semibold">Loading fleet needed documents...</p>
@@ -262,7 +267,7 @@ const FleetNeededDocuments = () => {
                         </tr>
                       ) : paginatedDocs.length === 0 ? (
                         <tr>
-                          <td colSpan="5" className="border-b border-gray-200 px-3 py-10 text-center">
+                          <td colSpan="6" className="border-b border-gray-200 px-3 py-10 text-center">
                             <div className="flex min-h-[130px] flex-col items-center justify-center text-slate-700">
                               <FileSearch size={92} strokeWidth={1.7} className="mb-2 text-indigo-950" />
                               <p className="text-xl font-medium">No Data Found</p>
@@ -273,6 +278,7 @@ const FleetNeededDocuments = () => {
                         paginatedDocs.map((doc) => (
                           <tr key={doc._id} className="bg-white transition-colors hover:bg-gray-50 border-b border-gray-100">
                             <td className="px-3 py-4 text-sm font-medium text-gray-950">{doc.name || '-'}</td>
+                            <td className="px-3 py-4 text-sm text-gray-700">{doc.document_for === 'vehicle' ? 'Vehicle' : 'Fleet driver'}</td>
                             <td className="px-3 py-4 text-sm capitalize text-gray-700">
                               {(doc.image_type || 'image').replace(/_/g, ' ')}
                             </td>
@@ -376,6 +382,25 @@ const FleetNeededDocuments = () => {
                              <option value="">Select</option>
                              <option value="front">Front</option>
                              <option value="front_back">Front & Back</option>
+                           </select>
+                           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                        </div>
+                     </div>
+
+                     <div>
+                        <label className={labelClass}>
+                           Document Belongs To <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                           <select
+                             required
+                             value={formData.document_for}
+                             onChange={(e) => setFormData({...formData, document_for: e.target.value})}
+                             className={`${inputClass} appearance-none pr-10`}
+                           >
+                             <option value="">Select</option>
+                             <option value="person">Fleet driver (licence, ID proof...)</option>
+                             <option value="vehicle">Vehicle (RC, insurance...)</option>
                            </select>
                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
                         </div>

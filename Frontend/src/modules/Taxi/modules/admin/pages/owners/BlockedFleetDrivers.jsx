@@ -122,7 +122,7 @@ const BlockedFleetDrivers = () => {
       const response = await adminService.getDrivers(1, 100);
       const items = response?.data?.data?.results || response?.data?.results || [];
       setDrivers(
-        items.filter((driver) => isFleetDriver(driver) && getDriverStatus(driver) !== 'approved'),
+        items.filter((driver) => isFleetDriver(driver) && ['blocked', 'inactive', 'disapproved', 'rejected'].includes(getDriverStatus(driver))),
       );
     } catch (error) {
       console.error('Failed to fetch blocked fleet drivers:', error);
@@ -372,7 +372,7 @@ const BlockedFleetDrivers = () => {
                           <td className="px-3 py-4">
                             <button
                               type="button"
-                              onClick={() => navigate(`/admin/drivers/${driverId}?tab=Documents`)}
+                              onClick={() => navigate(`/taxi/admin/fleet/drivers/${driverId}?tab=Documents`, { state: { from: "/taxi/admin/fleet/blocked" } })}
                               className="text-yellow-500 transition-colors hover:text-yellow-600 bg-yellow-50 p-1.5 rounded-lg"
                               title="View documents"
                             >
@@ -416,7 +416,7 @@ const BlockedFleetDrivers = () => {
                           <td className="px-3 py-4">
                             <button
                               type="button"
-                              onClick={() => navigate(`/admin/drivers/${driverId}`)}
+                              onClick={() => navigate(`/taxi/admin/fleet/drivers/${driverId}`, { state: { from: "/taxi/admin/fleet/blocked" } })}
                               className="inline-flex h-8 w-9 items-center justify-center rounded bg-yellow-50 text-yellow-600 transition-colors hover:bg-yellow-100"
                               title="View driver"
                             >
