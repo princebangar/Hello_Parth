@@ -225,7 +225,7 @@ const DriverDeleteAccount = () => {
           <>
             <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowConfirm(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] max-w-lg mx-auto" />
+              data-driver-overlay="1" className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] max-w-lg mx-auto" />
             <MotionDiv initial={{ scale: 0.92, opacity: 0, y: 40 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0, y: 40 }}
               className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[82%] max-w-sm bg-white rounded-[28px] p-7 z-[101] shadow-2xl text-center">
               <div className="w-16 h-16 bg-red-50 rounded-[20px] flex items-center justify-center mx-auto mb-4">

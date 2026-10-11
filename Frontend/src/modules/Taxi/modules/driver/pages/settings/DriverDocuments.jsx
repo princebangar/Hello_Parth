@@ -501,7 +501,7 @@ const DriverDocuments = () => {
 
       <AnimatePresence>
         {selectedDoc ? (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
+          <div data-driver-overlay="1" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-6 rounded-[1.8rem] shadow-2xl space-y-4 max-w-[320px] w-full text-center">
               <div className="flex justify-between items-start">
                 <div className="w-10 h-10 bg-slate-50 text-slate-900 rounded-xl flex items-center justify-center border border-slate-100">
@@ -538,7 +538,7 @@ const DriverDocuments = () => {
 
       <AnimatePresence>
         {expiryModal.isOpen ? (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
+          <div data-driver-overlay="1" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-6 rounded-[1.8rem] shadow-2xl space-y-5 max-w-[360px] w-full">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -590,7 +590,7 @@ const DriverDocuments = () => {
 
       <AnimatePresence>
         {metaModal.isOpen ? (
-          <div className="fixed inset-0 z-[111] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
+          <div data-driver-overlay="1" className="fixed inset-0 z-[111] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-6 rounded-[1.8rem] shadow-2xl space-y-5 max-w-[360px] w-full">
               <div className="flex items-start justify-between gap-4">
                 <div>

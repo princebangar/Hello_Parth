@@ -364,7 +364,7 @@ const SecuritySOS = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowAddSheet(false)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
+              data-driver-overlay="1" className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
             />
             <motion.div
               initial={{ y: '100%' }}
@@ -462,7 +462,7 @@ const SecuritySOS = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setDeleteTarget(null)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
+              data-driver-overlay="1" className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] max-w-lg mx-auto"
             />
             <motion.div
               initial={{ scale: 0.92, opacity: 0, y: 40 }}

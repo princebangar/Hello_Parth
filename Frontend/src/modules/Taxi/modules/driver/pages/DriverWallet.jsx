@@ -1033,7 +1033,7 @@ const DriverWallet = () => {
 
             <AnimatePresence>
                 {showTopUp && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
+                    <div data-driver-overlay="1" className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
                         <Motion.div
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
@@ -1114,7 +1114,7 @@ const DriverWallet = () => {
 
             <AnimatePresence>
                 {showWithdraw && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
+                    <div data-driver-overlay="1" className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 px-3 backdrop-blur-sm">
                         <Motion.div
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}

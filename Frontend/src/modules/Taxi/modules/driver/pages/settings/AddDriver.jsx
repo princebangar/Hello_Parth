@@ -2,25 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, UserPlus, CheckCircle2, ChevronRight, Upload, X, ShieldCheck, Mail, Phone, MapPin, IndianRupee } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { createOwnerFleetDriver, getOwnerFleetDrivers, getOwnerFleetVehicles, getOwnerFleetZones, updateOwnerFleetDriver } from '../../services/registrationService';
-import { uploadService } from '../../../../shared/services/uploadService';
-
-const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Could not read the selected file'));
-    reader.readAsDataURL(file);
-});
-
-const uploadDriverDocument = async (file) => {
-    const uploaded = await uploadService.uploadImage(await readFileAsDataUrl(file), 'driver-documents');
-    const data = uploaded?.data || uploaded || {};
-    return {
-        secureUrl: data.secureUrl || data.url || '',
-        fileName: file.name,
-        mimeType: file.type,
-    };
-};
+import { createOwnerFleetDriver, getDriverDocumentTemplates, getOwnerFleetDrivers, getOwnerFleetVehicles, getOwnerFleetZones, updateOwnerFleetDriver } from '../../services/registrationService';
+import { normalizeDriverDocumentTemplates } from '../../utils/documentTemplates';
+import FleetDocumentFields, { buildFleetDocumentsPayload, validateFleetDocumentInputs } from '../../components/FleetDocumentFields';
 
 const AddDriver = () => {
     const navigate = useNavigate();
@@ -59,13 +43,30 @@ const AddDriver = () => {
         assignedFleetVehicleId: '',
         zoneId: '',
         ...readDraft(),
-        adhaarFile: null,
-        licenseFile: null
+        documents: {},
     }));
+    // The papers to collect come from Admin > Fleet Needed Documents (driver papers); number / expiry per template.
+    const [documentTemplates, setDocumentTemplates] = useState([]);
+    const [templatesLoading, setTemplatesLoading] = useState(true);
+    const [documentMeta, setDocumentMeta] = useState({});
+
+    useEffect(() => {
+        if (isEditMode) return undefined;
+        let active = true;
+        getDriverDocumentTemplates('fleet_driver')
+            .then((response) => {
+                if (!active) return;
+                const results = response?.data?.data?.results || response?.data?.results || [];
+                setDocumentTemplates(normalizeDriverDocumentTemplates(results));
+            })
+            .catch(() => active && setError((current) => current || 'Could not load the document list'))
+            .finally(() => active && setTemplatesLoading(false));
+        return () => { active = false; };
+    }, [isEditMode]);
 
     useEffect(() => {
         if (isEditMode) return;
-        const { adhaarFile, licenseFile, ...textFields } = formData;
+        const { documents: _documents, ...textFields } = formData;
         try {
             window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(textFields));
         } catch {
@@ -177,10 +178,15 @@ const AddDriver = () => {
         };
     }, []);
 
-    const handleFileUpload = (field, e) => {
-        const file = e.target.files[0];
-        if (file) setFormData(p => ({ ...p, [field]: file }));
+    const handleFileUpload = (fieldKey, file) => {
+        if (file) setFormData((p) => ({ ...p, documents: { ...(p.documents || {}), [fieldKey]: file } }));
     };
+    const clearFile = (fieldKey) => setFormData((p) => {
+        const next = { ...(p.documents || {}) };
+        delete next[fieldKey];
+        return { ...p, documents: next };
+    });
+    const documentError = templatesLoading ? 'Loading' : validateFleetDocumentInputs(documentTemplates, formData.documents || {}, documentMeta);
 
     const returnTo = useMemo(
         () =>
@@ -220,11 +226,7 @@ const AddDriver = () => {
             };
 
             if (!isEditMode) {
-                const [aadhaar, license] = await Promise.all([
-                    uploadDriverDocument(formData.adhaarFile),
-                    uploadDriverDocument(formData.licenseFile),
-                ]);
-                payload.documents = { aadhaar_front: aadhaar, dl_front: license };
+                payload.documents = await buildFleetDocumentsPayload(documentTemplates, formData.documents || {}, documentMeta, {}, 'driver-documents');
             }
 
             if (isEditMode) {
@@ -427,46 +429,33 @@ const AddDriver = () => {
                         >
                             <div className="space-y-1.5">
                                 <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">Documents</h1>
-                                <p className="text-[11px] font-bold text-slate-400 opacity-80 uppercase tracking-widest leading-relaxed">Identity and License verification</p>
+                                <p className="text-[11px] font-bold text-slate-400 opacity-80 uppercase tracking-widest leading-relaxed">Documents asked by the admin</p>
                             </div>
 
                             <div className="space-y-5">
                                 {error ? (
                                     <p className="text-[11px] font-bold text-rose-500">{error}</p>
                                 ) : null}
-                                {/* Adhaar Card */}
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Aadhar Card</label>
-                                    <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-6 flex items-center justify-between hover:border-slate-900 transition-colors bg-slate-50/50">
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileUpload('adhaarFile', e)} />
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-300"><Upload size={18} /></div>
-                                            <p className="text-[12px] font-black text-slate-900 uppercase">{formData.adhaarFile ? 'Aadhar Attached' : 'Select File'}</p>
-                                        </div>
-                                        {formData.adhaarFile && <ShieldCheck size={18} className="text-emerald-500" />}
-                                    </div>
-                                </div>
-
-                                {/* Driving License */}
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Driving License</label>
-                                    <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-6 flex items-center justify-between hover:border-slate-900 transition-colors bg-slate-50/50">
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileUpload('licenseFile', e)} />
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-300"><Upload size={18} /></div>
-                                            <p className="text-[12px] font-black text-slate-900 uppercase">{formData.licenseFile ? 'License Attached' : 'Select File'}</p>
-                                        </div>
-                                        {formData.licenseFile && <ShieldCheck size={18} className="text-emerald-500" />}
-                                    </div>
-                                </div>
+                                {templatesLoading ? (
+                                    <p className="text-[11px] font-bold text-slate-400">Loading the document list...</p>
+                                ) : (
+                                    <FleetDocumentFields
+                                        templates={documentTemplates}
+                                        files={formData.documents}
+                                        meta={documentMeta}
+                                        onFile={handleFileUpload}
+                                        onClear={clearFile}
+                                        onMeta={(templateId, field, value) => setDocumentMeta((prev) => ({ ...prev, [templateId]: { ...(prev[templateId] || {}), [field]: value } }))}
+                                    />
+                                )}
                             </div>
 
                             <div className="fixed bottom-0 left-0 right-0 p-5 bg-white border-t border-slate-50">
                                 <button 
                                     onClick={handleSubmit}
-                                    disabled={submitting || !formData.adhaarFile || !formData.licenseFile}
+                                    disabled={submitting || Boolean(documentError)}
                                     className={`w-full h-14 rounded-2xl flex items-center justify-center gap-2 text-[13px] font-black uppercase tracking-widest shadow-lg transition-all ${
-                                        (formData.adhaarFile && formData.licenseFile)
+                                        !documentError
                                         ? 'bg-slate-900 text-white shadow-slate-900/10' 
                                         : 'bg-slate-100 text-slate-300 pointer-events-none'
                                     }`}
