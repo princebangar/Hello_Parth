@@ -9,7 +9,7 @@ import { prefetchPolicyContentWhenIdle, warmPolicyPage, USER_POLICY_ENDPOINTS } 
 import { buildMessagingServiceWorkerUrl } from "@/shared/utils/firebaseServiceWorkerUrl"
 import { requestPhoneFocus, usePhoneFocusRequest } from '@/shared/utils/loginFocus'
 
-const BRAND_RED = "#C8161D"
+const BRAND_RED = "#2563EB"
 
 // The red hero (wordmark, skyline, food & taxi) is drawn by window.__loginHeroHtml in index.html: the same HTML the
 // page paints before this code arrives (#boot-login), so the hand-over from the static screen to this one is invisible.
@@ -601,7 +601,11 @@ export default function UnifiedOTPFastLogin() {
   }, [])
   const cardRef = useRef(null)
   const [lift, setLift] = useState(0)
-  const keyboardRef = useRef({ focused: false, estimate: 0, baseHeight: 0, settleTimer: null })
+  // Android WebView (adjustResize) shrinks the whole page when the keyboard opens, which would squeeze the hero
+  // and push the wordmark up. While a field is focused the page keeps its full height instead (the keyboard just
+  // covers the bottom of it), so only the card slides up - exactly like the browser.
+  const [lockedHeight, setLockedHeight] = useState(null)
+  const keyboardRef = useRef({ focused: false, estimate: 0, baseHeight: 0, settleTimer: null, unlockTimer: null })
 
   const isTouchDevice = () =>
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
@@ -642,6 +646,9 @@ export default function UnifiedOTPFastLogin() {
     if (!kb.focused) {
       kb.baseHeight = window.innerHeight
       kb.estimate = estimateKeyboardHeight()
+      clearTimeout(kb.unlockTimer)
+      const rootH = rootRef.current?.getBoundingClientRect().height
+      if (rootH) setLockedHeight(Math.round(rootH))
     }
     kb.focused = true
     const overlap = measureOverlap()
@@ -653,8 +660,12 @@ export default function UnifiedOTPFastLogin() {
     setTimeout(() => {
       const active = document.activeElement
       if (active?.tagName === "INPUT" && rootRef.current?.contains(active)) return
-      keyboardRef.current.focused = false
+      const kb = keyboardRef.current
+      kb.focused = false
       setLift(0)
+      // Release the height only once the keyboard has finished closing, so the hero does not jump meanwhile.
+      clearTimeout(kb.unlockTimer)
+      kb.unlockTimer = setTimeout(() => setLockedHeight(null), 400)
     }, 120)
   }
 
@@ -673,8 +684,7 @@ export default function UnifiedOTPFastLogin() {
     const onResize = () => {
       if (!kb.focused) return
       // While the keyboard animates, keep the card where the estimate put it.
-      const shrink = kb.baseHeight - window.innerHeight
-      setLift(liftFor(Math.max(measureOverlap(), kb.estimate - shrink)))
+      setLift(liftFor(Math.max(measureOverlap(), kb.estimate)))
       clearTimeout(kb.settleTimer)
       kb.settleTimer = setTimeout(settle, 160)
     }
@@ -684,6 +694,7 @@ export default function UnifiedOTPFastLogin() {
       vv.removeEventListener("resize", onResize)
       vv.removeEventListener("scroll", onResize)
       clearTimeout(kb.settleTimer)
+      clearTimeout(kb.unlockTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -710,7 +721,7 @@ export default function UnifiedOTPFastLogin() {
   // Greyed out until the 10-digit number / code / name is complete.
   const submitLooksDisabled = submitDisabled && !loading
 
-  const inputShell = "w-full h-[56px] rounded-2xl border border-gray-200 bg-white flex items-center px-4 transition-colors focus-within:border-[#C8161D] focus-within:ring-2 focus-within:ring-[#C8161D]/10"
+  const inputShell = "w-full h-[56px] rounded-2xl border border-gray-200 bg-white flex items-center px-4 transition-colors focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-[#2563EB]/10"
   const numberChip = (label) => (
     <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 pl-4 pr-2 py-2">
       <div>
@@ -721,7 +732,7 @@ export default function UnifiedOTPFastLogin() {
         type="button"
         onClick={handleEditNumber}
         aria-label="Edit number"
-        className="w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-red-50 active:scale-95"
+        className="w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-blue-50 active:scale-95"
         style={{ color: BRAND_RED }}
       >
         <Pencil className="w-[18px] h-[18px]" strokeWidth={2.2} />
@@ -734,9 +745,10 @@ export default function UnifiedOTPFastLogin() {
       ref={rootRef}
       onPointerDown={handleRootPointerDown}
       className="fixed inset-0 overflow-hidden overscroll-none bg-[#ECECEE] font-['Inter',system-ui,sans-serif]"
+      style={lockedHeight ? { height: lockedHeight } : undefined}
     >
       <div className="relative mx-auto w-full max-w-[480px] h-full bg-white flex flex-col">
-        {/* ── Red hero (takes whatever height the card leaves) ───────────── */}
+        {/* ── Blue hero (takes whatever height the card leaves) ───────────── */}
         <div className="lg-hero" dangerouslySetInnerHTML={LOGIN_HERO_HTML} />
 
         {/* ── Form card (full width; at rest it continues the white dome, with the keyboard it slides up
@@ -853,7 +865,7 @@ export default function UnifiedOTPFastLogin() {
                           }
                         }
                       }}
-                      className="w-full h-[56px] text-center text-[24px] font-bold bg-white border border-gray-200 focus:border-[#C8161D] focus:ring-2 focus:ring-[#C8161D]/10 rounded-2xl outline-none transition-all text-[#1A1A1A]"
+                      className="w-full h-[56px] text-center text-[24px] font-bold bg-white border border-gray-200 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/10 rounded-2xl outline-none transition-all text-[#1A1A1A]"
                       placeholder="-"
                     />
                   ))}
@@ -885,7 +897,7 @@ export default function UnifiedOTPFastLogin() {
                   type="button"
                   onClick={handleRecoverAccount}
                   disabled={loading}
-                  className="w-full h-[56px] rounded-2xl font-semibold text-[16px] text-white shadow-[0_8px_20px_rgba(200,22,29,0.25)] active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
+                  className="w-full h-[56px] rounded-2xl font-semibold text-[16px] text-white shadow-[0_8px_20px_rgba(37,99,235,0.25)] active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
                   style={{ backgroundColor: BRAND_RED }}
                 >
                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Recover my old account"}
@@ -929,7 +941,7 @@ export default function UnifiedOTPFastLogin() {
                 className={`relative mt-5 w-full h-[56px] rounded-2xl font-semibold text-[17px] flex items-center justify-center transition-all ${
                   submitLooksDisabled
                     ? "bg-[#E5E7EB] text-gray-400 cursor-not-allowed"
-                    : `text-white ${submitDisabled ? "cursor-not-allowed" : "shadow-[0_8px_20px_rgba(200,22,29,0.28)] active:scale-[0.98]"}`
+                    : `text-white ${submitDisabled ? "cursor-not-allowed" : "shadow-[0_8px_20px_rgba(37,99,235,0.28)] active:scale-[0.98]"}`
                 }`}
                 style={submitLooksDisabled ? undefined : { backgroundColor: BRAND_RED }}
               >
