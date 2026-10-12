@@ -426,6 +426,9 @@ export default function UnifiedOTPFastLogin() {
       }
       console.log("[Auth] OTP verify error:", err?.response?.data || err)
       toast.error(msg)
+      // A wrong code: empty the boxes and put the cursor back in the first one (keyboard stays up) to type again.
+      setOtp("")
+      setTimeout(() => document.getElementById("otp-0")?.focus(), 0)
     } finally {
       setLoading(false)
       submitting.current = false
