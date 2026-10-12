@@ -256,7 +256,7 @@
         font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased;
       }
       .lg-page { position: relative; margin: 0 auto; width: 100%; max-width: 480px; height: 100%; background: #fff; display: flex; flex-direction: column; }
-      .lg-hero { position: relative; flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; background: linear-gradient(180deg, #3B7BF2 0%, #2563EB 40%, #1D4ED8 100%); }
+      .lg-hero { position: relative; flex: 1 1 0%; min-height: calc(max(14px, env(safe-area-inset-top)) + 250px); display: flex; flex-direction: column; background: linear-gradient(180deg, #3B7BF2 0%, #2563EB 40%, #1D4ED8 100%); }
       .lg-hero svg, .lg-hero img { display: block; }
       .lg-glow { position: absolute; left: 0; right: 0; bottom: 0; height: 55%; pointer-events: none; background: radial-gradient(70% 70% at 50% 100%, rgba(8,30,110,0.38) 0%, rgba(8,30,110,0) 100%); }
       .lg-skyline { position: absolute; left: 0; right: 0; bottom: 40px; height: 36%; pointer-events: none; }
@@ -264,9 +264,9 @@
       .lg-cloud { position: absolute; height: auto; pointer-events: none; }
       .lg-cloud-1 { left: 7%; top: 40%; width: 48px; }
       .lg-cloud-2 { right: 24%; top: 46%; width: 40px; }
-      .lg-word { position: relative; z-index: 10; flex-shrink: 0; padding-top: calc(max(14px, env(safe-area-inset-top)) + 64px); display: flex; flex-direction: column; align-items: center; color: #fff; -webkit-user-select: none; user-select: none; }
+      .lg-word { position: relative; z-index: 10; flex-shrink: 0; padding-top: calc(max(14px, env(safe-area-inset-top)) + clamp(6px, 4.5vh, 44px)); display: flex; flex-direction: column; align-items: center; color: #fff; -webkit-user-select: none; user-select: none; }
       .lg-word-in { position: relative; }
-      .lg-title { margin: 0; font-family: 'Pacifico', system-ui, sans-serif; font-weight: 400; font-size: 48px; line-height: 1.15; letter-spacing: -0.025em; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15)); }
+      .lg-title { margin: 0; font-family: 'Pacifico', system-ui, sans-serif; font-weight: 400; font-size: clamp(38px, 5.8vh, 48px); line-height: 1.15; letter-spacing: -0.025em; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15)); }
       .lg-marks { position: absolute; right: -20px; top: -4px; width: 24px; height: auto; }
       .lg-tag { margin: 4px 0 0; display: flex; align-items: center; gap: 12px; font-size: 21px; font-weight: 600; letter-spacing: 0.025em; }
       .lg-dot { width: 8px; height: 8px; border-radius: 9999px; background: #93C5FD; }
@@ -275,7 +275,7 @@
       .lg-art-box { position: absolute; bottom: 0; left: 50%; transform: translate(-50%, 8%); aspect-ratio: 1000 / 412; height: min(100%, 200px, calc(min(94vw, 440px) * 0.412)); pointer-events: none; -webkit-user-select: none; user-select: none; }
       .lg-pin { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 172.8%; }
       .lg-art-img { position: relative; width: 100%; height: 100%; max-width: none; }
-      .lg-card { position: relative; z-index: 30; flex-shrink: 0; width: 100%; box-sizing: border-box; background: #fff; padding: 8px 24px calc(env(safe-area-inset-bottom) + 88px); }
+      .lg-card { position: relative; z-index: 30; flex-shrink: 0; width: 100%; box-sizing: border-box; background: #fff; padding: 8px 24px calc(env(safe-area-inset-bottom) + clamp(20px, 6vh, 64px)); }
       .lg-h2 { margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #1A1A1A; letter-spacing: -0.025em; }
       .lg-sub { margin: 8px 0 0; font-size: 16px; line-height: 1.375; color: #6B7280; }
       .lg-form { margin-top: 20px; display: flex; flex-direction: column; }
@@ -296,8 +296,8 @@
       .lg-links { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; }
       .lg-links i { width: 4px; height: 4px; border-radius: 9999px; background: #9CA3AF; }
       @media (max-height: 700px) {
-        .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 40px); }
-        .lg-title { font-size: 38px; }
+        .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
+        .lg-title { font-size: 36px; }
         .lg-tag { font-size: 18px; }
         .lg-dome { height: 66px; }
         .lg-card { padding-top: 4px; padding-bottom: calc(env(safe-area-inset-bottom) + 22px); }

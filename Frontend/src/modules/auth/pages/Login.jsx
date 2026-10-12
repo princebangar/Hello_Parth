@@ -755,7 +755,7 @@ export default function UnifiedOTPFastLogin() {
             over the hero as a rounded sheet) ── */}
         <div
           ref={cardRef}
-          className={`relative z-30 shrink-0 w-full bg-white px-6 pt-2 [@media(max-height:700px)]:pt-1 pb-[calc(env(safe-area-inset-bottom)+88px)] [@media(max-height:700px)]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
+          className={`relative z-30 shrink-0 w-full bg-white px-6 pt-2 [@media(max-height:700px)]:pt-1 pb-[calc(env(safe-area-inset-bottom)+clamp(20px,6vh,64px))] [@media(max-height:700px)]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
           style={{ transform: `translateY(-${lift}px)`, transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
         >
           <h2 className="text-[26px] [@media(max-height:700px)]:text-[23px] leading-tight font-extrabold text-[#1A1A1A] tracking-tight">
