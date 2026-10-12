@@ -269,7 +269,6 @@ export default function UnifiedOTPFastLogin() {
       setOtp("")
       goToStep(2)
       setResendTimer(RESEND_COOLDOWN_SECONDS)
-      toast.success("OTP sent! Check your phone.", { duration: 3000 })
     } catch (err) {
       console.log("[Auth] OTP send error:", err?.response?.data || err)
       const msg = err?.response?.data?.message || err?.message || "Failed to send OTP."
@@ -296,7 +295,6 @@ export default function UnifiedOTPFastLogin() {
       setOtpSent(true)
       setResendTimer(RESEND_COOLDOWN_SECONDS)
       document.getElementById("otp-0")?.focus()
-      toast.success("OTP resent successfully.", { duration: 3000 })
     } catch (err) {
       console.log("[Auth] OTP resend error:", err?.response?.data || err)
       const msg = err?.response?.data?.message || err?.message || "Failed to resend OTP."
@@ -423,7 +421,7 @@ export default function UnifiedOTPFastLogin() {
         if (/deactivat(ed|e)/i.test(String(msg))) {
           msg = "Your account is deactivated. Please contact support."
         } else {
-          msg = "Invalid or expired code, or account not active."
+          msg = "Invalid OTP"
         }
       }
       console.log("[Auth] OTP verify error:", err?.response?.data || err)
@@ -619,6 +617,20 @@ export default function UnifiedOTPFastLogin() {
 
   // Lift just enough for the field and its Continue / Verify button to sit right above a keyboard of
   // `keyboardPx` - not the whole keyboard height - and never past the top safe area.
+  // Every step (number, OTP, name ...) lifts to the SAME card position on screen: the first lift on this screen decides
+  // where the card's top edge sits while the keyboard is up (targetTopRef), and every later open - any step, any number
+  // of times, keyboard closed with Back or not - goes to exactly that position.
+  const targetTopRef = useRef(null)
+  const liftToTarget = (keyboardPx) => {
+    const card = cardRef.current
+    if (!card) return 0
+    if (targetTopRef.current == null) {
+      const first = liftFor(keyboardPx)
+      if (first > 0) targetTopRef.current = card.offsetTop - first
+      return first
+    }
+    return Math.max(0, Math.min(card.offsetTop - targetTopRef.current, card.offsetTop - 16))
+  }
   const liftFor = (keyboardPx) => {
     const card = cardRef.current
     const root = rootRef.current
@@ -669,7 +681,7 @@ export default function UnifiedOTPFastLogin() {
     kb.focused = true
     // The card lifts once, by the estimate, and then stays exactly there for as long as the keyboard is up (moving
     // between OTP boxes keeps it too) - the keyboard's real height is never used to nudge it afterwards.
-    setLift((cur) => (alreadyUp && cur > 0 ? cur : liftFor(kb.estimate)))
+    setLift((cur) => (alreadyUp && cur > 0 ? cur : liftToTarget(kb.estimate)))
   }
 
   const handleFieldBlur = () => {
@@ -696,12 +708,12 @@ export default function UnifiedOTPFastLogin() {
     const keyboardUp = () => measureOverlap() > 100 || kb.baseHeight - window.innerHeight > 100
     const settle = () => {
       if (!kb.focused) return
-      if (keyboardUp()) setLift((cur) => (cur > 0 ? cur : liftFor(kb.estimate)))
+      if (keyboardUp()) setLift((cur) => (cur > 0 ? cur : liftToTarget(kb.estimate)))
       else setLift(0) // keyboard closed (or none: hardware keyboard / desktop touch)
     }
     const onResize = () => {
       if (!kb.focused) return
-      if (keyboardUp()) setLift((cur) => (cur > 0 ? cur : liftFor(kb.estimate)))
+      if (keyboardUp()) setLift((cur) => (cur > 0 ? cur : liftToTarget(kb.estimate)))
       clearTimeout(kb.settleTimer)
       kb.settleTimer = setTimeout(settle, 160)
     }
@@ -773,7 +785,7 @@ export default function UnifiedOTPFastLogin() {
             over the hero as a rounded sheet) ── */}
         <div
           ref={cardRef}
-          className={`relative z-30 shrink-0 w-full bg-white px-6 pt-2 [.lg-short_&]:pt-1 pb-[calc(env(safe-area-inset-bottom)+clamp(20px,calc(var(--lg-vh,1vh)*6),64px))] [.lg-short_&]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
+          className={`relative z-30 shrink-0 w-full bg-white after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-[60vh] after:bg-white px-6 pt-2 [.lg-short_&]:pt-1 pb-[calc(env(safe-area-inset-bottom)+clamp(20px,calc(var(--lg-vh,1vh)*6),64px))] [.lg-short_&]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
           style={{ transform: `translateY(-${lift}px)`, transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
         >
           <h2 className="text-[26px] [.lg-short_&]:text-[23px] leading-tight font-extrabold text-[#1A1A1A] tracking-tight">
