@@ -642,6 +642,18 @@ export default function UnifiedOTPFastLogin() {
     return Math.max(0, root.getBoundingClientRect().bottom - (vv.offsetTop + vv.height))
   }
 
+  // Focusing a field makes the browser scroll the nearest overflow container to bring it into view - also an
+  // overflow:hidden one - and that offset stays after the keyboard closes, so the next lift stacked on top of it
+  // (screen pushed up, hero gone). This screen never scrolls: keep every container at 0.
+  const keepUnscrolled = () => {
+    const root = rootRef.current
+    if (!root) return
+    if (root.scrollTop) root.scrollTop = 0
+    if (root.scrollLeft) root.scrollLeft = 0
+    const page = root.firstElementChild
+    if (page?.scrollTop) page.scrollTop = 0
+  }
+
   const handleFieldFocus = (e) => {
     if (e.target?.tagName !== "INPUT" || !isTouchDevice()) return
     const kb = keyboardRef.current
@@ -652,6 +664,7 @@ export default function UnifiedOTPFastLogin() {
       const rootH = rootRef.current?.getBoundingClientRect().height
       if (rootH) setLockedHeight(Math.round(rootH))
     }
+    keepUnscrolled()
     const alreadyUp = kb.focused
     kb.focused = true
     // The card lifts once, by the estimate, and then stays exactly there for as long as the keyboard is up (moving
@@ -665,6 +678,7 @@ export default function UnifiedOTPFastLogin() {
       if (active?.tagName === "INPUT" && rootRef.current?.contains(active)) return
       const kb = keyboardRef.current
       kb.focused = false
+      keepUnscrolled()
       setLift(0)
       // Release the height only once the keyboard has finished closing, so the hero does not jump meanwhile.
       clearTimeout(kb.unlockTimer)
@@ -747,7 +761,8 @@ export default function UnifiedOTPFastLogin() {
     <div
       ref={rootRef}
       onPointerDown={handleRootPointerDown}
-      className="fixed inset-0 overflow-hidden overscroll-none bg-[#ECECEE] font-['Inter',system-ui,sans-serif]"
+      onScroll={keepUnscrolled}
+      className="fixed inset-0 overflow-hidden [overflow:clip] overscroll-none bg-[#ECECEE] font-['Inter',system-ui,sans-serif]"
       style={lockedHeight ? { height: lockedHeight } : undefined}
     >
       <div className="relative mx-auto w-full max-w-[480px] h-full bg-white flex flex-col">
