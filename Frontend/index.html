@@ -21,6 +21,22 @@
       @font-face { font-family: 'Pacifico'; src: url('/auth_assets/pacifico-hello-parth.woff2') format('woff2'); font-display: block; }
     </style>
     <script>
+      // 1% of the screen height, frozen while a field is focused: the on-screen keyboard shrinks the WebView, and the login
+      // hero (gaps / title size) must not re-layout when it opens.
+      (function () {
+        var d = document.documentElement;
+        function set() {
+          var a = document.activeElement;
+          if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
+          d.style.setProperty('--lg-vh', (window.innerHeight * 0.01) + 'px');
+          d.classList.toggle('lg-short', window.innerHeight <= 700);
+        }
+        set();
+        window.addEventListener('resize', set);
+        window.addEventListener('orientationchange', set);
+      })();
+    </script>
+    <script>
       (function() {
         try {
           // Only the Food/Taxi consumer app has a real dark mode toggle. Admin, login and the
@@ -264,9 +280,9 @@
       .lg-cloud { position: absolute; height: auto; pointer-events: none; }
       .lg-cloud-1 { left: 7%; top: 40%; width: 48px; }
       .lg-cloud-2 { right: 24%; top: 46%; width: 40px; }
-      .lg-word { position: relative; z-index: 10; flex-shrink: 0; padding-top: calc(max(14px, env(safe-area-inset-top)) + clamp(6px, 4.5vh, 44px)); display: flex; flex-direction: column; align-items: center; color: #fff; -webkit-user-select: none; user-select: none; }
+      .lg-word { position: relative; z-index: 10; flex-shrink: 0; padding-top: calc(max(14px, env(safe-area-inset-top)) + clamp(6px, calc(var(--lg-vh, 1vh) * 4.5), 44px)); display: flex; flex-direction: column; align-items: center; color: #fff; -webkit-user-select: none; user-select: none; }
       .lg-word-in { position: relative; }
-      .lg-title { margin: 0; font-family: 'Pacifico', system-ui, sans-serif; font-weight: 400; font-size: clamp(38px, 5.8vh, 48px); line-height: 1.15; letter-spacing: -0.025em; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15)); }
+      .lg-title { margin: 0; font-family: 'Pacifico', system-ui, sans-serif; font-weight: 400; font-size: clamp(38px, calc(var(--lg-vh, 1vh) * 5.8), 48px); line-height: 1.15; letter-spacing: -0.025em; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15)); }
       .lg-marks { position: absolute; right: -20px; top: -4px; width: 24px; height: auto; }
       .lg-tag { margin: 4px 0 0; display: flex; align-items: center; gap: 12px; font-size: 21px; font-weight: 600; letter-spacing: 0.025em; }
       .lg-dot { width: 8px; height: 8px; border-radius: 9999px; background: #93C5FD; }
@@ -275,7 +291,7 @@
       .lg-art-box { position: absolute; bottom: 0; left: 50%; transform: translate(-50%, 8%); aspect-ratio: 1000 / 412; height: min(100%, 200px, calc(min(94vw, 440px) * 0.412)); pointer-events: none; -webkit-user-select: none; user-select: none; }
       .lg-pin { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 172.8%; }
       .lg-art-img { position: relative; width: 100%; height: 100%; max-width: none; }
-      .lg-card { position: relative; z-index: 30; flex-shrink: 0; width: 100%; box-sizing: border-box; background: #fff; padding: 8px 24px calc(env(safe-area-inset-bottom) + clamp(20px, 6vh, 64px)); }
+      .lg-card { position: relative; z-index: 30; flex-shrink: 0; width: 100%; box-sizing: border-box; background: #fff; padding: 8px 24px calc(env(safe-area-inset-bottom) + clamp(20px, calc(var(--lg-vh, 1vh) * 6), 64px)); }
       .lg-h2 { margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #1A1A1A; letter-spacing: -0.025em; }
       .lg-sub { margin: 8px 0 0; font-size: 16px; line-height: 1.375; color: #6B7280; }
       .lg-form { margin-top: 20px; display: flex; flex-direction: column; }
@@ -295,17 +311,15 @@
       .lg-agree { margin: 20px 0 0; text-align: center; font-size: 13px; line-height: 1.625; color: #6B7280; }
       .lg-links { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; }
       .lg-links i { width: 4px; height: 4px; border-radius: 9999px; background: #9CA3AF; }
-      @media (max-height: 700px) {
-        .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
-        .lg-title { font-size: 36px; }
-        .lg-tag { font-size: 18px; }
-        .lg-dome { height: 66px; }
-        .lg-card { padding-top: 4px; padding-bottom: calc(env(safe-area-inset-bottom) + 22px); }
-        .lg-h2 { font-size: 23px; }
-        .lg-form { margin-top: 16px; }
-        .lg-or { margin: 12px 0; }
-        .lg-agree { margin-top: 12px; }
-      }
+              html.lg-short .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
+        html.lg-short .lg-title { font-size: 36px; }
+        html.lg-short .lg-tag { font-size: 18px; }
+        html.lg-short .lg-dome { height: 66px; }
+        html.lg-short .lg-card { padding-top: 4px; padding-bottom: calc(env(safe-area-inset-bottom) + 22px); }
+        html.lg-short .lg-h2 { font-size: 23px; }
+        html.lg-short .lg-form { margin-top: 16px; }
+        html.lg-short .lg-or { margin: 12px 0; }
+        html.lg-short .lg-agree { margin-top: 12px; }
 
       /* Terms / Privacy / Support, and a refresh while Under Maintenance is on: the same loader the React screen shows
          (shared/components/PolicyPageLoader.jsx) instead of a blank page. */

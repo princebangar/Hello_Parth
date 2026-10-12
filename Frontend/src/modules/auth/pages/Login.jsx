@@ -755,10 +755,10 @@ export default function UnifiedOTPFastLogin() {
             over the hero as a rounded sheet) ── */}
         <div
           ref={cardRef}
-          className={`relative z-30 shrink-0 w-full bg-white px-6 pt-2 [@media(max-height:700px)]:pt-1 pb-[calc(env(safe-area-inset-bottom)+clamp(20px,6vh,64px))] [@media(max-height:700px)]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
+          className={`relative z-30 shrink-0 w-full bg-white px-6 pt-2 [.lg-short_&]:pt-1 pb-[calc(env(safe-area-inset-bottom)+clamp(20px,calc(var(--lg-vh,1vh)*6),64px))] [.lg-short_&]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
           style={{ transform: `translateY(-${lift}px)`, transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
         >
-          <h2 className="text-[26px] [@media(max-height:700px)]:text-[23px] leading-tight font-extrabold text-[#1A1A1A] tracking-tight">
+          <h2 className="text-[26px] [.lg-short_&]:text-[23px] leading-tight font-extrabold text-[#1A1A1A] tracking-tight">
             {step === 5
               ? "Start fresh"
               : step === 4
@@ -795,7 +795,7 @@ export default function UnifiedOTPFastLogin() {
                       ? (e) => e.preventDefault()
                       : handleCompleteProfile
             }
-            className="mt-5 [@media(max-height:700px)]:mt-4 w-full flex flex-col"
+            className="mt-5 [.lg-short_&]:mt-4 w-full flex flex-col"
           >
             {step === 1 ? (
               <div className={inputShell}>
@@ -960,7 +960,7 @@ export default function UnifiedOTPFastLogin() {
 
             {step === 1 && (
               <>
-                <div className="my-4 [@media(max-height:700px)]:my-3 flex items-center gap-4 px-6">
+                <div className="my-4 [.lg-short_&]:my-3 flex items-center gap-4 px-6">
                   <div className="flex-1 h-px bg-gray-200" />
                   <span className="text-[15px] text-gray-500">or</span>
                   <div className="flex-1 h-px bg-gray-200" />
@@ -976,7 +976,7 @@ export default function UnifiedOTPFastLogin() {
                   Continue as Guest
                 </button>
 
-                <p className="mt-5 [@media(max-height:700px)]:mt-3 text-center text-[13px] text-gray-500 leading-relaxed">
+                <p className="mt-5 [.lg-short_&]:mt-3 text-center text-[13px] text-gray-500 leading-relaxed">
                   By continuing, you agree to our
                 </p>
                 <div className="mt-1.5 flex items-center justify-center gap-2.5 text-[12px] font-bold uppercase tracking-[0.08em] text-[#6B7280]">
