@@ -25,15 +25,19 @@
       // hero (gaps / title size) must not re-layout when it opens.
       (function () {
         var d = document.documentElement;
-        function set() {
+        var h = 0, w = 0;
+        function set(force) {
           var a = document.activeElement;
-          if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
-          d.style.setProperty('--lg-vh', (window.innerHeight * 0.01) + 'px');
-          d.classList.toggle('lg-short', window.innerHeight <= 700);
+          if (!force && a && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
+          // Only ever taller (or after a rotation): a shrunk height is the keyboard, also while it is closing.
+          if (!force && window.innerWidth === w && window.innerHeight <= h) return;
+          h = window.innerHeight; w = window.innerWidth;
+          d.style.setProperty('--lg-vh', (h * 0.01) + 'px');
+          d.classList.toggle('lg-short', h <= 700);
         }
-        set();
-        window.addEventListener('resize', set);
-        window.addEventListener('orientationchange', set);
+        set(true);
+        window.addEventListener('resize', function () { set(false); });
+        window.addEventListener('orientationchange', function () { setTimeout(function () { set(true); }, 200); });
       })();
     </script>
     <script>

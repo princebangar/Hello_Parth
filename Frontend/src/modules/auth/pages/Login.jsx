@@ -614,7 +614,7 @@ export default function UnifiedOTPFastLogin() {
   // may only lift further (if the button would still be hidden), never lower the card, so nothing moves back down.
   const estimateKeyboardHeight = () => {
     const screenH = window.screen?.height || window.innerHeight
-    return Math.round(Math.min(360, Math.max(240, screenH * 0.38)))
+    return Math.round(Math.min(380, Math.max(250, screenH * 0.41)))
   }
 
   // Lift just enough for the field and its Continue / Verify button to sit right above a keyboard of
@@ -652,10 +652,11 @@ export default function UnifiedOTPFastLogin() {
       const rootH = rootRef.current?.getBoundingClientRect().height
       if (rootH) setLockedHeight(Math.round(rootH))
     }
+    const alreadyUp = kb.focused
     kb.focused = true
-    const overlap = measureOverlap()
-    // Keyboard already up (moving between OTP boxes) -> keep the real value, else lift instantly by the estimate.
-    setLift(liftFor(overlap > 100 ? overlap : kb.estimate))
+    // The card lifts once, by the estimate, and then stays exactly there for as long as the keyboard is up (moving
+    // between OTP boxes keeps it too) - the keyboard's real height is never used to nudge it afterwards.
+    setLift((cur) => (alreadyUp && cur > 0 ? cur : liftFor(kb.estimate)))
   }
 
   const handleFieldBlur = () => {
@@ -679,14 +680,14 @@ export default function UnifiedOTPFastLogin() {
       if (!kb.focused) return
       const shrink = kb.baseHeight - window.innerHeight // adjustResize: layout already moved up by this much
       const overlap = measureOverlap()
-      if (overlap > 100) setLift((cur) => Math.max(cur, liftFor(overlap)))
-      else if (shrink > 100) setLift((cur) => Math.max(cur, liftFor(0)))
+      // Only a button still hidden under the keyboard (by more than a few px) lifts the card further; never lower.
+      if (overlap > 100) setLift((cur) => { const need = liftFor(overlap); return need > cur + 8 ? need : cur })
+      else if (shrink > 100) setLift((cur) => { const need = liftFor(0); return need > cur + 8 ? need : cur })
       else setLift(0) // no on-screen keyboard (hardware keyboard / desktop touch)
     }
     const onResize = () => {
       if (!kb.focused) return
       // While the keyboard animates, keep the card where the estimate put it.
-      setLift((cur) => Math.max(cur, liftFor(Math.max(measureOverlap(), kb.estimate))))
       clearTimeout(kb.settleTimer)
       kb.settleTimer = setTimeout(settle, 160)
     }
