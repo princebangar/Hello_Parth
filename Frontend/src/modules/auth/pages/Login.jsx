@@ -690,18 +690,18 @@ export default function UnifiedOTPFastLogin() {
     const vv = typeof window !== "undefined" ? window.visualViewport : null
     if (!vv) return
     const kb = keyboardRef.current
+    // One rule for every open: the card sits at the estimated lift while the keyboard is up, whether the keyboard
+    // came with a fresh focus or by tapping a field that never lost focus (keyboard closed with Back, then tapped
+    // again - no focus event then). The keyboard's real height is never used to size the lift.
+    const keyboardUp = () => measureOverlap() > 100 || kb.baseHeight - window.innerHeight > 100
     const settle = () => {
       if (!kb.focused) return
-      const shrink = kb.baseHeight - window.innerHeight // adjustResize: layout already moved up by this much
-      const overlap = measureOverlap()
-      // Only a button still hidden under the keyboard (by more than a few px) lifts the card further; never lower.
-      if (overlap > 100) setLift((cur) => { const need = liftFor(overlap); return need > cur + 8 ? need : cur })
-      else if (shrink > 100) setLift((cur) => { const need = liftFor(0); return need > cur + 8 ? need : cur })
-      else setLift(0) // no on-screen keyboard (hardware keyboard / desktop touch)
+      if (keyboardUp()) setLift((cur) => (cur > 0 ? cur : liftFor(kb.estimate)))
+      else setLift(0) // keyboard closed (or none: hardware keyboard / desktop touch)
     }
     const onResize = () => {
       if (!kb.focused) return
-      // While the keyboard animates, keep the card where the estimate put it.
+      if (keyboardUp()) setLift((cur) => (cur > 0 ? cur : liftFor(kb.estimate)))
       clearTimeout(kb.settleTimer)
       kb.settleTimer = setTimeout(settle, 160)
     }
