@@ -597,7 +597,36 @@ export default function UnifiedOTPFastLogin() {
   useLayoutEffect(() => {
     document.getElementById("boot-login")?.remove()
   }, [])
+  // Below the white card the page's own cream background shows on phones whose browser leaves a strip under the
+  // fixed layer (gesture / navigation bar area) - that edge was the thin line under Terms / Privacy. Paint the
+  // page white while this screen is up.
+  useLayoutEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prev = [html.style.backgroundColor, body.style.backgroundColor]
+    html.style.backgroundColor = "#fff"
+    body.style.backgroundColor = "#fff"
+    return () => {
+      html.style.backgroundColor = prev[0]
+      body.style.backgroundColor = prev[1]
+    }
+  }, [])
   const cardRef = useRef(null)
+  // The hero takes whatever height the card leaves, so a shorter card (OTP) made the hero taller and the card sit lower
+  // than on the number screen. Every later step keeps at least the number screen's card height, so the card's top edge
+  // (and the hero above it) stays put from step to step.
+  const [cardMinH, setCardMinH] = useState(0)
+  useLayoutEffect(() => {
+    const measure = () => {
+      const a = document.activeElement
+      if (step !== 1 || (a && a.tagName === "INPUT")) return
+      const h = cardRef.current?.offsetHeight
+      if (h) setCardMinH((cur) => (cur === h ? cur : h))
+    }
+    measure()
+    window.addEventListener("resize", measure)
+    return () => window.removeEventListener("resize", measure)
+  }, [step])
   const [lift, setLift] = useState(0)
   // Android WebView (adjustResize) shrinks the whole page when the keyboard opens, which would squeeze the hero
   // and push the wordmark up. While a field is focused the page keeps its full height instead (the keyboard just
@@ -621,13 +650,16 @@ export default function UnifiedOTPFastLogin() {
   // where the card's top edge sits while the keyboard is up (targetTopRef), and every later open - any step, any number
   // of times, keyboard closed with Back or not - goes to exactly that position.
   const targetTopRef = useRef(null)
+  // The name card is the tallest (number chip + name field + button), so the shared position is set a little higher than the
+  // number screen strictly needs: then its Complete Profile button is above the keyboard at that same position too.
+  const NAME_STEP_EXTRA = 44
   const liftToTarget = (keyboardPx) => {
     const card = cardRef.current
     if (!card) return 0
     if (targetTopRef.current == null) {
-      const first = liftFor(keyboardPx)
+      const first = Math.min(liftFor(keyboardPx) + NAME_STEP_EXTRA, card.offsetTop - 16)
       if (first > 0) targetTopRef.current = card.offsetTop - first
-      return first
+      return Math.max(0, first)
     }
     return Math.max(0, Math.min(card.offsetTop - targetTopRef.current, card.offsetTop - 16))
   }
@@ -681,7 +713,8 @@ export default function UnifiedOTPFastLogin() {
     kb.focused = true
     // The card lifts once, by the estimate, and then stays exactly there for as long as the keyboard is up (moving
     // between OTP boxes keeps it too) - the keyboard's real height is never used to nudge it afterwards.
-    setLift((cur) => (alreadyUp && cur > 0 ? cur : liftToTarget(kb.estimate)))
+    // (a step change with the keyboard up - OTP -> name - re-aims at the same shared position)
+    setLift(liftToTarget(kb.estimate))
   }
 
   const handleFieldBlur = () => {
@@ -786,7 +819,7 @@ export default function UnifiedOTPFastLogin() {
         <div
           ref={cardRef}
           className={`relative z-30 shrink-0 w-full bg-white after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-[60vh] after:bg-white px-6 pt-2 [.lg-short_&]:pt-1 pb-[calc(env(safe-area-inset-bottom)+clamp(20px,calc(var(--lg-vh,1vh)*6),64px))] [.lg-short_&]:pb-[calc(env(safe-area-inset-bottom)+22px)] will-change-transform ${lift ? "rounded-t-[28px] shadow-[0_-8px_30px_rgba(0,0,0,0.07)]" : ""}`}
-          style={{ transform: `translateY(-${lift}px)`, transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
+          style={{ minHeight: step !== 1 && cardMinH ? cardMinH : undefined, transform: `translateY(-${lift}px)`, transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
         >
           <h2 className="text-[26px] [.lg-short_&]:text-[23px] leading-tight font-extrabold text-[#1A1A1A] tracking-tight">
             {step === 5

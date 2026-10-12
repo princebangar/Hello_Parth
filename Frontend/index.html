@@ -271,6 +271,7 @@
          two in step with src/modules/auth/pages/Login.jsx. */
       #boot-login { display: none; }
       html[data-boot="login"] #boot-skeleton { display: none; }
+      html[data-boot="login"], html[data-boot="login"] body { background: #fff; }
       html[data-boot="login"] #boot-login {
         display: block; position: fixed; inset: 0; z-index: 60; overflow: hidden; overflow: clip; background: #ECECEE;
         font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased;
@@ -315,7 +316,8 @@
       .lg-agree { margin: 20px 0 0; text-align: center; font-size: 13px; line-height: 1.625; color: #6B7280; }
       .lg-links { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; }
       .lg-links i { width: 4px; height: 4px; border-radius: 9999px; background: #9CA3AF; }
-              html.lg-short .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
+              html.lg-short .lg-hero { min-height: calc(max(10px, env(safe-area-inset-top)) + 200px); }
+        html.lg-short .lg-word { padding-top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
         html.lg-short .lg-title { font-size: 36px; }
         html.lg-short .lg-tag { font-size: 18px; }
         html.lg-short .lg-dome { height: 66px; }
