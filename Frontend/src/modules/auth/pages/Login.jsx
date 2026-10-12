@@ -610,21 +610,11 @@ export default function UnifiedOTPFastLogin() {
   const isTouchDevice = () =>
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
 
-  // The keyboard's share of the page height: remembered from the last time it opened on this phone (so the first lift
-  // already lands where it will settle - no jump), else a typical Android number-pad value.
-  const KB_RATIO_KEY = "hp_login_kb_ratio"
+  // The first lift (this estimate) is the look the screen keeps while the keyboard is up: the settle step below
+  // may only lift further (if the button would still be hidden), never lower the card, so nothing moves back down.
   const estimateKeyboardHeight = () => {
-    let ratio = 0.34
-    try {
-      const saved = parseFloat(localStorage.getItem(KB_RATIO_KEY))
-      if (saved > 0.2 && saved < 0.6) ratio = saved
-    } catch { /* storage blocked: default */ }
-    return Math.round(window.innerHeight * ratio)
-  }
-  const rememberKeyboard = (px) => {
-    const base = keyboardRef.current.baseHeight || window.innerHeight
-    if (px < 150 || !base) return
-    try { localStorage.setItem(KB_RATIO_KEY, String(Math.round((px / base) * 1000) / 1000)) } catch { /* ignore */ }
+    const screenH = window.screen?.height || window.innerHeight
+    return Math.round(Math.min(360, Math.max(240, screenH * 0.38)))
   }
 
   // Lift just enough for the field and its Continue / Verify button to sit right above a keyboard of
@@ -689,14 +679,14 @@ export default function UnifiedOTPFastLogin() {
       if (!kb.focused) return
       const shrink = kb.baseHeight - window.innerHeight // adjustResize: layout already moved up by this much
       const overlap = measureOverlap()
-      if (overlap > 100) { rememberKeyboard(overlap); setLift(liftFor(overlap)) }
-      else if (shrink > 100) { rememberKeyboard(shrink); setLift(liftFor(0)) }
+      if (overlap > 100) setLift((cur) => Math.max(cur, liftFor(overlap)))
+      else if (shrink > 100) setLift((cur) => Math.max(cur, liftFor(0)))
       else setLift(0) // no on-screen keyboard (hardware keyboard / desktop touch)
     }
     const onResize = () => {
       if (!kb.focused) return
       // While the keyboard animates, keep the card where the estimate put it.
-      setLift(liftFor(Math.max(measureOverlap(), kb.estimate)))
+      setLift((cur) => Math.max(cur, liftFor(Math.max(measureOverlap(), kb.estimate))))
       clearTimeout(kb.settleTimer)
       kb.settleTimer = setTimeout(settle, 160)
     }
