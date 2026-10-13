@@ -1161,6 +1161,9 @@ const SelectVehicle = () => {
   const [promoError, setPromoError] = useState('');
   const [applyingPromoCode, setApplyingPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
+  // The coupon the rider picked. It stays picked while they try other vehicles: on a vehicle whose fare it does not
+  // cover (minimum fare) it is just not applied there, and it applies again on a vehicle that qualifies.
+  const [chosenPromoCode, setChosenPromoCode] = useState('');
   const [rideMode, setRideMode] = useState(() => (location.state?.rideMode === 'schedule' ? 'schedule' : 'now'));
   const [scheduledAt, setScheduledAt] = useState(() => (
     (location.state?.scheduledAt && toLocalDateTimeInput(location.state.scheduledAt)) || getMinScheduledDateTime()
@@ -1620,6 +1623,9 @@ const SelectVehicle = () => {
         originalIndex: index,
         availability: availabilityByVehicleId[vehicle.id] || DEFAULT_AVAILABILITY,
       }))
+      // Booking now: only vehicles with an online driver nearby are listed (offline / busy types stay hidden).
+      // "Later" keeps every type, because the driver is matched at pickup time.
+      .filter(({ availability }) => rideMode === 'schedule' || (availability.totalDrivers || 0) > 0)
       .sort((a, b) => {
         const aAvailable = (a.availability.totalDrivers || 0) > 0;
         const bAvailable = (b.availability.totalDrivers || 0) > 0;
@@ -1645,9 +1651,9 @@ const SelectVehicle = () => {
     console.log('Final displayed vehicles:', rankedVehicles.map(v => v.name));
 
     return rankedVehicles;
-  }, [availabilityByVehicleId, hasAvailabilityResults, hasLoadedAvailability, pricedVehicles]);
+  }, [availabilityByVehicleId, hasAvailabilityResults, hasLoadedAvailability, pricedVehicles, rideMode]);
 
-  const selectedVehicle = useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
+  const selectedVehicle =useMemo(() => pricedVehicles.find((v) => v.id === selected), [pricedVehicles, selected]);
   const previewVehicle = useMemo(
     () => pricedVehicles.find((vehicle) => vehicle.id === previewVehicleId) || null,
     [previewVehicleId, pricedVehicles],
@@ -1665,9 +1671,16 @@ const SelectVehicle = () => {
     0,
     Number(appliedPromo?.breakdown?.fare_after_discount ?? selectedVehicle?.price ?? 0),
   );
+  // The coupon was validated for one fare; show the cut price on that vehicle's card only while it still matches
+  // (right after picking another vehicle the old breakdown must not leak onto the new fare).
+  const promoMatchesSelectedFare = Boolean(appliedPromo)
+    && appliedPromoDiscount > 0
+    && Math.round(Number(appliedPromo?.breakdown?.fare_before_discount)) === Math.round(Number(selectedVehicle?.price));
   const selectedAvailability = selectedVehicle ? (availabilityByVehicleId[selectedVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
   const previewAvailability = previewVehicle ? (availabilityByVehicleId[previewVehicle.id] || DEFAULT_AVAILABILITY) : DEFAULT_AVAILABILITY;
-  const canProceed = Boolean(selectedVehicle) && !isFarePending && Number(selectedVehicle?.price) > 0;
+  // A vehicle that is not in the list (no online driver any more) can never be booked.
+  const isSelectedVehicleListed = Boolean(selectedVehicle) && displayedVehicles.some((vehicle) => vehicle.id === selectedVehicle.id);
+  const canProceed = isSelectedVehicleListed && !isFarePending && Number(selectedVehicle?.price) > 0;
   // Every car (SUV, Sedan, ...) is booked as a "Car Taxi"; bike / auto keep their own name.
   const bookButtonName = selectedVehicle?.category === 'car' ? 'Car Taxi' : selectedVehicle?.name;
   const hasBookableVehicles = useMemo(
@@ -1741,6 +1754,7 @@ const SelectVehicle = () => {
 
   const clearAppliedPromo = (nextFeedback = '') => {
     setAppliedPromo(null);
+    setChosenPromoCode('');
     setApplyingPromoCode('');
     setPromoError('');
     setPromoFeedback(nextFeedback);
@@ -1782,16 +1796,19 @@ const SelectVehicle = () => {
 
       if (!payload?.eligible) {
         setAppliedPromo(null);
+        setChosenPromoCode('');
         setPromoError(payload?.message || 'This coupon is not valid for this ride.');
         return false;
       }
 
       setAppliedPromo(payload);
+      setChosenPromoCode(code);
       setPromoCodeInput(code);
       setPromoFeedback(`${code} applied. You save ${formatCurrency(payload?.breakdown?.discount_amount || 0)}.`);
       return true;
     } catch (error) {
       setAppliedPromo(null);
+      setChosenPromoCode('');
       setPromoError(error?.response?.data?.message || error?.message || 'Could not apply this coupon right now.');
       return false;
     } finally {
@@ -1827,8 +1844,8 @@ const SelectVehicle = () => {
         const promos = Array.isArray(unwrap(response)) ? unwrap(response) : [];
         setAvailablePromos(promos);
 
-        if (appliedPromo?.promo?.code) {
-          const stillAvailable = promos.some((promo) => String(promo?.code || '').toUpperCase() === String(appliedPromo.promo.code || '').toUpperCase());
+        if (chosenPromoCode) {
+          const stillAvailable = promos.some((promo) => String(promo?.code || '').toUpperCase() === chosenPromoCode.toUpperCase());
           if (!stillAvailable) {
             clearAppliedPromo('Coupon removed because it does not apply in this zone.');
           }
@@ -1878,7 +1895,7 @@ const SelectVehicle = () => {
   }, [selectedVehicle?.id, selectedVehicle?.price, serviceLocationId]);
 
   useEffect(() => {
-    if (!appliedPromo?.promo?.code || !selectedVehicle) {
+    if (!chosenPromoCode || !selectedVehicle) {
       return;
     }
 
@@ -1887,7 +1904,7 @@ const SelectVehicle = () => {
     const refreshAppliedPromo = async () => {
       try {
         const response = await userService.validatePromo({
-          code: appliedPromo.promo.code,
+          code: chosenPromoCode,
           fare: Number(selectedVehicle.price || 0),
           service_location_id: serviceLocationId,
           transport_type: resolvedTransportType,
@@ -1899,14 +1916,21 @@ const SelectVehicle = () => {
         }
 
         if (!payload?.eligible) {
-          clearAppliedPromo(payload?.message || 'Coupon removed because it is no longer valid for this fare.');
+          // Not applied on THIS vehicle, but the coupon stays picked for the others.
+          setAppliedPromo(null);
+          setPromoFeedback('');
+          setPromoError(`${chosenPromoCode} is not applied on ${selectedVehicle.name}: ${payload?.message || 'not valid for this fare'}.`);
           return;
         }
 
+        setPromoError('');
+        setPromoFeedback('');
         setAppliedPromo(payload);
       } catch (error) {
         if (active) {
-          clearAppliedPromo(error?.response?.data?.message || 'Coupon removed because validation failed.');
+          setAppliedPromo(null);
+          setPromoFeedback('');
+          setPromoError(error?.response?.data?.message || 'Could not check this coupon right now.');
         }
       }
     };
@@ -1916,7 +1940,7 @@ const SelectVehicle = () => {
     return () => {
       active = false;
     };
-  }, [appliedPromo?.promo?.code, resolvedTransportType, selectedVehicle?.price, serviceLocationId]);
+  }, [chosenPromoCode, resolvedTransportType, selectedVehicle?.id, selectedVehicle?.price, serviceLocationId]);
 
   useEffect(() => {
     const timer = setTimeout(handleScroll, 200);
@@ -1945,7 +1969,9 @@ const SelectVehicle = () => {
 
     // The list preselects its first entry before availability is known; move off it to a vehicle
     // that actually has drivers, unless the rider already picked one themselves.
-    if (!selected || (!vehiclePickedByUserRef.current && !hasDrivers(selected) && hasDrivers(firstAvailable.id))) {
+    // A selected vehicle that dropped out of the list (its last driver went offline) is replaced too.
+    const isSelectedListed = displayedVehicles.some((vehicle) => vehicle.id === selected);
+    if (!selected || !isSelectedListed || (!vehiclePickedByUserRef.current && !hasDrivers(selected) && hasDrivers(firstAvailable.id))) {
       setSelected(firstAvailable.id);
     }
   }, [availabilityByVehicleId, displayedVehicles, hasAvailabilityResults, rideMode, selected]);
@@ -2372,8 +2398,17 @@ const SelectVehicle = () => {
 
             {!isInitialVehicleResultsLoading && !vehicleLoadError && displayedVehicles.length === 0 && (
               <div className="rounded-[18px] border border-slate-100 bg-white px-4 py-5 text-center">
-                <p className="text-[13px] font-bold text-slate-900">No vehicles available</p>
-                <p className="mt-1 text-[11px] font-bold text-slate-400">Try changing your location or method.</p>
+                {vehicles.length > 0 && rideMode !== 'schedule' ? (
+                  <>
+                    <p className="text-[13px] font-bold text-slate-900">No drivers available nearby</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-400">All drivers are offline or busy right now. Please try again in a moment.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] font-bold text-slate-900">No vehicles available</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-400">Try changing your location or method.</p>
+                  </>
+                )}
               </div>
             )}
 
@@ -2389,6 +2424,8 @@ const SelectVehicle = () => {
               const fareLabel = isFarePending
                 ? '...'
                 : formatVehicleFare(v);
+              // Coupon applied: the selected card shows the old fare struck through and the fare after the discount.
+              const showPromoFare = isSelected && !isFarePending && !v.supportsBidding && promoMatchesSelectedFare;
               const sublabel = isUnavailable && rideMode !== 'schedule' 
                 ? `No nearby ${v.name.toLowerCase()} drivers` 
                 : v.sublabel;
@@ -2447,9 +2484,20 @@ const SelectVehicle = () => {
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <span className="block text-[20px] font-semibold leading-none text-slate-900">
-                            {fareLabel}
-                          </span>
+                          {showPromoFare ? (
+                            <>
+                              <span className="block text-[12px] font-medium leading-none text-slate-400 line-through">
+                                {fareLabel}
+                              </span>
+                              <span className="mt-1 block text-[20px] font-semibold leading-none text-emerald-700">
+                                {formatCurrency(discountedSelectedFare)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="block text-[20px] font-semibold leading-none text-slate-900">
+                              {fareLabel}
+                            </span>
+                          )}
                           {!isFarePending && Number(v.surgePercent) > 0 ? (
                             <span className="mt-1 inline-block rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-600" title="Busy time: higher fare">
                               Surge +{v.surgePercent}%
@@ -2535,7 +2583,7 @@ const SelectVehicle = () => {
               }`}
             >
               <TicketPercent size={14} strokeWidth={2.3} className={appliedPromo ? 'text-emerald-600' : 'text-slate-500'} />
-              <span>{appliedPromo?.promo?.code || (availablePromos.length ? `Coupon ${availablePromos.length}` : 'Coupon')}</span>
+              <span>{appliedPromo?.promo?.code || chosenPromoCode || (availablePromos.length ? `Coupon ${availablePromos.length}` : 'Coupon')}</span>
             </button>
             <button
               type="button"
@@ -2611,7 +2659,7 @@ const SelectVehicle = () => {
                 : 'bg-slate-200 text-slate-400'
             }`}
           >
-            {selectedVehicle
+            {isSelectedVehicleListed
               ? isFarePending
                 ? 'Calculating fare...'
                 : selectedVehicle.supportsBidding && shouldUseDriverBidding
@@ -2668,9 +2716,16 @@ const SelectVehicle = () => {
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Estimated fare</p>
-                  <p className="mt-1 text-[17px] font-extrabold text-slate-900">
-                    {isFarePending ? 'Calculating...' : formatVehicleFare(previewVehicle)}
-                  </p>
+                  {!isFarePending && !previewVehicle.supportsBidding && previewVehicle.id === selectedVehicle?.id && promoMatchesSelectedFare ? (
+                    <p className="mt-1 text-[17px] font-extrabold text-emerald-700">
+                      {formatCurrency(discountedSelectedFare)}
+                      <span className="ml-1.5 text-[12px] font-medium text-slate-400 line-through">{formatVehicleFare(previewVehicle)}</span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[17px] font-extrabold text-slate-900">
+                      {isFarePending ? 'Calculating...' : formatVehicleFare(previewVehicle)}
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-[18px] border border-slate-100 bg-slate-50/70 px-4 py-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Seats</p>
