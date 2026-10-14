@@ -3317,7 +3317,8 @@ export const cancelMyBusBooking = async (req, res) => {
     booking,
     busService,
     seatIds: seatsToCancel.map((item) => item.seatId),
-    travelDateOverride: req.body?.travelDate || req.body?.date,
+    // The refund rule is worked out from the booking's OWN travel date. A date sent by the app is ignored: trusting it
+    // let anyone claim a later date (more hours left = bigger refund, even after the bus had left).
   });
   if (!cancellationQuote.allowed) {
     throw new ApiError(409, cancellationQuote.reason || 'This booking can no longer be cancelled');

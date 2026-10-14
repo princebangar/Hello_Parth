@@ -8,11 +8,7 @@ import {
   Clock3,
   Loader2,
   Star,
-  BusFront,
-  Sparkles,
-  TicketPercent,
   SlidersHorizontal,
-  BadgePercent,
 } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
@@ -296,34 +292,7 @@ const BusList = () => {
 
         {!loading && !error && buses.length > 0 ? (
           <>
-            <div className="grid grid-cols-3 gap-3">
-              <div
-                style={{ background: 'linear-gradient(135deg,#f59e0b 0%,#f97316 100%)', color: '#ffffff' }}
-                className="overflow-hidden rounded-[22px] p-4 shadow-[0_10px_24px_rgba(249,115,22,0.18)]"
-              >
-                <div className="flex items-center justify-between">
-                  <BusFront size={22} />
-                  <Sparkles size={16} className="text-white/80" />
-                </div>
-                <p className="mt-6 text-lg font-black leading-none" style={{ color: '#ffffff' }}>Bus</p>
-                <p className="mt-1 text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>Best routes today</p>
-              </div>
-              <div className="rounded-[22px] border border-rose-100 bg-[radial-gradient(circle_at_top_left,#ffe4e6_0%,#fff1f2_45%,#ffffff_100%)] p-4 shadow-sm">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-100 text-rose-500">
-                  <TicketPercent size={16} />
-                </div>
-                <p className="mt-4 text-sm font-black leading-tight text-slate-900">Free Cancellation</p>
-                <p className="mt-1 text-[11px] font-semibold text-slate-500">On selected buses</p>
-              </div>
-              <div className="rounded-[22px] border border-emerald-100 bg-[radial-gradient(circle_at_top_left,#dcfce7_0%,#f0fdf4_45%,#ffffff_100%)] p-4 shadow-sm">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
-                  <BadgePercent size={16} />
-                </div>
-                <p className="mt-4 text-sm font-black leading-tight text-slate-900">Special Deals</p>
-                <p className="mt-1 text-[11px] font-semibold text-slate-500">Save more today</p>
-              </div>
-            </div>
-
+            {/* (The three marketing tiles "Bus / Free Cancellation / Special Deals" were removed: they were not backed by any bus data.) */}
             <div ref={sortMenuRef} className="relative pb-1">
               <div className="flex gap-2 overflow-x-auto">
                 <div className="shrink-0">

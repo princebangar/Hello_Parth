@@ -461,11 +461,21 @@ const BusBookingDetail = () => {
                   <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Total paid</span>
                   <span className="text-xl font-black text-slate-900">{formatMoney(booking.fare?.total ?? booking.amount, booking.currency)}</span>
                 </div>
-                {Number(booking.cancellation?.refundAmount || 0) > 0 ? (
-                  <div className="flex items-center justify-between text-emerald-700">
-                    <span className="font-semibold">Refunded</span>
-                    <span className="font-black">{formatMoney(booking.cancellation.refundAmount, booking.currency)}</span>
-                  </div>
+                {/* Money actually given back for cancelled seats (all cancellations together). Not
+                    booking.cancellation.refundAmount: on a live ticket that is only the preview for the seats still active. */}
+                {Number(booking.totalRefundedAmount || 0) > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between text-emerald-700">
+                      <span className="font-semibold">Refunded</span>
+                      <span className="font-black">{formatMoney(booking.totalRefundedAmount, booking.currency)}</span>
+                    </div>
+                    {Number(booking.totalChargedAmount || 0) > 0 ? (
+                      <div className="flex items-center justify-between text-rose-600">
+                        <span className="font-semibold">Cancellation charges</span>
+                        <span className="font-black">{formatMoney(booking.totalChargedAmount, booking.currency)}</span>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
                 <p className="text-[11px] font-semibold text-slate-400">
                   Payment: {String(booking.payment?.status || 'paid').replace(/_/g, ' ')}
