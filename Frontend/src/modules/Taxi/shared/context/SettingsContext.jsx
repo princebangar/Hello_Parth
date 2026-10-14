@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import api from '../api/axiosInstance';
 import { BACKEND_ORIGIN } from '../api/runtimeConfig';
+import { preloadBannerImage } from '@/shared/utils/bannerImage';
 
 // Favicon object URL tracking removed
 const SETTINGS_CACHE_KEY = 'appSettingsCache:v1';
@@ -41,9 +42,11 @@ const DEFAULT_SETTINGS_CONTEXT = {
     },
     paymentGateway: null,
     userHomeSettings: {},
+    homeBanner: {},
   },
   loading: true,
   hasBootstrapSettings: false,
+  settingsFresh: false,
   refreshSettings: () => { },
 };
 const SettingsContext = createContext(DEFAULT_SETTINGS_CONTEXT);
@@ -168,6 +171,7 @@ const buildSettingsState = (payload = {}) => ({
   bidRide: payload?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
   paymentGateway: payload?.paymentGateway || null,
   userHomeSettings: payload?.userHomeSettings || {},
+  homeBanner: payload?.homeBanner || {},
 });
 
 const readCachedSettings = () => {
@@ -211,21 +215,49 @@ const settingsFromBootstrap = (data = {}) => buildSettingsState({
   bidRide: data.settings?.bidRide || DEFAULT_SETTINGS_CONTEXT.settings.bidRide,
   paymentGateway: data.settings?.paymentGateway || null,
   userHomeSettings: data.settings?.userHomeSettings || {},
+  homeBanner: data.settings?.homeBanner || {},
 });
+
+// When the start-up settings last arrived in this tab (from the provider or from the warm-up below). While they are
+// recent, the Taxi home knows for sure whether a banner image is uploaded and does not have to wait for them again.
+const FRESH_FOR_MS = 5 * 60 * 1000;
+let bootstrapArrivedAt = 0;
+const bootstrapIsFresh = () => bootstrapArrivedAt > 0 && Date.now() - bootstrapArrivedAt < FRESH_FOR_MS;
+
+/**
+ * Starts downloading the Taxi home banner ahead of time: the uploaded picture when there is one, otherwise the
+ * default design's vehicle picture - so it is already in the browser when the rider opens Taxi.
+ */
+const warmHomeBanner = (settings) => {
+  const uploaded = normalizeAssetUrl(settings?.homeBanner?.taxiImageUrl);
+  if (uploaded) {
+    preloadBannerImage(uploaded);
+    return;
+  }
+  import('../../modules/user/components/TaxiHeroBanner').then((mod) => mod.preloadHeroArt()).catch(() => {});
+};
 
 /**
  * Downloads the public start-up settings ahead of time (the login screen calls this while the person types their
- * number) and stores them in the cache SettingsProvider reads when Taxi opens, so the first Taxi screen already has
- * its settings instead of a loading header and nav bar. Needs no login; never throws.
+ * number; Food calls it too) and stores them in the cache SettingsProvider reads when Taxi opens, so the first Taxi
+ * screen already has its settings instead of a loading header and nav bar - and its banner picture is already
+ * downloaded. Needs no login; never throws.
  */
 export const prefetchTaxiSettings = async () => {
-  if (readCachedSettings()) return; // a copy is already there - the provider refreshes it on its own
+  if (bootstrapIsFresh()) {
+    warmHomeBanner(readCachedSettings());
+    return;
+  }
   try {
     // Warm-up read made from the OTHER app (Food): runs behind that screen's own requests.
     const response = await api.get('/users/bootstrap', { background: true });
-    writeCachedSettings(settingsFromBootstrap(response?.data?.data || response?.data || {}));
+    const fresh = settingsFromBootstrap(response?.data?.data || response?.data || {});
+    writeCachedSettings(fresh);
+    bootstrapArrivedAt = Date.now();
+    warmHomeBanner(fresh);
   } catch {
     // purely an optimisation
+    warmHomeBanner(readCachedSettings());
   }
 };
 
@@ -236,6 +268,9 @@ export const SettingsProvider = ({ children }) => {
   // state on remount just because a background refresh is about to run.
   const [loading, setLoading] = useState(!cachedSettings);
   const [hasBootstrapSettings, setHasBootstrapSettings] = useState(Boolean(cachedSettings));
+  // True once this tab has an answer from the server (not just the saved copy): only then is it certain whether a home
+  // banner image is uploaded. Stays true when the provider is mounted again (Food -> Taxi) within a few minutes.
+  const [settingsFresh, setSettingsFresh] = useState(bootstrapIsFresh);
   const [modules, setModules] = useState([]);
 
   const lastFetchAtRef = useRef(0);
@@ -252,10 +287,13 @@ export const SettingsProvider = ({ children }) => {
       setModules(data.modules || []);
       setHasBootstrapSettings(true);
       writeCachedSettings(nextSettings);
+      bootstrapArrivedAt = Date.now();
     } catch (err) {
       console.error('[SettingsContext] Failed to fetch bootstrap settings:', err);
     } finally {
       setLoading(false);
+      // Also after a failure: the answer is not coming, so show what is saved (or the default banner) instead of waiting forever.
+      setSettingsFresh(true);
     }
   };
 
@@ -329,7 +367,7 @@ export const SettingsProvider = ({ children }) => {
   const refreshSettings = () => fetchSettings();
 
   return (
-    <SettingsContext.Provider value={{ settings, modules, loading, hasBootstrapSettings, refreshSettings }}>
+    <SettingsContext.Provider value={{ settings, modules, loading, hasBootstrapSettings, settingsFresh, refreshSettings }}>
       {children}
     </SettingsContext.Provider>
   );

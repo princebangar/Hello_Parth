@@ -10,7 +10,8 @@ export const getLandingSettings = async (zoneId = null) => {
     return doc;
 };
 
-export const updateLandingSettings = async (payload, zoneId = null) => {
+/** Saves the settings and also reports what happened to a banner file that was replaced or removed. */
+export const updateLandingSettingsDetailed = async (payload, zoneId = null) => {
     let query = zoneId ? { zoneId } : { zoneId: null };
     const oldDoc = await FoodLandingSettings.findOne(query).lean();
 
@@ -20,10 +21,13 @@ export const updateLandingSettings = async (payload, zoneId = null) => {
     }).lean();
 
     // Drop the previous banner file when the URL was cleared or replaced.
+    let removedAsset = null;
     if (oldDoc && oldDoc.festBannerImageUrl && oldDoc.festBannerImageUrl !== doc.festBannerImageUrl) {
-        await deleteStoredAsset(oldDoc.festBannerImageUrl);
+        removedAsset = { url: oldDoc.festBannerImageUrl, deleted: await deleteStoredAsset(oldDoc.festBannerImageUrl) };
     }
 
-    return doc;
+    return { doc, removedAsset };
 };
+
+export const updateLandingSettings = async (payload, zoneId = null) => (await updateLandingSettingsDetailed(payload, zoneId)).doc;
 

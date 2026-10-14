@@ -5,6 +5,7 @@ import * as customerController from './globalCustomer.controller.js';
 import * as otherServiceController from '../landing/otherService.controller.js';
 import * as pageContentController from './globalPageContent.controller.js';
 import * as customizationController from './globalCustomization.controller.js';
+import * as homeBannerController from './globalHomeBanner.controller.js';
 import * as businessSettingsController from '../../food/admin/controllers/businessSettings.controller.js';
 import { upload } from '../../../middleware/upload.js';
 
@@ -27,6 +28,11 @@ router.delete('/sub-admins/:id', platformOnly, subAdminController.deleteSubAdmin
 router.get('/customers', requireGlobalAccess({ section: 'customers', action: 'view' }), customerController.listCustomers);
 router.get('/customers/:id', requireGlobalAccess({ section: 'customers', action: 'view' }), customerController.getCustomerById);
 router.patch('/customers/:id/status', requireGlobalAccess({ section: 'customers', action: 'edit' }), customerController.updateCustomerStatus);
+
+// User Management > Home Banners: the Food fest banner and the Taxi home banner (shown in the user apps).
+router.get('/user-management/home-banners', requireGlobalAccess({ section: 'userManagement', action: 'view' }), homeBannerController.getHomeBanners);
+router.patch('/user-management/home-banners/food', requireGlobalAccess({ section: 'userManagement', action: 'edit' }), homeBannerController.updateFoodHomeBanner);
+router.patch('/user-management/home-banners/taxi', requireGlobalAccess({ section: 'userManagement', action: 'edit' }), homeBannerController.updateTaxiHomeBanner);
 
 // Terms & Conditions / Privacy Policy / Support — User, Restaurant, Delivery and Captain (driver) content.
 router.get('/pages-social-media/:key', requireGlobalAccess({ section: 'pagesSocialMedia', action: 'view' }), pageContentController.getPageController);

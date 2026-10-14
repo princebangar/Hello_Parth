@@ -1,4 +1,5 @@
 import { FoodApp, FoodUserRouter, TaxiApp, FoodAdminRouter } from './appChunks.js'
+import { preloadBannerImage } from './bannerImage.js'
 
 export const ACTIVE_MODULE_KEY = 'hello_parth_active_module'
 export const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
@@ -152,7 +153,21 @@ export function prefetchFoodUser({ zone = true } = {}) {
     FoodUserRouter.preload(),
   ])
     .then(() => (zone ? warmFoodZone() : undefined))
+    .then(warmFoodFestBanner)
     .catch(() => {})
+}
+
+/**
+ * The Food home saves the address of its fest banner picture (uploaded in Global admin). Download that picture now, so
+ * opening Food shows it at once instead of waiting for it.
+ */
+function warmFoodFestBanner() {
+  try {
+    const url = localStorage.getItem('CACHED_FEST_BANNER')
+    if (url) preloadBannerImage(url)
+  } catch {
+    // purely an optimisation
+  }
 }
 
 /**

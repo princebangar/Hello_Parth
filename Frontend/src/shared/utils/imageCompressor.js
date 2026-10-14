@@ -113,9 +113,13 @@ export async function compressImageForUpload(file, options = {}) {
     maxHeight = DEFAULT_MAX_HEIGHT,
     maxBytes = DEFAULT_MAX_BYTES,
     quality = DEFAULT_QUALITY,
+    // Look at the picture even when the file is already a small WebP / JPEG, so a picture that is too large in
+    // pixels is still scaled down (used for the home banners: more pixels than the phone shows only slows loading).
+    alwaysCheckSize = false,
   } = options
 
   if (
+    !alwaysCheckSize &&
     file.size <= maxBytes &&
     (file.type === "image/webp" || file.type === "image/jpeg") &&
     file.size <= 900 * 1024

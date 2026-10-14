@@ -189,7 +189,10 @@ const deleteRemoteAsset = async (url) => {
         },
         body: JSON.stringify({ url })
     });
-    return response.ok;
+    if (!response.ok) return false;
+    // The server answers 200 with { data: { deleted } }: false = the file was not there (or could not be removed).
+    const payload = await response.json().catch(() => null);
+    return payload?.data?.deleted !== false;
 };
 
 const deleteFromDisk = async (urlOrPublicId) => {

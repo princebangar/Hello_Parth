@@ -15,7 +15,7 @@ import { isUnifiedAuthenticated } from '@/shared/utils/moduleAuth.js';
 import { prefetchWallet } from '@/shared/utils/walletPrefetch.js';
 import { whenAppSettled } from '@/shared/utils/whenSettled.js';
 import { preloadTaxiTab } from '@/modules/Taxi/modules/user/components/tabPages';
-import { readSharedFoodLocation, getFoodStyleLocationParts, getLocationSubtitle, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
+import { readSharedFoodLocation, getFoodStyleLocationParts, getHeaderLocationLines, FOOD_LOCATION_UPDATED_EVENT, TAXI_LOCATION_UPDATED_EVENT, TAXI_LOCATION_STORAGE_KEY } from '@/shared/utils/sharedUserLocation';
 
 function readHelloParthLocation() {
   if (typeof window === 'undefined') return null;
@@ -172,7 +172,8 @@ export default function SuperAppHomeHeader({
     }
     if (hasVisitedVertical(verticalId)) {
       slideSwitcherPills(verticalId);
-      window.setTimeout(() => navigate(path), SLIDE_BEFORE_NAVIGATE_MS);
+      // Opened before: go straight in (the new header already has the highlight in place) - no waiting for the slide.
+      requestAnimationFrame(() => navigate(path));
       return;
     }
     window.dispatchEvent(new CustomEvent(SWITCH_VERTICAL_EVENT, { detail: { to: verticalId } }));
@@ -248,25 +249,9 @@ export default function SuperAppHomeHeader({
   const notificationsPath = isTaxi ? '/taxi/user/profile/notifications' : '/food/user/notifications';
   const profilePath = isTaxi ? '/taxi/user/profile' : '/food/user/profile';
 
-  const displayTitle = useMemo(() => {
-    if (locationTitle?.trim()) return locationTitle.trim();
-    if (location?.area) return location.area;
-    if (savedAddressText?.trim()) {
-      const firstPart = savedAddressText.split(',')[0]?.trim();
-      return firstPart || savedAddressText;
-    }
-    return location?.city || location?.formattedAddress?.split(',')[0] || 'Select Location';
-  }, [locationTitle, savedAddressText, location]);
-
-  const displaySubtitle = useMemo(() => {
-    if (locationSubtitle?.trim()) return locationSubtitle.trim();
-    return getLocationSubtitle({
-      address: location?.address || location?.formattedAddress,
-      title: displayTitle,
-      state: location?.state,
-      pincode: location?.pincode || location?.zipCode || location?.postalCode,
-    });
-  }, [locationSubtitle, location, displayTitle]);
+  const headerLines = useMemo(() => getHeaderLocationLines(location || {}), [location]);
+  const displayTitle = locationTitle?.trim() || headerLines.title;
+  const displaySubtitle = locationSubtitle?.trim() || headerLines.subtitle;
 
   const onLocationClick = useCallback(() => {
     if (handleLocationClick) {
@@ -339,26 +324,24 @@ export default function SuperAppHomeHeader({
       style={{ backgroundColor: verticalTheme.theme }}
     >
       {!tabsOnly && (
-      <div className="relative z-20 px-4 pt-4 pb-2 flex items-center justify-between gap-3">
+      <div className="relative z-20 flex items-start gap-3 px-4 pt-4 pb-2">
+        {/* Location: exactly Food's location selector (same box, icon, text sizes), so the header is the same in both apps. */}
         <button
           type="button"
-          className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
+          className="group flex items-center gap-2 min-w-0 flex-1 text-left"
           onClick={onLocationClick}
         >
-          <MapPin className="h-5 w-5 flex-shrink-0" strokeWidth={1.5} style={{ color: verticalTheme.accent, fill: verticalTheme.accent }} />
-          {/* Inline white — this header's background is always the brand's
-              dark colour, independent of app light/dark theme, so a plain
-              `text-white` class gets force-overridden by the global theme
-              CSS (invisible text in light mode) otherwise. */}
+          <div className="p-1.5 group-active:scale-95 transition-all">
+            <MapPin className="h-4 w-4" style={{ color: 'rgba(255,255,255,0.9)', fill: 'rgba(255,255,255,0.2)' }} />
+          </div>
+          {/* Inline white: this header is always the brand's dark colour, independent of the app light/dark theme. */}
           <div className="flex flex-col min-w-0" style={{ color: '#ffffff' }}>
-            <div className="flex items-center gap-0.5 min-w-0">
-              <span className="text-[14px] font-bold truncate drop-shadow-sm">
-                {displayTitle}
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 opacity-90" />
+            <div className="flex items-center gap-1">
+              <span className="text-[15px] font-black truncate drop-shadow-sm">{displayTitle}</span>
+              <ChevronDown className="h-3 w-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.7)' }} />
             </div>
             {displaySubtitle ? (
-              <span className="text-[11px] font-medium truncate opacity-80 max-w-[210px]">
+              <span className="text-[10px] font-medium truncate leading-tight mt-0.5" style={{ color: 'rgba(255,255,255,0.8)' }}>
                 {displaySubtitle}
               </span>
             ) : null}

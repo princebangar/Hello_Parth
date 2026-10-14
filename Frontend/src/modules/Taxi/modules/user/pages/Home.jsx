@@ -7,7 +7,8 @@ import HeaderGreeting from '../components/HeaderGreeting';
 import ServiceGrid, { ServiceCard } from '../components/ServiceGrid';
 import ServiceArt from '../components/ServiceArt';
 import useTaxiNotificationUnread from '../utils/useTaxiNotificationUnread';
-import LocationMapSection from '../components/LocationMapSection';
+import LocationDetector from '../components/LocationDetector';
+import TaxiHomeBanner from '../components/TaxiHomeBanner';
 import ActionsSection from '../components/ActionsSection';
 import PromoBanners from '../components/PromoBanners';
 import ExplorerSection from '../components/ExplorerSection';
@@ -27,7 +28,7 @@ import airplaneIcon from '../../../assets/3d images/AutoCab/airoplan.png';
 import railwayIcon from '../../../assets/3d images/AutoCab/one way.png';
 import busStationIcon from '../../../assets/3d images/AutoCab/bus.png';
 import api from '../../../shared/api/axiosInstance';
-import { useSettings } from '../../../shared/context/SettingsContext';
+import { useSettings, normalizeAssetUrl } from '../../../shared/context/SettingsContext';
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 
@@ -103,7 +104,7 @@ const PromoBannerImage = ({ promo, fallbackImage }) => {
 };
 
 import { getLocalUserToken, clearLocalUserSession } from '../services/authService';
-import { getSavedLocation, LOCATION_UPDATED_EVENT } from '../services/locationStore';
+import { getSavedLocation } from '../services/locationStore';
 import { hasPersistentMap } from '../utils/persistentMap';
 import useTaxiZoneGate from '../utils/useTaxiZoneGate';
 import { showHelloParthBrandedToast } from '@/shared/utils/customToasts';
@@ -162,9 +163,6 @@ const getCurrentRideIcon = (ride) => {
 
   return taxiFallback;
 };
-
-// Shown as the pickup only until the real current address is known - never a made-up city.
-const PICKUP_PLACEHOLDER = 'Detecting your location...';
 
 const defaultSettings = {
   homeSections: {
@@ -424,7 +422,12 @@ const Home = () => {
   }, [outOfZone]);
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings, loading: settingsLoading } = useSettings();
+  const { settings, loading: settingsLoading, settingsFresh } = useSettings();
+  const taxiBannerUrl = normalizeAssetUrl(settings?.homeBanner?.taxiImageUrl);
+  // The server has not answered yet and the saved copy has no image: nobody knows whether one is uploaded, so keep the
+  // area plain colour (like Food's header) instead of flashing the default design and then swapping it. With an
+  // uploaded image (saved or fresh) the image's own box shows at once - the default never appears under it.
+  const taxiBannerPending = !settingsFresh && !taxiBannerUrl;
   const { theme } = useUserTheme();
   const isDark = theme === 'dark';
   const appName = settings.general?.app_name || 'App';
@@ -487,44 +490,22 @@ const Home = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAllServicesOpen, setIsAllServicesOpen] = useState(false);
   const [activeServices, setActiveServices] = useState([]);
-  const [pickupAddress, setPickupAddress] = useState(() => (
-    String(getSavedLocation()?.address || '').trim() || PICKUP_PLACEHOLDER
-  ));
-  const [isLocationLoading, setIsLocationLoading] = useState(() => !getSavedLocation()?.address);
-
-  useEffect(() => {
-    const handleLocationUpdate = () => {
-      setPickupAddress(String(getSavedLocation()?.address || '').trim() || PICKUP_PLACEHOLDER);
-    };
-    const handleLocationStatus = (e) => {
-      setIsLocationLoading(e.detail === 'loading');
-    };
-    window.addEventListener(LOCATION_UPDATED_EVENT, handleLocationUpdate);
-    window.addEventListener('helloparth:location-status', handleLocationStatus);
-    return () => {
-      window.removeEventListener(LOCATION_UPDATED_EVENT, handleLocationUpdate);
-      window.removeEventListener('helloparth:location-status', handleLocationStatus);
-    };
-  }, []);
-
   const [currentRide, setCurrentRide] = useState(() => {
     const ride = getCurrentRide();
     return isActiveCurrentRide(ride) ? ride : null;
   });
   const [clockNow, setClockNow] = useState(() => Date.now());
-  // The map is mounted a beat after the first paint on a cold start (keeps the first screen light). When the map
-  // already exists - coming back from Food - there is nothing heavy left to wait for: mount it straight away, or
-  // the screen shows a grey placeholder where the map was a moment ago.
-  const [showDeferredSections, setShowDeferredSections] = useState(() => hasPersistentMap());
-  // Home renders a phone layout and a desktop layout and hides one with CSS. The map (and its GPS / geocoding work)
-  // must exist only once, in the layout that is actually on screen.
+  // The GPS / address lookup (LocationDetector) starts a beat after the first paint on a cold start (keeps the first
+  // screen light). When the location was already found earlier in this session there is nothing to wait for.
+  const [showDeferredSections, setShowDeferredSections] = useState(() => hasPersistentMap() || Boolean(getSavedLocation()?.address));
+  // Home has a phone layout and a desktop layout: build only the one that is on screen (half the work on every open,
+  // and the service tiles are requested once, not twice).
   const [isDesktopLayout, setIsDesktopLayout] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
   );
   useEffect(() => {
     const query = window.matchMedia('(min-width: 1024px)');
     const onChange = (event) => setIsDesktopLayout(event.matches);
-    setIsDesktopLayout(query.matches);
     query.addEventListener('change', onChange);
     return () => query.removeEventListener('change', onChange);
   }, []);
@@ -600,6 +581,18 @@ const Home = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, []);
+
+  // A vehicle on the default banner starts a booking for that vehicle type (same as its tile in the grid).
+  const handleHeroPick = (category) => {
+    try {
+      localStorage.setItem('selectedVehicleType', category);
+    } catch {
+      /* ignore */
+    }
+    navigate(`${routePrefix}/ride/select-location?vehicleType=${category}`, {
+      state: { selectedCategory: category, flow: 'ride', activeInput: 'drop' },
+    });
+  };
 
   const handleServiceClick = (service) => {
     // Scroll everything to top immediately upon clicking a service
@@ -1250,9 +1243,11 @@ const Home = () => {
 
   return (
     <div className="min-h-screen w-full lg:max-w-7xl mx-auto relative font-sans no-scrollbar overflow-x-clip transition-colors duration-300 user-app-theme shadow-2xl">
+      {/* No map on this screen any more, but the rider's current location is still found here. */}
+      {showDeferredSections && <LocationDetector />}
 
       {/* 1. MOBILE LAYOUT: Google Map component + Sticky Search Bar + HomeContent */}
-      <div className="block lg:hidden">
+      {!isDesktopLayout && (<div className="block lg:hidden">
         <div className="user-home">
           {/* Solid top app bar — location + Food/Taxi switcher. Own space, not
               floated over the map, so nothing overlaps. */}
@@ -1260,30 +1255,9 @@ const Home = () => {
             <SuperAppHomeHeader activeVertical="taxi" notificationCount={unreadNotifications} />
           </div>
 
-          {/* Map — sits below the app bar, fully visible, own box. */}
-          <div className="map-header">
-            {showDeferredSections && !isDesktopLayout ? (
-              <LocationMapSection />
-            ) : (
-              <div className={`h-full w-full animate-pulse ${isDark ? 'bg-[#0f172a]' : 'bg-slate-200'}`} />
-            )}
-
-            {/* Pickup Address Pill: overlays the map's own bottom edge only */}
-            <div
-              onClick={() => navigate(`${routePrefix}/ride/select-location`, { state: { activeInput: 'pickup', flow: 'ride' } })}
-              className="pickup-address-pill flex items-center gap-2.5 rounded-full py-2 pl-4 pr-2 cursor-pointer"
-              style={{ background: 'var(--user-card-bg)', border: '1px solid var(--user-border)', boxShadow: '0 8px 24px rgba(15,23,42,0.22)', color: 'var(--user-text-primary)' }}
-            >
-              <div className="w-[10px] h-[10px] rounded-full bg-[#168a45] shrink-0 ring-4 ring-[#168a45]/20" />
-              <span className="text-[13px] font-semibold truncate flex-1 leading-none">
-                {isLocationLoading ? 'Pinning your current location...' : pickupAddress}
-              </span>
-              <span className="text-[11px] font-bold rounded-full px-3 py-1.5 shrink-0 leading-none" style={{ background: 'var(--user-accent)', color: 'var(--user-accent-ink)' }}>
-                Change
-              </span>
-            </div>
-          </div>
-          {/* Content Sheet — flows directly after the map, no overlap */}
+          {/* Banner (image from Global admin, else the default Safe Rides design) — sits below the app bar where the map used to be. */}
+          <TaxiHomeBanner imageUrl={taxiBannerUrl} pending={taxiBannerPending} onPick={handleHeroPick} className="-mt-px rounded-b-[2rem] shadow-lg" />
+          {/* Content Sheet — flows directly after the banner, no overlap */}
           <div className="home-sheet space-y-3">
             {/* Sticky Search Bar */}
             <motion.div
@@ -1459,10 +1433,10 @@ const Home = () => {
             )}
           </div>
         </div>
-      </div>
+      </div>)}
 
       {/* 2. DESKTOP LAYOUT (hidden lg:grid) */}
-      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-8 lg:px-6 lg:pt-6 relative z-10">
+      {isDesktopLayout && (<div className="hidden lg:grid lg:grid-cols-12 lg:gap-8 lg:px-6 lg:pt-6 relative z-10">
 
         {/* Left Column (Greeting + Categories + Promos) */}
         <div className="lg:col-span-5 space-y-4">
@@ -1511,18 +1485,12 @@ const Home = () => {
           {goPlacesSection}
         </div>
 
-        {/* Right Column (Map) */}
+        {/* Right Column (Banner) */}
         <div className="lg:col-span-7 space-y-6 lg:sticky lg:top-6 self-start">
-          {showDeferredSections && isDesktopLayout ? (
-            <div className="lg:h-[calc(100vh-14rem)] min-h-[480px]">
-              <LocationMapSection />
-            </div>
-          ) : (
-            <div className="lg:h-[calc(100vh-14rem)] min-h-[480px] h-[480px] animate-pulse rounded-[20px] border border-white/80 bg-white/70 shadow-[0_10px_22px_rgba(15,23,42,0.05)]" />
-          )}
+          <TaxiHomeBanner imageUrl={taxiBannerUrl} pending={taxiBannerPending} onPick={handleHeroPick} naturalclassName="rounded-[2rem] shadow-[0_18px_40px_rgba(2,42,115,0.28)] lg:[&_h2]:text-[52px]" />
         </div>
 
-      </div>
+      </div>)}
 
       <AnimatePresence>
         {isAllServicesOpen && (

@@ -374,3 +374,36 @@ export function syncSharedLocationStoresOnBoot() {
     }
   } catch {}
 }
+
+/**
+ * The two lines of the location button in the Food / Taxi home header (title + small line under it).
+ * Same rules as Food's own header, so both apps show exactly the same text for the same place.
+ */
+export function getHeaderLocationLines(location = {}) {
+  const area = location?.area || location?.subLocality || location?.mainTitle || location?.neighborhood;
+  const city = (location?.city || '').toLowerCase();
+  const state = (location?.state || '').toLowerCase();
+
+  let title = location?.area || location?.city || 'Select Location';
+  if (area && !/^-?\d+(\.\d+)?$/.test(String(area).trim()) && String(area).toLowerCase() !== city && String(area).toLowerCase() !== state) {
+    title = area;
+  } else if (location?.address && location.address !== 'Select location') {
+    const part = location.address.split(',').map((p) => p.trim()).find((p) => {
+      const lower = p.toLowerCase();
+      return lower && lower !== city && lower !== state && !/^-?\d/.test(p) && p.length > 2;
+    });
+    if (part) title = part;
+  }
+
+  const stateText = location?.state || '';
+  const pincode = location?.pincode || '';
+  let subtitle;
+  if (stateText && pincode) subtitle = `${stateText}, ${pincode}`;
+  else if (stateText) subtitle = stateText;
+  else if (pincode) subtitle = pincode;
+  else {
+    const addr = location?.address || '';
+    subtitle = addr && addr.length > 10 ? addr.split(',').slice(1, 3).join(',').trim() || 'Pinpoint location' : 'Pinpoint location';
+  }
+  return { title, subtitle };
+}

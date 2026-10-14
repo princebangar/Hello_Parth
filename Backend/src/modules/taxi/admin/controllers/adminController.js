@@ -11,6 +11,7 @@ import { BusSeatHold } from '../../user/models/BusSeatHold.js';
 import { getPublicActivePaymentGateway, resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 import { getOrLoadCachedValue } from '../../../../utils/cache.js';
+import { getTaxiHomeBannerUrl } from '../../../global/admin/globalHomeBanner.service.js';
 
 const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
 
@@ -1642,13 +1643,14 @@ export const getAppBootstrap = asyncHandler(async (_req, res) => {
     {
       ttlMs: PUBLIC_BOOTSTRAP_CACHE_TTL_MS,
       load: async () => {
-        const [modules, general, transportRide, customize, paymentGateway, userHomeSettings] = await Promise.all([
+        const [modules, general, transportRide, customize, paymentGateway, userHomeSettings, taxiHomeBannerUrl] = await Promise.all([
           adminService.listAppModules(),
           adminService.getGeneralSettings('general'),
           adminService.getGeneralSettings('transport-ride'),
           adminService.getGeneralSettings('customize'),
           getPublicActivePaymentGateway(),
           adminService.getGeneralSettings('user-home-management'),
+          getTaxiHomeBannerUrl().catch(() => ''),
         ]);
 
         return {
@@ -1659,6 +1661,8 @@ export const getAppBootstrap = asyncHandler(async (_req, res) => {
             customization: customize.settings || {},
             paymentGateway: paymentGateway?.activeGateway || null,
             userHomeSettings: userHomeSettings.settings || {},
+            // Image of the Taxi home banner, uploaded in Global admin > User Management > Home Banners ('' = none).
+            homeBanner: { taxiImageUrl: taxiHomeBannerUrl },
           },
         };
       },

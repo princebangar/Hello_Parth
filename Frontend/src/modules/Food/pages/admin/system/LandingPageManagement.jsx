@@ -93,14 +93,11 @@ export default function LandingPageManagement() {
   const diningBannersFileInputRef = useRef(null)
 
   // Settings
-  const [settings, setSettings] = useState({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerImageUrl: "", festBannerTopColor: "" })
-  const [originalSettings, setOriginalSettings] = useState({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerImageUrl: "", festBannerTopColor: "" })
-  const [selectedFestBannerFile, setSelectedFestBannerFile] = useState(null)
+  const [settings, setSettings] = useState({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250 })
+  const [originalSettings, setOriginalSettings] = useState({ exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250 })
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [recommendedSearchQuery, setRecommendedSearchQuery] = useState("")
-  const [festBannerUploading, setFestBannerUploading] = useState(false)
-  const festBannerFileInputRef = useRef(null)
 
   const [allRestaurants, setAllRestaurants] = useState([])
   const [restaurantsLoading, setRestaurantsLoading] = useState(false)
@@ -1099,9 +1096,7 @@ export default function LandingPageManagement() {
         const newSettings = {
           exploreMoreHeading: nextSettings.exploreMoreHeading || "Explore More",
           recommendedRestaurantIds: recommendedIds,
-          under250PriceLimit: Number(nextSettings.under250PriceLimit) || 250,
-          festBannerImageUrl: typeof nextSettings.festBannerImageUrl === "string" ? nextSettings.festBannerImageUrl : "",
-          festBannerTopColor: typeof nextSettings.festBannerTopColor === "string" ? nextSettings.festBannerTopColor : ""
+          under250PriceLimit: Number(nextSettings.under250PriceLimit) || 250
         }
         setSettings(newSettings)
         setOriginalSettings(newSettings)
@@ -1109,7 +1104,7 @@ export default function LandingPageManagement() {
     } catch (err) {
       // Silently handle 401/404 errors - endpoints may not exist yet, use default settings
       if (err.response?.status === 401 || err.response?.status === 404) {
-        const defaultSettings = { exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250, festBannerImageUrl: "", festBannerTopColor: "" }
+        const defaultSettings = { exploreMoreHeading: "Explore More", recommendedRestaurantIds: [], under250PriceLimit: 250 }
         setSettings(defaultSettings) // Use default settings
         setOriginalSettings(defaultSettings)
         setError(null) // Clear any previous error
@@ -1129,35 +1124,10 @@ export default function LandingPageManagement() {
       setError(null)
       setSuccess(null)
 
-      let finalUrl = settings.festBannerImageUrl || ""
-      let finalTopColor = settings.festBannerTopColor || ""
-
-        if (selectedFestBannerFile) {
-        setFestBannerUploading(true)
-        const formData = new FormData()
-        formData.append('file', await prepareUploadFile(selectedFestBannerFile))
-        formData.append('folder', 'food/landing/fest-banner')
-        if (settings.festBannerImageUrl) formData.append('replaceUrl', settings.festBannerImageUrl)
-        if (selectedZoneId) formData.append('zoneId', selectedZoneId)
-
-        const uploadRes = await api.post('/uploads/image', formData, getAuthConfig())
-        finalUrl = uploadRes?.data?.data?.url || ''
-        finalTopColor = uploadRes?.data?.data?.dominantColor || ''
-        if (!finalUrl) {
-          setErrorSafely('Failed to upload banner image')
-          setFestBannerUploading(false)
-          return
-        }
-        setFestBannerUploading(false)
-        setSelectedFestBannerFile(null)
-      }
-
       const response = await api.patch('/food/hero-banners/landing/settings', { zoneId: selectedZoneId || null,
         exploreMoreHeading: settings.exploreMoreHeading,
         recommendedRestaurantIds: Array.isArray(settings.recommendedRestaurantIds) ? settings.recommendedRestaurantIds : [],
-        under250PriceLimit: Number(settings.under250PriceLimit) || 250,
-        festBannerImageUrl: finalUrl,
-        festBannerTopColor: finalTopColor
+        under250PriceLimit: Number(settings.under250PriceLimit) || 250
       }, getAuthConfig())
       if (response.data.success) {
         const savedSettings = response.data.data?.settings || response.data.data || {}
@@ -1168,13 +1138,7 @@ export default function LandingPageManagement() {
         const updatedSettings = {
           exploreMoreHeading: savedSettings.exploreMoreHeading || settings.exploreMoreHeading,
           recommendedRestaurantIds: recommendedIds,
-          under250PriceLimit: Number(savedSettings.under250PriceLimit) || settings.under250PriceLimit,
-          festBannerImageUrl: typeof savedSettings.festBannerImageUrl === "string"
-            ? savedSettings.festBannerImageUrl
-            : settings.festBannerImageUrl,
-          festBannerTopColor: typeof savedSettings.festBannerTopColor === "string"
-            ? savedSettings.festBannerTopColor
-            : settings.festBannerTopColor || ""
+          under250PriceLimit: Number(savedSettings.under250PriceLimit) || settings.under250PriceLimit
         }
         setSettings(updatedSettings)
         setOriginalSettings(updatedSettings)
@@ -1185,28 +1149,6 @@ export default function LandingPageManagement() {
       setErrorSafely(err.response?.data?.message || 'Failed to save settings.')
     } finally {
       setSettingsSaving(false)
-      setFestBannerUploading(false)
-    }
-  }
-
-  const handleFestBannerImageSelect = (e) => {
-    const file = e.target?.files?.[0] || null
-    if (!file) return
-
-    if (!file.type.startsWith('image/')) {
-      setErrorSafely('Please select a valid image file')
-      return
-    }
-
-    try {
-      const localUrl = URL.createObjectURL(file)
-      setSelectedFestBannerFile(file)
-      setSettings((prev) => ({ ...prev, festBannerImageUrl: localUrl }))
-      setSuccess('Banner selected. Click Save Settings to upload and publish.')
-      if (festBannerFileInputRef.current) festBannerFileInputRef.current.value = ''
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      setErrorSafely('Failed to read selected image')
     }
   }
 
@@ -1874,52 +1816,6 @@ export default function LandingPageManagement() {
                       placeholder="250"
                     />
                     <p className="text-xs text-slate-500 mt-1">Button will show "Under ₹{settings.under250PriceLimit || 250}" on user home page</p>
-                  </div>
-
-                  <div>
-                    <Label>Fest Banner (User Home)</Label>
-                    <p className="text-xs text-slate-500 mt-1 mb-3">
-                      Upload a promo image for the home fest banner. If empty, the default design is shown.
-                    </p>
-                    <div className="flex flex-col gap-3">
-                      <input
-                        ref={festBannerFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFestBannerImageSelect}
-                        className="hidden"
-                        disabled={festBannerUploading}
-                      />
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          type="button"
-                          onClick={() => festBannerFileInputRef.current?.click()}
-                          disabled={festBannerUploading}
-                          className="bg-slate-900 hover:bg-slate-800 text-white"
-                        >
-                          {festBannerUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                          {festBannerUploading ? 'Uploading...' : 'Upload Banner'}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setSettings((prev) => ({ ...prev, festBannerImageUrl: "", festBannerTopColor: "" }))
-                            setSelectedFestBannerFile(null)
-                          }}
-                          disabled={festBannerUploading || !settings.festBannerImageUrl}
-                        >
-                          Remove Banner
-                        </Button>
-                      </div>
-                      {settings.festBannerImageUrl ? (
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 break-all">
-                          {settings.festBannerImageUrl}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-500">No banner uploaded.</p>
-                      )}
-                    </div>
                   </div>
 
                   {selectedZoneId !== "" && selectedZoneId != null && (

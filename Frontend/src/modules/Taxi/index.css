@@ -1205,15 +1205,14 @@ html, body, #root {
   overflow-x: clip !important;
 }
 
-/* The app bar above is the sticky header now; the search bar scrolls with the sheet. */
 .user-search-bar {
   position: relative !important;
   z-index: 5 !important;
 }
 
+/* Not sticky: like Food's home, the app bar, the banner and the content scroll away together as one page. */
 .user-home-appbar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 40;
 }
 

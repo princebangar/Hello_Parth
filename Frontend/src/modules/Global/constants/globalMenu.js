@@ -1,4 +1,4 @@
-import { Building2, BarChart3, FileText, Gift, Languages, LayoutDashboard, Link2, Lock, Headset, SlidersHorizontal, User, UserCog, UserPlus, Users } from "lucide-react"
+import { Building2, BarChart3, FileText, Gift, Image, Languages, LayoutDashboard, Link2, Lock, Headset, SlidersHorizontal, User, UserCog, UserPlus, Users } from "lucide-react"
 import { GLOBAL_ADMIN_HOME } from "@/shared/utils/activeModule.js"
 import { hasGlobalSection, isPlatformAdmin } from "@/shared/utils/adminAccess.js"
 
@@ -18,6 +18,12 @@ export const GLOBAL_MENU = [
     label: "People",
     items: [
       { label: "Customers", path: `${GLOBAL_ADMIN_HOME}/customers`, icon: Users, section: "customers" },
+    ],
+  },
+  {
+    label: "User Management",
+    items: [
+      { label: "Home Banners", path: `${GLOBAL_ADMIN_HOME}/user-management/home-banners`, icon: Image, section: "userManagement" },
     ],
   },
   {

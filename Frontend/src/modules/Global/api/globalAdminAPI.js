@@ -41,6 +41,18 @@ export const globalAdminAPI = {
     })
   },
 
+  getHomeBanners: () => apiClient.get("/admin/global/user-management/home-banners", admin),
+  updateFoodHomeBanner: (body) => apiClient.patch("/admin/global/user-management/home-banners/food", body, admin),
+  updateTaxiHomeBanner: (body) => apiClient.patch("/admin/global/user-management/home-banners/taxi", body, admin),
+  // The old image is not replaced here: the save deletes it only after the new address is stored.
+  uploadHomeBannerImage: (file, folder) => {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("folder", folder)
+    return apiClient.post("/uploads/image", formData, admin)
+  },
+  deleteUploadedImage: (url) => apiClient.delete("/uploads", { data: { url }, ...admin }),
+
   getOtherServices: () => apiClient.get("/admin/global/landing/other-services", admin),
   createOtherService: (body) => apiClient.post("/admin/global/landing/other-services", body, admin),
   updateOtherService: (id, body) =>

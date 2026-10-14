@@ -8,6 +8,7 @@ export const GLOBAL_PERMISSION_ACTIONS = ['view', 'create', 'edit', 'delete'];
 export const GLOBAL_PERMISSION_SECTIONS = [
   { key: 'overview', label: 'Overview', path: '/admin/global' },
   { key: 'customers', label: 'Customers', path: '/admin/global/customers' },
+  { key: 'userManagement', label: 'User Management', path: '/admin/global/user-management' },
   { key: 'landing', label: 'Landing Page', path: '/admin/global/landing' },
   { key: 'pagesSocialMedia', label: 'Pages & Social Media', path: '/admin/global/pages-social-media' },
   { key: 'referrals', label: 'Referral Management', path: '/admin/global/referrals' },

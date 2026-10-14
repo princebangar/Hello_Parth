@@ -19,6 +19,9 @@ export const updateAdminLandingSettingsController = async (req, res, next) => {
             throw new ValidationError('Invalid settings payload');
         }
         const zoneId = payload.zoneId;
+        // The fest banner moved to Global admin (User Management > Home Banners); this old endpoint must not touch it.
+        delete payload.festBannerImageUrl;
+        delete payload.festBannerTopColor;
         const updated = await updateLandingSettings(payload, zoneId);
         return sendResponse(res, 200, 'Landing settings updated successfully', updated);
     } catch (error) {

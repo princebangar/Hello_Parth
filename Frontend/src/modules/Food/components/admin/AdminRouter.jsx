@@ -20,6 +20,7 @@ const GlobalAdminLayout = lazy(() => import("@/modules/Global/components/GlobalA
 const GlobalSectionRoute = lazy(() => import("@/modules/Global/components/GlobalSectionRoute"));
 const GlobalCustomers = lazy(() => import("@/modules/Global/pages/GlobalCustomers"));
 const GlobalLandingManagement = lazy(() => import("@/modules/Global/pages/GlobalLandingManagement"));
+const GlobalHomeBanners = lazy(() => import("@/modules/Global/pages/GlobalHomeBanners"));
 const GlobalSubAdmins = lazy(() => import("@/modules/Global/pages/GlobalSubAdmins"));
 const GlobalSubAdminAccess = lazy(() => import("@/modules/Global/pages/GlobalSubAdminAccess"));
 const GlobalTerms = lazy(() => import("@/modules/Global/pages/pages-social-media/GlobalTerms"));
@@ -180,6 +181,8 @@ export default function AdminRouter() {
         >
           <Route index element={<GlobalSectionRoute section="overview"><GlobalAdminHome /></GlobalSectionRoute>} />
           <Route path="customers" element={<GlobalSectionRoute section="customers"><GlobalCustomers /></GlobalSectionRoute>} />
+          <Route path="user-management" element={<Navigate to="/admin/global/user-management/home-banners" replace />} />
+          <Route path="user-management/home-banners" element={<GlobalSectionRoute section="userManagement"><GlobalHomeBanners /></GlobalSectionRoute>} />
           <Route path="landing" element={<GlobalSectionRoute section="landing"><GlobalLandingManagement /></GlobalSectionRoute>} />
           <Route path="pages-social-media/terms" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalTerms /></GlobalSectionRoute>} />
           <Route path="pages-social-media/privacy" element={<GlobalSectionRoute section="pagesSocialMedia"><GlobalPrivacy /></GlobalSectionRoute>} />

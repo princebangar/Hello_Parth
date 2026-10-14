@@ -4,6 +4,9 @@ import { useLocation } from 'react-router-dom'
 import { BootShellBody, BootShellHeader } from './BootShell'
 
 export const SWITCH_VERTICAL_EVENT = 'helloparth:switch-vertical'
+// Taxi home sends this once its service tiles are on screen: the Taxi skeleton stays up until then.
+export const TAXI_HOME_READY_EVENT = 'helloparth:taxi-home-ready'
+const TAXI_MAX_WAIT_MS = 2500
 
 const MAX_SHOWN_MS = 6000
 
@@ -39,6 +42,15 @@ export default function VerticalSwitchOverlay() {
   // The destination is committed: let it paint once, then take the placeholder away.
   useEffect(() => {
     if (!to || !pathname.startsWith(`/${to}/`)) return undefined
+    if (to === 'taxi') {
+      const done = () => setTo(null)
+      window.addEventListener(TAXI_HOME_READY_EVENT, done)
+      const cap = setTimeout(done, TAXI_MAX_WAIT_MS)
+      return () => {
+        window.removeEventListener(TAXI_HOME_READY_EVENT, done)
+        clearTimeout(cap)
+      }
+    }
     let second = 0
     const first = requestAnimationFrame(() => {
       second = requestAnimationFrame(() => setTo(null))

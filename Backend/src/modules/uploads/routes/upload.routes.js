@@ -22,6 +22,11 @@ const requireInternalSecret = (req, res, next) => {
     return next();
 };
 
+// Home banners (Global admin > User Management > Home Banners) are shown at most about 390-430 css px wide and the
+// template is 1170 px wide: a bigger picture only makes the app open slower.
+const HOME_BANNER_FOLDER = /(^|\/)(home-banner|fest-banner)(\/|$)/i;
+const imageOptionsForFolder = (folder) => (HOME_BANNER_FOLDER.test(folder) ? { maxWidth: 1170 } : {});
+
 const isImageUpload = (file) => {
     const mime = String(file?.mimetype || '').toLowerCase();
     if (mime.startsWith('image/')) return true;
@@ -45,6 +50,7 @@ router.post('/image', upload.single('file'), async (req, res, next) => {
                 : 'uploads';
 
         const stored = await storeImageBuffer(req.file.buffer, folder, {
+            ...imageOptionsForFolder(folder),
             mimeType: req.file.mimetype,
             originalName: req.file.originalname,
             replaceUrl: extractAssetUrl(req.body?.replaceUrl),
@@ -82,6 +88,7 @@ router.post('/internal', requireInternalSecret, upload.single('file'), async (re
 
         const stored = isImageUpload(req.file)
             ? await storeImageBuffer(req.file.buffer, folder, {
+                  ...imageOptionsForFolder(folder),
                   mimeType: req.file.mimetype,
                   originalName: req.file.originalname,
                   replaceUrl,

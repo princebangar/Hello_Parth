@@ -550,6 +550,20 @@ export default function Home({ homeMode = null, isTabActive = true }) {
     }
     return RESTAURANTS_BATCH_SIZE;
   });
+  // Only the first few restaurant cards are built in the opening frame (they are the heavy part of this screen); the
+  // rest follow right after it has painted, so opening Food - above all coming back from Taxi - is not held up by them.
+  const [firstPaintLimit, setFirstPaintLimit] = useState(() => (visibleRestaurantCount > RESTAURANTS_BATCH_SIZE ? Infinity : 3));
+  useEffect(() => {
+    if (firstPaintLimit === Infinity) return undefined;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setFirstPaintLimit(Infinity));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [firstPaintLimit]);
   const restaurantLoadMoreRef = useRef(null);
   const publicCategoriesCacheRef = useRef(new Map());
   const publicCategoriesInFlightRef = useRef(new Map());
@@ -2287,8 +2301,8 @@ export default function Home({ homeMode = null, isTabActive = true }) {
   }, [isTakeawayActive, isTakeawaySearching]);
 
   const visibleRestaurants = useMemo(
-    () => filteredRestaurants.slice(0, visibleRestaurantCount),
-    [filteredRestaurants, visibleRestaurantCount],
+    () => filteredRestaurants.slice(0, Math.min(visibleRestaurantCount, firstPaintLimit)),
+    [filteredRestaurants, visibleRestaurantCount, firstPaintLimit],
   );
 
   const hasMoreRestaurants =

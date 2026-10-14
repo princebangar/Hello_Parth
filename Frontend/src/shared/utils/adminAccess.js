@@ -17,6 +17,13 @@ export const GLOBAL_SECTIONS = [
     hint: 'Edit = block or unblock a customer in both apps',
   },
   {
+    key: 'userManagement',
+    label: 'User Management',
+    path: `${GLOBAL_ADMIN_HOME}/user-management`,
+    actions: ['view', 'edit'],
+    hint: 'Edit = change the Food fest banner and the Taxi home banner shown in the customer app',
+  },
+  {
     key: 'landing',
     label: 'Landing Page',
     path: `${GLOBAL_ADMIN_HOME}/landing`,

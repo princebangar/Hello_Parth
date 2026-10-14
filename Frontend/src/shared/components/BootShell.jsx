@@ -83,20 +83,22 @@ export function BootShellHeader({ vertical }) {
           fontFamily: "'Outfit','Poppins',system-ui,-apple-system,'Segoe UI',sans-serif",
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 16px 8px', boxSizing: 'border-box', height: 62 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" strokeWidth="1.5" style={{ flex: 'none', fill: theme.pin, stroke: theme.pin }}>
-              <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
-              <circle cx="12" cy="10" r="3" fill="#fff" stroke="none" />
-            </svg>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '16px 16px 8px', boxSizing: 'border-box', height: 62 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+            <span style={{ flex: 'none', display: 'flex', padding: 6 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" strokeWidth="2" style={{ fill: 'rgba(255,255,255,.2)', stroke: 'rgba(255,255,255,.9)' }}>
+                <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+                <circle cx="12" cy="10" r="3" fill="none" />
+              </svg>
+            </span>
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 14, fontWeight: 700, lineHeight: '20px', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 15, fontWeight: 900, lineHeight: '20px', minWidth: 0 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" style={{ flex: 'none', opacity: 0.9, ...icon }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" strokeWidth="2" style={{ flex: 'none', opacity: 0.7, ...icon }}>
                   <path d="m6 9 6 6 6-6" />
                 </svg>
               </div>
-              <div style={{ fontSize: 11, fontWeight: 500, lineHeight: '14px', opacity: 0.8, maxWidth: 210, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minHeight: 14 }}>{subtitle}</div>
+              <div style={{ fontSize: 10, fontWeight: 500, lineHeight: '12px', marginTop: 2, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minHeight: 12 }}>{subtitle}</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 'none' }}>
@@ -132,7 +134,18 @@ export function BootShellHeader({ vertical }) {
           </div>
         ) : null}
       </div>
-      {vertical === 'taxi' ? <div style={{ height: 200, background: 'rgba(203,213,225,.8)' }} className="dark:!bg-white/10" /> : null}
+      {vertical === 'taxi' ? (
+        <div
+          style={{
+            width: '100%',
+            marginTop: -1,
+            aspectRatio: '390 / 263',
+            background: theme.bg,
+            borderRadius: '0 0 32px 32px',
+            boxShadow: '0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1)',
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -163,7 +176,7 @@ export function BootShellBody({ vertical }) {
     const tiles = [[88, 64], [80, 70], [96, 76], [84, 60]]
     return (
       <div className="bs-body bs-on bs-taxi" aria-hidden="true">
-        <div className="bs-c bs-flex" style={{ marginTop: 27, height: 60, borderRadius: 16, gap: 12, padding: '0 12px' }}>
+        <div className="bs-c bs-flex" style={{ marginTop: 16, height: 60, borderRadius: 16, gap: 12, padding: '0 12px' }}>
           {bar(36, 36)}
           {bar(170, 14)}
         </div>

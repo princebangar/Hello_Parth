@@ -441,6 +441,13 @@ const ServiceGrid = ({
     return () => window.removeEventListener('helloparth:open-all-services-modal', handleOpenModal);
   }, []);
 
+  // Tell the Taxi tab switch (its skeleton) that the tiles are on screen.
+  useEffect(() => {
+    if (loading) return undefined;
+    const timer = setTimeout(() => window.dispatchEvent(new Event('helloparth:taxi-home-ready')), 250);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   useEffect(() => {
     let isMounted = true;
     const fetchModules = async () => {
