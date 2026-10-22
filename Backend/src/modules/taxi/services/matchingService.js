@@ -329,9 +329,10 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
 
   const zone = await findZoneByPickup(coordinates, { serviceLocationId });
   const zoneBoundaryCapMeters = zone ? getZoneBoundaryCapMeters(zone, coordinates) : null;
-  const effectiveMaxDistance = Number.isFinite(zoneBoundaryCapMeters) && zoneBoundaryCapMeters >= 0
-    ? Math.min(Math.max(1, Math.round(maxDistance)), Math.max(1, zoneBoundaryCapMeters))
-    : Math.max(1, Math.round(maxDistance));
+  // The search radius is NOT cut down to the rider's distance from the zone edge any more. That cap made a rider standing
+  // 200 m from the edge of the zone see drivers only within 200 m - so "no driver available" came and went with a few
+  // metres of GPS drift. Drivers are still kept inside the zone polygon (filterDriversForMatchedZone below).
+  const effectiveMaxDistance = Math.max(1, Math.round(maxDistance));
 
   let drivers = await findDriversForZone({
     zoneId: zone?._id || null,

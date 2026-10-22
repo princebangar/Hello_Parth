@@ -5,6 +5,7 @@ import { adminAPI } from "@food/api"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { networkErrorMessage } from "@/shared/utils/networkError"
 import useDirty from "../../../../../shared/hooks/useDirty"
+import { createPlacesAutocomplete } from "@/shared/maps/placesCompat"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -94,7 +95,7 @@ export default function AddZone() {
       return
     }
 
-    const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+    const autocomplete = createPlacesAutocomplete(autocompleteInputRef.current, {
       // No `geocode` type — it routes predictions through Geocoding-style endpoints.
       componentRestrictions: { country: 'in' }, // Restrict to India
       fields: ['geometry', 'formatted_address', 'name'],

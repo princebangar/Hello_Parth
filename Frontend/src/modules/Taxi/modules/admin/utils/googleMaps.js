@@ -1,6 +1,7 @@
 import { useJsApiLoader } from '@react-google-maps/api';
 
 import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getJsApiLoaderOptions } from '../../../../../shared/utils/googleMapsConfig';
+import { installPlacesCompat } from '../../../../../shared/maps/placesCompat';
 
 export { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES };
 
@@ -23,8 +24,12 @@ export const getLatLng = (source, fallback = INDIA_CENTER) => {
   return fallback;
 };
 
-const useGoogleMapsLoader = () =>
-  useJsApiLoader(getJsApiLoaderOptions(HAS_VALID_GOOGLE_MAPS_KEY ? GOOGLE_MAPS_API_KEY : ''));
+const useGoogleMapsLoader = () => {
+  const loader = useJsApiLoader(getJsApiLoaderOptions(HAS_VALID_GOOGLE_MAPS_KEY ? GOOGLE_MAPS_API_KEY : ''));
+  // The old Places classes are swapped for Places API (New) ones before any screen builds them (see placesCompat.js).
+  if (loader.isLoaded) installPlacesCompat(window.google);
+  return loader;
+};
 
 export const useBaseGoogleMapsLoader = () => useGoogleMapsLoader();
 

@@ -68,6 +68,13 @@ export async function fetchPolyline(origin, destination) {
  * Uses the same route a vehicle would take — not air/haversine distance.
  * @returns {Promise<number|null>}
  */
+// Road distances rarely change: the same pair (to ~10 m) is answered from memory for a few hours. This makes the
+// delivery fee and the rider's earning identical for the same trip, and saves a Google call (and its wait) per request.
+const DRIVING_DISTANCE_CACHE = new Map();
+const DRIVING_DISTANCE_TTL_MS = 6 * 60 * 60 * 1000;
+const DRIVING_DISTANCE_CACHE_MAX = 5000;
+const roundCoord = (value) => Number(value).toFixed(4);
+
 export async function fetchDrivingDistanceKm(origin, destination) {
   if (!origin || !destination) return null;
   const oLat = Number(origin.lat);
@@ -76,10 +83,31 @@ export async function fetchDrivingDistanceKm(origin, destination) {
   const dLng = Number(destination.lng);
   if (![oLat, oLng, dLat, dLng].every(Number.isFinite)) return null;
 
+  const cacheKey = `${roundCoord(oLat)},${roundCoord(oLng)}>${roundCoord(dLat)},${roundCoord(dLng)}`;
+  const cached = DRIVING_DISTANCE_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.km;
+
+  // One retry: a single slow / dropped call used to drop the whole order to the straight-line distance.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const km = await requestDrivingDistanceKm(oLat, oLng, dLat, dLng);
+    if (Number.isFinite(km) && km > 0) {
+      if (DRIVING_DISTANCE_CACHE.size >= DRIVING_DISTANCE_CACHE_MAX) {
+        DRIVING_DISTANCE_CACHE.delete(DRIVING_DISTANCE_CACHE.keys().next().value);
+      }
+      DRIVING_DISTANCE_CACHE.set(cacheKey, { km, expiresAt: Date.now() + DRIVING_DISTANCE_TTL_MS });
+      return km;
+    }
+    if (km === false) break; // key missing / refused: a retry cannot help
+  }
+  return null;
+}
+
+// null = no answer this time (worth a retry), false = cannot work at all (no key / Google refused the key)
+async function requestDrivingDistanceKm(oLat, oLng, dLat, dLng) {
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) {
     logger.warn('Google Maps API key missing. Driving distance skipped.');
-    return null;
+    return false;
   }
 
   try {
@@ -114,8 +142,10 @@ export async function fetchDrivingDistanceKm(origin, destination) {
     }
 
     logger.warn(
-      `Driving distance failed: ${JSON.stringify(data)}`,
+      `Driving distance failed (the Routes API must be enabled for the server key): ${JSON.stringify(data)}`,
     );
+    const code = Number(data?.error?.code);
+    if (code === 403 || code === 400) return false;
   } catch (err) {
     logger.error(`Error fetching driving distance: ${err.message}`);
   }

@@ -3,7 +3,6 @@ import {
   GoogleMap, 
   useJsApiLoader, 
   OverlayView, 
-  DirectionsService, 
   Polyline
 } from '@react-google-maps/api';
 import io from 'socket.io-client';
@@ -298,34 +297,43 @@ const DeliveryTrackingMap = ({
     debugLog(`[Camera] Focusing on ${isOrderPickedUp ? 'Delivery' : 'Pickup'} leg`);
   }, [map, riderLocation, normRestCoords, normCustCoords, isOrderPickedUp, isLoaded]);
 
-  // 6. Baseline Directions callback — stores the overview_path as fullRoutePath
-  const baselineDirectionsCallback = useCallback((result, status) => {
-    if (status === 'OK' && result) {
-      const rawPath = result.routes?.[0]?.overview_path || [];
-      const plain = rawPath.map(normPt).filter(Boolean);
-      if (plain.length > 1) {
-        setFullRoutePath(plain);
-        debugLog(`✅ Baseline route stored: ${plain.length} points`);
+  // 6. Baseline route (Routes API; the old DirectionsService is not available on a new Google project): stores the
+  // path as fullRoutePath. Only asked once, and only when the server did not already send a polyline.
+  useEffect(() => {
+    if (!isLoaded || fullRoutePath || cloudPolyline || baselineRequestedRef.current) return;
+    if (!normRestCoords || !normCustCoords || !window.google?.maps?.importLibrary) return;
+    baselineRequestedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { Route } = await window.google.maps.importLibrary('routes');
+        const { routes } = await Route.computeRoutes({
+          origin: { lat: normRestCoords.lat, lng: normRestCoords.lng },
+          destination: { lat: normCustCoords.lat, lng: normCustCoords.lng },
+          travelMode: 'DRIVING',
+          fields: ['path', 'durationMillis'],
+        });
+        if (cancelled) return;
+        const plain = (routes?.[0]?.path || []).map(normPt).filter(Boolean);
+        if (plain.length > 1) {
+          setFullRoutePath(plain);
+          debugLog(`✅ Baseline route stored: ${plain.length} points`);
+        }
+        // Also extract ETA from baseline if no real-time ETA yet
+        const millis = routes?.[0]?.durationMillis;
+        if (Number.isFinite(millis) && millis > 0 && !currentEta) {
+          const mins = Math.max(1, Math.round(millis / 60000));
+          const durationText = mins >= 60 ? `${Math.floor(mins / 60)} hr ${mins % 60} mins` : `${mins} mins`;
+          setCurrentEta(durationText);
+          if (onEtaUpdate) onEtaUpdate(durationText);
+        }
+      } catch (error) {
+        baselineRequestedRef.current = false;
+        console.error('[DeliveryTrackingMap] Baseline route (Routes API) failed:', error?.message || error);
       }
-      // Also extract ETA from baseline if no real-time ETA yet
-      const durationText = result?.routes?.[0]?.legs?.[0]?.duration?.text;
-      if (durationText && !currentEta) {
-        setCurrentEta(durationText);
-        if (onEtaUpdate) onEtaUpdate(durationText);
-      }
-    } else if (status !== 'OK') {
-      console.error('[DeliveryTrackingMap] Baseline DirectionsService failed:', status);
-    }
-  }, [currentEta, onEtaUpdate]);
-
-  const baselineDirectionsOptions = useMemo(() => {
-    if (!normRestCoords || !normCustCoords || cloudPolyline) return null;
-    return {
-      origin: normRestCoords,
-      destination: normCustCoords,
-      travelMode: 'DRIVING'
-    };
-  }, [normRestCoords?.lat, normRestCoords?.lng, normCustCoords?.lat, normCustCoords?.lng, cloudPolyline]);
+    })();
+    return () => { cancelled = true; };
+  }, [isLoaded, fullRoutePath, cloudPolyline, normRestCoords?.lat, normRestCoords?.lng, normCustCoords?.lat, normCustCoords?.lng]);
 
   /**
    * SPLIT POLYLINE LOGIC:
@@ -394,17 +402,6 @@ const DeliveryTrackingMap = ({
           ]
         }}
       >
-        {/* BASELINE DIRECTIONS API CALL (only needed if no cloudPolyline) */}
-        {!fullRoutePath && baselineDirectionsOptions && !baselineRequestedRef.current && (
-          <DirectionsService
-            options={baselineDirectionsOptions}
-            callback={(r, s) => {
-              baselineRequestedRef.current = true;
-              baselineDirectionsCallback(r, s);
-            }}
-          />
-        )}
-
         {/* ── TRAVELED PATH: dashed grey (already covered by driver) ── */}
         {traveledPath.length > 1 && (
           <Polyline

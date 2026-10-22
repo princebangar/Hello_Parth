@@ -7,6 +7,7 @@ import { Label } from "@food/components/ui/label"
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import useDirty from "../../../../../shared/hooks/useDirty"
+import { createPlacesAutocomplete } from "@/shared/maps/placesCompat"
 
 const debugError = (..._args) => {}
 
@@ -228,7 +229,7 @@ export default function EditRestaurant() {
         return
       }
 
-      placesAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+      placesAutocompleteRef.current = createPlacesAutocomplete(
         locationSearchInputRef.current,
         {
           fields: ["formatted_address", "address_components", "geometry"],

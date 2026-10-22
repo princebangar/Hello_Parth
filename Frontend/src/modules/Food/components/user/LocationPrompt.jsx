@@ -218,7 +218,9 @@ export default function LocationPrompt() {
         </h3>
 
         <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mt-3 leading-relaxed px-1">
-          Allow location access once to see nearby food, rides, and offers. The same location is used in Food and Taxi.
+          {String(routeLocation.pathname || "").startsWith("/taxi")
+            ? "Allow location access once so we can find rides near you. The same location is used in Food and Taxi."
+            : "Allow location access once to see nearby food and offers. The same location is used in Food and Taxi."}
         </p>
 
         {geoPermission === "denied" && (

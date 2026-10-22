@@ -3,6 +3,7 @@ import { geocodeGooglePlaceId } from "./googleGeocoding"
 import { Loader } from "@googlemaps/js-api-loader"
 import { geocodeAPI } from "@food/api"
 import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
+import { installPlacesCompat } from '@/shared/maps/placesCompat'
 
 let mapsLoadPromise = null
 let autocompleteService = null
@@ -14,6 +15,7 @@ const normalizePlaceId = (placeId = "") => {
 }
 
 export async function ensureGoogleMapsPlacesLoaded() {
+  installPlacesCompat(window.google)
   if (window.google?.maps?.places?.AutocompleteService) {
     if (!autocompleteService) {
       autocompleteService = new window.google.maps.places.AutocompleteService()
@@ -29,6 +31,7 @@ export async function ensureGoogleMapsPlacesLoaded() {
       const loader = new Loader(getLoaderOptions(apiKey))
 
       const google = await loader.load()
+      installPlacesCompat(google)
       autocompleteService = new google.maps.places.AutocompleteService()
       return google
     })()

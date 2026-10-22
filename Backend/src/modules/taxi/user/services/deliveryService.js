@@ -3,6 +3,7 @@ import { normalizePoint } from '../../../../utils/geo.js';
 import { GoodsType } from '../../admin/models/GoodsType.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { startDispatchFlow } from '../../services/dispatchService.js';
+import { fetchRoadDistance } from '../../services/googleDistanceService.js';
 import { Delivery } from '../models/Delivery.js';
 import {
   createRideRecord,
@@ -110,12 +111,18 @@ const calculateDistanceKm = (fromCoords = [], toCoords = []) => {
 /**
  * Distance a parcel is priced on. The app quotes on the Google road route; the server only has the straight
  * line. A road distance is accepted when it is plausible (never shorter than the straight line, at most ~3x
- * it), so the fare charged and the km shown match the quote; anything else falls back to the straight line.
+ * it), so the fare charged and the km shown match the quote. When the app sent none (or an odd one) the server asks
+ * Google for the road distance itself; the straight line is only the last resort.
  */
-const resolveDeliveryDistanceKm = ({ pickupCoords, dropCoords, estimatedDistanceMeters }) => {
+const resolveDeliveryDistanceKm = async ({ pickupCoords, dropCoords, estimatedDistanceMeters }) => {
   const airKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
   const roadKm = Math.max(0, Number(estimatedDistanceMeters || 0)) / 1000;
-  return roadKm >= airKm && roadKm <= airKm * 3 + 2 ? roadKm : airKm;
+  if (roadKm >= airKm && roadKm <= airKm * 3 + 2) return roadKm;
+
+  const [pLng, pLat] = pickupCoords || [];
+  const [dLng, dLat] = dropCoords || [];
+  const road = await fetchRoadDistance({ lat: pLat, lng: pLng }, { lat: dLat, lng: dLng });
+  return road?.km >= airKm ? road.km : airKm;
 };
 
 const computeDeliveryFareBreakdown = ({ vehicle = {}, distanceKm = 0 }) => {
@@ -186,7 +193,7 @@ export const createDeliveryRecord = async ({
   const vehicle = vehicleTypeId
     ? await Vehicle.findById(vehicleTypeId).select('delivery_distance_pricing service_tax').lean()
     : null;
-  const distanceKm = resolveDeliveryDistanceKm({ pickupCoords, dropCoords, estimatedDistanceMeters });
+  const distanceKm = await resolveDeliveryDistanceKm({ pickupCoords, dropCoords, estimatedDistanceMeters });
   const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, distanceKm });
   const resolvedFare = fareBreakdown.total > 0 ? fareBreakdown.total : Number(fare || 0);
 

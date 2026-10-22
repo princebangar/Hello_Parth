@@ -70,7 +70,6 @@ export default function GoogleMapsTracking({
 }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   const mapRef = useRef(null)
-  const directionsServiceRef = useRef(null)
   const directionsRendererRef = useRef(null)
   const lastRouteCalcRef = useRef({ time: 0, origin: { lat: 0, lng: 0 } })
   const hasInitialBoundsFitted = useRef(false)
@@ -263,7 +262,7 @@ export default function GoogleMapsTracking({
     };
   }, [limitZoomIfNeeded])
 
-  // Calculate and display route using Google Directions Service
+  // Calculate and display the route using the Google Routes API
   const calculateAndDisplayRoute = useCallback((origin, destination, waypoints = []) => {
     if (!isLoaded || !mapRef.current || !window.google?.maps) {
       debugLog('?? Cannot calculate route: map not loaded or not ready')
@@ -293,117 +292,87 @@ export default function GoogleMapsTracking({
     }
     lastRouteCalcRef.current = { time: now, origin: { ...origin } }
 
-    // Initialize DirectionsService if not already initialized
-    if (!directionsServiceRef.current) {
-      directionsServiceRef.current = new window.google.maps.DirectionsService()
+    // Routes API (the old DirectionsService / DirectionsRenderer are not available on a new Google project): the route
+    // comes back as a path and is drawn as one plain blue line. `directionsRendererRef` now holds that line.
+    const formatDuration = (seconds) => {
+      if (seconds < 60) return `${Math.ceil(seconds)} sec`
+      const mins = Math.ceil(seconds / 60)
+      if (mins < 60) return `${mins} mins`
+      const hours = Math.floor(mins / 60)
+      const remainingMins = mins % 60
+      return `${hours}h ${remainingMins}m`
     }
 
-    // Initialize or reuse DirectionsRenderer
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-        map: mapRef.current,
-        suppressMarkers: true, // We'll use custom markers
-        preserveViewport: true, // Preserve viewport - we'll center manually
-                      polylineOptions: {
-                        strokeColor: '#3b82f6', // Bright blue like Hello Parth
-                        strokeWeight: 6,
-                        strokeOpacity: 1.0, // Fully visible - plain solid line
-                        icons: [], // No icons/dots - plain solid line only
-                      },
-      })
-    } else {
-      // Ensure preserveViewport is true so route updates don't change viewport
-      directionsRendererRef.current.setOptions({ preserveViewport: true })
+    const formatDistance = (meters) => {
+      if (meters < 1000) return `${meters}m`
+      return `${(meters / 1000).toFixed(1)} km`
     }
 
-    // Prepare waypoints
-    const googleWaypoints = waypoints.map(wp => ({
-      location: new window.google.maps.LatLng(wp.lat, wp.lng),
-      stopover: true
-    }));
+    const stops = (Array.isArray(waypoints) ? waypoints : []).filter((wp) => Number.isFinite(Number(wp?.lat)) && Number.isFinite(Number(wp?.lng)))
 
-    // Calculate route with DRIVING mode
-    directionsServiceRef.current.route(
-      {
-        origin: origin,
-        destination: destination,
-        waypoints: googleWaypoints,
-        travelMode: window.google.maps.TravelMode.DRIVING, // DRIVING mode as requested
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: 'bestguess'
-        },
-        optimizeWaypoints: true,
-      },
-      (result, status) => {
-        if (status === 'OK' && result.routes && result.routes[0]) {
-          setRouteError(null)
-          // Extract route information
-          const route = result.routes[0]
-          if (route.legs && route.legs.length > 0) {
-            let totalDistance = 0
-            let totalDurationSeconds = 0
-            route.legs.forEach((leg) => {
-              totalDistance += leg.distance?.value || 0
-              totalDurationSeconds += leg.duration?.value || 0
-            })
+    ;(async () => {
+      try {
+        const { Route } = await window.google.maps.importLibrary('routes')
+        const request = {
+          origin,
+          destination,
+          travelMode: 'DRIVING',
+          fields: ['path', 'legs', 'distanceMeters', 'durationMillis'],
+        }
+        if (stops.length) {
+          request.intermediates = stops.map((wp) => ({ location: { lat: Number(wp.lat), lng: Number(wp.lng) } }))
+          if (stops.length > 1) request.optimizeWaypointOrder = true
+        }
+        const { routes } = await Route.computeRoutes(request)
+        const route = routes?.[0]
+        const path = (route?.path || []).map((p) => ({
+          lat: typeof p.lat === 'function' ? p.lat() : p.lat,
+          lng: typeof p.lng === 'function' ? p.lng() : p.lng,
+        }))
+        if (!path.length) throw new Error('ZERO_RESULTS')
+        if (!mapRef.current) return
 
-            // Add 2-minute buffer (120 seconds) as requested
-            totalDurationSeconds += 120
+        setRouteError(null)
+        const legs = Array.isArray(route.legs) ? route.legs : []
+        const totalDistance = legs.length
+          ? legs.reduce((sum, leg) => sum + (leg.distanceMeters || 0), 0)
+          : (route.distanceMeters || 0)
+        const totalMillis = legs.length
+          ? legs.reduce((sum, leg) => sum + (leg.durationMillis || 0), 0)
+          : (route.durationMillis || 0)
+        // Add 2-minute buffer (120 seconds) as requested
+        const totalDurationSeconds = Math.round(totalMillis / 1000) + 120
+        setRouteInfo({
+          distance: formatDistance(totalDistance),
+          duration: formatDuration(totalDurationSeconds),
+          durationValue: totalDurationSeconds,
+          distanceValue: totalDistance,
+        })
 
-            const formatDuration = (seconds) => {
-              if (seconds < 60) return `${Math.ceil(seconds)} sec`
-              const mins = Math.ceil(seconds / 60)
-              if (mins < 60) return `${mins} mins`
-              const hours = Math.floor(mins / 60)
-              const remainingMins = mins % 60
-              return `${hours}h ${remainingMins}m`
-            }
-
-            const formatDistance = (meters) => {
-              if (meters < 1000) return `${meters}m`
-              return `${(meters / 1000).toFixed(1)} km`
-            }
-
-            setRouteInfo({
-              distance: formatDistance(totalDistance),
-              duration: formatDuration(totalDurationSeconds),
-              durationValue: totalDurationSeconds,
-              distanceValue: totalDistance,
-            })
-          }
-          directionsRendererRef.current.setDirections(result);
-          
-          // Force remove any default icons/dots from polyline after directions are set
-          // Try multiple times to ensure icons are removed
-          [100, 300, 500, 700].forEach(delay => {
-            setTimeout(() => {
-              if (directionsRendererRef.current) {
-                directionsRendererRef.current.setOptions({
-                  polylineOptions: {
-                    strokeColor: '#3b82f6',
-                    strokeWeight: 6,
-                    strokeOpacity: 1.0,
-                    icons: [] // Explicitly remove all icons/dots - plain solid line only
-                  }
-                });
-              }
-            }, delay);
-          });
+        if (!directionsRendererRef.current) {
+          directionsRendererRef.current = new window.google.maps.Polyline({
+            map: mapRef.current,
+            strokeColor: '#3b82f6', // Bright blue like Hello Parth
+            strokeWeight: 6,
+            strokeOpacity: 1.0, // Fully visible - plain solid line
+            icons: [], // No icons/dots - plain solid line only
+          })
+        }
+        directionsRendererRef.current.setPath(path)
+      } catch (error) {
+        debugError('? Routes request failed:', error?.message || error, { origin, destination })
+        setRouteInfo(null)
+        // Fallback to straight line if route fails
+        const text = String(error?.message || error || '')
+        if (text.includes('ZERO_RESULTS') || text.includes('NOT_FOUND')) {
+          setRouteError('No road route found. Showing straight line.')
+        } else if (text.includes('OVER_QUERY_LIMIT') || text.includes('RESOURCE_EXHAUSTED')) {
+          setRouteError('Map service busy. Showing straight line.')
         } else {
-          debugError('? Directions request failed:', status, { origin, destination })
-          setRouteInfo(null)
-          // Fallback to straight line if route fails
-          if (status === 'ZERO_RESULTS') {
-            setRouteError('No road route found. Showing straight line.')
-          } else if (status === 'OVER_QUERY_LIMIT') {
-            setRouteError('Map service busy. Showing straight line.')
-          } else {
-            setRouteError('Navigation error. Showing straight line.')
-          }
+          setRouteError('Navigation error. Showing straight line.')
         }
       }
-    )
+    })()
   }, [isLoaded])
 
   // Handle route calculation when routeOrigin and routeDestination are provided

@@ -1217,9 +1217,38 @@ async function registerNativeWebViewFcmToken(moduleName) {
   return persistModuleFcmToken(moduleName, { maxAttempts: 6, delayMs: 350 });
 }
 
+// Which customer app a push belongs to ('taxi' | 'food' | null when it cannot be told), from the screen it opens or
+// from its type. The foreground listener below is app-wide, so without this a ride / bus push popped up inside Food
+// and an order push inside Taxi.
+function getPushVertical(payload = {}) {
+  const data = isRecord(payload?.data) ? payload.data : {};
+  const target = String(data.targetUrl || data.url || data.link || data.click_action || "").toLowerCase();
+  if (target.includes("/taxi")) return "taxi";
+  if (target.includes("/food")) return "food";
+  const type = String(data.type || "").toLowerCase();
+  if (/^(ride|bus|parcel|scheduled_ride|support_chat|chat|fleet|driver_|cancellation|trip|intercity)/.test(type)) return "taxi";
+  if (/^(order|food|restaurant|delivery|rider_order|takeaway|dining|offer_food)/.test(type)) return "food";
+  return null;
+}
+
+function getCurrentCustomerVertical() {
+  const path = String(getAppRoutePath() || "").toLowerCase();
+  if (path.startsWith("/taxi/user")) return "taxi";
+  if (path.startsWith("/food/user")) return "food";
+  return null;
+}
+
 function showForegroundNotification(payload = {}) {
   if (!isRecord(payload)) {
     pushDebugWarn(PUSH_DEBUG_PREFIX, "Ignoring malformed foreground notification payload", { payload });
+    return;
+  }
+
+  // An in-app popup / sound for the OTHER customer app is not shown here (it stays in the notifications list, and the
+  // phone's own banner still appears when the app is in the background).
+  const pushVertical = getPushVertical(payload);
+  const screenVertical = getCurrentCustomerVertical();
+  if (pushVertical && screenVertical && pushVertical !== screenVertical && document.visibilityState === "visible") {
     return;
   }
 

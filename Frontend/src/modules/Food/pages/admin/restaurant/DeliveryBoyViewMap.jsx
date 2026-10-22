@@ -7,6 +7,7 @@ import { Loader } from "@googlemaps/js-api-loader"
 import { subscribeAllDeliveryLocations } from "@food/realtimeTracking"
 import bikeLogo from "@food/assets/bikelogo.png"
 import { getLoaderOptions } from '@/shared/utils/googleMapsConfig'
+import { createPlacesAutocomplete } from "@/shared/maps/placesCompat"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -89,7 +90,7 @@ export default function DeliveryBoyViewMap() {
   // Initialize Places Autocomplete when map is loaded
   useEffect(() => {
     if (!mapLoading && mapInstanceRef.current && autocompleteInputRef.current && window.google?.maps?.places && !autocompleteRef.current) {
-      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+      const autocomplete = createPlacesAutocomplete(autocompleteInputRef.current, {
         componentRestrictions: { country: 'in' }
       })
       

@@ -34,6 +34,7 @@ import OnboardingExitModal from "@/shared/components/OnboardingExitModal"
 import useOnboardingExitGuard from "@/shared/hooks/useOnboardingExitGuard"
 import { collectFcmTokenForSignup, persistModuleFcmToken, syncPendingPartnerFcmQuick, clearOnboardingFcmLocal, prefetchModuleFcmToken } from "@food/utils/firebaseMessaging"
 import { getAppRouteSearch } from '@/shared/utils/nativeShell'
+import { createPlacesAutocomplete } from "@/shared/maps/placesCompat"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -2150,7 +2151,7 @@ export default function RestaurantOnboarding() {
 
         // Zone is now derived from the picked location, so the search is not
         // limited to a pre-selected zone's bounds anymore.
-        autocomplete = new window.google.maps.places.Autocomplete(inputElement, autocompleteOptions)
+        autocomplete = createPlacesAutocomplete(inputElement, autocompleteOptions)
 
         inputElement.setAttribute("data-google-places-initialized", "true")
         placesAutocompleteRef.current = autocomplete

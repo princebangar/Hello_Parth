@@ -138,11 +138,11 @@ const MAX_ROAD_LOOKUPS = 10;
  * `{ placeId }`. Resolves to an array of metres (null where Google has no road route), or null if the service is
  * unavailable altogether.
  *
- * Uses the Directions service, the one every Maps key has (the newer Routes API answers 403 unless it is switched
- * on for the key, and the Distance Matrix is deprecated and logs a warning on every call).
+ * Asks the Routes library first (the current Google API - new projects cannot switch on the old Directions API) and
+ * falls back to the Directions service for a key that still has it.
  */
 export const loadRoadDistances = async (google, originCoords, destinations) => {
-  if (!google?.maps?.DirectionsService || !Array.isArray(originCoords) || originCoords.length !== 2 || !destinations?.length) return null;
+  if (!(google?.maps?.DirectionsService || google?.maps?.importLibrary) || !Array.isArray(originCoords) || originCoords.length !== 2 || !destinations?.length) return null;
   const origin = toLatLng(originCoords);
   if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lng)) return null;
 
@@ -152,19 +152,51 @@ export const loadRoadDistances = async (google, originCoords, destinations) => {
     return null;
   });
 
-  const service = new google.maps.DirectionsService();
+  let RoutesLibrary = null;
+  if (google.maps.importLibrary) {
+    try {
+      RoutesLibrary = (await google.maps.importLibrary('routes'))?.Route || null;
+    } catch {
+      RoutesLibrary = null;
+    }
+  }
+  let routesBroken = false;
+  const service = google.maps.DirectionsService ? new google.maps.DirectionsService() : null;
   const lookups = targets.map((target) => new Promise((resolve) => {
     if (!target) {
       resolve(null);
       return;
     }
-    service.route(
-      { origin, destination: target, travelMode: google.maps.TravelMode.DRIVING },
-      (response, status) => {
-        const meters = Number(response?.routes?.[0]?.legs?.[0]?.distance?.value);
-        resolve(status === 'OK' && Number.isFinite(meters) ? meters : null);
-      },
-    );
+    const viaDirections = () => {
+      if (!service) {
+        resolve(null);
+        return;
+      }
+      service.route(
+        { origin, destination: target, travelMode: google.maps.TravelMode.DRIVING },
+        (response, status) => {
+          const meters = Number(response?.routes?.[0]?.legs?.[0]?.distance?.value);
+          resolve(status === 'OK' && Number.isFinite(meters) ? meters : null);
+        },
+      );
+    };
+    if (RoutesLibrary && !routesBroken) {
+      RoutesLibrary.computeRoutes({
+        origin,
+        destination: target.placeId ? { placeId: target.placeId } : target,
+        travelMode: 'DRIVING',
+        fields: ['distanceMeters'],
+      }).then((result) => {
+        const meters = Number(result?.routes?.[0]?.distanceMeters);
+        if (Number.isFinite(meters) && meters > 0) resolve(meters);
+        else viaDirections();
+      }).catch(() => {
+        routesBroken = true;
+        viaDirections();
+      });
+      return;
+    }
+    viaDirections();
   }));
   const meters = await Promise.all(lookups);
   return destinations.map((_, index) => (index < meters.length ? meters[index] : null));

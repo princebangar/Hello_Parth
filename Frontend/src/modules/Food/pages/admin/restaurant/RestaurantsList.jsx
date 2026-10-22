@@ -10,6 +10,7 @@ import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/resta
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { formatRestaurantDisplayAddress, getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import useDirty from "../../../../../shared/hooks/useDirty"
+import { createPlacesAutocomplete } from "@/shared/maps/placesCompat"
 
 // Import icons from Dashboard-icons
 const debugLog = (...args) => {}
@@ -626,7 +627,7 @@ export default function RestaurantsList() {
       return
     }
 
-    placesAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+    placesAutocompleteRef.current = createPlacesAutocomplete(
       locationSearchInputRef.current,
       {
         fields: ["formatted_address", "address_components", "geometry"],

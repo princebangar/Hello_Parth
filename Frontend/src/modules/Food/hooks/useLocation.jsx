@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { persistFoodUserLocation } from "@/shared/utils/sharedUserLocation"
+import { getFastAccuratePosition } from "@/shared/utils/accuratePosition"
 import { useProfile } from "@food/context/ProfileContext"
 import apiClient from "@food/api/axios"
 import { geocodeAPI } from "@food/api"
@@ -1219,7 +1220,7 @@ export function useLocation() {
           maximumAge: forceFresh ? 0 : (options.maximumAge || 60000), // If forceFresh, get fresh location
         }
 
-        navigator.geolocation.getCurrentPosition(
+        getFastAccuratePosition(
           async (pos) => {
             try {
               const { latitude, longitude, accuracy } = pos.coords
@@ -2173,7 +2174,7 @@ export function useLocation() {
 
       const getPosition = (options) =>
         new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, options)
+          getFastAccuratePosition(resolve, reject, options)
         })
 
       let pos

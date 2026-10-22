@@ -7,6 +7,10 @@
  * Every screen (Taxi, Food, Delivery, admin) must therefore take its options from here, never write its own.
  */
 
+import { watchAndInstallPlacesCompat } from "../maps/placesCompat";
+
+watchAndInstallPlacesCompat();
+
 const sanitizeKey = (value) => String(value || "").trim().replace(/^['"]|['"]$/g, "");
 
 export const GOOGLE_MAPS_API_KEY = sanitizeKey(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);

@@ -17,6 +17,7 @@ import { RESTAURANT_CUISINES, MAX_RESTAURANT_CUISINES } from "@food/constants/di
 import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
+import { createPlacesAutocomplete } from "@/shared/maps/placesCompat"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => { console.warn(...args) }
@@ -853,7 +854,7 @@ export default function AddRestaurant() {
       if (inputElement.hasAttribute('data-google-places-initialized')) return
 
       try {
-        autocomplete = new window.google.maps.places.Autocomplete(
+        autocomplete = createPlacesAutocomplete(
           inputElement,
           {
             fields: ["formatted_address", "address_components", "geometry"],
