@@ -369,7 +369,7 @@ export default function HomeHeader({
               transition={{ type: "spring", damping: 10, stiffness: 100 }}
             >
               <h2
-                className="text-[1.5rem] sm:text-[1.65rem] font-black text-white italic uppercase leading-none drop-shadow-md"
+                className="text-[1.5rem] sm:text-[1.65rem] font-black text-[#ffffff] italic uppercase leading-none drop-shadow-md"
                 style={{ WebkitTextStroke: '1px #5a0000' }}
               >
                 {vegMode ? 'VEGGIE DELIGHT' : 'FLAVOUR FEST'}

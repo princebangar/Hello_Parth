@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { normalizeCurrencyCode } from '../../../../utils/helpers.js';
 import { env } from '../../../../config/env.js';
@@ -3994,6 +3994,16 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
     update.registerFor = normalizeDriverRegisterFor(transportTypeValue);
   }
 
+  // The Service Categories chosen on the edit screen (Taxi / Outstation / Delivery) were never stored on the driver,
+  // so they came back unchanged after Save.
+  const serviceCategoriesValue = payload.serviceCategories ?? payload.service_categories;
+  if (serviceCategoriesValue !== undefined) {
+    update.serviceCategories = normalizeDriverServiceCategories(
+      serviceCategoriesValue,
+      update.registerFor || 'taxi',
+    );
+  }
+
   const vehicleTypeValue = payload.vehicle_type ?? payload.vehicleType ?? payload.car_type;
   if (vehicleTypeValue !== undefined) {
     update.vehicleType = String(vehicleTypeValue || '').trim().toLowerCase() || 'car';
@@ -4572,6 +4582,11 @@ export const listServiceLocations = async (currentAdmin = null) => {
   return ServiceLocation.find(query).sort({ createdAt: -1 }).lean();
 };
 
+// A country's id must be the same on every request: it is stored on drivers / owners, and a random id per request
+// never matched the saved one, so the Country dropdown came back empty on every edit screen.
+const stableCountryId = (name = '') =>
+  createHash('sha1').update(`country:${String(name).trim().toLowerCase()}`).digest('hex').slice(0, 24);
+
 export const listCountries = async () => {
   const locations = await listServiceLocations();
   const countriesFromLocations = locations
@@ -4581,17 +4596,17 @@ export const listCountries = async () => {
       typeof country === 'object'
         ? country
         : {
-          _id: nextId(),
+          _id: stableCountryId(country),
           name: String(country),
           code: String(country).slice(0, 2).toUpperCase(),
         },
     );
 
   const merged = [
-    { _id: nextId(), name: 'India', code: 'IN' },
-    { _id: nextId(), name: 'United Arab Emirates', code: 'AE' },
-    { _id: nextId(), name: 'United Kingdom', code: 'GB' },
-    { _id: nextId(), name: 'United States', code: 'US' },
+    { _id: stableCountryId('India'), name: 'India', code: 'IN' },
+    { _id: stableCountryId('United Arab Emirates'), name: 'United Arab Emirates', code: 'AE' },
+    { _id: stableCountryId('United Kingdom'), name: 'United Kingdom', code: 'GB' },
+    { _id: stableCountryId('United States'), name: 'United States', code: 'US' },
     ...countriesFromLocations,
   ];
 

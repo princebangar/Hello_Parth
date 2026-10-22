@@ -38,8 +38,19 @@ const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, veh
   const normalizedVehicleTypeKeys = Array.isArray(vehicleTypeKeys)
     ? [...new Set(vehicleTypeKeys.map(normalizeVehicleKey).filter(Boolean))]
     : [];
+  // A driver registered for BOTH Taxi and Delivery rides with one vehicle (e.g. a bike) for either job, so a Taxi ride
+  // also reaches him when he signed up with the Delivery type of that vehicle, and the other way round. He matches
+  // by the kind of vehicle (bike / auto / car ...), not by the exact vehicle-type row.
+  const bothServicesClause = normalizedVehicleTypeKeys.length
+    ? {
+        $and: [
+          { $or: [{ registerFor: 'both' }, { serviceCategories: { $all: ['taxi', 'delivery'] } }] },
+          { $or: [{ vehicleType: { $in: normalizedVehicleTypeKeys } }, { vehicleIconType: { $in: normalizedVehicleTypeKeys } }] },
+        ],
+      }
+    : null;
   const vehicleTypeClauses = normalizedVehicleTypeIds.length
-    ? [{ vehicleTypeId: { $in: normalizedVehicleTypeIds } }]
+    ? [{ vehicleTypeId: { $in: normalizedVehicleTypeIds } }, ...(bothServicesClause ? [bothServicesClause] : [])]
     : [
         ...(normalizedVehicleTypeKeys.length
           ? [
@@ -62,7 +73,8 @@ const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, veh
     ],
     ...(zoneId ? { zoneId } : {}),
     ...(serviceLocationId ? { service_location_id: serviceLocationId } : {}),
-    ...vehicleTypeFilter,
+    // the vehicle filter can itself be an $or: it goes under $and so it never replaces the wallet $or above
+    ...(vehicleTypeFilter.$or ? { $and: [vehicleTypeFilter] } : vehicleTypeFilter),
   };
 };
 

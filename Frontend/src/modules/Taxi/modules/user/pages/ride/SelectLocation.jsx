@@ -29,8 +29,6 @@ const formatRoadDistance = (meters) => (meters < 1000 ? `${Math.max(10, Math.rou
 const sanitizeLocationInput = (value) => String(value || '').replace(/^\s+/g, '').replace(/\s{2,}/g, ' ');
 // Pickups saved from this screen are stamped "now" so they count as fresh for a while.
 const savePickup = (location) => saveLocation({ ...location, updatedAt: Date.now() });
-// A saved pickup older than this is not trusted as "where the user is now".
-const SAVED_PICKUP_MAX_AGE_MS = 10 * 60 * 1000;
 // A city ride longer than this is almost certainly a wrong pick (or belongs to Intercity).
 const MAX_CITY_RIDE_KM = 100;
 const MAX_RIDE_STOPS = 3;
@@ -200,10 +198,10 @@ const SelectLocation = () => {
     || routeState.transportType === 'intercity',
   );
   const savedLocation = getSavedLocation();
-  // Only a recent fix counts as "where I am now"; an old one would show a place the user has already left.
-  const savedIsFresh = Boolean(savedLocation?.updatedAt) && (Date.now() - savedLocation.updatedAt) <= SAVED_PICKUP_MAX_AGE_MS;
-  const savedPickupLabel = savedIsFresh ? String(savedLocation?.address || '').trim() : '';
-  const savedPickupCoords = savedIsFresh ? getSavedLocationCoords() : null;
+  // The location the user already chose (the one shown in the Food / Taxi header, one shared store) is the pickup, at
+  // once - no GPS wait on every ride. It needs coordinates too; without them the pickup is detected from the device.
+  const savedPickupCoords = getSavedLocationCoords();
+  const savedPickupLabel = savedPickupCoords ? String(savedLocation?.address || '').trim() : '';
   // Coming from the out-of-zone screen the saved place is the one that is NOT served: start with an empty pickup,
   // which fills itself with the device's current location (or lets the user type another one).
   const fromOutOfZone = Boolean(routeState.fromOutOfZone);
@@ -235,6 +233,10 @@ const SelectLocation = () => {
   const mapInstanceRef = useRef(null);
   const lastCenterRef = useRef(INDIA_CENTER);
   const reverseGeocodeTimerRef = useRef(null);
+  // The pickup is filled from the device ONCE per visit. Clearing it (X / deleting the text) must leave the field empty
+  // for typing - re-detecting on every empty pickup refilled it at once and made manual entry impossible.
+  const autoPickupDoneRef = useRef(false);
+  const pickupInputRef = useRef(null);
   const lastReverseGeocodedCenterRef = useRef(null);
   const geocoderRef = useRef(null);
   const autocompleteServiceRef = useRef(null);
@@ -360,7 +362,7 @@ const SelectLocation = () => {
   // Pickup must always come from the device's real current location — never a hardcoded city default.
   // If geolocation or the Maps API is unavailable, surface an error instead of silently faking a place.
   useEffect(() => {
-    if (pickup || isParcelFlow) {
+    if (pickup || isParcelFlow || autoPickupDoneRef.current) {
       return;
     }
 
@@ -384,6 +386,7 @@ const SelectLocation = () => {
 
     const handleSuccess = (pos) => {
       if (cancelled) return;
+      autoPickupDoneRef.current = true;
       const { latitude, longitude } = pos.coords;
       const coords = [longitude, latitude];
       const geocoder = getGeocoder();
@@ -413,6 +416,7 @@ const SelectLocation = () => {
 
     const handleFailure = () => {
       if (cancelled) return;
+      autoPickupDoneRef.current = true;
       setIsResolvingCurrentLocation(false);
       setLocationError('Could not access your current location. Please allow location access or select manually.');
     };
@@ -1378,6 +1382,7 @@ const SelectLocation = () => {
                   onClick={() => setActiveInput('pickup')}
                 >
                   <input
+                    ref={pickupInputRef}
                     type="text"
                     value={pickup}
                     onChange={(e) => { setUserTyped(true); setPickup(sanitizeLocationInput(e.target.value)); }}
@@ -1393,7 +1398,18 @@ const SelectLocation = () => {
                     <LoaderCircle size={16} className="ml-2 shrink-0 animate-spin text-slate-300" />
                   )}
                   {!isResolvingCurrentLocation && pickup.length > 0 && (
-                    <button onClick={() => setPickup('')} className="ml-2 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        autoPickupDoneRef.current = true;
+                        setUserTyped(true);
+                        setPickup('');
+                        setPickupCoords(null);
+                        setActiveInput('pickup');
+                        pickupInputRef.current?.focus();
+                      }}
+                      className="ml-2 shrink-0"
+                    >
                       <X size={16} className="text-slate-300 hover:text-slate-600 transition-colors" />
                     </button>
                   )}

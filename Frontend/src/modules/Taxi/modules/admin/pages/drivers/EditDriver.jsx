@@ -122,6 +122,9 @@ const EditDriver = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       setIsFetching(true);
+      // kept as plain lists too: the driver's own country is often empty and is then taken from his service location
+      let locationList = [];
+      let countryList = [];
       try {
         const locRes = await fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/service-locations', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -129,7 +132,8 @@ const EditDriver = () => {
         const locData = await locRes.json();
         if (locData.success || locData.data) {
           const results = locData.data?.results || locData.data || locData.results || [];
-          setLocations(Array.isArray(results) ? results : []);
+          locationList = Array.isArray(results) ? results : [];
+          setLocations(locationList);
         }
 
         const zoneRes = await fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/zones', {
@@ -147,7 +151,8 @@ const EditDriver = () => {
         const countData = await countRes.json();
         if (countData.success || countData.data) {
           const results = countData.data?.results || countData.data || countData.results || [];
-          setCountries(Array.isArray(results) ? results : []);
+          countryList = Array.isArray(results) ? results : [];
+          setCountries(countryList);
         }
 
         // Fetching driver details
@@ -176,7 +181,21 @@ const EditDriver = () => {
           setFormData({
             area: d.service_location_id?._id || d.service_location_id || d.service_location?._id || d.service_location || onboardingVehicle.locationId || '',
             zoneId: d.zoneId?._id || d.zoneId || d.zone?._id || d.zone || '',
-            country: d.country?._id || d.country || d.service_location?.country?._id || d.service_location?.country || '',
+            country: (() => {
+              // saved country: its id, or its name - and an old id that no longer matches any country falls back to
+              // the country of the driver's service location
+              const saved = String(d.country?._id || d.country || d.service_location?.country?._id || d.service_location?.country || '').trim();
+              const byId = countryList.find((c) => String(c._id) === saved);
+              if (byId) return String(byId._id);
+              const byName = countryList.find((c) => saved && String(c.name || '').toLowerCase() === saved.toLowerCase());
+              if (byName) return String(byName._id);
+              const areaId = String(d.service_location_id?._id || d.service_location_id || onboardingVehicle.locationId || '');
+              const loc = locationList.find((item) => String(item._id) === areaId);
+              const locCountry = String(loc?.country?._id || loc?.country || '').trim();
+              const fromLocation = countryList.find((c) => String(c._id) === locCountry || String(c.name || '').toLowerCase() === locCountry.toLowerCase());
+              if (fromLocation) return String(fromLocation._id);
+              return countryList.length === 1 ? String(countryList[0]._id) : saved;
+            })(),
             name: d.name || d.user_id?.name || onboardingPersonal.fullName || '',
             mobile: d.phone || d.mobile || d.user_id?.mobile || '',
             gender: d.gender ? d.gender.charAt(0).toUpperCase() + d.gender.slice(1) : 'Male',
@@ -310,9 +329,15 @@ const EditDriver = () => {
         ? prev.serviceCategories.filter((item) => item !== value)
         : [...prev.serviceCategories, value];
 
+      // Transport Type follows the categories: Delivery with Taxi / Outstation = Both, Delivery only = Delivery.
+      const hasDelivery = nextServiceCategories.includes('delivery');
+      const hasRide = nextServiceCategories.some((item) => item === 'taxi' || item === 'outstation');
+      const nextTransportType = hasDelivery && hasRide ? 'both' : hasDelivery ? 'delivery' : 'taxi';
+
       return {
         ...prev,
         serviceCategories: nextServiceCategories,
+        transportType: nextTransportType,
       };
     });
   };

@@ -26,6 +26,7 @@ import api from '../../../../shared/api/axiosInstance';
 import { computeDrivingRoute, sumComputedRouteLegs } from '../../../../shared/utils/googleRoutes';
 import { useUserTheme } from '../../../../shared/context/UserThemeContext';
 import { clearParcelPickerResult, peekParcelPickerResult } from '../../utils/parcelPickerResult';
+import { getSavedLocation, getSavedLocationCoords } from '../../services/locationStore';
 import {
   dedupePlaces,
   formatDistance,
@@ -479,9 +480,10 @@ const SenderReceiverDetails = () => {
   });
   const [receiverName, setReceiverName] = useState(() => parcelState.receiverName || '');
   const [receiverMobile, setReceiverMobile] = useState(() => parcelState.receiverMobile || '');
-  const [pickup, setPickup] = useState(() => parcelState.pickup || '');
+  // The location the user already chose (shown in the header) is the pickup at once; GPS is only asked when there is none.
+  const [pickup, setPickup] = useState(() => parcelState.pickup || (getSavedLocationCoords() ? getSavedLocation()?.address : '') || '');
   const [drop, setDrop] = useState(() => parcelState.drop || '');
-  const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || null);
+  const [pickupCoords, setPickupCoords] = useState(() => parcelState.pickupCoords || getSavedLocationCoords() || null);
   const [dropCoords, setDropCoords] = useState(() => parcelState.dropCoords || null);
   const [activeInput, setActiveInput] = useState(() => {
     const seed = { ...(location.state || {}), ...pickerResult };
@@ -1013,6 +1015,7 @@ const SenderReceiverDetails = () => {
 
   useEffect(() => {
     if (autoPickupRequestedRef.current || livePickupHydratedRef.current) return;
+    if (pickup && pickupCoords) return;
     autoPickupRequestedRef.current = true;
     livePickupHydratedRef.current = true;
     const timer = setTimeout(() => {
