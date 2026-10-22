@@ -2,7 +2,6 @@ import { Driver } from '../driver/models/Driver.js';
 import { Owner } from '../admin/models/Owner.js';
 import { SupportTicket } from '../support/models/SupportTicket.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
-import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 import { FleetVehicle } from '../admin/models/FleetVehicle.js';
 
 // Tells the Taxi admin panel that something is waiting for review: a live socket event (bell + toast in the
@@ -55,7 +54,7 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
 
   const [
     pendingDrivers, pendingDriverCount, pendingOwners, pendingOwnerCount, openTickets, openTicketCount, approvedDrivers,
-    pendingBusDrivers, pendingBusDriverCount, pendingPooling, pendingPoolingCount,
+    pendingBusDrivers, pendingBusDriverCount,
     pendingFleetVehicles, pendingFleetVehicleCount,
   ] =
     await Promise.all([
@@ -89,12 +88,6 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
         .select('name phone busName createdAt')
         .lean(),
       BusDriver.countDocuments({ signupSource: 'self_signup', approve: false }),
-      PoolingVehicle.find({ approve: false })
-        .sort({ createdAt: -1 })
-        .limit(perKind)
-        .select('driverName driverPhone vehicleNumber name createdAt')
-        .lean(),
-      PoolingVehicle.countDocuments({ approve: false }),
       FleetVehicle.find({ status: 'pending', active: true })
         .sort({ createdAt: -1 })
         .limit(perKind)
@@ -152,14 +145,6 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
       link: '/taxi/admin/bus-service',
       createdAt: busDriver.createdAt,
     })),
-    ...pendingPooling.map((vehicle) => ({
-      id: String(vehicle._id),
-      type: 'pooling_registration',
-      title: `${vehicle.driverName || 'New pooling driver'} is waiting for approval`,
-      body: `Pooling · ${vehicle.name || 'Vehicle'}${vehicle.vehicleNumber ? ` · ${vehicle.vehicleNumber}` : ''}`,
-      link: `/taxi/admin/pooling/vehicles/view/${vehicle._id}`,
-      createdAt: vehicle.createdAt,
-    })),
     ...openTickets.map((ticket) => ({
       id: String(ticket._id),
       type: 'support_ticket',
@@ -178,10 +163,9 @@ export const getPendingAdminRequests = async ({ limit = 30 } = {}) => {
       openTickets: openTicketCount,
       documentReverifications: reverifications.length,
       pendingBusDrivers: pendingBusDriverCount,
-      pendingPoolingDrivers: pendingPoolingCount,
       pendingFleetVehicles: pendingFleetVehicleCount,
     },
-    total: pendingDriverCount + pendingOwnerCount + openTicketCount + reverifications.length + pendingBusDriverCount + pendingPoolingCount + pendingFleetVehicleCount,
+    total: pendingDriverCount + pendingOwnerCount + openTicketCount + reverifications.length + pendingBusDriverCount + pendingFleetVehicleCount,
     results: items,
   };
 };

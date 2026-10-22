@@ -1,7 +1,7 @@
 /**
  * axiosInstance wraps every API payload (and everything nested in it) in a Proxy, and history.state is
  * stored with structured clone, which rejects Proxies. Any `navigate(path, { state })` that carries API
- * data therefore threw DataCloneError and the navigation silently never happened (pooling seats → confirm,
+ * data therefore threw DataCloneError and the navigation silently never happened (seat picker → confirm,
  * ride tracking → complete, driver signup → pending...). On that one error, retry with a plain JSON copy.
  */
 const GUARD_FLAG = '__TAXI_HISTORY_STATE_GUARD__';

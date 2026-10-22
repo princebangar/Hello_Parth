@@ -1,7 +1,6 @@
 import { getFirebaseMessaging } from '../../../config/firebase.js';
 import { Driver } from '../driver/models/Driver.js';
 import { User } from '../user/models/User.js';
-import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
 import { listEntityPushTokens } from './pushTokenService.js';
 
@@ -219,28 +218,11 @@ const sendPushToTargets = async ({
   };
 };
 
-const collectDirectTargets = async ({ userIds = [], driverIds = [], poolingDriverIds = [], busDriverIds = [], ownerIds = [] }) => {
+const collectDirectTargets = async ({ userIds = [], driverIds = [], busDriverIds = [], ownerIds = [] }) => {
   const normalizedOwnerIds = [...new Set((Array.isArray(ownerIds) ? ownerIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedUserIds = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const normalizedDriverIds = [...new Set((Array.isArray(driverIds) ? driverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
-  const normalizedPoolingIds = [...new Set((Array.isArray(poolingDriverIds) ? poolingDriverIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
   const targets = [];
-
-  if (normalizedPoolingIds.length) {
-    // a pooling driver account is its pooling vehicle: its push tokens live on that document
-    const vehicles = await PoolingVehicle.find({ _id: { $in: normalizedPoolingIds } })
-      .select('_id fcmTokenWeb fcmTokenMobile')
-      .lean();
-
-    vehicles.forEach((vehicle) => {
-      listEntityPushTokens(vehicle, 'driver').forEach((tokenEntry) => {
-        targets.push({
-          ...tokenEntry,
-          entityId: String(vehicle._id),
-        });
-      });
-    });
-  }
 
   if (normalizedOwnerIds.length) {
     // a fleet owner uses the partner app: the token sits on the owner document and is delivered like a driver's
@@ -425,7 +407,6 @@ export const sendPushNotificationToAudience = async ({
 export const sendPushNotificationToEntities = async ({
   userIds = [],
   driverIds = [],
-  poolingDriverIds = [],
   busDriverIds = [],
   ownerIds = [],
   title,
@@ -433,7 +414,7 @@ export const sendPushNotificationToEntities = async ({
   image = '',
   data = {},
 }) => {
-  const targets = await collectDirectTargets({ userIds, driverIds, poolingDriverIds, busDriverIds, ownerIds });
+  const targets = await collectDirectTargets({ userIds, driverIds, busDriverIds, ownerIds });
   const results = [];
   for (const role of ['user', 'driver']) {
     const roleTargets = targets.filter((target) => target.role === role);

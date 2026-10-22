@@ -9,7 +9,7 @@ import { isPolicyPath } from "../utils/policyPaths"
 // panel simply fills in.
 const isAdminPath = (pathname = "") => /^\/(taxi\/)?admin(\/|$)/.test(pathname)
 
-// The partner apps (restaurant, delivery partner, taxi captain / owner / bus / pooling driver) are separate apps: while
+// The partner apps (restaurant, delivery partner, taxi captain / owner / bus driver) are separate apps: while
 // one of their screens loads they showed the CUSTOMER home skeleton (Food) or the customer Taxi page skeleton right after
 // their splash. They get a plain white page instead - the same as the static index.html shell paints for them.
 const isPartnerPath = (pathname = "") => /^\/(food\/(restaurant|delivery)|taxi\/(driver|owner))(\/|$)/.test(pathname)

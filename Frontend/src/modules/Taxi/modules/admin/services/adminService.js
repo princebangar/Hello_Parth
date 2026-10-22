@@ -228,21 +228,6 @@ export const adminService = {
   createSetPrice: (data) => api.post('/admin/types/set-prices', data),
   updateSetPrice: (id, data) => api.patch(`/admin/types/set-prices/${id}`, data),
   deleteSetPrice: (id) => api.delete(`/admin/types/set-prices/${id}`),
-  getPoolingRoutes: () => api.get('/admin/pooling-routes'),
-  createPoolingRoute: (data) => api.post('/admin/pooling-routes', data),
-  updatePoolingRoute: (id, data) => api.patch(`/admin/pooling-routes/${id}`, data),
-  deletePoolingRoute: (id) => api.delete(`/admin/pooling-routes/${id}`),
-
-  getPoolingVehicles: () => api.get('/admin/pooling-vehicles'),
-  getPendingPoolingVehicles: (search = '') =>
-    api.get('/admin/pooling-vehicles', { params: { approve: false, search } }),
-  createPoolingVehicle: (data) => api.post('/admin/pooling-vehicles', data),
-  approvePoolingVehicle: (id) => api.patch(`/admin/pooling-vehicles/${id}/approve`),
-  updatePoolingVehicle: (id, data) => api.patch(`/admin/pooling-vehicles/${id}`, data),
-  deletePoolingVehicle: (id) => api.delete(`/admin/pooling-vehicles/${id}`),
-
-  getPoolingBookings: () => api.get('/admin/pooling-bookings'),
-  updatePoolingBookingStatus: (id, status) => api.patch(`/admin/pooling-bookings/${id}/status`, { status }),
 
   getAdminBusBookings: (params = {}) => api.get('/admin/bus-bookings', { params }),
   // Registrations, open support tickets and re-uploaded documents waiting for the admin (bell 'Requests' tab).
@@ -255,7 +240,6 @@ export const adminService = {
   createAdminBusBooking: (payload) => api.post('/admin/bus-bookings/manual', payload),
   cancelAdminBusBookingSeats: (id, payload = {}) => api.post(`/admin/bus-bookings/${id}/cancel`, payload),
 
-  uploadImage: (image) => api.post('/admin/upload-image', { image }),
 
   /**
    * Languages Management (Master)

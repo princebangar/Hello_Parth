@@ -49,7 +49,7 @@ export function resolveAppColdStartRoute() {
  */
 const LEGACY_TAXI_ADMIN_SEGMENTS = new Set([
   'dashboard', 'cancellation-analytics', 'earnings', 'chat', 'trips', 'deliveries', 'ongoing',
-  'bus-service', 'pooling', 'wallet', 'users', 'user-import', 'drivers', 'driver-import',
+  'bus-service', 'wallet', 'users', 'user-import', 'drivers', 'driver-import',
   'referrals', 'promotions', 'management', 'owners', 'owner-management', 'fleet', 'geo',
   'finance', 'pricing', 'safety', 'cms', 'support', 'reports', 'masters', 'settings', 'employees',
 ])
@@ -305,7 +305,6 @@ const AUTH_GATED_ROUTE_SEGMENTS = [
   '/parcel/tracking',
   '/parcel/detail',
   '/intercity/confirm',
-  '/pooling/confirm',
   '/food/user/cart',
   '/food/user/checkout',
   '/food/user/orders',

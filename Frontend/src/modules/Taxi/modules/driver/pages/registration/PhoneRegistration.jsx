@@ -8,9 +8,7 @@ import {
   getDriverOnboardingSession,
   getStoredDriverRegistrationSession,
   saveDriverRegistrationSession,
-  sendDriverLoginOtp,
   sendDriverOtp,
-  startPoolingDriverOnboarding,
   toPlainData,
 } from '../../services/registrationService';
 import AuthShell from '../../components/auth/AuthShell';
@@ -176,46 +174,6 @@ const PhoneRegistration = () => {
     if (error) setError('');
   };
 
-  // Pooling partners have their own onboarding API: sign an existing pooling account in, and only when
-  // this number has none yet start the pooling onboarding (which sends its own OTP).
-  const startPoolingFlow = async (baseSession) => {
-    try {
-      const response = await sendDriverLoginOtp({ phone, role: 'pooling_driver' });
-      const payload = unwrap(response);
-      const sessionData = payload?.session || {};
-
-      return saveDriverRegistrationSession({
-        ...baseSession,
-        loginMode: true,
-        existingAccount: true,
-        detectedRole: 'pooling_driver',
-        poolingOnboarding: false,
-        debugOtp: sessionData.debugOtp || '',
-        status: sessionData.status || 'otp_sent',
-        availableRoles: toPlainData(payload?.availableRoles || sessionData.availableRoles) || [],
-      });
-    } catch (loginError) {
-      if (getErrorStatus(loginError) !== 404) {
-        throw loginError;
-      }
-    }
-
-    const response = await startPoolingDriverOnboarding({ phone });
-    const payload = unwrap(response);
-
-    return saveDriverRegistrationSession({
-      ...baseSession,
-      loginMode: false,
-      existingAccount: false,
-      detectedRole: 'pooling_driver',
-      poolingOnboarding: true,
-      registrationId: payload?.session?.registrationId || '',
-      debugOtp: payload?.session?.debugOtp || '',
-      status: payload?.session?.status || 'otp_sent',
-      otpVerified: false,
-    });
-  };
-
   // Driver / owner / bus: the onboarding endpoint signs an existing account of this role in and
   // otherwise opens a registration session for the role that was picked here.
   const startStandardFlow = async (baseSession) => {
@@ -230,7 +188,6 @@ const PhoneRegistration = () => {
       loginMode: Boolean(payload?.loginMode || sessionData.loginMode),
       existingAccount: Boolean(payload?.existingAccount || sessionData.existingAccount),
       detectedRole: String(payload?.detectedRole || sessionData.role || role).trim().toLowerCase(),
-      poolingOnboarding: false,
       status: sessionData.status || '',
       availableRoles: toPlainData(payload?.availableRoles || sessionData.availableRoles) || [],
     });
@@ -264,9 +221,7 @@ const PhoneRegistration = () => {
         referralCode: sharedReferralCode,
         employeeCode: sharedEmployeeCode,
       };
-      const nextState = role === 'pooling_driver'
-        ? await startPoolingFlow(baseSession)
-        : await startStandardFlow(baseSession);
+      const nextState = await startStandardFlow(baseSession);
 
       navigate(`${getRoutePrefixForRole(role)}/otp-verify`, { state: nextState });
     } catch (requestError) {

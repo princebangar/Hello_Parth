@@ -1,6 +1,6 @@
 /**
  * Seeds the baseline Taxi configuration that the apps need before any ride, parcel, intercity,
- * bus or pooling booking can work (vehicle types, prices, app modules, goods types, bus/pooling
+ * or bus booking can work (vehicle types, prices, app modules, goods types, bus
  * routes, support titles, payout methods, feature switches).
  *
  * Safe to re-run: every record is looked up by its natural key first and only created when missing.
@@ -20,8 +20,6 @@ import { GoodsType } from '../src/modules/taxi/admin/models/GoodsType.js';
 import { RentalPackageType } from '../src/modules/taxi/admin/models/RentalPackageType.js';
 import { TaxiAppModule } from '../src/modules/taxi/admin/models/TaxiAppModule.js';
 import { PaymentMethod } from '../src/modules/taxi/admin/models/PaymentMethod.js';
-import { PoolingVehicle } from '../src/modules/taxi/admin/models/PoolingVehicle.js';
-import { PoolingRoute } from '../src/modules/taxi/admin/models/PoolingRoute.js';
 import { BusService } from '../src/modules/taxi/admin/models/BusService.js';
 import { ServiceLocation } from '../src/modules/taxi/admin/models/ServiceLocation.js';
 import { Zone } from '../src/modules/taxi/driver/models/Zone.js';
@@ -197,7 +195,6 @@ const APP_MODULES = [
   { name: 'Parcel', transport_type: 'delivery', service_type: 'normal', order_by: 3, short_description: 'Send anything' },
   { name: 'Intercity', transport_type: 'taxi', service_type: 'outstation', order_by: 4, short_description: 'Outstation one-way trips' },
   { name: 'Bus', transport_type: 'bus', service_type: 'bus', order_by: 5, short_description: 'Book bus seats' },
-  { name: 'Car Pooling', transport_type: 'pooling', service_type: 'pooling', order_by: 6, short_description: 'Share a ride, split the fare' },
 ];
 
 const ensureAppModules = async () => {
@@ -241,7 +238,7 @@ const ensurePaymentMethods = async () => {
 };
 
 const SUPPORT_TITLES = {
-  user: ['Ride issue', 'Payment or refund', 'Driver behaviour', 'Bus / pooling booking', 'App problem', 'Other'],
+  user: ['Ride issue', 'Payment or refund', 'Driver behaviour', 'Bus booking', 'App problem', 'Other'],
   driver: ['Payment or payout', 'Wallet recharge', 'Document verification', 'Trip issue', 'App problem', 'Other'],
   owner: ['Fleet or vehicle', 'Payout', 'Document verification', 'Other'],
 };
@@ -323,82 +320,6 @@ const ensureBusReady = async () => {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Car pooling
-// ---------------------------------------------------------------------------------------------
-const buildPoolingLayout = () => {
-  // 3 columns x 3 rows: driver + one front seat, then two rows of three -> 7 passenger seats.
-  const layout = [
-    { r: 0, c: 0, type: 'driver' },
-    { r: 0, c: 1, type: 'seat' },
-    { r: 0, c: 2, type: 'empty' },
-  ];
-  for (let r = 1; r <= 2; r += 1) {
-    for (let c = 0; c < 3; c += 1) {
-      layout.push({ r, c, type: 'seat' });
-    }
-  }
-  return { rows: 3, cols: 3, layout };
-};
-
-const ensurePooling = async () => {
-  let vehicle = await PoolingVehicle.findOne({ vehicleNumber: 'MP09PL1001' });
-  if (!vehicle) {
-    vehicle = await PoolingVehicle.create({
-      name: 'Ertiga Pool 1',
-      vehicleModel: 'Maruti Ertiga',
-      vehicleNumber: 'MP09PL1001',
-      driverName: 'Pool Driver',
-      driverPhone: '9000000001',
-      color: 'White',
-      capacity: 7,
-      adminCommissionPercentage: 10,
-      ownerCommissionPercentage: 0,
-      serviceTaxPercentage: 5,
-      vehicleType: 'van',
-      blueprint: buildPoolingLayout(),
-      status: 'active',
-      approve: true,
-      poolingEnabled: true,
-    });
-    created('pooling vehicle Ertiga Pool 1');
-  } else {
-    existing('pooling vehicle Ertiga Pool 1');
-  }
-
-  if (await PoolingRoute.findOne({ routeCode: 'IND-BPL-01' })) {
-    existing('pooling route Indore -> Bhopal');
-    return;
-  }
-
-  await adminService.createPoolingRoute({
-    routeName: 'Indore to Bhopal Pool',
-    routeCode: 'IND-BPL-01',
-    originLabel: 'Indore',
-    destinationLabel: 'Bhopal',
-    description: 'Daily shared cab between Indore and Bhopal',
-    assignedVehicleTypeIds: [String(vehicle._id)],
-    pickupPoints: [
-      { id: 'pool-pick-1', name: 'Sarwate Bus Stand', address: 'Sarwate Bus Stand, Indore', stopType: 'pickup', sequence: 1, etaMinutes: 0, latitude: 22.7196, longitude: 75.8577 },
-      { id: 'pool-pick-2', name: 'Vijay Nagar Square', address: 'Vijay Nagar, Indore', stopType: 'pickup', sequence: 2, etaMinutes: 15, latitude: 22.7533, longitude: 75.8937 },
-    ],
-    dropPoints: [
-      { id: 'pool-drop-1', name: 'ISBT Bhopal', address: 'ISBT, Bhopal', stopType: 'drop', sequence: 1, etaMinutes: 270, latitude: 23.2599, longitude: 77.4126 },
-      { id: 'pool-drop-2', name: 'MP Nagar', address: 'MP Nagar, Bhopal', stopType: 'drop', sequence: 2, etaMinutes: 285, latitude: 23.2332, longitude: 77.4343 },
-    ],
-    schedules: [
-      { id: 'pool-sch-morning', label: 'Morning', departureTime: '07:00', arrivalTime: '11:30', activeDays: DAYS, status: 'active' },
-      { id: 'pool-sch-evening', label: 'Evening', departureTime: '18:00', arrivalTime: '22:30', activeDays: DAYS, status: 'active' },
-    ],
-    farePerSeat: 450,
-    maxSeatsPerBooking: 4,
-    maxAdvanceBookingHours: 720,
-    boardingBufferMinutes: 15,
-    status: 'active',
-  });
-  created('pooling route Indore -> Bhopal');
-};
-
-// ---------------------------------------------------------------------------------------------
 // Existing default driver -> point at a real taxi vehicle type
 // ---------------------------------------------------------------------------------------------
 const repointDriversFromParcelVehicle = async ({ parcelVehicle, sedan }) => {
@@ -459,9 +380,6 @@ const run = async () => {
 
   log('\nBus');
   await ensureBusReady();
-
-  log('\nCar pooling');
-  await ensurePooling();
 
   log('\nExisting drivers');
   await repointDriversFromParcelVehicle({ parcelVehicle, sedan: vehicles.Sedan });

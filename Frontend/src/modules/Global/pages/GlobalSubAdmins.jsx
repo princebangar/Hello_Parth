@@ -31,7 +31,7 @@ const inputClass =
 
 const MODULES = [
   { key: "food", label: "Food", description: "Restaurants, orders, delivery", Icon: UtensilsCrossed },
-  { key: "taxi", label: "Taxi", description: "Rides, drivers, bus, pooling", Icon: Truck },
+  { key: "taxi", label: "Taxi", description: "Rides, drivers, bus", Icon: Truck },
 ]
 
 const ModuleBadge = ({ module }) => {

@@ -3,7 +3,6 @@ import { Owner } from '../admin/models/Owner.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
-import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 import { User } from '../user/models/User.js';
 import { verifyAccessToken } from '../services/tokenService.js';
 import {
@@ -17,7 +16,6 @@ const roleModelMap = {
   admin: Admin,
   'super-admin': Admin,
   driver: Driver,
-  pooling_driver: PoolingVehicle,
   bus_driver: BusDriver,
   owner: Owner,
   user: User,
@@ -137,22 +135,6 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
         ['pending', 'blocked'].includes(String(entity.status || '').toLowerCase()))
     ) {
       throw new ApiError(403, 'Bus driver account is pending approval');
-    }
-
-    if (
-      normalizedRole === 'pooling_driver' &&
-      !allowPending &&
-      (entity.approve === false || String(entity.status || '').toLowerCase() === 'pending')
-    ) {
-      throw new ApiError(403, 'Pooling driver account is pending approval');
-    }
-
-    if (
-      normalizedRole === 'pooling_driver' &&
-      (entity.poolingEnabled === false ||
-        ['inactive', 'maintenance'].includes(String(entity.status || '').toLowerCase()))
-    ) {
-      throw new ApiError(403, 'Pooling driver account is inactive');
     }
 
     attachResolvedAuth(req, payload, subjectId);

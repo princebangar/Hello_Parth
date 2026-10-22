@@ -33,7 +33,6 @@ const PROMO_TRANSPORT_OPTIONS = [
   { value: 'bus', label: 'Bus' },
   { value: 'taxi', label: 'Taxi' },
   { value: 'delivery', label: 'Delivery' },
-  { value: 'pooling', label: 'Pooling' },
 ];
 
 const inputClass =

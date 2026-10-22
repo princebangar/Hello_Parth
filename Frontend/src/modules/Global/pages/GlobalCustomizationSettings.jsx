@@ -8,7 +8,7 @@ import { CUSTOMIZATION_CACHE_KEY, apiErrorMessage, globalAdminAPI } from "../api
 
 /** Who uses which gateway — shown on its card so the admin knows what a switch affects. */
 const GATEWAY_USAGE = {
-  razorpay: "Food: checkout + wallet top-up. Taxi: ride, tip, pooling, bus booking, driver QR, wallet top-up.",
+  razorpay: "Food: checkout + wallet top-up. Taxi: ride, tip, bus booking, driver QR, wallet top-up.",
   phonepe: "Taxi wallet top-up only (user and driver). Used when Razorpay is off.",
 }
 

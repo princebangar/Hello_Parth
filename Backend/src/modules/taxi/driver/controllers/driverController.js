@@ -16,8 +16,6 @@ import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
-import { PoolingVehicle } from "../../admin/models/PoolingVehicle.js";
-import { PoolingBooking } from "../../admin/models/PoolingBooking.js";
 import { ServiceLocation } from "../../admin/models/ServiceLocation.js";
 import { Vehicle } from "../../admin/models/Vehicle.js";
 import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js";
@@ -25,7 +23,6 @@ import { Notification } from "../../admin/promotions/models/Notification.js";
 import { dismissNotifications, getDismissedNotificationIds } from "../../admin/promotions/models/NotificationDismissal.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
 import { Zone } from "../models/Zone.js";
-import { uploadDataUrlToCloudinary } from "../../../../utils/cloudinaryUpload.js";
 import {
   comparePassword,
   hashPassword,
@@ -49,13 +46,6 @@ import {
   startDriverLoginOtp,
   verifyDriverLoginOtp,
 } from "../services/loginOtpService.js";
-import {
-  completePoolingDriverOnboarding,
-  getPoolingDriverOnboardingSession,
-  savePoolingDriverOnboardingDetails,
-  startPoolingDriverOnboarding,
-  verifyPoolingDriverOnboardingOtp,
-} from "../services/poolingOnboardingService.js";
 import { verifyAccessToken } from "../../services/tokenService.js";
 import { clearDriverActiveRideIfStale } from "../../services/rideService.js";
 import { getWalletSettings } from "../../services/appSettingsService.js";
@@ -1787,87 +1777,6 @@ const serializeOwnerProfile = (owner = {}) => ({
   },
 });
 
-const serializePoolingDriverProfile = (vehicle = {}) => ({
-  id: vehicle._id,
-  name: vehicle.driverName || "Pooling Driver",
-  phone: vehicle.driverPhone || "",
-  email: "",
-  profileImage: "",
-  gender: "",
-  vehicleType: vehicle.vehicleType || "sedan",
-  vehicleTypeId: null,
-  vehicleIconType: vehicle.vehicleType || "sedan",
-  vehicleIconUrl: Array.isArray(vehicle.images) && vehicle.images.length > 0 ? vehicle.images[0] : "",
-  vehicleMake: vehicle.name || "",
-  vehicleModel: vehicle.vehicleModel || "",
-  registerFor: "pooling",
-  vehicleNumber: vehicle.vehicleNumber || "",
-  vehicleColor: vehicle.color || "",
-  vehicleImage: Array.isArray(vehicle.images) && vehicle.images.length > 0 ? vehicle.images[0] : "",
-  city: "",
-  status: vehicle.status || (vehicle.approve === false ? "pending" : "active"),
-  rating: 0,
-  wallet: {
-    balance: 0,
-    currency: "INR",
-  },
-  referralCode: "",
-  deletionRequest: { status: "none" },
-  isOnline: vehicle.isOnline === true,
-  isOnRide: false,
-  onlineSelfie: {},
-  location: vehicle.lastLocation?.coordinates?.length === 2 ? vehicle.lastLocation : null,
-  zoneId: null,
-  documents: {},
-  emergencyContacts: [],
-  poolingVehicle: vehicle,
-  approve: vehicle.approve !== false,
-  onboarding: {
-    role: "pooling_driver",
-  },
-});
-
-const serializePoolingDriverBooking = (booking = {}) => ({
-  id: String(booking._id || ""),
-  bookingId: String(booking.bookingId || ""),
-  seatsBooked: Number(booking.seatsBooked || 0),
-  fare: Number(booking.fare || 0),
-  baseFare: Number(booking.baseFare || 0),
-  serviceTaxPercentage: Number(booking.serviceTaxPercentage || 0),
-  serviceTaxAmount: Number(booking.serviceTaxAmount || 0),
-  driverCommissionPercentage: Number(booking.driverCommissionPercentage || 0),
-  driverCommissionAmount: Number(booking.driverCommissionAmount || 0),
-  ownerCommissionPercentage: Number(booking.ownerCommissionPercentage || 0),
-  ownerCommissionAmount: Number(booking.ownerCommissionAmount || 0),
-  currency: String(booking.currency || "INR"),
-  paymentStatus: String(booking.paymentStatus || booking.payment?.status || "pending"),
-  bookingStatus: String(booking.bookingStatus || "confirmed"),
-  selectedSeats: Array.isArray(booking.selectedSeats) ? booking.selectedSeats : [],
-  pickupLabel: String(booking.pickupLabel || ""),
-  dropLabel: String(booking.dropLabel || ""),
-  scheduleId: String(booking.scheduleId || ""),
-  otp: String(booking.otp || ""),
-  travelDate: booking.travelDate || null,
-  createdAt: booking.createdAt || null,
-  updatedAt: booking.updatedAt || null,
-  user: booking.user
-    ? {
-        id: String(booking.user._id || booking.user),
-        name: String(booking.user.name || ""),
-        phone: String(booking.user.phone || ""),
-        email: String(booking.user.email || ""),
-      }
-    : null,
-  route: booking.route
-    ? {
-        id: String(booking.route._id || booking.route),
-        routeName: String(booking.route.routeName || ""),
-        originLabel: String(booking.route.originLabel || ""),
-        destinationLabel: String(booking.route.destinationLabel || ""),
-      }
-    : null,
-});
-
 const serializeDriverNotification = (item = {}) => ({
   id: String(item._id || ""),
   title: String(item.push_title || "").trim(),
@@ -2121,20 +2030,6 @@ export const getCurrentDriver = async (req, res) => {
     return;
   }
 
-  if (String(req.auth?.role || "").toLowerCase() === "pooling_driver") {
-    const poolingVehicle = await PoolingVehicle.findById(req.auth.sub).lean();
-
-    if (!poolingVehicle) {
-      throw new ApiError(404, "Pooling driver not found");
-    }
-
-    res.json({
-      success: true,
-      data: serializePoolingDriverProfile(poolingVehicle),
-    });
-    return;
-  }
-
   const driver = await Driver.findById(req.auth.sub)
     .populate("zoneId", "name service_location_id");
 
@@ -2202,29 +2097,6 @@ export const getCurrentDriver = async (req, res) => {
       onboarding: driver.onboarding || {},
       todaySummary: todaySummary || buildDriverTodaySummaryFromDocument(driver),
     },
-  });
-};
-
-export const getPoolingDriverBookings = async (req, res) => {
-  if (String(req.auth?.role || "").toLowerCase() !== "pooling_driver") {
-    throw new ApiError(403, "Pooling driver access is required");
-  }
-
-  const bookings = await PoolingBooking.find({ vehicle: req.auth.sub })
-    .populate("user", "name phone email")
-    .populate("route", "routeName originLabel destinationLabel schedules")
-    .sort({ travelDate: -1, createdAt: -1 })
-    .lean();
-
-  res.json({
-    success: true,
-    data: bookings.map((booking) => ({
-      ...serializePoolingDriverBooking(booking),
-      departureTime: String(
-        (booking.route?.schedules || []).find((item) => String(item?.id || "") === String(booking.scheduleId || ""))
-          ?.departureTime || "",
-      ),
-    })),
   });
 };
 
@@ -2408,7 +2280,6 @@ export const cancelDriverScheduledRide = async (req, res) => {
 const DRIVER_PUSH_ROLE_MODEL_MAP = {
   driver: Driver,
   owner: Owner,
-  pooling_driver: PoolingVehicle,
   bus_driver: BusDriver,
 };
 
@@ -5455,7 +5326,7 @@ export const getDriverApprovalStatus = async (req, res) => {
 
   const normalizedRole = String(payload.role || "").toLowerCase();
 
-  if (!["driver", "owner", "bus_driver", "pooling_driver"].includes(normalizedRole)) {
+  if (!["driver", "owner", "bus_driver"].includes(normalizedRole)) {
     throw new ApiError(403, "Insufficient permissions for this resource. Role: " + normalizedRole);
   }
 
@@ -5514,35 +5385,6 @@ export const getDriverApprovalStatus = async (req, res) => {
         rejectionReason: busDriver.rejectionReason || "",
         isOnline: false,
         isOnRide: false,
-      },
-    });
-    return;
-  }
-
-  if (normalizedRole === "pooling_driver") {
-    const poolingVehicle = await PoolingVehicle.findById(payload.sub).lean();
-
-    if (!poolingVehicle) {
-      throw new ApiError(404, "Pooling driver not found");
-    }
-
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-
-    res.json({
-      success: true,
-      data: {
-        id: poolingVehicle._id,
-        name: poolingVehicle.driverName || "",
-        phone: poolingVehicle.phone || "",
-        approve: poolingVehicle.approve,
-        status: poolingVehicle.status,
-        documents: poolingVehicle.documents || {},
-        onboarding: poolingVehicle.onboarding || {},
-        rejectionReason: poolingVehicle.rejectionReason || "",
-        isOnline: poolingVehicle.isOnline || false,
-        isOnRide: poolingVehicle.isOnRide || false,
       },
     });
     return;
@@ -6188,135 +6030,6 @@ export const deleteOwnerFleetVehicle = async (req, res) => {
     success: true,
     message: "Vehicle deleted successfully",
     data: { deleted: true },
-  });
-};
-
-export const getOwnerPoolingVehicles = async (req, res) => {
-  const owner = await resolveAuthenticatedOwner(req);
-
-  if (!owner?._id) {
-    throw new ApiError(
-      403,
-      "Pooling vehicle access is only available for owner accounts",
-    );
-  }
-
-  const vehicles = await PoolingVehicle.find({ ownerId: owner._id })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  res.json({
-    success: true,
-    data: vehicles,
-    message: "Owner pooling vehicles fetched successfully",
-  });
-};
-
-export const createOwnerPoolingVehicle = async (req, res) => {
-  const owner = await resolveAuthenticatedOwner(req);
-
-  if (!owner?._id) {
-    throw new ApiError(
-      403,
-      "Pooling vehicle access is only available for owner accounts",
-    );
-  }
-
-  const body = req.body || {};
-  const vehicle = await PoolingVehicle.create({
-    name: String(body.name || "").trim(),
-    vehicleModel: String(body.vehicleModel || "").trim(),
-    vehicleNumber: String(body.vehicleNumber || "").trim(),
-    driverName: String(body.driverName || "").trim(),
-    driverPhone: String(body.driverPhone || "").trim(),
-    color: String(body.color || "").trim(),
-    capacity: Math.max(1, Number(body.capacity || 1) || 1),
-    vehicleType: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'].includes(String(body.vehicleType || ''))
-      ? String(body.vehicleType)
-      : 'sedan',
-    blueprint: body.blueprint || {},
-    images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
-    ownerId: owner._id,
-    approve: false,
-    status: 'pending',
-    poolingEnabled: true,
-    adminCommissionPercentage: 0,
-    ownerCommissionPercentage: 0,
-    serviceTaxPercentage: 0,
-  });
-
-  res.status(201).json({
-    success: true,
-    data: vehicle,
-    message: "Pooling vehicle created successfully",
-  });
-};
-
-export const updateOwnerPoolingVehicle = async (req, res) => {
-  const owner = await resolveAuthenticatedOwner(req);
-
-  if (!owner?._id) {
-    throw new ApiError(
-      403,
-      "Pooling vehicle access is only available for owner accounts",
-    );
-  }
-
-  const body = req.body || {};
-  const vehicle = await PoolingVehicle.findOneAndUpdate(
-      { _id: req.params.vehicleId, ownerId: owner._id },
-      {
-        name: String(body.name || "").trim(),
-        vehicleModel: String(body.vehicleModel || "").trim(),
-        vehicleNumber: String(body.vehicleNumber || "").trim(),
-        driverName: String(body.driverName || "").trim(),
-        driverPhone: String(body.driverPhone || "").trim(),
-        color: String(body.color || "").trim(),
-        capacity: Math.max(1, Number(body.capacity || 1) || 1),
-        vehicleType: ['bike', 'sedan', 'hatchback', 'suv', 'van', 'luxury'].includes(String(body.vehicleType || ''))
-          ? String(body.vehicleType)
-          : 'sedan',
-        blueprint: body.blueprint || {},
-        images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
-        ownerId: owner._id,
-      },
-      { returnDocument: 'after', runValidators: true },
-    );
-
-  if (!vehicle) {
-    throw new ApiError(404, "Pooling vehicle not found");
-  }
-
-  res.json({
-    success: true,
-    data: vehicle,
-    message: "Pooling vehicle updated successfully",
-  });
-};
-
-export const deleteOwnerPoolingVehicle = async (req, res) => {
-  const owner = await resolveAuthenticatedOwner(req);
-
-  if (!owner?._id) {
-    throw new ApiError(
-      403,
-      "Pooling vehicle access is only available for owner accounts",
-    );
-  }
-
-  const vehicle = await PoolingVehicle.findOneAndDelete({
-    _id: req.params.vehicleId,
-    ownerId: owner._id,
-  });
-
-  if (!vehicle) {
-    throw new ApiError(404, "Pooling vehicle not found");
-  }
-
-  res.json({
-    success: true,
-    data: { deleted: true },
-    message: "Pooling vehicle deleted successfully",
   });
 };
 
@@ -7733,54 +7446,6 @@ export const startDriverLoginOtpRequest = async (req, res) => {
 export const verifyDriverLoginOtpRequest = async (req, res) => {
   const result = await verifyDriverLoginOtp(req.body);
   res.json({ success: true, data: result });
-};
-
-export const startPoolingOnboardingRequest = async (req, res) => {
-  const result = await startPoolingDriverOnboarding(req.body);
-  res.status(201).json({ success: true, data: result });
-};
-
-export const verifyPoolingOnboardingOtpRequest = async (req, res) => {
-  const result = await verifyPoolingDriverOnboardingOtp(req.body);
-  res.json({ success: true, data: result });
-};
-
-export const getPoolingOnboardingSessionRequest = async (req, res) => {
-  const result = await getPoolingDriverOnboardingSession({
-    registrationId: req.params.registrationId,
-    phone: req.query.phone,
-  });
-  res.json({ success: true, data: result });
-};
-
-export const savePoolingOnboardingDetailsRequest = async (req, res) => {
-  const result = await savePoolingDriverOnboardingDetails(req.body);
-  res.json({ success: true, data: result });
-};
-
-export const completePoolingOnboardingRequest = async (req, res) => {
-  const result = await completePoolingDriverOnboarding(req.body);
-  res.status(201).json({ success: true, data: result });
-};
-
-export const uploadPoolingOnboardingImageRequest = async (req, res) => {
-  const image = String(req.body?.image || "").trim();
-
-  if (!image) {
-    throw new ApiError(400, "Image data is required");
-  }
-
-  const result = await uploadDataUrlToCloudinary({
-    dataUrl: image,
-    publicIdPrefix: "pooling-driver-onboarding",
-  });
-
-  res.status(201).json({
-    success: true,
-    data: {
-      url: result.secureUrl,
-    },
-  });
 };
 
 export const startOnboarding = async (req, res) => {

@@ -1263,7 +1263,7 @@ export default function Home({ homeMode = null, isTabActive = true }) {
         } else {
           try {
             const meta = document.querySelector('meta[name="theme-color"]');
-            if (meta) meta.setAttribute('content', '#D91F3A');
+            if (meta) meta.setAttribute('content', '#9A1809');
           } catch (e) {}
         }
         setCachedExploreIcons({ items: mappedItems, heading });
@@ -2805,7 +2805,7 @@ export default function Home({ homeMode = null, isTabActive = true }) {
             }
           }
           .home-red-banner-bg {
-            background-color: #D91F3A;
+            background-color: #9A1809;
           }
         `}</style>
         </div>
@@ -2839,7 +2839,7 @@ export default function Home({ homeMode = null, isTabActive = true }) {
                     }
                     try {
                       const meta = document.querySelector('meta[name="theme-color"]');
-                      if (meta) meta.setAttribute('content', '#D91F3A');
+                      if (meta) meta.setAttribute('content', '#9A1809');
                     } catch(e) {}
                   }}
                 />

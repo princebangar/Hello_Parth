@@ -47,7 +47,7 @@ const readTitleAndSubtitle = () => {
 
 const THEME = {
   taxi: { bg: '#0B172A', pin: '#5B9BD5', activeTab: '#2563EB', height: 130, radius: 0 },
-  food: { bg: '#D91F3A', pin: '#FF6B7A', activeTab: '#FF5C72', height: 393, radius: 36 },
+  food: { bg: '#9A1809', pin: '#FF6B7A', activeTab: '#FF5C72', height: 393, radius: 36 },
 }
 
 const icon = { fill: 'none', stroke: '#fff', strokeLinecap: 'round', strokeLinejoin: 'round' }

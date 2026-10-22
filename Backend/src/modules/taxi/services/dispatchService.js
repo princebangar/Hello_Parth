@@ -543,7 +543,7 @@ export const addSocketSubscriptions = (socket, { role, entityId }) => {
     return;
   }
 
-  if (role === 'driver' || role === 'pooling_driver') {
+  if (role === 'driver') {
     socket.join(getDriverRoom(entityId));
   }
 };

@@ -198,26 +198,6 @@ export const sendDriverLoginOtp = (payload) =>
 export const verifyDriverLoginOtp = (payload) =>
   api.post("/drivers/auth/verify-otp", payload);
 
-export const startPoolingDriverOnboarding = (payload) =>
-  api.post("/drivers/pooling/onboarding/send-otp", payload);
-
-export const verifyPoolingDriverOnboardingOtp = (payload) =>
-  api.post("/drivers/pooling/onboarding/verify-otp", payload);
-
-export const getPoolingDriverOnboardingSession = ({ registrationId, phone }) =>
-  api.get(`/drivers/pooling/onboarding/session/${encodeURIComponent(registrationId)}`, {
-    params: phone ? { phone } : {},
-  });
-
-export const savePoolingDriverOnboardingDetails = (payload) =>
-  api.patch("/drivers/pooling/onboarding/details", payload);
-
-export const completePoolingDriverOnboarding = (payload) =>
-  api.post("/drivers/pooling/onboarding/complete", payload);
-
-export const uploadPoolingDriverOnboardingImage = (image) =>
-  api.post("/drivers/pooling/onboarding/upload-image", { image });
-
 export const getDriverOnboardingSession = ({ registrationId, phone }) =>
   api.get(`/drivers/onboarding/session/${encodeURIComponent(registrationId)}`, {
     params: phone ? { phone } : {},
@@ -252,13 +232,6 @@ export const saveDriverDocuments = (payload) =>
 
 export const completeDriverOnboarding = (payload) =>
   api.post("/drivers/onboarding/complete", payload);
-
-export const ownerPoolingVehicleService = {
-  getPoolingVehicles: () => api.get("/drivers/fleet/pooling-vehicles"),
-  createPoolingVehicle: (data) => api.post("/drivers/fleet/pooling-vehicles", data),
-  updatePoolingVehicle: (id, data) => api.patch(`/drivers/fleet/pooling-vehicles/${id}`, data),
-  deletePoolingVehicle: (id) => api.delete(`/drivers/fleet/pooling-vehicles/${id}`),
-};
 
 export const buildDriverOnboardingSessionSnapshot = (payload = {}, fallbackSession = {}) => {
   const serverSession = payload?.session || {};
@@ -522,24 +495,6 @@ export const getCurrentDriver = () =>
     if (driver && typeof driver === "object") writeDriverCache("me", driver);
     return response;
   });
-
-export const getPoolingDriverBookings = () =>
-  api.get("/drivers/pooling/bookings", withDriverAuth());
-
-export const getPoolingDriverDashboard = () =>
-  api.get("/drivers/pooling/dashboard", withDriverAuth());
-
-export const getPoolingDriverRoutes = () =>
-  api.get("/drivers/pooling/routes", withDriverAuth());
-
-export const setPoolingDriverRoute = (routeId, assigned) =>
-  api.patch(`/drivers/pooling/routes/${routeId}`, { assigned: Boolean(assigned) }, withDriverAuth());
-
-export const setPoolingDriverOnline = (online, location = null) =>
-  api.patch("/drivers/pooling/online", { online: Boolean(online), ...(location ? { location } : {}) }, withDriverAuth());
-
-export const sendPoolingDriverLocation = (location, heading = null) =>
-  api.post("/drivers/pooling/location", { location, heading }, withDriverAuth());
 
 export const getDriverRideHistory = (params = {}) =>
   api.get("/rides", withDriverAuth({ params }));

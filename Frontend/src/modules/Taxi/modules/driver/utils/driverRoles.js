@@ -1,4 +1,4 @@
-import { Briefcase, BusFront, CarFront, Users } from 'lucide-react';
+import { Briefcase, BusFront, CarFront } from 'lucide-react';
 
 // The four partner roles that sign in through the driver / owner portal. The login, OTP and role-selection
 // screens all render from this list so the wording, icons and routing stay in one place.
@@ -20,14 +20,6 @@ export const DRIVER_ROLES = [
     tint: 'rgba(16, 185, 129, 0.14)',
   },
   {
-    id: 'pooling_driver',
-    label: 'Pooling Driver',
-    description: 'Shared seats on fixed routes',
-    Icon: Users,
-    accent: '#7c3aed',
-    tint: 'rgba(139, 92, 246, 0.14)',
-  },
-  {
     id: 'bus_driver',
     label: 'Bus Driver',
     description: 'Bus service and bookings',
@@ -43,7 +35,6 @@ const LAST_LOGIN_ROLE_KEY = 'driverLoginRole';
 export const normalizeDriverRole = (role) => {
   const normalized = String(role || '').trim().toLowerCase();
   if (normalized === 'owner') return 'owner';
-  if (['pooling_driver', 'pooling-driver', 'poolingdriver', 'pooling'].includes(normalized)) return 'pooling_driver';
   if (['bus_driver', 'bus-driver', 'busdriver', 'bus'].includes(normalized)) return 'bus_driver';
   return DEFAULT_DRIVER_ROLE;
 };

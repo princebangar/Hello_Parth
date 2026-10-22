@@ -91,7 +91,7 @@ export default function FestBanner({ isVegMode, videoUrl = "", hideFoodImages = 
           transition={{ type: "spring", damping: 10, stiffness: 100 }}
         >
           <h2 
-            className="text-4xl sm:text-5xl font-black text-[#fff200] italic uppercase leading-none drop-shadow-md"
+            className="text-4xl sm:text-5xl font-black text-white italic uppercase leading-none drop-shadow-md"
             style={{ WebkitTextStroke: '1px #5a0000' }}
           >
             {isVegMode ? 'VEGGIE DELIGHT' : 'FLAVOUR FEST'}

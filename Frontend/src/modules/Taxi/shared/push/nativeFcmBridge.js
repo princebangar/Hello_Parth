@@ -17,7 +17,6 @@ const NATIVE_FCM_GLOBAL_KEYS = [
 const DRIVER_PORTAL_ROLES = new Set([
   'driver',
   'owner',
-  'pooling_driver',
   'bus_driver',
 ]);
 

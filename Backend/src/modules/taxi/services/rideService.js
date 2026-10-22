@@ -730,7 +730,7 @@ export const resolveSetPriceForRide = async ({ zoneId = null, serviceLocationId 
   }
 
   const normalizedTransportType = String(transportType || 'taxi').trim().toLowerCase() || 'taxi';
-  // Set Price has no "intercity" transport type (only taxi / delivery / pooling / both), so an intercity or outstation
+  // Set Price has no "intercity" transport type (only taxi / delivery / both), so an intercity or outstation
   // ride is priced and settled with the rule of its taxi vehicle: intercity rows first, then BOTH, then taxi.
   const transportCandidates = normalizedTransportType === 'intercity'
     ? ['intercity', 'both', 'taxi']

@@ -10,7 +10,7 @@ import { uploadDataUrlToCloudinary } from '../../../../../utils/cloudinaryUpload
 import { sendPushNotificationToAudience, sendPushNotificationToEntities } from '../../../services/pushNotificationService.js';
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
-const PROMO_TRANSPORT_TYPES = ['taxi', 'delivery', 'pooling', 'bus', 'self_drive', 'all'];
+const PROMO_TRANSPORT_TYPES = ['taxi', 'delivery', 'bus', 'self_drive', 'all'];
 const PROMO_AUDIENCES = ['all', 'first_time', 'existing', 'specific'];
 
 const buildPaginator = (items, page = 1, limit = 50) => {
@@ -282,7 +282,7 @@ const normalizePromoPayload = async (payload, existing = null) => {
 
   const transportType = normalizeTransportType(payload.transport_type ?? existing?.transport_type ?? 'all');
   if (!PROMO_TRANSPORT_TYPES.includes(transportType)) {
-    throw new ApiError(400, 'Transport type must be one of taxi, delivery, pooling, bus, self_drive, or all');
+    throw new ApiError(400, 'Transport type must be one of taxi, delivery, bus, self_drive, or all');
   }
 
   const minimumTripAmount = parseNumber(payload.minimum_trip_amount ?? existing?.minimum_trip_amount, 0);

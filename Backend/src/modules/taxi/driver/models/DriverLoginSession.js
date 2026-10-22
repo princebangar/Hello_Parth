@@ -16,7 +16,7 @@ const driverLoginSessionSchema = new mongoose.Schema(
     },
     accountRole: {
       type: String,
-      enum: ['driver', 'owner', 'pooling_driver', 'bus_driver'],
+      enum: ['driver', 'owner', 'bus_driver'],
       default: 'driver',
       required: true,
     },

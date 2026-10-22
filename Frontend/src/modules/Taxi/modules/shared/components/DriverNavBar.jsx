@@ -4,7 +4,7 @@ import useKeyboardOffset from "../../../shared/hooks/useKeyboardOffset";
 import "./driverChrome.css";
 
 /**
- * The floating bottom bar shared by every driver app (taxi, owner, bus, pooling, delivery).
+ * The floating bottom bar shared by every driver app (taxi, owner, bus, delivery).
  * items: [{ key, label, Icon, active, onSelect, badge?, onPreload? }]
  * The blue pill is one element that is always mounted and just slides to the active tab, so a tapped tab
  * never blinks (a pill that is unmounted and mounted again leaves white text on white for a moment).

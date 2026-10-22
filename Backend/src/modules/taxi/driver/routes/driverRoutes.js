@@ -1,10 +1,3 @@
-import {
-  getPoolingDriverDashboard,
-  getPoolingDriverRoutes,
-  setPoolingDriverOnline,
-  setPoolingDriverRoute,
-  updatePoolingDriverLocation,
-} from "../controllers/poolingDriverController.js";
 import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
@@ -22,11 +15,8 @@ import {
   createDriverPaymentQr,
   handleDriverRazorpayWalletTopupCallback,
   createDriverWithdrawalRequest,
-  completePoolingOnboardingRequest,
   createOwnerFleetDriver,
-  createOwnerPoolingVehicle,
   updateOwnerFleetDriver,
-  updateOwnerPoolingVehicle,
   updateOwnerFleetVehicle,
   deleteCurrentDriverAccount,
   deleteDriverEmergencyContact,
@@ -41,7 +31,6 @@ import {
   updateBusDriverLiveLocation,
   updateBusDriverLiveTripStatus,
   getCurrentDriver,
-  getPoolingDriverBookings,
   getBusDriverSeatLayout,
   listBusDriverBookings,
   getDriverPaymentQrStatus,
@@ -57,7 +46,6 @@ import {
   cancelDriverScheduledRide,
   getDriverScheduledRides,
   listOwnerBusServices,
-  getOwnerPoolingVehicles,
   saveDriverFcmToken,
   getOwnerFleetDrivers,
   getOwnerFleetDashboard,
@@ -71,7 +59,6 @@ import {
   getServiceLocations,
   loginDriver,
   startDriverLoginOtpRequest,
-  startPoolingOnboardingRequest,
   saveOnboardingDocuments,
   saveOnboardingRoleDetails,
   saveOnboardingRole,
@@ -100,16 +87,11 @@ import {
   updateOwnerBusService,
   verifyOnboardingOtp,
   verifyDriverLoginOtpRequest,
-  verifyPoolingOnboardingOtpRequest,
   addOwnerVehicle,
   deleteOwnerBusService,
-  deleteOwnerPoolingVehicle,
   getOwnerFleetVehicles,
   deleteOwnerFleetVehicle,
   updateCurrentDriverDocument,
-  getPoolingOnboardingSessionRequest,
-  savePoolingOnboardingDetailsRequest,
-  uploadPoolingOnboardingImageRequest,
 } from "../controllers/driverController.js";
 import { triggerDriverSosAlert } from '../../safety/controllers/safetyController.js';
 
@@ -123,66 +105,10 @@ driverRouter.post(
   otpVerifyRateLimit,
   asyncHandler(verifyDriverLoginOtpRequest),
 );
-driverRouter.post(
-  "/pooling/onboarding/send-otp",
-  otpSendRateLimit,
-  asyncHandler(startPoolingOnboardingRequest),
-);
-driverRouter.post(
-  "/pooling/onboarding/verify-otp",
-  otpVerifyRateLimit,
-  asyncHandler(verifyPoolingOnboardingOtpRequest),
-);
-driverRouter.get(
-  "/pooling/onboarding/session/:registrationId",
-  asyncHandler(getPoolingOnboardingSessionRequest),
-);
-driverRouter.patch(
-  "/pooling/onboarding/details",
-  asyncHandler(savePoolingOnboardingDetailsRequest),
-);
-driverRouter.post(
-  "/pooling/onboarding/complete",
-  asyncHandler(completePoolingOnboardingRequest),
-);
-driverRouter.post(
-  "/pooling/onboarding/upload-image",
-  asyncHandler(uploadPoolingOnboardingImageRequest),
-);
 driverRouter.get(
   "/me",
-  authenticate(["driver", "owner", "pooling_driver", "bus_driver"], { allowPending: true }),
+  authenticate(["driver", "owner", "bus_driver"], { allowPending: true }),
   asyncHandler(getCurrentDriver),
-);
-driverRouter.get(
-  "/pooling/dashboard",
-  authenticate(["pooling_driver"]),
-  asyncHandler(getPoolingDriverDashboard),
-);
-driverRouter.get(
-  "/pooling/routes",
-  authenticate(["pooling_driver"]),
-  asyncHandler(getPoolingDriverRoutes),
-);
-driverRouter.patch(
-  "/pooling/routes/:routeId",
-  authenticate(["pooling_driver"]),
-  asyncHandler(setPoolingDriverRoute),
-);
-driverRouter.patch(
-  "/pooling/online",
-  authenticate(["pooling_driver"]),
-  asyncHandler(setPoolingDriverOnline),
-);
-driverRouter.post(
-  "/pooling/location",
-  authenticate(["pooling_driver"]),
-  asyncHandler(updatePoolingDriverLocation),
-);
-driverRouter.get(
-  "/pooling/bookings",
-  authenticate(["pooling_driver"], { allowPending: true }),
-  asyncHandler(getPoolingDriverBookings),
 );
 driverRouter.patch(
   "/me",
@@ -336,7 +262,7 @@ driverRouter.post(
 );
 driverRouter.post(
   "/fcm-token",
-  authenticate(["driver", "owner", "pooling_driver", "bus_driver"], { allowPending: true }),
+  authenticate(["driver", "owner", "bus_driver"], { allowPending: true }),
   asyncHandler(saveDriverFcmToken),
 );
 driverRouter.get(
@@ -490,26 +416,6 @@ driverRouter.delete(
   "/fleet/vehicles/:vehicleId",
   authenticate(["driver", "owner"]),
   asyncHandler(deleteOwnerFleetVehicle),
-);
-driverRouter.get(
-  "/fleet/pooling-vehicles",
-  authenticate(["owner"]),
-  asyncHandler(getOwnerPoolingVehicles),
-);
-driverRouter.post(
-  "/fleet/pooling-vehicles",
-  authenticate(["owner"]),
-  asyncHandler(createOwnerPoolingVehicle),
-);
-driverRouter.patch(
-  "/fleet/pooling-vehicles/:vehicleId",
-  authenticate(["owner"]),
-  asyncHandler(updateOwnerPoolingVehicle),
-);
-driverRouter.delete(
-  "/fleet/pooling-vehicles/:vehicleId",
-  authenticate(["owner"]),
-  asyncHandler(deleteOwnerPoolingVehicle),
 );
 driverRouter.get("/service-locations", asyncHandler(getServiceLocations));
 driverRouter.get(

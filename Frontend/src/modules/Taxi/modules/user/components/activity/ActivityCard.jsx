@@ -14,7 +14,7 @@ const ActivityCard = ({ type, title, address, date, time, status, statusTone, pr
   const [driverBroken, setDriverBroken] = useState(false);
   const resolvedDriverImage = driverBroken ? buildAvatarFallback(driverName) : driverImage;
   // No picture (or it fails to load) -> a vehicle glyph, never a leftover placeholder image.
-  const artHint = type === 'parcel' ? 'parcel' : type === 'bus' ? 'bus' : type === 'pooling' ? 'pooling' : title;
+  const artHint = type === 'parcel' ? 'parcel' : type === 'bus' ? 'bus' : title;
 
   return (
     <motion.button

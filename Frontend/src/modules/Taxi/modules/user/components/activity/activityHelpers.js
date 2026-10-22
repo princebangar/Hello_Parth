@@ -7,7 +7,7 @@ import SuvIcon from '../../../../assets/icons/SUV.png';
 import busIcon from '../../../../assets/3d images/AutoCab/bus.png';
 
 export const PAGE_SIZE = 4;
-export const TABS = ['All', 'Rides', 'Parcels', 'Bus', 'Pooling', 'Outstation', 'Scheduled'];
+export const TABS = ['All', 'Rides', 'Parcels', 'Bus', 'Outstation', 'Scheduled'];
 
 export const pickFirstString = (...values) => {
   for (const value of values) {
@@ -125,10 +125,6 @@ export const getVehicleVisual = (ride, type) => {
     return busIcon;
   }
 
-  if (type === 'pooling') {
-    return carIcon;
-  }
-
   return getVehicleTypeAsset(
     ride?.vehicleIconType ||
     ride?.driver?.vehicleIconType ||
@@ -222,34 +218,3 @@ export const normalizeBusBooking = (booking) => {
   };
 };
 
-export const normalizePoolingBooking = (booking) => {
-  const routeName = pickFirstString(
-    booking?.route?.routeName,
-    booking?.route?.originLabel && booking?.route?.destinationLabel
-      ? `${booking.route.originLabel} to ${booking.route.destinationLabel}`
-      : '',
-    'Pooling trip',
-  );
-  const pickup = pickFirstString(booking?.pickupLabel, booking?.route?.originLabel, 'Pickup');
-  const drop = pickFirstString(booking?.dropLabel, booking?.route?.destinationLabel, 'Drop');
-  const driverName = pickFirstString(booking?.vehicle?.name, 'Pooling vehicle');
-  const status = formatStatus(booking?.bookingStatus || 'confirmed');
-
-  return {
-    id: booking?._id || booking?.bookingId,
-    type: 'pooling',
-    title: routeName,
-    address: `${pickup} to ${drop}`,
-    date: formatRideDate(booking?.travelDate),
-    time: pickFirstString(booking?.scheduleId, formatRideTime(booking?.travelDate)),
-    status,
-    statusTone: getStatusTone(status),
-    price: Number(booking?.fare || 0).toFixed(0),
-    driverName,
-    eyebrow: pickFirstString(booking?.vehicle?.vehicleNumber, 'Pooling booking'),
-    driverImage: buildAvatarFallback(driverName),
-    vehicleImage: getVehicleVisual(null, 'pooling'),
-    booking,
-    sortTimestamp: toTimestamp(booking?.createdAt || booking?.travelDate),
-  };
-};

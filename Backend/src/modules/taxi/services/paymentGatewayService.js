@@ -17,7 +17,7 @@ const TAXI_TO_PLATFORM = {
 export const getActivePaymentGateway = async () => {
   const status = await getPaymentGatewayStatus();
 
-  // Razorpay first: rides, pooling and the driver QR only run on Razorpay; PhonePe is a wallet top-up fallback.
+  // Razorpay first: rides and the driver QR only run on Razorpay; PhonePe is a wallet top-up fallback.
   for (const [slug, platformKey] of Object.entries(TAXI_TO_PLATFORM)) {
     const gateway = status.find((item) => item.key === platformKey);
     if (gateway?.active) {

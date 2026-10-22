@@ -680,8 +680,8 @@ const Home = () => {
       return;
     }
 
+    // Pooling is switched off until the new pooling flow is built.
     if (name.includes("pooling") || serviceType.includes("pooling")) {
-      navigate("/taxi/user/pooling");
       return;
     }
 

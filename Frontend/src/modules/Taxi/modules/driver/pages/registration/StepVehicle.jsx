@@ -163,7 +163,7 @@ const normalizeServiceCategories = (value, registerFor = 'taxi') => {
         rawValues
             .map((item) => String(item || '').trim().toLowerCase())
             .flatMap((item) => item === 'both' ? ['taxi', 'outstation'] : item ? [item] : [])
-            .filter((item) => ['taxi', 'outstation', 'delivery', 'pooling'].includes(item)),
+            .filter((item) => ['taxi', 'outstation', 'delivery'].includes(item)),
     )];
 
     if (normalized.length > 0) {
@@ -175,7 +175,7 @@ const normalizeServiceCategories = (value, registerFor = 'taxi') => {
         return ['taxi', 'outstation'];
     }
 
-    return ['taxi', 'outstation', 'delivery', 'pooling'].includes(fallback) ? [fallback] : ['taxi'];
+    return ['taxi', 'outstation', 'delivery'].includes(fallback) ? [fallback] : ['taxi'];
 };
 
 const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
@@ -185,7 +185,6 @@ const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
     if (normalized.includes('taxi')) return 'taxi';
     if (normalized.includes('outstation')) return 'outstation';
     if (normalized.includes('delivery')) return 'delivery';
-    if (normalized.includes('pooling')) return 'pooling';
 
     return String(fallback || 'taxi').trim().toLowerCase() || 'taxi';
 };

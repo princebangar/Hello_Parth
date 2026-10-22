@@ -65,7 +65,6 @@ const normalizePaymentTypes = (value) => {
 const normalizeTransportType = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'delivery') return 'delivery';
-  if (normalized === 'pooling') return 'pooling';
   if (normalized === 'both' || normalized === 'all') return 'both';
   return normalized === 'taxi' ? 'taxi' : '';
 };
@@ -76,7 +75,6 @@ const getVehicleTransportType = (vehicle = {}) =>
 const formatTransportTypeLabel = (value = '') => {
   const normalized = normalizeTransportType(value);
   if (normalized === 'delivery') return 'Delivery';
-  if (normalized === 'pooling') return 'Pooling';
   if (normalized === 'both') return 'Both';
   return normalized === 'taxi' ? 'Taxi' : 'Not assigned';
 };
@@ -658,7 +656,6 @@ const SetPrices = ({ mode }) => {
                           <option value="">All transport types</option>
                           <option value="taxi">Taxi</option>
                           <option value="delivery">Delivery</option>
-                          <option value="pooling">Pooling</option>
                           <option value="both">Both</option>
                         </select>
                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

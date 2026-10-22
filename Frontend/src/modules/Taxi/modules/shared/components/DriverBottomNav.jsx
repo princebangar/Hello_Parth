@@ -2,9 +2,7 @@ import React from "react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Briefcase,
   Bus,
-  CalendarCheck,
   Car,
   Home,
   IndianRupee,
@@ -24,7 +22,7 @@ const isEnabledFlag = (value) => {
   return ["1", "true", "yes", "on", "enabled"].includes(String(value || "").trim().toLowerCase());
 };
 
-// Bottom navigation of the Taxi driver, Owner and Pooling driver apps (the Bus driver has its own tabs).
+// Bottom navigation of the Taxi driver and Owner apps (the Bus driver has its own tabs).
 const DriverBottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -46,22 +44,16 @@ const DriverBottomNav = () => {
         { Icon: Home, label: "Home", path: `${routePrefix}/dashboard` },
         { Icon: Users, label: "Drivers", path: `${routePrefix}/manage-drivers` },
         { Icon: Car, label: "Vehicle", path: `${routePrefix}/vehicle-fleet` },
-        { Icon: Briefcase, label: "Pooling", path: `${routePrefix}/pooling-vehicles` },
         ...(busEnabled ? [{ Icon: Bus, label: "Bus", path: `${routePrefix}/bus-service` }] : []),
         { Icon: User, label: "Account", path: `${routePrefix}/profile` },
       ]
-    : role === "pooling_driver"
-      ? [
-          { Icon: Home, label: "Home", path: "/taxi/driver/pooling", exact: true },
-          { Icon: CalendarCheck, label: "Bookings", path: "/taxi/driver/pooling/bookings" },
-        ]
-      : [
-          { Icon: Home, label: "Home", path: `${routePrefix}/home` },
-          { Icon: History, label: "History", path: `${routePrefix}/history` },
-          { Icon: IndianRupee, label: "Wallet", path: `${routePrefix}/wallet` },
-          { Icon: Trophy, label: "Milestone", path: `${routePrefix}/incentives` },
-          { Icon: User, label: "Profile", path: `${routePrefix}/profile` },
-        ];
+    : [
+        { Icon: Home, label: "Home", path: `${routePrefix}/home` },
+        { Icon: History, label: "History", path: `${routePrefix}/history` },
+        { Icon: IndianRupee, label: "Wallet", path: `${routePrefix}/wallet` },
+        { Icon: Trophy, label: "Milestone", path: `${routePrefix}/incentives` },
+        { Icon: User, label: "Profile", path: `${routePrefix}/profile` },
+      ];
 
   // Screens that belong to a tab without being the tab itself light that tab (the owner's landing path is /home but its
   // tab points at /dashboard; wallet / history open from the dashboard; bus bookings sit under Bus).

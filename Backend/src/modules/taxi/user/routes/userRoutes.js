@@ -51,15 +51,6 @@ import {
   getSetPrices,
   getZones,
 } from '../controllers/userController.js';
-import {
-  searchPoolingRoutes,
-  getPoolingRouteDetails,
-  createPoolingBookingOrder,
-  verifyPoolingBookingPayment,
-  createPoolingBooking,
-  getMyPoolingBookings,
-  cancelMyPoolingBooking,
-} from '../controllers/poolingController.js';
 import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
@@ -115,10 +106,3 @@ userRouter.post('/bus-bookings/order', authenticate(['user']), paymentOrderRateL
 userRouter.post('/bus-bookings/verify', authenticate(['user']), paymentOrderRateLimit, asyncHandler(verifyBusBookingPayment));
 userRouter.post('/bus-bookings/:id/cancel', authenticate(['user']), asyncHandler(cancelMyBusBooking));
 
-userRouter.get('/pooling/search', authenticate(['user']), asyncHandler(searchPoolingRoutes));
-userRouter.get('/pooling/routes/:id', authenticate(['user']), asyncHandler(getPoolingRouteDetails));
-userRouter.post('/pooling/bookings/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createPoolingBookingOrder));
-userRouter.post('/pooling/bookings/verify', authenticate(['user']), paymentOrderRateLimit, asyncHandler(verifyPoolingBookingPayment));
-userRouter.post('/pooling/bookings', authenticate(['user']), asyncHandler(createPoolingBooking));
-userRouter.get('/pooling/bookings', authenticate(['user']), asyncHandler(getMyPoolingBookings));
-userRouter.post('/pooling/bookings/:id/cancel', authenticate(['user']), asyncHandler(cancelMyPoolingBooking));

@@ -192,7 +192,7 @@ export default function GlobalAdminHome() {
 
         {access.taxi && <ModuleCard
           title="Taxi"
-          subtitle="Rides, parcels, bus, pooling, drivers"
+          subtitle="Rides, parcels, bus, drivers"
           icon={Car}
           accent="bg-sky-600"
           status={taxi.status}

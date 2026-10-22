@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
-import imgShared    from '@/assets/3d images/AutoCab/taxi.png';
 import imgOneWay    from '@/assets/3d images/AutoCab/one way.png';
 import imgBus       from '@/assets/3d images/AutoCab/bus.png';
 
@@ -15,16 +14,6 @@ const isEnabledFlag = (value) => {
 };
 
 const services = [
-  {
-    id: 'shared',
-    title: 'Shared Taxi',
-    sub: 'Split fare with co-passengers',
-    img: imgShared,
-    path: '/cab/shared',
-    accent: 'bg-[linear-gradient(135deg,#F0FDF4_0%,#BBF7D0_100%)]',
-    tag: '50% cheaper',
-    tagColor: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-  },
   {
     id: 'oneway',
     title: 'One Way',

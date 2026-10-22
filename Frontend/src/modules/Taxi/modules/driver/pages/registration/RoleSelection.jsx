@@ -5,7 +5,6 @@ import {
   getStoredDriverRegistrationSession,
   saveDriverOnboardingRole,
   saveDriverRegistrationSession,
-  startPoolingDriverOnboarding,
 } from '../../services/registrationService';
 import AuthShell from '../../components/auth/AuthShell';
 import RolePicker from '../../components/auth/RolePicker';
@@ -15,7 +14,6 @@ const unwrap = (response) => response?.data?.data || response?.data || response;
 
 const ROLE_NOTES = {
   bus_driver: 'You will ask for a bus assignment during signup.',
-  pooling_driver: 'One more OTP is sent to set up your pooling profile.',
 };
 
 // Only reached for a number whose role was not chosen on the login screen (older sessions / deep links).
@@ -48,28 +46,6 @@ const RoleSelection = () => {
     setError('');
 
     try {
-      if (selectedRole === 'pooling_driver') {
-        const response = await startPoolingDriverOnboarding({ phone });
-        const payload = unwrap(response);
-        const nextSession = saveDriverRegistrationSession({
-          ...session,
-          phone,
-          role: 'pooling_driver',
-          roleConfirmed: true,
-          needsRoleSelection: false,
-          loginMode: false,
-          poolingOnboarding: true,
-          registrationId: payload?.session?.registrationId || '',
-          debugOtp: payload?.session?.debugOtp || '',
-          status: payload?.session?.status || 'otp_sent',
-          otpVerified: false,
-          entryPath: '/taxi/driver/login',
-        });
-
-        navigate('/taxi/driver/otp-verify', { replace: true, state: nextSession });
-        return;
-      }
-
       const response = await saveDriverOnboardingRole({
         registrationId,
         phone,

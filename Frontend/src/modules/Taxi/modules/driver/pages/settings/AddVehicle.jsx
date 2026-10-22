@@ -70,8 +70,6 @@ const ICON_TYPE_ALIASES = {
   motorbike: "bike",
   mini_truck: "truck",
   "mini truck": "truck",
-  pooling_truck: "truck",
-  "pooling truck": "truck",
   loader: "truck",
   hcv: "HCV",
   lcv: "LCV",
@@ -118,7 +116,6 @@ const formatTransportType = (value = "") => {
 const formatDispatchType = (value = "") => {
   const normalized = String(value || "normal").trim().toLowerCase();
   if (normalized === "bidding") return "Bidding";
-  if (normalized === "pooling") return "Pooling";
   return "Normal";
 };
 

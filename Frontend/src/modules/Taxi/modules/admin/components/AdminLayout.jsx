@@ -8,7 +8,6 @@ import {
   prefetchTaxiAdmin,
 } from '@/shared/utils/activeModule.js';
 import { getAdminHomePath, getModuleAccess } from '@/shared/utils/adminAccess.js';
-import { POOLING_ENABLED } from '../../../shared/featureFlags';
 import { socketService } from '../../../shared/api/socket';
 import { warmAdminPages } from '@/shared/utils/warmAdminPages.js';
 import { useSettings } from '../../../shared/context/SettingsContext';
@@ -45,7 +44,6 @@ import {
   PlusCircle,
   Search,
   Settings,
-  Share2,
   ShieldCheck,
   Smartphone,
   Star,
@@ -88,7 +86,7 @@ const hasActiveChild = (pathname, items = []) =>
 // permissions, sub-items); this only decides which section heading each top-level item sits under, in order.
 const ADMIN_SECTION_LAYOUT = [
   { title: 'Home', labels: ['Dashboard', 'Admin Earnings', 'Chat'] },
-  { title: 'Operations', labels: ['Trip Requests', 'Ongoing Requests', 'User SOS', 'Driver SOS', 'Delivery Requests', 'Cancellation Analytics', 'Geofencing', 'Bus Service', 'Car Pooling'] },
+  { title: 'Operations', labels: ['Trip Requests', 'Ongoing Requests', 'User SOS', 'Driver SOS', 'Delivery Requests', 'Cancellation Analytics', 'Geofencing', 'Bus Service'] },
   { title: 'People', labels: ['Customer Management', 'Driver Management', 'Owner Management'] },
   { title: 'Pricing & Services', labels: ['Price Management'] },
   { title: 'Marketing', labels: ['Broadcast Notifications', 'Promotions Management'] },
@@ -920,20 +918,6 @@ const AdminLayout = () => {
               { label: 'Bus Bookings', path: '/taxi/admin/bus-service/bookings', permission: 'bus_service.view' },
             ],
           },
-          ...(POOLING_ENABLED
-            ? [
-                {
-                  icon: Share2,
-                  label: 'Car Pooling',
-                  subItems: [
-                    { label: 'Pooling Vehicles', path: '/taxi/admin/pooling/vehicles', permission: 'pooling.view' },
-                    { label: 'Pooling Commission', path: '/taxi/admin/pooling/commission', permission: 'pooling.view' },
-                    { label: 'Routes & Stops', path: '/taxi/admin/pooling/routes', permission: 'pooling.view' },
-                    { label: 'Pooling Bookings', path: '/taxi/admin/pooling/bookings', permission: 'pooling.view' },
-                  ],
-                },
-              ]
-            : []),
           {
             icon: MapPin,
             label: 'Geofencing',
@@ -2044,9 +2028,7 @@ const AdminLayout = () => {
                                       ? 'Owner'
                                       : item.type === 'bus_driver_registration'
                                         ? 'Bus'
-                                        : item.type === 'pooling_registration'
-                                          ? 'Pooling'
-                                          : 'Driver'}
+                                        : 'Driver'}
                               </span>
                             </div>
                             <div className="mt-2 flex items-center justify-end text-[11px] font-semibold text-slate-400">

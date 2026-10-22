@@ -10,7 +10,7 @@ export const getServiceGlyph = (hint = '') => {
   if (text.includes('bike') || text.includes('moto')) return Motorbike;
   if (text.includes('parcel') || text.includes('delivery') || text.includes('courier')) return Package;
   if (text.includes('truck')) return Truck;
-  if (text.includes('pool') || text.includes('share')) return Users;
+  if (text.includes('share')) return Users;
   if (text.includes('intercity') || text.includes('outstation')) return Route;
   if (text.includes('taxi') || text.includes('auto') || text.includes('cab')) return CarTaxiFront;
   return CarFront;

@@ -113,6 +113,13 @@ const getFallbackIcon = (module = {}) => {
 
 const normalizeModuleText = (value = '') => String(value || '').trim().toLowerCase();
 
+// Pooling is switched off for riders until the new pooling flow is built.
+const isPoolingModule = (module = {}) => {
+  const name = normalizeModuleText(module?.name);
+  const serviceType = normalizeModuleText(module?.service_type);
+  return serviceType === 'pooling' || name.includes('pooling');
+};
+
 const isDeliveryModule = (module = {}) => {
   const name = normalizeModuleText(module?.name);
   const serviceType = normalizeModuleText(module?.service_type);
@@ -188,9 +195,6 @@ export const ServiceCard = React.memo(({ icon, label, description, path, loading
     }
     if (cleanLabel.includes('bus')) {
       return 'Intercity travel';
-    }
-    if (cleanLabel.includes('pool')) {
-      return 'Share your ride';
     }
     return 'Everything in minutes';
   };
@@ -490,9 +494,6 @@ const ServiceGrid = ({
 
     if (transportType === 'delivery') return '/taxi/user/parcel/type';
     if (serviceType === 'outstation') return '/taxi/user/intercity';
-    if (serviceType === 'pooling' || moduleName.includes('pooling')) {
-      return '/taxi/user/pooling';
-    }
 
     if (serviceType === 'bus' || transportType === 'bus' || moduleName.includes('bus')) {
       return '/taxi/user/bus';
@@ -565,7 +566,8 @@ const ServiceGrid = ({
 
   const activeModules = React.useMemo(() => {
     return (modules || []).filter(
-      (m) => m.active === 1 || m.active === true || String(m.active) === '1' || String(m.active) === 'true'
+      (m) => (m.active === 1 || m.active === true || String(m.active) === '1' || String(m.active) === 'true')
+        && !isPoolingModule(m)
     );
   }, [modules]);
 

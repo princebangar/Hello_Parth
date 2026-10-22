@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 // ... removed BottomNavbar import ...
 import { useUserTheme } from '../../../shared/context/UserThemeContext';
 
@@ -17,8 +16,7 @@ import {
 import api from '../../../shared/api/axiosInstance';
 import { toHistorySafeState } from '../../../shared/utils/historyState';
 import userBusService from '../services/busService';
-import { userService } from '../services/userService';
-import { normalizeBusBooking, normalizePoolingBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
+import { normalizeBusBooking, normalizeRide, PAGE_SIZE, TABS } from '../components/activity/activityHelpers';
 
 import taxiFallback from '../../../assets/user-app/taxi.png';
 import bikeFallback from '../../../assets/user-app/bike.png';
@@ -117,7 +115,7 @@ const getScheduledCountdownLabel = (value, now = Date.now()) => {
 
 const AGGREGATE_FETCH_LIMIT = 60;
 
-// The "All" list (rides + bus + pooling, newest first) is the first thing Rides shows. It is fetched ahead of time -
+// The "All" list (rides + bus, newest first) is the first thing Rides shows. It is fetched ahead of time -
 // when the app is idle, or the moment a finger lands on the Rides tab - and kept here, so opening Rides shows the list
 // straight away and only refreshes it in the background. Kept per signed-in customer; memory only, so it is gone after
 // a reload and never shows one account's rides to another.
@@ -136,27 +134,19 @@ const activityOwner = () => {
 const readAllActivitiesCache = () => (allActivitiesCache && allActivitiesCache.owner === activityOwner() ? allActivitiesCache.merged : null);
 
 const fetchAllActivities = async () => {
-  const [ridesResult, busResult, poolingResult] = await Promise.allSettled([
+  const [ridesResult, busResult] = await Promise.allSettled([
     api.get('/rides', { params: { limit: AGGREGATE_FETCH_LIMIT, page: 1 } }),
     userBusService.getMyBookings({ page: 1, limit: AGGREGATE_FETCH_LIMIT }),
-    userService.getMyPoolingBookings(),
   ]);
 
   const ridePayload = ridesResult.status === 'fulfilled' ? getPayload(ridesResult.value) : {};
   const busPayload = busResult.status === 'fulfilled' ? getPayload(busResult.value) : {};
-  const poolingPayload = poolingResult.status === 'fulfilled' ? getPayload(poolingResult.value) : {};
   const rides = Array.isArray(ridePayload?.results) ? ridePayload.results : [];
   const bookings = Array.isArray(busPayload?.results) ? busPayload.results : [];
-  const poolingBookings = Array.isArray(poolingPayload)
-    ? poolingPayload
-    : Array.isArray(poolingPayload?.results)
-      ? poolingPayload.results
-      : [];
 
   const merged = sortLatestFirst([
     ...rides.map(normalizeRide).filter((item) => item.id),
     ...bookings.map(normalizeBusBooking).filter((item) => item.id),
-    ...poolingBookings.map(normalizePoolingBooking).filter((item) => item.id),
   ]);
   allActivitiesCache = { owner: activityOwner(), merged };
   return merged;
@@ -207,7 +197,6 @@ const getRideCategoryForTab = (tab) => {
 const getHelperText = (tab) => {
   if (tab === 'Support') return 'Tickets and help requests';
   if (tab === 'Bus') return 'Your bus tickets, travel timings, and operator details';
-  if (tab === 'Pooling') return 'Shared pooling rides, seat reservations, and upcoming departures';
   if (tab === 'Outstation') return 'Long-distance trips and outstation deliveries';
   if (tab === 'Scheduled') return 'Bookings reserved for a later pickup time';
   return 'Your recent trips, deliveries, and bookings';
@@ -351,16 +340,6 @@ const Activity = () => {
           const bookings = Array.isArray(payload?.results) ? payload.results : [];
           nextActivities = bookings.map(normalizeBusBooking).filter((item) => item.id);
           nextPagination = payload?.pagination || null;
-        } else if (activeTab === 'Pooling') {
-          const response = await userService.getMyPoolingBookings();
-          const payload = getPayload(response);
-          const bookings = Array.isArray(payload) ? payload : Array.isArray(payload?.results) ? payload.results : [];
-          const localPage = buildLocalPagination(
-            sortLatestFirst(bookings.map(normalizePoolingBooking).filter((item) => item.id)),
-            currentPage,
-          );
-          nextActivities = localPage.results;
-          nextPagination = localPage.pagination;
         } else if (activeTab === 'All') {
           // a fetch that is already running (started by prefetchActivityAll) is joined instead of repeated
           const merged = await (allActivitiesInflight || (allActivitiesInflight = fetchAllActivities().finally(() => {
@@ -447,25 +426,9 @@ const Activity = () => {
     setCurrentPage(1);
   }, [activeTab]);
 
-  const handleCancelPooling = async (item) => {
-    if (!window.confirm('Cancel this pooling booking? Bookings can be cancelled up to 6 hours before departure.')) {
-      return;
-    }
-
-    try {
-      const response = await userService.cancelPoolingBooking(item.booking?._id || item.id);
-      toast.success(response?.message || response?.data?.message || 'Booking cancelled');
-      setReloadKey((current) => current + 1);
-    } catch (cancelError) {
-      toast.error(cancelError?.response?.data?.error || cancelError?.message || 'Could not cancel this booking');
-    }
-  };
-
   const handleItemClick = (item) => {
     if (item.type === 'bus') {
       navigate(`${routePrefix}/profile/bus-bookings/${item.id}`);
-    } else if (item.type === 'pooling') {
-      navigate(`${routePrefix}/pooling`);
     } else if (item.type === 'parcel') {
       navigate(`${routePrefix}/parcel/detail/${item.id}`);
     } else {
@@ -602,15 +565,6 @@ const Activity = () => {
             {activities.map((activity) => (
               <div key={activity.id}>
                 <ActivityCard {...activity} onClick={() => handleItemClick(activity)} />
-                {activity.type === 'pooling' && String(activity.booking?.bookingStatus || 'confirmed') === 'confirmed' && (
-                  <button
-                    type="button"
-                    onClick={() => handleCancelPooling(activity)}
-                    className="mt-1.5 w-full rounded-xl border border-rose-100 bg-rose-50 py-2 text-[12px] font-semibold text-rose-600 active:scale-[0.99]"
-                  >
-                    Cancel booking
-                  </button>
-                )}
               </div>
             ))}
             <ActivityPager

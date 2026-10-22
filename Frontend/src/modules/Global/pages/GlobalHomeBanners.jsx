@@ -151,7 +151,7 @@ function BannerCard({
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  value={/^#[0-9a-f]{6}$/i.test(topColor) ? topColor : "#d91f3a"}
+                  value={/^#[0-9a-f]{6}$/i.test(topColor) ? topColor : "#9a1809"}
                   onChange={(event) => setTopColor(event.target.value)}
                   disabled={!canEdit || !imageUrl}
                   className="h-9 w-12 rounded border border-slate-200 bg-white p-1"
@@ -160,7 +160,7 @@ function BannerCard({
                   type="text"
                   value={topColor}
                   onChange={(event) => setTopColor(event.target.value.trim())}
-                  placeholder="#D91F3A"
+                  placeholder="#9A1809"
                   disabled={!canEdit || !imageUrl}
                   className="w-32 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                 />
@@ -345,7 +345,7 @@ export default function GlobalHomeBanners() {
                 "The bottom corners are rounded by the app.",
               ]}
               aspect="390 / 393"
-              baseColor="#D91F3A"
+              baseColor="#9A1809"
               baseColorNote="No image: the default red Flavour Fest design is shown"
               guideAt={49}
               guideLabel="Search bar ends"

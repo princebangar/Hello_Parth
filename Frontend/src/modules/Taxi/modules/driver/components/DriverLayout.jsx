@@ -52,7 +52,6 @@ const onboardingRoutes = new Set([
     '/taxi/driver/step-referral',
     '/taxi/driver/step-vehicle',
     '/taxi/driver/step-documents',
-    '/taxi/driver/pooling/onboarding',
     '/taxi/driver/role-signup',
     '/taxi/driver/registration-status',
     '/taxi/driver/status',
@@ -87,13 +86,10 @@ const TOP_BAR_PATHS = new Set([
     '/taxi/driver/wallet',
     '/taxi/driver/incentives',
     '/taxi/driver/bus-home',
-    '/taxi/driver/pooling',
-    '/taxi/driver/pooling/bookings',
     '/taxi/owner/home',
     '/taxi/owner/dashboard',
     '/taxi/owner/manage-drivers',
     '/taxi/owner/vehicle-fleet',
-    '/taxi/owner/pooling-vehicles',
     '/taxi/owner/bus-service',
     '/taxi/owner/bus-bookings',
     '/taxi/owner/wallet',
@@ -103,8 +99,8 @@ const TOP_BAR_PATHS = new Set([
 // Screens that carry the floating bottom bar. It lives here (not in each page) so it stays mounted while the
 // pages change and the active pill can slide from tab to tab.
 const BOTTOM_NAV_PATH = new RegExp(
-    '^/taxi/driver/(home|dashboard|history|wallet|incentives|profile|vehicle-fleet(/.*)?|pooling|pooling/bookings)$'
-    + '|^/taxi/owner/(home|dashboard|history|wallet|profile|manage-drivers|vehicle-fleet(/.*)?|pooling-vehicles(/.*)?|bus-service(/.*)?|bus-bookings)$',
+    '^/taxi/driver/(home|dashboard|history|wallet|incentives|profile|vehicle-fleet(/.*)?)$'
+    + '|^/taxi/owner/(home|dashboard|history|wallet|profile|manage-drivers|vehicle-fleet(/.*)?|bus-service(/.*)?|bus-bookings)$',
 );
 
 // A token that already passed /drivers/me (approved): a refresh opens the screen straight away and the check runs
@@ -155,18 +151,13 @@ const getAuthenticatedDriverHome = (pathname = '', role = '') => {
         ? `${getPortalPrefix(pathname, 'owner')}/dashboard`
         : activeRole === 'bus_driver'
             ? '/taxi/driver/bus-home'
-        : activeRole === 'pooling_driver'
-            ? '/taxi/driver/pooling'
             : '/taxi/driver/home';
 };
 
 const getPendingDriverRoute = (pathname = '') => `${getPortalPrefix(pathname)}/registration-status`;
-const getPendingRouteForRole = (pathname = '', role = '') =>
-    String(role || '').toLowerCase() === 'pooling_driver'
-        ? '/taxi/driver/pooling/status'
-        : getPendingDriverRoute(pathname);
 const isBusConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/bus-home');
-const isPoolingConsoleRoute = (pathname = '') => pathname.startsWith('/taxi/driver/pooling');
+// Pooling is switched off until the new pooling flow is built: an old pooling-driver session is signed out.
+const isRetiredPoolingRole = (role = '') => String(role || '').toLowerCase() === 'pooling_driver';
 const isPendingAllowedRoute = (pathname = '') =>
     [
         '/taxi/driver/documents',
@@ -179,7 +170,6 @@ const isPendingAllowedRoute = (pathname = '') =>
         '/taxi/owner/support/chat',
         '/taxi/driver/support/tickets',
         '/taxi/owner/support/tickets',
-        '/taxi/driver/pooling/status',
     ].includes(pathname);
 
 // Sits next to the screen inside the Suspense boundary, so its effect runs only once the screen itself is on the page.
@@ -244,9 +234,10 @@ const DriverLayout = () => {
             return;
         }
 
-        if (isPoolingConsoleRoute(currentPath) && authenticatedRole !== 'pooling_driver') {
+        if (isRetiredPoolingRole(authenticatedRole)) {
             setIsAllowed(false);
-            navigate(authenticatedHome, { replace: true });
+            clearDriverAuthState();
+            redirectToDriverLogin(navigate);
             return;
         }
 
@@ -282,6 +273,14 @@ const DriverLayout = () => {
                     return;
                 }
 
+                if (isRetiredPoolingRole(effectiveRole)) {
+                    forgetVerifiedSession();
+                    setIsAllowed(false);
+                    clearDriverAuthState();
+                    redirectToDriverLogin(navigate);
+                    return;
+                }
+
                 if (!isApproved) {
                     forgetVerifiedSession();
                     // Login / welcome must stay reachable for an unapproved account, otherwise the
@@ -297,7 +296,7 @@ const DriverLayout = () => {
                     setIsAllowed(false);
                     verifiedTokenRef.current = '';
                     verifiedApprovalRef.current = false;
-                    navigate(getPendingRouteForRole(currentPath, effectiveRole || authenticatedRole), { replace: true });
+                    navigate(getPendingDriverRoute(currentPath), { replace: true });
                     return;
                 }
 
@@ -311,15 +310,9 @@ const DriverLayout = () => {
                     return;
                 }
 
-                if (isPoolingConsoleRoute(currentPath) && effectiveRole !== 'pooling_driver') {
-                    navigate(getAuthenticatedDriverHome(currentPath, effectiveRole), { replace: true });
-                    return;
-                }
-
                 const isDriverConsoleRoute =
                     currentPath.startsWith('/taxi/driver') &&
                     !isBusConsoleRoute(currentPath) &&
-                    !isPoolingConsoleRoute(currentPath) &&
                     !isOnboardingRoute(currentPath);
 
                 if (isDriverConsoleRoute && effectiveRole !== 'driver') {

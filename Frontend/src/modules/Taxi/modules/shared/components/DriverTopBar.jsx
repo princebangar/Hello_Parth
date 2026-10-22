@@ -6,12 +6,11 @@ import "./driverChrome.css";
 const ROLES = {
   driver: { title: "Hello Parth", subtitle: "Taxi Driver" },
   bus_driver: { title: "Hello Parth", subtitle: "Bus Driver" },
-  pooling_driver: { title: "Hello Parth", subtitle: "Pooling Driver" },
   owner: { title: "Hello Parth", subtitle: "Owner" },
 };
 
 /**
- * Header of the driver apps ("Hello Parth" + Taxi Driver / Bus Driver / Pooling Driver / Owner): same curved blue bar on every
+ * Header of the driver apps ("Hello Parth" + Taxi Driver / Bus Driver / Owner): same curved blue bar on every
  * main screen. `floating` pins it over a full-screen map (Taxi Home); children are the buttons on its right.
  */
 const DriverTopBar = ({ floating = false, children = null }) => {

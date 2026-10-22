@@ -16,7 +16,7 @@ const TAXI_GROUPS = ADMIN_PERMISSION_GROUPS
 
 const MODULE_CARDS = [
   { key: "food", label: "Food", description: "Restaurants, orders, delivery partners", Icon: UtensilsCrossed },
-  { key: "taxi", label: "Taxi", description: "Rides, drivers, bus, pooling, pricing", Icon: Truck },
+  { key: "taxi", label: "Taxi", description: "Rides, drivers, bus, pricing", Icon: Truck },
 ]
 
 const sortedCopy = (list) => [...list].sort()

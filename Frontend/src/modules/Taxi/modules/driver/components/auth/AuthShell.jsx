@@ -7,7 +7,7 @@ const BRAND_POINTS = [
   {
     Icon: UsersIcon,
     title: 'Every partner role in one place',
-    text: 'Taxi drivers, fleet owners, pooling and bus partners all sign in here.',
+    text: 'Taxi drivers, fleet owners and bus partners all sign in here.',
   },
   {
     Icon: Wallet,
@@ -26,7 +26,6 @@ const BRAND_POINTS = [
 const FLEET_BADGES = [
   { Icon: Car, label: 'Taxi' },
   { Icon: Bus, label: 'Bus' },
-  { Icon: UsersIcon, label: 'Pooling' },
 ];
 
 const FleetStrip = ({ tone = 'dark' }) => (

@@ -3,7 +3,6 @@ import { ApiError } from '../../../../utils/ApiError.js';
 import { resolveOtpForPhone } from '../../../../core/otp/otp.service.js';
 import { env } from '../../../../config/env.js';
 import { Owner } from '../../admin/models/Owner.js';
-import { PoolingVehicle } from '../../admin/models/PoolingVehicle.js';
 import { Driver } from '../models/Driver.js';
 import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
@@ -36,9 +35,6 @@ const normalizeRole = (role) => {
   if (normalized === 'owner') return 'owner';
   if (normalized === 'bus_driver' || normalized === 'bus-driver' || normalized === 'busdriver') {
     return 'bus_driver';
-  }
-  if (normalized === 'pooling_driver' || normalized === 'pooling-driver' || normalized === 'poolingdriver' || normalized === 'pooling') {
-    return 'pooling_driver';
   }
   return 'driver';
 };
@@ -118,25 +114,9 @@ const publicBusDriverPayload = (driver) => ({
   destinationCity: driver.destinationCity || '',
 });
 
-const publicPoolingDriverPayload = (vehicle) => ({
-  id: vehicle._id,
-  name: vehicle.driverName || 'Pooling Driver',
-  phone: vehicle.driverPhone || '',
-  approve: vehicle.approve !== false,
-  active: vehicle.poolingEnabled !== false,
-  status: vehicle.status || (vehicle.approve === false ? 'pending' : 'active'),
-  vehicleId: vehicle._id,
-  vehicleName: vehicle.name || '',
-  vehicleNumber: vehicle.vehicleNumber || '',
-  vehicleModel: vehicle.vehicleModel || '',
-  vehicleType: vehicle.vehicleType || 'sedan',
-  vehicleColor: vehicle.color || '',
-});
-
 const LOGIN_ROLE_PRIORITY = [
   'owner',
   'bus_driver',
-  'pooling_driver',
   'driver',
 ];
 
@@ -171,8 +151,6 @@ export const findDriverPortalAccountByPhone = async ({ phone, role } = {}) => {
         })
       : normalizedRole === 'bus_driver'
         ? await BusDriver.findOne({ phone: { $in: phoneCandidates } })
-      : normalizedRole === 'pooling_driver'
-        ? await PoolingVehicle.findOne({ driverPhone: { $in: phoneCandidates } })
         : await Driver.findOne({ phone: { $in: phoneCandidates } });
 
   return account ? { role: normalizedRole, account } : null;
@@ -187,10 +165,6 @@ const buildDriverPortalExistenceQuery = (role, phoneCandidates) => {
 
   if (role === 'bus_driver') {
     return BusDriver.findOne({ phone: { $in: phoneCandidates } }).select('_id').lean();
-  }
-
-  if (role === 'pooling_driver') {
-    return PoolingVehicle.findOne({ driverPhone: { $in: phoneCandidates } }).select('_id').lean();
   }
 
   return Driver.findOne({ phone: { $in: phoneCandidates } }).select('_id').lean();
@@ -254,8 +228,6 @@ export const startDriverLoginOtp = async ({ phone, role = 'driver' }) => {
           ? 'Owner'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
-          : normalizedRole === 'pooling_driver'
-            ? 'Pooling driver'
             : 'Driver'
       } account not found`,
     );
@@ -368,8 +340,6 @@ export const verifyDriverLoginOtp = async ({ phone, otp, role }) => {
         ? await Owner.findById(session.driverId)
         : normalizedRole === 'bus_driver'
           ? await BusDriver.findById(session.driverId)
-        : normalizedRole === 'pooling_driver'
-          ? await PoolingVehicle.findById(session.driverId)
           : await Driver.findById(session.driverId);
   }
 
@@ -381,8 +351,6 @@ export const verifyDriverLoginOtp = async ({ phone, otp, role }) => {
           ? 'Owner'
           : normalizedRole === 'bus_driver'
             ? 'Bus driver'
-          : normalizedRole === 'pooling_driver'
-            ? 'Pooling driver'
             : 'Driver'
       } account not found`,
     );
@@ -425,8 +393,6 @@ export const verifyDriverLoginOtp = async ({ phone, otp, role }) => {
         ? publicOwnerPayload(account)
         : normalizedRole === 'bus_driver'
           ? publicBusDriverPayload(account)
-        : normalizedRole === 'pooling_driver'
-          ? publicPoolingDriverPayload(account)
           : publicDriverPayload(account),
   };
 };

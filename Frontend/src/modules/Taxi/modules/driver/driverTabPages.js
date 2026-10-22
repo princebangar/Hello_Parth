@@ -1,6 +1,6 @@
 import lazyPreloaded from '@/shared/utils/lazyPreloaded';
 
-// The bottom-bar screens of the driver apps (taxi, owner, bus, pooling). lazyPreloaded, not React.lazy: React.lazy
+// The bottom-bar screens of the driver apps (taxi, owner, bus). lazyPreloaded, not React.lazy: React.lazy
 // always suspends the first time it renders - even when the code is already loaded - so a tab tap waited ~1 s before
 // the screen changed. Preloaded while the app is idle, a tap then renders the screen at once.
 export const DriverHome = lazyPreloaded(() => import('./pages/DriverHome'));
@@ -12,18 +12,14 @@ export const OwnerDashboard = lazyPreloaded(() => import('./pages/OwnerDashboard
 export const OwnerWallet = lazyPreloaded(() => import('./pages/OwnerWallet'));
 export const ManageDrivers = lazyPreloaded(() => import('./pages/settings/ManageDrivers'));
 export const OwnerVehicleFleet = lazyPreloaded(() => import('./pages/settings/OwnerVehicleFleet'));
-export const OwnerPoolingVehicles = lazyPreloaded(() => import('./pages/OwnerPoolingVehicles'));
 export const OwnerBusServicePage = lazyPreloaded(() => import('./pages/OwnerBusServicePage'));
 export const OwnerBusBookingsPage = lazyPreloaded(() => import('./pages/OwnerBusBookingsPage'));
 export const BusDriverHome = lazyPreloaded(() => import('./pages/BusDriverHome'));
-export const PoolingDriverDashboard = lazyPreloaded(() => import('./pages/PoolingDriverDashboard'));
-export const PoolingDriverBookings = lazyPreloaded(() => import('./pages/pooling/PoolingDriverBookings'));
 
 const TABS_BY_ROLE = {
   driver: [DriverHome, RideRequests, DriverWallet, DriverIncentives, DriverProfile],
-  owner: [OwnerDashboard, ManageDrivers, OwnerVehicleFleet, OwnerPoolingVehicles, OwnerBusServicePage, DriverProfile],
+  owner: [OwnerDashboard, ManageDrivers, OwnerVehicleFleet, OwnerBusServicePage, DriverProfile],
   bus_driver: [BusDriverHome],
-  pooling_driver: [PoolingDriverDashboard, PoolingDriverBookings],
 };
 
 /** Loads every bottom-bar screen of this role (call when the app is idle). */
@@ -38,8 +34,6 @@ const BY_PATH = {
   '/taxi/driver/wallet': DriverWallet,
   '/taxi/driver/incentives': DriverIncentives,
   '/taxi/driver/profile': DriverProfile,
-  '/taxi/driver/pooling': PoolingDriverDashboard,
-  '/taxi/driver/pooling/bookings': PoolingDriverBookings,
   '/taxi/owner/dashboard': OwnerDashboard,
   '/taxi/owner/home': OwnerDashboard,
   '/taxi/owner/wallet': OwnerWallet,
@@ -47,7 +41,6 @@ const BY_PATH = {
   '/taxi/owner/profile': DriverProfile,
   '/taxi/owner/manage-drivers': ManageDrivers,
   '/taxi/owner/vehicle-fleet': OwnerVehicleFleet,
-  '/taxi/owner/pooling-vehicles': OwnerPoolingVehicles,
   '/taxi/owner/bus-service': OwnerBusServicePage,
   '/taxi/owner/bus-bookings': OwnerBusBookingsPage,
 };

@@ -165,32 +165,6 @@ const getBusReminderPayload = (booking) => {
   };
 };
 
-const getPoolingReminderPayload = (booking) => {
-  const bookingId = String(booking?._id || booking?.bookingId || '').trim();
-  const routeSchedules = Array.isArray(booking?.route?.schedules) ? booking.route.schedules : [];
-  const selectedSchedule = routeSchedules.find((item) => String(item?.id || '') === String(booking?.scheduleId || ''));
-  const departureTime = String(selectedSchedule?.departureTime || booking?.departureTime || '').trim();
-  const eventTime = parseDateTime(booking?.travelDate, departureTime);
-
-  if (!bookingId || !eventTime) {
-    return null;
-  }
-
-  const routeName = String(
-    booking?.route?.routeName ||
-    `${booking?.route?.originLabel || 'Pickup'} to ${booking?.route?.destinationLabel || 'Drop'}`,
-  ).trim();
-
-  return {
-    scope: 'pooling',
-    entityId: bookingId,
-    eventTime,
-    title: `Pooling trip soon: ${routeName}`,
-    body: `Your shared ride leaves at ${departureTime || 'the scheduled time'}. Please reach ${booking?.pickupLabel || 'the pickup point'} early.`,
-    type: 'ride',
-  };
-};
-
 const isTerminalRideStatus = (ride) => {
   const status = String(ride?.status || ride?.liveStatus || '').toLowerCase();
   return ['cancelled', 'completed', 'failed', 'expired'].includes(status);
@@ -216,16 +190,10 @@ const getScheduledRideReminderPayload = (ride) => {
 
 export const syncUpcomingRideReminders = ({
   busBookings = [],
-  poolingBookings = [],
   scheduledRides = [],
 } = {}) => {
   busBookings
     .map(getBusReminderPayload)
-    .filter(Boolean)
-    .forEach(scheduleReminderWindowSet);
-
-  poolingBookings
-    .map(getPoolingReminderPayload)
     .filter(Boolean)
     .forEach(scheduleReminderWindowSet);
 
@@ -237,13 +205,6 @@ export const syncUpcomingRideReminders = ({
 
 export const scheduleBusBookingReminders = (booking) => {
   const payload = getBusReminderPayload(booking);
-  if (payload) {
-    scheduleReminderWindowSet(payload);
-  }
-};
-
-export const schedulePoolingBookingReminders = (booking) => {
-  const payload = getPoolingReminderPayload(booking);
   if (payload) {
     scheduleReminderWindowSet(payload);
   }

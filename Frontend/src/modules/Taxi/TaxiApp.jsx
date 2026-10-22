@@ -17,15 +17,13 @@ import { syncThemeForPath } from '@/shared/utils/theme.js';
 import { getLocalUserToken } from './modules/user/services/authService';
 import { clearCurrentRide } from './modules/user/services/currentRideService';
 import userBusService from './modules/user/services/busService';
-import { userService } from './modules/user/services/userService';
 import { syncUpcomingRideReminders } from './modules/user/utils/upcomingRideReminderService';
 import { getAuthenticatedDriverRole, getLocalDriverToken } from './modules/driver/services/registrationService';
 import { installBrowserFcmRegistration } from './shared/push/browserFcmRegistration';
 import { installNativeFcmBridge } from './shared/push/nativeFcmBridge';
-import { POOLING_ENABLED } from './shared/featureFlags';
 import UserMainTabKeepAlive from './modules/user/components/UserMainTabKeepAlive';
 import AppRouteFallback from '@/shared/components/AppRouteFallback';
-// Driver / owner / bus / pooling bottom-bar screens: preloadable, so a tab tap renders without waiting.
+// Driver / owner / bus bottom-bar screens: preloadable, so a tab tap renders without waiting.
 import {
   BusDriverHome,
   DriverHome,
@@ -36,11 +34,8 @@ import {
   OwnerBusBookingsPage,
   OwnerBusServicePage,
   OwnerDashboard,
-  OwnerPoolingVehicles,
   OwnerVehicleFleet,
   OwnerWallet,
-  PoolingDriverBookings,
-  PoolingDriverDashboard,
   RideRequests,
 } from './modules/driver/driverTabPages';
 import './App.css';
@@ -96,9 +91,6 @@ const DeleteAccount = lazy(() => import('./modules/user/pages/profile/DeleteAcco
 
 // Phase 4 — Cab/Intercity/Bus flows
 const CabHome = lazy(() => import('./modules/user/pages/cab/CabHome'));
-const SharedTaxi = lazy(() => import('./modules/user/pages/cab/SharedTaxi'));
-const SharedTaxiSeats = lazy(() => import('./modules/user/pages/cab/SharedTaxiSeats'));
-const SharedTaxiConfirm = lazy(() => import('./modules/user/pages/cab/SharedTaxiConfirm'));
 
 const IntercityVehicle = lazy(() => import('./modules/user/pages/intercity/IntercityVehicle'));
 const IntercityDetails = lazy(() => import('./modules/user/pages/intercity/IntercityDetails'));
@@ -115,12 +107,6 @@ const BusConfirm = lazy(() => import('./modules/user/pages/bus/BusConfirm'));
 
 // New Feature Pages
 const IntercityHome = lazy(() => import('./modules/user/pages/intercity/IntercityHome'));
-
-// Car Pooling flow
-const UserPoolingHome = lazy(() => import('./modules/user/pages/pooling/PoolingHome'));
-const UserPoolingList = lazy(() => import('./modules/user/pages/pooling/PoolingList'));
-const UserPoolingSeats = lazy(() => import('./modules/user/pages/pooling/PoolingSeats'));
-const UserPoolingConfirm = lazy(() => import('./modules/user/pages/pooling/PoolingConfirm'));
 
 // Profile Settings Sub-pages
 const ProfileSettings = lazy(() => import('./modules/user/pages/profile/ProfileSettings'));
@@ -152,10 +138,7 @@ const ApplicationStatus = lazy(() => import('./modules/driver/pages/registration
 // Driver Module - Core
 const ActiveTrip = lazy(() => import('./modules/driver/pages/ActiveTrip'));
 const BusDriverLiveRoute = lazy(() => import('./modules/driver/pages/BusDriverLiveRoute'));
-const OwnerPoolingVehicleForm = lazy(() => import('./modules/driver/pages/OwnerPoolingVehicleForm'));
 const DriverBankDetailsPage = lazy(() => import('./modules/driver/pages/DriverBankDetailsPage'));
-const PoolingDriverOnboarding = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverOnboarding'));
-const PoolingDriverPendingStatus = lazy(() => import('./modules/driver/pages/pooling/PoolingDriverPendingStatus'));
 const RoleSelection = lazy(() => import('./modules/driver/pages/registration/RoleSelection'));
 const RoleSpecificOnboarding = lazy(() => import('./modules/driver/pages/registration/RoleSpecificOnboarding'));
 const BusSignupBuilderPage = lazy(() => import('./modules/driver/pages/registration/BusSignupBuilderPage'));
@@ -225,11 +208,6 @@ const AdminSurgePricing = lazy(() => import('./modules/admin/pages/price-managem
 const AdminVehicleType = lazy(() => import('./modules/admin/pages/price-management/VehicleType'));
 const AdminPackageTypes = lazy(() => import('./modules/admin/pages/price-management/PackageTypes'));
 const AdminGoodsTypes = lazy(() => import('./modules/admin/pages/price-management/GoodsTypes'));
-const AdminPoolingManager = lazy(() => import('./modules/admin/pages/pooling/PoolingManager'));
-const AdminPoolingVehicles = lazy(() => import('./modules/admin/pages/pooling/PoolingVehicles'));
-const AdminPoolingVehicleForm = lazy(() => import('./modules/admin/pages/pooling/PoolingVehicleForm'));
-const AdminPoolingBookings = lazy(() => import('./modules/admin/pages/pooling/PoolingBookings'));
-const AdminPoolingCommissionManager = lazy(() => import('./modules/admin/pages/pooling/PoolingCommissionManager'));
 const AdminBusServiceManager = lazy(() => import('./modules/admin/pages/bus-service/BusServiceManager'));
 const AdminBusServiceDetails = lazy(() => import('./modules/admin/pages/bus-service/BusServiceDetails'));
 const AdminBusBookingManager = lazy(() => import('./modules/admin/pages/bus-service/BusBookingManager'));
@@ -580,7 +558,7 @@ const UserAccountInvalidationListener = () => {
 
 const getResponsePayload = (response) => response?.data?.data || response?.data || response || {};
 
-// Reminder sync = 3 reads (bus, pooling, scheduled rides). It is background work, so it must never compete with
+// Reminder sync = 2 reads (bus, scheduled rides). It is background work, so it must never compete with
 // the screen the person just opened: it starts a few seconds after the screen is up, it does not repeat on every
 // in-app navigation, and focus / tab-visible events only refresh it when the last sync is a couple of minutes old.
 const REMINDER_FIRST_SYNC_DELAY_MS = 4000;
@@ -595,7 +573,6 @@ const UserUpcomingRideReminderBootstrap = () => {
     location.pathname.startsWith('/taxi/user') ||
     location.pathname === '/user' ||
     location.pathname.startsWith('/ride') ||
-    location.pathname.startsWith('/pooling') ||
     location.pathname.startsWith('/bus');
 
   useEffect(() => {
@@ -608,13 +585,10 @@ const UserUpcomingRideReminderBootstrap = () => {
     const syncReminders = async () => {
       lastReminderSyncAt = Date.now();
       try {
-        const [busResult, poolingResult, scheduledRideResult] = await Promise.all([
+        const [busResult, scheduledRideResult] = await Promise.all([
           busEnabled
             ? userBusService.getMyBookings({ page: 1, limit: 20, tripState: 'upcoming' }).catch(() => ({ data: { results: [] } }))
             : Promise.resolve({ data: { results: [] } }),
-          POOLING_ENABLED
-            ? userService.getMyPoolingBookings().catch(() => [])
-            : Promise.resolve([]),
           api.get('/rides', {
             params: {
               page: 1,
@@ -629,55 +603,10 @@ const UserUpcomingRideReminderBootstrap = () => {
         }
 
         const busPayload = getResponsePayload(busResult);
-        const poolingPayload = getResponsePayload(poolingResult);
         const scheduledRidePayload = getResponsePayload(scheduledRideResult);
-
-        const rawPoolingBookings = POOLING_ENABLED
-          ? (Array.isArray(poolingPayload)
-            ? poolingPayload
-            : Array.isArray(poolingPayload?.results)
-              ? poolingPayload.results
-              : [])
-          : [];
-        let poolingBookings = [];
-
-        if (POOLING_ENABLED && rawPoolingBookings.length > 0) {
-          const routeIds = [...new Set(rawPoolingBookings.map((booking) => String(booking?.route?._id || '')).filter(Boolean))];
-          const routeDetailsEntries = await Promise.all(
-            routeIds.map(async (routeId) => {
-              try {
-                const routeResponse = await userService.getPoolingRouteDetails(routeId);
-                return [routeId, getResponsePayload(routeResponse)];
-              } catch {
-                return [routeId, null];
-              }
-            }),
-          );
-
-          if (cancelled) {
-            return;
-          }
-
-          const routeDetailsMap = new Map(routeDetailsEntries);
-          poolingBookings = rawPoolingBookings.map((booking) => {
-            const routeId = String(booking?.route?._id || '');
-            const routeDetails = routeDetailsMap.get(routeId);
-
-            return routeDetails
-              ? {
-                ...booking,
-                route: {
-                  ...(booking.route || {}),
-                  ...routeDetails,
-                },
-              }
-              : booking;
-          });
-        }
 
         syncUpcomingRideReminders({
           busBookings: Array.isArray(busPayload?.results) ? busPayload.results : [],
-          poolingBookings,
           scheduledRides: Array.isArray(scheduledRidePayload?.results) ? scheduledRidePayload.results : [],
         });
       } catch {
@@ -815,12 +744,6 @@ function TaxiApp() {
                 <Route path="intercity/details" element={<IntercityDetails />} />
                 <Route path="intercity/confirm" element={<IntercityConfirm />} />
                 <Route path="cab" element={<CabHome />} />
-                <Route path="cab/shared" element={<SharedTaxi />} />
-                <Route path="cab/shared/seats" element={<SharedTaxiSeats />} />
-                <Route
-                  path="cab/shared/confirm"
-                  element={<SharedTaxiConfirm />}
-                />
                 <Route path="bus" element={<BusHome />} />
                 <Route path="bus/list" element={<BusList />} />
                 <Route path="bus/seats" element={<BusSeats />} />
@@ -905,14 +828,6 @@ function TaxiApp() {
                 />
                 <Route path="user/parcel/chat" element={<Chat />} />
 
-                {POOLING_ENABLED ? (
-                  <>
-                    <Route path="user/pooling" element={<UserPoolingHome />} />
-                    <Route path="user/pooling/list" element={<UserPoolingList />} />
-                    <Route path="user/pooling/seats/:id" element={<UserPoolingSeats />} />
-                    <Route path="user/pooling/confirm" element={<UserPoolingConfirm />} />
-                  </>
-                ) : null}
                 <Route path="user/intercity" element={<IntercityHome />} />
                 <Route
                   path="user/intercity/vehicle"
@@ -927,15 +842,6 @@ function TaxiApp() {
                   element={<IntercityConfirm />}
                 />
                 <Route path="user/cab" element={<CabHome />} />
-                <Route path="user/cab/shared" element={<SharedTaxi />} />
-                <Route
-                  path="user/cab/shared/seats"
-                  element={<SharedTaxiSeats />}
-                />
-                <Route
-                  path="user/cab/shared/confirm"
-                  element={<SharedTaxiConfirm />}
-                />
                 <Route path="user/bus" element={<UserMainTabKeepAlive />} />
                 <Route path="user/bus/list" element={<BusList />} />
                 <Route path="user/bus/seats" element={<BusSeats />} />
@@ -1027,10 +933,6 @@ function TaxiApp() {
                 <Route path="select-role" element={<RoleSelection />} />
                 <Route path="role-signup" element={<RoleSpecificOnboarding />} />
                 <Route path="role-signup/bus-builder/*" element={<BusSignupBuilderPage />} />
-                <Route path="pooling/onboarding" element={<PoolingDriverOnboarding />} />
-                <Route path="pooling/status" element={<PoolingDriverPendingStatus />} />
-                <Route path="pooling" element={<PoolingDriverDashboard />} />
-                <Route path="pooling/bookings" element={<PoolingDriverBookings />} />
                 <Route path="terms" element={<LegalPage />} />
                 <Route path="privacy" element={<LegalPage />} />
                 <Route path="legal/terms" element={<DriverLegalTerms />} />
@@ -1100,9 +1002,6 @@ function TaxiApp() {
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="profile/bank-details" element={<DriverBankDetailsPage />} />
                 <Route path="settings" element={<DriverSettings />} />
-                <Route path="pooling-vehicles" element={<OwnerPoolingVehicles />} />
-                <Route path="pooling-vehicles/create" element={<OwnerPoolingVehicleForm />} />
-                <Route path="pooling-vehicles/edit/:id" element={<OwnerPoolingVehicleForm />} />
                 <Route path="wallet" element={<OwnerWallet />} />
                 <Route path="history" element={<RideRequests />} />
                 <Route path="terms" element={<LegalPage />} />
@@ -1159,35 +1058,6 @@ function TaxiApp() {
                 <Route path="bus-service/commission" element={<AdminBusCommissionManager />} />
                 <Route path="bus-service/bookings" element={<AdminBusBookingManager />} />
                 <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
-                {POOLING_ENABLED ? (
-                  <>
-                    <Route path="pooling" element={<Navigate to="/taxi/admin/pooling/routes" replace />} />
-                    <Route path="pooling/routes" element={<AdminPoolingManager />} />
-                    <Route
-                      path="pooling/create"
-                      element={<AdminPoolingManager mode="create" />}
-                    />
-                    <Route
-                      path="pooling/edit/:id"
-                      element={<AdminPoolingManager mode="edit" />}
-                    />
-                    <Route path="pooling/vehicles" element={<AdminPoolingVehicles />} />
-                    <Route path="pooling/commission" element={<AdminPoolingCommissionManager />} />
-                    <Route
-                      path="pooling/vehicles/create"
-                      element={<AdminPoolingVehicleForm />}
-                    />
-                    <Route
-                      path="pooling/vehicles/edit/:id"
-                      element={<AdminPoolingVehicleForm />}
-                    />
-                    <Route
-                      path="pooling/vehicles/view/:id"
-                      element={<AdminPoolingVehicleForm mode="view" />}
-                    />
-                    <Route path="pooling/bookings" element={<AdminPoolingBookings />} />
-                  </>
-                ) : null}
                 <Route path="wallet/payment" element={<AdminWalletPayment />} />
                 <Route path="users" element={<AdminUserList />} />
                 <Route path="users/create" element={<AdminUserCreate />} />
