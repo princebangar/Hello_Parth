@@ -183,7 +183,8 @@ export const loadRoadDistances = async (google, originCoords, destinations) => {
     if (RoutesLibrary && !routesBroken) {
       RoutesLibrary.computeRoutes({
         origin,
-        destination: target.placeId ? { placeId: target.placeId } : target,
+        // the Routes library does not take the old `{ placeId }` literal: a place id goes in as a Place object
+        destination: target.placeId && google.maps.places?.Place ? new google.maps.places.Place({ id: target.placeId }) : target,
         travelMode: 'DRIVING',
         fields: ['distanceMeters'],
       }).then((result) => {

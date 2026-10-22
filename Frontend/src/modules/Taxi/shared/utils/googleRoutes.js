@@ -41,7 +41,8 @@ export const sumComputedRouteLegs = (legs = []) =>
   (Array.isArray(legs) ? legs : []).reduce(
     (totals, leg) => ({
       distanceMeters: totals.distanceMeters + Number(leg?.distanceMeters || 0),
-      durationSeconds: totals.durationSeconds + parseDurationSeconds(leg?.duration),
+      // the Routes library gives `durationMillis`; the old Directions fallback below gives a "123s" string
+      durationSeconds: totals.durationSeconds + (Number.isFinite(Number(leg?.durationMillis)) ? Number(leg.durationMillis) / 1000 : parseDurationSeconds(leg?.duration)),
     }),
     { distanceMeters: 0, durationSeconds: 0 },
   );
