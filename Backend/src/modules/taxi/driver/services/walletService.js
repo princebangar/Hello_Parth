@@ -169,6 +169,8 @@ export const serializeDriverWallet = async (driver) => {
   const isBelowMinimumBalance = !isFleetDriver && wallet.balance < wallet.minimumBalanceForOrders;
 
   return {
+    // fleet driver: the owner's wallet decides if rides come (shown as a popup on the driver's home)
+    ownerWallet: isFleetDriver ? await getOwnerWalletStatus(driver.owner_id) : null,
     balance: wallet.balance,
     cashLimit: wallet.cashLimit,
     minimumBalanceForOrders: wallet.minimumBalanceForOrders,
@@ -199,6 +201,18 @@ const resolveOwnerWalletRules = async () => {
 export const getMinimumBalanceForOrders = async () => {
   const rules = await resolveOwnerWalletRules();
   return rules.isEnforced ? rules.minimumBalanceForOrders : null;
+};
+
+const getOwnerWalletStatus = async (ownerId) => {
+  const rules = await resolveOwnerWalletRules();
+  if (!rules.isEnforced || !ownerId) return null;
+  const owner = await Owner.findById(ownerId).select('wallet.balance').lean();
+  const balance = Number(owner?.wallet?.balance || 0);
+  return {
+    balance,
+    minimumBalanceForOrders: rules.minimumBalanceForOrders,
+    isBelowMinimum: balance < rules.minimumBalanceForOrders,
+  };
 };
 
 export const getDriverIdsBlockedByOwnerWallet = async (driverIds = []) => {

@@ -773,7 +773,26 @@ const DriverHome = () => {
         () => getWalletAlertState(walletSummary, { ignoreRestrictions: isOwnerManagedDriver }),
         [walletSummary, isOwnerManagedDriver],
     );
+    // Fleet driver: rides come only while the OWNER's wallet meets the admin minimum.
+    const ownerWalletLow = isOwnerManagedDriver && Boolean(walletSummary.ownerWallet?.isBelowMinimum);
+    const ownerWalletMinimum = Math.max(0, Number(walletSummary.ownerWallet?.minimumBalanceForOrders || 0));
+    // Shown every time Home opens while the wallet is too low ("Later" only hides it until the next visit / go-online try).
+    const lowWalletPopupKind = !walletLoaded ? '' : ownerWalletLow ? 'owner' : walletAlertState.isBlocked ? 'self' : '';
+    const [lowWalletPopupOpen, setLowWalletPopupOpen] = useState(false);
+    useEffect(() => {
+        setLowWalletPopupOpen(Boolean(lowWalletPopupKind));
+    }, [lowWalletPopupKind]);
+
     const walletNotice = useMemo(() => {
+        if (ownerWalletLow) {
+            return {
+                title: 'Owner wallet is low',
+                message: `Your owner must keep at least Rs ${ownerWalletMinimum} in their wallet for you to receive rides.`,
+                tone: 'danger',
+                hideTopUp: true,
+            };
+        }
+
         if (walletAlertState.isBlocked) {
             return {
                 title: walletAlertState.belowMinimumBalance ? 'Top up to go online' : 'Cash limit reached',
@@ -793,7 +812,7 @@ const DriverHome = () => {
         }
 
         return null;
-    }, [walletAlertState]);
+    }, [walletAlertState, ownerWalletLow, ownerWalletMinimum]);
 
     const { isLoaded, loadError: mapLoadError } = useBaseGoogleMapsLoader();
 
@@ -1396,6 +1415,7 @@ const DriverHome = () => {
                     ? `Keep your wallet at or above Rs ${Math.max(0, walletAlertState.minimumBalanceForOrders)} to go online.`
                     : 'Cash limit exceeded. Please top up your wallet to go online.',
             );
+            setLowWalletPopupOpen(true);
             return;
         }
 
@@ -1545,6 +1565,7 @@ const DriverHome = () => {
                     ? `Keep your wallet at or above Rs ${Math.max(0, walletAlertState.minimumBalanceForOrders)} to go online.`
                     : 'Cash limit exceeded. Please top up your wallet to go online.',
             );
+            setLowWalletPopupOpen(true);
             return;
         }
 
@@ -1978,7 +1999,7 @@ const DriverHome = () => {
                         stopRideRequestAlertSound();
                         setStatusMessage(
                             nextWalletAlertState.belowMinimumBalance
-                                ? 'Wallet balance must be above Rs 0 to receive new ride requests.'
+                                ? `Keep your wallet at or above Rs ${Math.max(0, nextWalletAlertState.minimumBalanceForOrders)} to receive new ride requests.`
                                 : 'Cash limit exceeded. Top up to receive new ride requests.',
                         );
                     } else if (nextWalletAlertState.isWarning) {
@@ -2246,6 +2267,81 @@ const DriverHome = () => {
                                     Go Offline
                                 </button>
                             </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {lowWalletPopupOpen && lowWalletPopupKind && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-[76] bg-slate-950/45 backdrop-blur-sm"
+                            onClick={() => setLowWalletPopupOpen(false)}
+                        />
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none absolute inset-0 z-[77] flex items-center justify-center px-5">
+                            <motion.div
+                                role="alertdialog"
+                                aria-labelledby="low-wallet-title"
+                                initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                                className="pointer-events-auto w-full max-w-sm rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+                            >
+                                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-rose-50 text-rose-600">
+                                    <Wallet size={22} strokeWidth={2.6} />
+                                </div>
+                                {lowWalletPopupKind === 'owner' ? (
+                                    <>
+                                        <h3 id="low-wallet-title" className="mt-4 text-[19px] font-black tracking-tight text-slate-950">Owner wallet balance is low</h3>
+                                        <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+                                            Your fleet owner&apos;s wallet has less than Rs {ownerWalletMinimum}. You will not receive any ride requests until your owner adds money to their wallet.
+                                        </p>
+                                        <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+                                            Please ask your owner to keep at least Rs {ownerWalletMinimum} in their wallet.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLowWalletPopupOpen(false)}
+                                            className="mt-6 flex h-12 w-full items-center justify-center rounded-[16px] bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] text-[13px] font-extrabold uppercase tracking-[0.04em] text-white shadow-[0_10px_22px_rgba(29,78,216,0.32)] transition active:scale-[0.97]"
+                                        >
+                                            OK, got it
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h3 id="low-wallet-title" className="mt-4 text-[19px] font-black tracking-tight text-slate-950">Add money to your wallet</h3>
+                                        <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+                                            Your wallet balance is Rs {Number(walletSummary.balance || 0).toFixed(0)}.{' '}
+                                            {walletAlertState.minimumBalanceForOrders > 0
+                                                ? `Keep at least Rs ${walletAlertState.minimumBalanceForOrders} in your wallet, otherwise you will not receive any ride requests.`
+                                                : 'Your cash limit is used up. Add money to your wallet, otherwise you will not receive any ride requests.'}
+                                        </p>
+                                        <div className="mt-6 grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setLowWalletPopupOpen(false)}
+                                                className="flex h-12 items-center justify-center whitespace-nowrap rounded-[16px] border-2 border-[#1d4ed8] bg-white px-2 text-[13px] font-extrabold uppercase tracking-[0.04em] text-[#1d4ed8] transition active:scale-[0.97]"
+                                            >
+                                                Later
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLowWalletPopupOpen(false);
+                                                    navigate('/taxi/driver/wallet');
+                                                }}
+                                                className="flex h-12 items-center justify-center whitespace-nowrap rounded-[16px] bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] px-2 text-[13px] font-extrabold uppercase tracking-[0.04em] text-white shadow-[0_10px_22px_rgba(29,78,216,0.32)] transition active:scale-[0.97]"
+                                            >
+                                                Add Money
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </motion.div>
                         </motion.div>
                     </>
                 )}
@@ -2537,13 +2633,15 @@ const DriverHome = () => {
                                 {walletNotice.message}
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/taxi/driver/wallet')}
-                            className="shrink-0 rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white shadow-sm active:scale-95"
-                        >
-                            Top up
-                        </button>
+                        {walletNotice.hideTopUp ? null : (
+                            <button
+                                type="button"
+                                onClick={() => navigate('/taxi/driver/wallet')}
+                                className="shrink-0 rounded-full bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white shadow-sm active:scale-95"
+                            >
+                                Top up
+                            </button>
+                        )}
                     </div>
                 </div>
             ) : null}

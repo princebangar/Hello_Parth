@@ -133,6 +133,17 @@ const OwnerDashboard = () => {
   const recentRides = dashboard?.recentRides || [];
   const transportBreakdown = dashboard?.transportBreakdown || [];
   const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
+  // Admin rule: below this owner-wallet balance none of the fleet's drivers get taxi/parcel rides (bus is not affected).
+  const walletMinimum = Number(earnings.minimumBalanceForOrders);
+  const walletBelowMinimum = Boolean(dashboard)
+    && String(profile.transportType || '').toLowerCase() !== 'bus'
+    && earnings.minimumBalanceForOrders !== null
+    && Number.isFinite(walletMinimum)
+    && Number(earnings.walletBalance || 0) < walletMinimum;
+  const [lowWalletPopupOpen, setLowWalletPopupOpen] = useState(false);
+  useEffect(() => {
+    setLowWalletPopupOpen(walletBelowMinimum);
+  }, [walletBelowMinimum]);
 
   const businessSubtitle = useMemo(() => {
     const ownerName = profile.ownerName || profile.companyName || 'Owner';
@@ -543,6 +554,46 @@ const OwnerDashboard = () => {
         </div>
       </div>
 
+      {lowWalletPopupOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-5" onClick={() => setLowWalletPopupOpen(false)}>
+          <div
+            role="alertdialog"
+            aria-labelledby="owner-low-wallet-title"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+          >
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-rose-50 text-rose-600">
+              <Wallet size={22} strokeWidth={2.6} />
+            </div>
+            <h3 id="owner-low-wallet-title" className="mt-4 text-[19px] font-black tracking-tight text-slate-950">Add money to your wallet</h3>
+            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+              Your wallet balance is {money(earnings.walletBalance)}. Keep at least {money(walletMinimum)} in your wallet, otherwise your drivers will not receive any ride requests.
+            </p>
+            <p className="mt-2 text-[13px] font-semibold leading-relaxed text-slate-500">
+              Please contact the admin team to add money to your wallet.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setLowWalletPopupOpen(false)}
+                className="flex h-12 items-center justify-center whitespace-nowrap rounded-[16px] border-2 border-[#1d4ed8] bg-white px-2 text-[13px] font-extrabold uppercase tracking-[0.04em] text-[#1d4ed8] active:scale-[0.97]"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLowWalletPopupOpen(false);
+                  navigate('/taxi/owner/wallet');
+                }}
+                className="flex h-12 items-center justify-center whitespace-nowrap rounded-[16px] bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] px-2 text-[13px] font-extrabold uppercase tracking-[0.04em] text-white shadow-[0_10px_22px_rgba(29,78,216,0.32)] active:scale-[0.97]"
+              >
+                View Wallet
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -6617,6 +6617,8 @@ export const getOwnerFleetDashboard = async (req, res) => {
       },
       earnings: {
         walletBalance: Number(owner.wallet?.balance || 0),
+        // null = no minimum is asked (owner wallet feature off)
+        minimumBalanceForOrders: await getMinimumBalanceForOrders(),
         grossRevenue: rideMetrics.grossRevenue,
         ownerEarnings: rideMetrics.ownerEarnings,
         todayGrossRevenue: todayMetrics.grossRevenue,
