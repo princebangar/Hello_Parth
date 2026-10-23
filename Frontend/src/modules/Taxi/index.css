@@ -1581,3 +1581,18 @@ body.splash-active {
 .driver-theme button[class*="bg-[#FFC400]"]:not([data-card]) * {
   color: inherit;
 }
+
+/* Driver trip screen (ActiveTrip): full-screen height and a scrollable bottom sheet.
+   vh first for WebViews without dvh support; without it the sheet grew past the screen and could not scroll. */
+.trip-screen-root {
+  height: 100vh;
+  height: 100dvh;
+}
+.trip-sheet-scroll {
+  max-height: 85vh;
+  max-height: 85dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}

@@ -32,6 +32,8 @@ import carIcon from '../../../assets/icons/car.png';
 import { getLocalDriverToken } from '../services/registrationService';
 import { BACKEND_ORIGIN } from '../../../shared/api/runtimeConfig';
 import useTripSimulationEnabled from '@/shared/hooks/useTripSimulationEnabled';
+import useRideChatUnread from '../../shared/chat/useRideChatUnread';
+import ChatUnreadBadge from '../../shared/components/ChatUnreadBadge';
 
 const MAP_CONTAINER_STYLE = {
     width: '100%',
@@ -953,6 +955,7 @@ const ActiveTrip = () => {
     const liveRequest = effectiveState?.request || {};
     const liveRaw = liveRequest.raw || {};
     const rideId = getJobRideId(liveRequest) || getJobRideId(effectiveState);
+    const chatUnread = useRideChatUnread(rideId, 'driver');
     const [resolvedPickupCoords, setResolvedPickupCoords] = useState(null);
     const [resolvedDropCoords, setResolvedDropCoords] = useState(null);
     const vehicleIconUrl = getActiveTripVehicleIcon(
@@ -2328,7 +2331,7 @@ const ActiveTrip = () => {
     }), []);
 
     return (
-        <div className="relative mx-auto min-h-[100dvh] max-w-lg overflow-hidden bg-slate-200 font-sans select-none">
+        <div className="trip-screen-root relative mx-auto max-w-lg overflow-hidden bg-slate-200 font-sans select-none">
             {isHydratingTrip && (
                 <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-200/90 backdrop-blur-sm">
                     <div className="rounded-[16px] bg-white/95 px-4 py-3 shadow-sm text-[12px] font-semibold text-slate-700">
@@ -2522,7 +2525,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 trip-sheet-scroll"
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-3">
@@ -2542,7 +2545,7 @@ const ActiveTrip = () => {
                                     </div>
                                 </div>
                             <div className="flex gap-2">
-                                    <button onClick={openTripChat} className="w-11 h-11 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 active:scale-95 transition-transform" aria-label="Open trip chat"><MessageSquare size={18} strokeWidth={2.5} /></button>
+                                    <button onClick={openTripChat} className="relative w-11 h-11 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 active:scale-95 transition-transform" aria-label="Open trip chat"><MessageSquare size={18} strokeWidth={2.5} /><ChatUnreadBadge count={chatUnread} /></button>
                                     <button onClick={() => callContact(pickupContact?.phone)} className="w-11 h-11 bg-slate-50 rounded-xl flex items-center justify-center active:scale-95 transition-transform" style={{ color: routeStrokeColor }} aria-label="Call contact"><Phone size={18} strokeWidth={2.5} /></button>
                                 </div>
                             </div>
@@ -2591,7 +2594,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 trip-sheet-scroll"
                         >
                             <div className="text-center mb-6">
                                 <h3 className="text-xl font-semibold text-slate-900 tracking-tight uppercase leading-none">Security Pin</h3>
@@ -2676,7 +2679,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 trip-sheet-scroll"
                         >
                                 <div className="mb-5 rounded-[22px] border border-slate-100 bg-slate-50/85 px-4 py-3.5 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
                                 <div className="flex items-start justify-between gap-3">
@@ -2764,7 +2767,7 @@ const ActiveTrip = () => {
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 max-h-[85dvh] overflow-y-auto overscroll-contain touch-pan-y"
+                            className="bg-white rounded-t-[2.5rem] p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-slate-100 trip-sheet-scroll"
                         >
                             <div className="text-center mb-6">
                                 <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-lg transition-all duration-500 text-white" style={{ backgroundColor: driverPaymentStatus === 'success' ? routeStrokeColor : '#0f172a' }}>

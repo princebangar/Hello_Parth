@@ -1,6 +1,6 @@
 import { normalizePoint } from '../../../../utils/geo.js';
 import { RIDE_LIVE_STATUS } from '../../constants/index.js';
-import { getDriverRoom } from '../../services/dispatchService.js';
+import { getDriverRoom, getUserRoom } from '../../services/dispatchService.js';
 import {
   appendRideMessage,
   getActiveRideForIdentity,
@@ -232,7 +232,7 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
   socket.on(
     SOCKET_EVENTS.RIDE_MESSAGE_SEND,
     onAsync(socket, async ({ rideId, message, clientId }) => {
-      await authorizeRideRoomAccess({ socket, rideId });
+      const ride = await authorizeRideRoomAccess({ socket, rideId });
       // The sender may have lost the room on a reconnect: it must get its own message back to show it as sent.
       socket.join(getRideRoom(rideId));
 
@@ -243,7 +243,11 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         message,
       });
 
-      io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_MESSAGE_NEW, {
+      // Also each side's own room: the trip screens count unread messages even if they are not in the ride room.
+      const rooms = [getRideRoom(rideId)];
+      if (ride?.userId) rooms.push(getUserRoom(ride.userId));
+      if (ride?.driverId) rooms.push(getDriverRoom(ride.driverId));
+      io.to(rooms).emit(SOCKET_EVENTS.RIDE_MESSAGE_NEW, {
         ...savedMessage,
         ...(clientId ? { clientId: String(clientId).slice(0, 64) } : {}),
       });

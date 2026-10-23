@@ -13,6 +13,8 @@ import { scheduleScheduledRideReminders } from '../../utils/upcomingRideReminder
 import { toHistorySafeState } from '../../../../shared/utils/historyState';
 import { getUnpaidRideFromError, openUnpaidRidePayment } from '../../utils/unpaidRide';
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
+import useRideChatUnread from '../../../shared/chat/useRideChatUnread';
+import ChatUnreadBadge from '../../../shared/components/ChatUnreadBadge';
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -229,6 +231,8 @@ const SearchingDriver = () => {
     [routeState],
   );
   const activeRideIdRef = useRef('');
+  // read on each render: the driver-found card re-renders once the ride is accepted
+  const chatUnread = useRideChatUnread(activeRideIdRef.current || getCurrentRide()?.rideId || '', 'user');
   const searchNonce = String(routeState.searchNonce || '');
   const isDriverBidRide = biddingSummary.pricingNegotiationMode === 'driver_bid';
   const isUserIncrementRide = biddingSummary.pricingNegotiationMode === 'user_increment_only';
@@ -1393,8 +1397,9 @@ const SearchingDriver = () => {
                     <motion.button
                       whileTap={{ scale: 0.96 }}
                       onClick={() => navigate(`${routePrefix}/ride/chat`, { state: buildHistoryState({ driver }) })}
-                      className="flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
+                      className="relative flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
                     >
+                      <ChatUnreadBadge count={chatUnread} />
                       <MessageCircle size={18} className="text-white" strokeWidth={2.5} />
                       <span className="text-[13px] font-black text-white uppercase tracking-widest leading-none">Chat</span>
                     </motion.button>

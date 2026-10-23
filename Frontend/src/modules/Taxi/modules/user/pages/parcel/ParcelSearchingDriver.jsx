@@ -15,6 +15,8 @@ import SuvIcon from '@/assets/icons/SUV.png';
 import BikeIcon from '@/assets/icons/bike.png';
 import CarIcon from '@/assets/icons/car.png';
 import AutoIcon from '@/assets/icons/auto.png';
+import useRideChatUnread from '../../../shared/chat/useRideChatUnread';
+import ChatUnreadBadge from '../../../shared/components/ChatUnreadBadge';
 import { getUnpaidRideFromError, openUnpaidRidePayment } from '../../utils/unpaidRide';
 import { getAppRoutePath } from '@/shared/utils/nativeShell';
 
@@ -316,6 +318,8 @@ const ParcelSearchingDriver = () => {
   const acceptedTimerRef = useRef(null);
   const driverRef = useRef(driver);
   const activeRideIdRef = useRef('');
+  // read on each render: the driver-found card re-renders once the ride is accepted
+  const chatUnread = useRideChatUnread(activeRideIdRef.current || getCurrentRide()?.rideId || '', 'user');
   const trackingStartedRef = useRef(false);
   const searchNonce = String(routeState.searchNonce || '');
   const preferredVehicleType = String(
@@ -990,8 +994,9 @@ const ParcelSearchingDriver = () => {
                     <motion.button
                       whileTap={{ scale: 0.96 }}
                       onClick={() => navigate(`${routePrefix}/parcel/chat`, { state: { driver } })}
-                      className="flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
+                      className="relative flex items-center justify-center gap-3 rounded-[22px] bg-slate-950 py-4.5 shadow-[0_12px_24px_rgba(15,23,42,0.15)] active:shadow-none"
                     >
+                      <ChatUnreadBadge count={chatUnread} />
                       <MessageCircle size={18} className="text-white" strokeWidth={2.5} />
                       <span className="text-[13px] font-black text-white uppercase tracking-widest leading-none">Chat</span>
                     </motion.button>

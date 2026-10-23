@@ -16,6 +16,8 @@ import bikeIcon from '../../../../assets/icons/bike.png';
 import autoIcon from '../../../../assets/icons/auto.png';
 import deliveryIcon from '../../../../assets/icons/Delivery.png';
 import { useSettings } from '../../../../shared/context/SettingsContext';
+import useRideChatUnread from '../../../shared/chat/useRideChatUnread';
+import ChatUnreadBadge from '../../../shared/components/ChatUnreadBadge';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
@@ -461,6 +463,7 @@ const RideTracking = () => {
   const routeSos = location.pathname.startsWith('/taxi/user') ? '/taxi/user/safety/sos' : '/safety/sos';
 
   const rideId = state.rideId || '';
+  const chatUnread = useRideChatUnread(rideId, 'user');
   const scheduledAt = rideRealtime?.scheduledAt || state.scheduledAt || null;
   const scheduledTimestamp = scheduledAt ? new Date(scheduledAt).getTime() : NaN;
   const isScheduledRide = Number.isFinite(scheduledTimestamp);
@@ -1781,8 +1784,9 @@ const RideTracking = () => {
                 onClick={btn.action}
                 className="flex flex-col items-center gap-1.5 py-3 rounded-[18px] bg-white border border-slate-100/60 shadow-[0_2px_8px_rgba(15,23,42,0.03)] hover:bg-slate-50 transition-all duration-200"
               >
-                <div className="p-0.5">
+                <div className="relative p-0.5">
                   <btn.icon size={18} className="text-slate-800" strokeWidth={2} />
+                  {btn.id === 'chat' ? <ChatUnreadBadge count={chatUnread} className="-right-3 -top-2" /> : null}
                 </div>
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em] leading-none">{btn.label}</span>
               </motion.button>

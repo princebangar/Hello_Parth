@@ -31,6 +31,8 @@ import carIcon from '../../../../assets/icons/car.png';
 import bikeIcon from '../../../../assets/icons/bike.png';
 import autoIcon from '../../../../assets/icons/auto.png';
 import deliveryIcon from '../../../../assets/icons/Delivery.png';
+import useRideChatUnread from '../../../shared/chat/useRideChatUnread';
+import ChatUnreadBadge from '../../../shared/components/ChatUnreadBadge';
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 const DEFAULT_CENTER = { lat: 22.7196, lng: 75.8577 };
@@ -280,6 +282,7 @@ const ParcelTracking = () => {
   });
 
   const rideId = state.rideId || '';
+  const chatUnread = useRideChatUnread(rideId, 'user');
   const tripStatus = String(rideRealtime?.status || state.liveStatus || state.status || 'accepted').toLowerCase();
   
   const pickupPosition = useMemo(() => toLatLng(rideRealtime?.pickup?.coordinates || state.pickupCoords || [75.9048, 22.7039]), [rideRealtime?.pickup?.coordinates, state.pickupCoords]);
@@ -1214,7 +1217,7 @@ const ParcelTracking = () => {
           {/* Action Grid */}
           <div className="grid grid-cols-4 gap-3">
             <ActionButton icon={Phone} label="Call" onClick={handleCall} />
-            <ActionButton icon={MessageCircle} label="Chat" onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { rideId, peer: driver } })} />
+            <ActionButton icon={MessageCircle} label="Chat" badge={chatUnread} onClick={() => navigate(`${routePrefix}/ride/chat`, { state: { rideId, peer: driver } })} />
             <ActionButton icon={Share2} label="Share" onClick={handleShare} />
             <ActionButton icon={ShieldCheck} label="Safety" onClick={() => navigate(routePrefix ? `${routePrefix}/support` : '/ride/support')} color="dark" />
           </div>
@@ -1275,11 +1278,11 @@ const ParcelTracking = () => {
   );
 };
 
-const ActionButton = ({ icon: Icon, label, onClick, color = 'gray' }) => (
+const ActionButton = ({ icon: Icon, label, onClick, color = 'gray', badge = 0 }) => (
   <motion.button
     whileTap={{ scale: 0.94 }}
     onClick={onClick}
-    className={`flex flex-col items-center gap-1.5 py-4 rounded-[24px] border ${
+    className={`relative flex flex-col items-center gap-1.5 py-4 rounded-[24px] border ${
       color === 'dark'
         ? 'bg-slate-900 border-slate-900 text-white'
         : 'bg-gray-50 border-gray-100 text-gray-700'
@@ -1287,6 +1290,7 @@ const ActionButton = ({ icon: Icon, label, onClick, color = 'gray' }) => (
   >
     <Icon size={20} strokeWidth={2.5} />
     <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+    <ChatUnreadBadge count={badge} className="right-2 top-2" />
   </motion.button>
 );
 

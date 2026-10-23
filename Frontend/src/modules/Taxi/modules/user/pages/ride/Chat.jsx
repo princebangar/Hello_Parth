@@ -5,6 +5,7 @@ import { ArrowLeft, Send, Phone, Loader2 } from 'lucide-react';
 import UserSupportChatPanel from '../../../shared/components/UserSupportChatPanel';
 import { socketService } from '../../../../shared/api/socket';
 import { getCurrentRide } from '../../services/currentRideService';
+import { markRideChatSeen } from '../../../shared/chat/useRideChatUnread';
 
 // Ride chat is plain text: emojis (typed or pasted) are stripped.
 const EMOJI_PATTERN = /[\p{Extended_Pictographic}‍️⃣]/gu;
@@ -106,6 +107,13 @@ const Chat = () => {
       list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
     }
   }, [messages, isJoiningRide, chatError]);
+
+  // Everything on screen is read: clears the unread count on the trip screen's chat button.
+  useEffect(() => {
+    if (isAdminChat || !rideId) return;
+    const latestIncoming = messages.reduce((latest, entry) => (entry.sender === 'other' && !entry.pending ? Math.max(latest, entry.at || 0) : latest), 0);
+    if (latestIncoming) markRideChatSeen(chatRole, rideId, latestIncoming);
+  }, [chatRole, isAdminChat, messages, rideId]);
 
   const quickReplies = isAdminChat
     ? ['Payment Issue', 'Ride Cancelled', 'Lost Item', 'Safety']
