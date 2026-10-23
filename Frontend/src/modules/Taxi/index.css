@@ -484,9 +484,10 @@
 .user-app-theme .bg-slate-950\/80,
 .user-app-theme .bg-zinc-900,
 .user-app-theme .bg-zinc-900\/80 {
+  /* No backdrop-filter here: these classes sit on whole page wrappers too, and a backdrop-filter turns
+     the wrapper into the containing block of its `fixed` children - the bottom Pay / Proceed bars then
+     sat at the end of the page, off-screen. The card colour is opaque, so the blur showed nothing anyway. */
   background-color: var(--user-card-bg) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
 }
 
 /* Text Primary overrides */

@@ -586,7 +586,8 @@ const BusDriverHome = () => {
 
   // Lapsed payment holds come back as `expired`; they never occupied a seat.
   const liveBookingCount = useMemo(
-    () => bookings.filter((item) => !['expired', 'cancelled', 'failed'].includes(String(item?.status || '').toLowerCase())).length,
+    // Paid passengers only: a "pending" row is a checkout still at the payment step (its seat stays held in Occupied).
+    () => bookings.filter((item) => String(item?.status || '').toLowerCase() === 'confirmed').length,
     [bookings],
   );
   const todaysManualReservations = useMemo(

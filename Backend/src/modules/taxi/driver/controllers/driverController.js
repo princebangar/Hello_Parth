@@ -1028,7 +1028,9 @@ const serializeBusDriverProfile = async (busDriver) => {
   const upcomingBookingsCount = assignedBusServiceId
     ? await BusBooking.countDocuments({
         busServiceId: assignedBusServiceId,
-        status: { $in: ["pending", "confirmed"] },
+        // paid seats from today on; a "pending" row is only a checkout still at the payment step
+        status: "confirmed",
+        travelDate: { $gte: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) },
       })
     : 0;
 
@@ -3534,6 +3536,9 @@ export const listBusDriverBookings = async (req, res) => {
 
   const query = {
     busServiceId: busDriver.assignedBusServiceId,
+    // An abandoned checkout whose seat hold ran out is not a booking (the user-side cleanup marks it expired
+    // only on the next user bus call, so it must not show here in the meantime).
+    $nor: [{ status: 'pending', expiresAt: { $lte: new Date() } }],
   };
 
   const travelDate = toCleanString(req.query?.date || req.query?.travelDate);
