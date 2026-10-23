@@ -552,9 +552,18 @@ const computeCommissionSummary = ({ fare = 0, promoDiscount = 0, pricingSnapshot
 
 const getSimulationPath = ({ routePath = [], from, to }) => {
     const path = routePath.length > 1 ? routePath : [from, to].filter(Boolean);
-    return path
+    const points = path
         .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng)))
         .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }));
+    // The road route ends on the nearest road; finish on the exact pin (parcel delivery needs to be within 100 m of it).
+    const target = to && Number.isFinite(Number(to.lat)) && Number.isFinite(Number(to.lng))
+        ? { lat: Number(to.lat), lng: Number(to.lng) }
+        : null;
+    const last = points[points.length - 1];
+    if (target && last && (last.lat !== target.lat || last.lng !== target.lng)) {
+        points.push(target);
+    }
+    return points;
 };
 const getRouteCacheKey = (origin, destination) => {
     const serializePoint = (point) =>
@@ -1743,7 +1752,8 @@ const ActiveTrip = () => {
     };
 
     const resumeSimulation = () => {
-        if (simulationPathRef.current.length < 2) {
+        // finished path (or none): plan a fresh one from here to the current destination
+        if (simulationPathRef.current.length < 2 || simulationStep >= simulationPathRef.current.length - 1) {
             startSimulation();
             return;
         }
@@ -2071,6 +2081,15 @@ const ActiveTrip = () => {
 
         if (isSimulationEnabled && !destinationChanged) {
             return;
+        }
+
+        // New leg (pickup -> drop): drop the finished path so Start/Resume drives to the new destination.
+        // Simulation stays on, so real GPS does not pull the driver back.
+        if (isSimulationEnabled && destinationChanged) {
+            stopSimulationTimer();
+            simulationPathRef.current = [];
+            setIsSimulationRunning(false);
+            setSimulationStep(0);
         }
 
         if (arePositionsNearlyEqual(driverPosition, activeDestination)) {
