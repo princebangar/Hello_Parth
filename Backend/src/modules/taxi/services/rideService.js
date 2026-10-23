@@ -827,7 +827,25 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
     return clauses.length > 1 ? { $or: clauses } : clauses[0] || {};
   }
 
-  return { vehicleTypeId: { $in: vehicleTypeIds } };
+  // Same rule as driver matching: a driver registered for BOTH Taxi and Delivery with e.g. a bike also takes a Taxi
+  // bike ride (or a bike parcel), although his own vehicle-type row is the other service's one.
+  const rideVehicles = await Vehicle.find({ _id: { $in: vehicleTypeIds } }).select('name vehicle_type icon_types').lean();
+  const vehicleKeys = normalizeVehicleKeys(rideVehicles);
+  if (!vehicleKeys.length) {
+    return { vehicleTypeId: { $in: vehicleTypeIds } };
+  }
+
+  return {
+    $or: [
+      { vehicleTypeId: { $in: vehicleTypeIds } },
+      {
+        $and: [
+          { $or: [{ registerFor: 'both' }, { serviceCategories: { $all: ['taxi', 'delivery'] } }] },
+          { $or: [{ vehicleType: { $in: vehicleKeys } }, { vehicleIconType: { $in: vehicleKeys } }] },
+        ],
+      },
+    ],
+  };
 };
 
 const syncDeliveryWithRide = async (ride) => {
