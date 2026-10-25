@@ -1,0 +1,1598 @@
+/* Web fonts (Plus Jakarta Sans, Inter, Outfit) are requested once from index.html - an @import here made the
+   whole Taxi stylesheet, and so the Taxi route chunk, wait on a Google round trip. */
+
+/* Gated on `html.taxi-app-active` (set by TaxiApp.jsx while the URL is under /taxi). This sheet stays
+   loaded after the first Taxi visit, and these used to be global, so Food picked up Outfit and the
+   Taxi root colours too. `:where()` keeps the specificity exactly what it was before. */
+:root:where(.taxi-app-active) {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #1C2833;
+  background-color: #F9F9F9;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:where(html.taxi-app-active) body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
+}
+
+#root {
+  width: 100%;
+}
+
+@theme {
+  --color-primary: #E85D04;
+  --color-secondary: #F48C06;
+  --font-sans: 'Outfit', system-ui, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+  
+  --shadow-premium: 0 10px 40px -10px rgba(0,0,0,0.1);
+  --shadow-soft: 0 4px 20px -2px rgba(0,0,0,0.05);
+}
+
+/* Global scrollbar hiding for a cleaner mobile experience */
+* {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+*::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Premium Driver-Specific Theme Layer */
+.driver-theme {
+    /* Centralized Color Controls - Update these to change the entire driver module appearance */
+    --color-primary: #1C2833;      /* Driver Brand Primary (Dark Navy/Slate for professional SaaS feel) */
+    --color-secondary: #334155;    /* Driver Brand Secondary (Lighter Slate) */
+    
+    /* Dedicated Variable-Based Mapping */
+    --driver-accent: #FFD700;
+    --driver-bg-soft: #F8F9FA;
+    --driver-card-white: #FFFFFF;
+    
+    background-color: var(--driver-bg-soft);
+    color: #0F172A;
+    font-family: 'Outfit', sans-serif;
+}
+
+/* Localize Tailwind's color mapping for the driver module */
+.driver-theme .text-primary { color: var(--color-primary); }
+.driver-theme .bg-primary { background-color: var(--color-primary); }
+.driver-theme .border-primary { border-color: var(--color-primary); }
+.driver-theme .shadow-premium { --tw-shadow: 0 10px 40px -10px rgba(0,0,0,0.15); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
+
+.glass-morphism {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.admin-user-field,
+.admin-user-field:focus {
+  color-scheme: light;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.admin-user-field::placeholder {
+  color: #6b7280 !important;
+  opacity: 1;
+}
+
+.admin-user-field option {
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.admin-user-field:-webkit-autofill,
+.admin-user-field:-webkit-autofill:hover,
+.admin-user-field:-webkit-autofill:focus,
+.admin-user-field:-webkit-autofill:active {
+  -webkit-text-fill-color: #000000 !important;
+  caret-color: #000000 !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.skeleton {
+  background-color: #f1f5f9;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ==========================================================================
+   REDIGO CENTRALIZED ADMIN THEME & TYPOGRAPHY
+   This layer unifies typography, alignment, form fields, cards, and tables
+   specifically inside the Admin Panel, scoped under .redigo-admin-root.
+   ========================================================================== */
+
+/* 1. Global Font and Typography Unification */
+.redigo-admin-root,
+.redigo-admin-root * {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Normalise oversized headers and weight discrepancies */
+.redigo-admin-root h1 {
+  font-size: 1.5rem !important; /* Unified to 24px */
+  font-weight: 800 !important; /* Sleek bold */
+  letter-spacing: -0.025em !important;
+}
+
+.redigo-admin-root h2 {
+  font-size: 1.25rem !important; /* Unified to 20px */
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.redigo-admin-root h3 {
+  font-size: 1rem !important; /* Unified to 16px */
+  font-weight: 600 !important;
+}
+
+/* Adjust overly heavy weights (900/black) to professional bold/semibold */
+.redigo-admin-root .font-black {
+  font-weight: 800 !important;
+}
+.redigo-admin-root .font-extrabold {
+  font-weight: 800 !important;
+}
+
+/* 2. Text Color Normalization */
+.redigo-admin-root .text-slate-900,
+.redigo-admin-root .text-gray-900 {
+  color: #0f172a !important; /* slate-900 */
+}
+
+.redigo-admin-root .text-slate-800,
+.redigo-admin-root .text-gray-800 {
+  color: #1e293b !important; /* slate-800 */
+}
+
+.redigo-admin-root .text-slate-700,
+.redigo-admin-root .text-gray-700 {
+  color: #334155 !important; /* slate-700 */
+}
+
+.redigo-admin-root .text-slate-500,
+.redigo-admin-root .text-gray-500 {
+  color: #64748b !important; /* slate-500 */
+}
+
+.redigo-admin-root .text-slate-400,
+.redigo-admin-root .text-gray-400 {
+  color: #94a3b8 !important; /* slate-400 */
+}
+
+/* 3. Outer Padding and Alignment Standardization */
+/* Prevents double padding between AdminLayout's main container and standalone page wrappers */
+.redigo-admin-root main > div,
+.redigo-admin-root main > section,
+.redigo-admin-root main > form {
+  padding: 0 !important;
+  background-color: transparent !important;
+  min-height: auto !important;
+}
+
+/* 4. Form Field Standardization (Inputs, Selects, Textareas) */
+.redigo-admin-root input[type="text"],
+.redigo-admin-root input[type="number"],
+.redigo-admin-root input[type="email"],
+.redigo-admin-root input[type="tel"],
+.redigo-admin-root input[type="password"],
+.redigo-admin-root select,
+.redigo-admin-root textarea {
+  border-radius: 8px !important; /* unified rounded-lg */
+  border-color: #cbd5e1 !important; /* slate-300 */
+  background-color: #ffffff !important;
+  color: #1e293b !important; /* slate-800 */
+  font-size: 0.875rem !important; /* text-sm */
+  transition: all 0.2s ease-in-out !important;
+}
+
+/* ==========================================================================
+   TAXI ADMIN — shared building blocks
+   Pages used these class names (admin-card, admin-btn-*, admin-input, admin-badge) but no stylesheet
+   defined them, so cards had no padding/border and buttons looked like plain text. One neutral,
+   professional palette: white surfaces, slate borders, signal-yellow only for the primary action.
+   ========================================================================== */
+.admin-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 0;
+}
+.admin-card .card-label {
+  letter-spacing: 0.08em;
+}
+
+.admin-btn-primary,
+.admin-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.admin-btn-primary {
+  background: #ffc400;
+  color: #0b1220;
+  border: 1px solid #ffc400;
+}
+.admin-btn-primary:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+.admin-btn-secondary {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #d9dee7;
+}
+.admin-btn-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #c3cad6;
+}
+.admin-btn-primary:disabled,
+.admin-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d9dee7;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  outline: none;
+}
+.admin-input:focus {
+  border-color: #ffc400;
+  box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.2);
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+.admin-badge-success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+/* One page frame for every admin screen. 63 of 114 pages brought their own padding AND their own background
+   (gray-50 / #F9FAFB / #F8FAFC / slate-50) on top of <main>'s padding: double gaps and patchwork backgrounds.
+   <main> now owns the spacing and the page background; a page's own outer wrapper is flattened into it.
+   Full-screen centred states (loaders / empty screens use justify-center) are left alone. */
+.taxi-admin-main > .min-h-screen:not(.justify-center) {
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* The dark sidebar's "Search Menu" box must look like Food's (dark), not like a white form field. */
+.redigo-admin-root input.admin-sidebar-search[type="text"] {
+  background-color: #171717 !important; /* neutral-900 */
+  border-color: #262626 !important; /* neutral-800 */
+  color: #ffffff !important;
+}
+.redigo-admin-root input.admin-sidebar-search[type="text"]:focus {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4) !important;
+}
+
+.redigo-admin-root input[type="text"]:focus,
+.redigo-admin-root input[type="number"]:focus,
+.redigo-admin-root input[type="email"]:focus,
+.redigo-admin-root input[type="tel"]:focus,
+.redigo-admin-root input[type="password"]:focus,
+.redigo-admin-root select:focus,
+.redigo-admin-root textarea:focus {
+  border-color: #e0ac00 !important; /* brand yellow (was indigo, which clashed with the rest of the admin) */
+  outline: 2px solid transparent !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.25) !important;
+}
+
+/* 5. Card and Border Uniformity */
+.redigo-admin-root .rounded-xl,
+.redigo-admin-root .rounded-2xl,
+.redigo-admin-root .rounded-\[28px\] {
+  border-radius: 16px !important; /* Standardize premium rounded cards */
+}
+
+.redigo-admin-root .border-slate-200,
+.redigo-admin-root .border-gray-200 {
+  border-color: #e2e8f0 !important; /* Standard slate-200 */
+}
+
+.redigo-admin-root .border-slate-100,
+.redigo-admin-root .border-gray-100 {
+  border-color: #f1f5f9 !important; /* Standard slate-100 */
+}
+
+/* 6. Unified Table Design */
+.redigo-admin-root thead {
+  background-color: #f8fafc !important; /* slate-50 */
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.redigo-admin-root th {
+  color: #64748b !important; /* slate-500 */
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+}
+
+.redigo-admin-root td {
+  border-color: #f1f5f9 !important;
+}
+
+/* ==========================================================================
+   USER APP PREMIUM REDESIGN - DARK & LIGHT THEME STYLING
+   ========================================================================== */
+
+/* 1. Global Font and Typography for User App */
+/* 1. Global Font and Typography for User App */
+.user-app-theme,
+.user-app-theme * {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
+  box-sizing: border-box !important;
+}
+
+/* Explicitly map all Tailwind font-override utility classes in user app to Outfit */
+.user-app-theme .font-sans,
+.user-app-theme .font-display,
+.user-app-theme [class*="font-['Plus_Jakarta_Sans'"],
+.user-app-theme [class*="font-['Inter'"],
+.user-app-theme [class*="font-['Plus_Jakarta_Sans']"],
+.user-app-theme [class*="font-['Inter']"] {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
+}
+
+/* 2. Colour tokens — ONE set per theme, defined in "User Theme Custom Variables" further down.
+   (This file used to carry three competing copies of these; the last one silently won.) */
+
+/* Weight scale. The customer screens were written with font-black / font-extrabold almost
+   everywhere (600+ uses), which reads shouty and cheap. Collapse the heavy end once, here,
+   instead of editing every screen: black/extrabold -> 700, bold -> 600. */
+.user-app-theme .font-black,
+.user-app-theme .font-extrabold,
+.user-app-theme [class*="font-[900]"],
+.user-app-theme [class*="font-[800]"] {
+  font-weight: 700 !important;
+}
+.user-app-theme .font-bold {
+  font-weight: 600 !important;
+}
+
+/* Legibility floor: 8–9.5px captions (50+ of them across the ride/bus/pooling screens) are unreadable
+   on a phone. */
+.user-app-theme [class*="text-[8px]"],
+.user-app-theme [class*="text-[9px]"],
+.user-app-theme [class*="text-[9.5px]"] {
+  font-size: 10.5px !important;
+}
+
+/* Decorative blurred colour blobs sit behind many screens (orange / emerald / indigo patches). They
+   carry no information and make the pages look patchy, so they are switched off app-wide. */
+.user-app-theme .blur-3xl,
+.user-app-theme .blur-2xl {
+  display: none !important;
+}
+
+/* 4. Adaptive Utility Class Mappings inside User App */
+.user-app-theme {
+  background-color: var(--user-bg) !important;
+  color: var(--user-text-primary) !important;
+}
+
+.user-app-theme .bg-white,
+.user-app-theme .bg-white\/70,
+.user-app-theme .bg-white\/75,
+.user-app-theme .bg-white\/80,
+.user-app-theme .bg-white\/85,
+.user-app-theme .bg-white\/90,
+.user-app-theme .bg-white\/92,
+.user-app-theme .bg-white\/95,
+.user-app-theme .bg-slate-50,
+.user-app-theme .bg-gray-50,
+.user-app-theme .bg-gray-50\/50,
+.user-app-theme .bg-slate-900,
+.user-app-theme .bg-slate-950,
+.user-app-theme .bg-zinc-950,
+.user-app-theme .bg-neutral-950,
+.user-app-theme .bg-slate-900\/90,
+.user-app-theme .bg-slate-900\/95,
+.user-app-theme .bg-slate-900\/80,
+.user-app-theme .bg-black\/60,
+.user-app-theme .bg-slate-950\/70,
+.user-app-theme .bg-slate-950\/85,
+.user-app-theme .bg-slate-950\/80,
+.user-app-theme .bg-zinc-900,
+.user-app-theme .bg-zinc-900\/80 {
+  /* No backdrop-filter here: these classes sit on whole page wrappers too, and a backdrop-filter turns
+     the wrapper into the containing block of its `fixed` children - the bottom Pay / Proceed bars then
+     sat at the end of the page, off-screen. The card colour is opaque, so the blur showed nothing anyway. */
+  background-color: var(--user-card-bg) !important;
+}
+
+/* Text Primary overrides */
+.user-app-theme .text-slate-950,
+.user-app-theme .text-slate-900,
+.user-app-theme .text-slate-800,
+.user-app-theme .text-gray-900,
+.user-app-theme .text-gray-800,
+.user-app-theme .text-black,
+.user-app-theme .text-white,
+.user-app-theme .text-zinc-100 {
+  color: var(--user-text-primary) !important;
+}
+
+/* The out-of-zone screen is always dark purple: its white text must not take the light theme's dark text colour. */
+.user-app-theme .oz-screen .text-white {
+  color: #ffffff !important;
+}
+
+/* The inner field of a search row sits inside its own bordered box; the theme's gold focus ring must not draw a second box in it. */
+.user-app-theme input.bare-input:focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Text Secondary overrides */
+.user-app-theme .text-slate-700,
+.user-app-theme .text-slate-600,
+.user-app-theme .text-slate-400,
+.user-app-theme .text-gray-700,
+.user-app-theme .text-gray-600,
+.user-app-theme .text-gray-400,
+.user-app-theme .text-zinc-400,
+.user-app-theme .text-slate-300 {
+  color: var(--user-text-secondary) !important;
+}
+
+/* Text Muted overrides */
+.user-app-theme .text-slate-500,
+.user-app-theme .text-gray-500,
+.user-app-theme .text-zinc-500 {
+  color: var(--user-text-muted) !important;
+}
+
+/* Yellow / amber badges and buttons keep dark text in the dark theme (text-slate-900 is remapped to white above, which was
+   white-on-yellow: "Confirm & Proceed", the rating badge, ...). */
+.user-app-theme [class*="bg-[#f8e001]"],
+.user-app-theme [class*="bg-[#FFC400]"],
+.user-app-theme [class*="bg-[#ffc400]"],
+.user-app-theme .bg-yellow-300,
+.user-app-theme .bg-yellow-400,
+.user-app-theme .bg-yellow-500,
+.user-app-theme .bg-amber-300,
+.user-app-theme .bg-amber-400,
+.user-app-theme [class*="bg-[#f8e001]"] *,
+.user-app-theme [class*="bg-[#FFC400]"] *,
+.user-app-theme [class*="bg-[#ffc400]"] *,
+.user-app-theme .bg-yellow-300 *,
+.user-app-theme .bg-yellow-400 *,
+.user-app-theme .bg-yellow-500 *,
+.user-app-theme .bg-amber-300 *,
+.user-app-theme .bg-amber-400 * {
+  color: #0b1220 !important;
+}
+
+/* Border overrides */
+.user-app-theme .border-white,
+.user-app-theme .border-white\/10,
+.user-app-theme .border-white\/80,
+.user-app-theme .border-slate-100,
+.user-app-theme .border-slate-200,
+.user-app-theme .border-slate-200\/40,
+.user-app-theme .border-slate-50,
+.user-app-theme .border-slate-800,
+.user-app-theme .border-slate-850,
+.user-app-theme .border-slate-800\/80,
+.user-app-theme .border-zinc-800,
+.user-app-theme .border-slate-300,
+.user-app-theme .border-slate-350,
+.user-app-theme .border-gray-100,
+.user-app-theme .border-gray-200,
+.user-app-theme .border-gray-300 {
+  border-color: var(--user-border) !important;
+}
+
+.user-app-theme .shadow-sm,
+.user-app-theme .shadow-md,
+.user-app-theme .shadow-lg,
+.user-app-theme .shadow-xl,
+.user-app-theme .shadow-2xl,
+.user-app-theme .shadow-premium {
+  box-shadow: 0 12px 30px -10px rgba(0,0,0,0.15) !important;
+}
+
+/* Accent overrides */
+.user-app-theme .text-primary,
+.user-app-theme .text-amber-500,
+.user-app-theme .text-orange-500,
+.user-app-theme .text-\[\#FFB300\],
+.user-app-theme .text-yellow-400,
+.user-app-theme .text-yellow-500 {
+  color: var(--user-accent) !important;
+}
+
+.user-app-theme .bg-primary,
+.user-app-theme .bg-orange-500,
+.user-app-theme .bg-amber-500,
+.user-app-theme .bg-\[\#FFB300\],
+.user-app-theme .bg-yellow-400,
+.user-app-theme .bg-yellow-500 {
+  background-color: var(--user-accent) !important;
+  color: #0b1220 !important;
+}
+
+/* Glassmorphism custom components */
+.user-glass-card {
+  background: var(--user-card-bg) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--user-border) !important;
+  border-radius: 24px !important;
+}
+
+/* For Inputs */
+.user-app-theme input,
+.user-app-theme select,
+.user-app-theme textarea {
+  background-color: var(--user-card-soft) !important;
+  color: var(--user-text-primary) !important;
+  border-color: var(--user-border) !important;
+}
+
+.user-app-theme input.bg-transparent,
+.user-app-theme textarea.bg-transparent {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.user-app-theme input:focus,
+.user-app-theme select:focus,
+.user-app-theme textarea:focus {
+  border-color: var(--user-accent) !important;
+  box-shadow: 0 0 0 1px var(--user-accent) !important;
+}
+
+/* A transparent field sits inside its own rounded box (icon + input): the gold focus ring goes on that box, not as a
+   second square inside it. */
+.user-app-theme input.bg-transparent:focus,
+.user-app-theme textarea.bg-transparent:focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.user-app-theme :has(> input.bg-transparent:focus),
+.user-app-theme :has(> textarea.bg-transparent:focus) {
+  border-color: var(--user-accent) !important;
+  box-shadow: 0 0 0 1px var(--user-accent) !important;
+}
+
+/* Browser autofill (saved e-mail / phone) painted the field light blue; keep the theme's own colours. */
+.user-app-theme input:-webkit-autofill,
+.user-app-theme input:-webkit-autofill:hover,
+.user-app-theme input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--user-text-primary) !important;
+  caret-color: var(--user-text-primary);
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Lighter grey badges, card inner sections, and alerts map to card-soft */
+.user-app-theme .bg-slate-100,
+.user-app-theme .bg-gray-100,
+.user-app-theme .bg-slate-200,
+.user-app-theme .bg-gray-200,
+.user-app-theme .bg-slate-300,
+.user-app-theme .bg-gray-300,
+.user-app-theme .bg-slate-50\/50,
+.user-app-theme .bg-slate-50\/60,
+.user-app-theme .bg-slate-50\/70,
+.user-app-theme .bg-slate-50\/80,
+.user-app-theme .bg-slate-50\/90,
+.user-app-theme .bg-slate-100\/40,
+.user-app-theme .bg-slate-100\/50,
+.user-app-theme .bg-slate-100\/60,
+.user-app-theme .bg-slate-100\/70,
+.user-app-theme .bg-white\/10,
+.user-app-theme .bg-white\/20,
+.user-app-theme .bg-white\/30,
+.user-app-theme .bg-slate-200\/50,
+.user-app-theme .bg-orange-50,
+.user-app-theme .bg-orange-50\/60,
+.user-app-theme .bg-orange-50\/70,
+.user-app-theme .bg-orange-100,
+.user-app-theme .bg-orange-100\/60,
+.user-app-theme .bg-emerald-50,
+.user-app-theme .bg-emerald-50\/30,
+.user-app-theme .bg-emerald-50\/50,
+.user-app-theme .bg-emerald-50\/70,
+.user-app-theme .bg-emerald-100,
+.user-app-theme .bg-emerald-100\/50,
+.user-app-theme .bg-emerald-100\/70,
+.user-app-theme .bg-blue-50,
+.user-app-theme .bg-blue-50\/60,
+.user-app-theme .bg-blue-50\/70,
+.user-app-theme .bg-blue-100,
+.user-app-theme .bg-blue-100\/50,
+.user-app-theme .bg-indigo-50,
+.user-app-theme .bg-indigo-50\/50,
+.user-app-theme .bg-indigo-50\/70,
+.user-app-theme .bg-red-50,
+.user-app-theme .bg-rose-50,
+.user-app-theme .bg-rose-50\/60,
+.user-app-theme .bg-rose-50\/70,
+.user-app-theme .bg-rose-100,
+.user-app-theme .bg-amber-50,
+.user-app-theme .bg-amber-50\/60,
+.user-app-theme .bg-amber-100,
+.user-app-theme .bg-yellow-50,
+.user-app-theme .bg-yellow-50\/60,
+.user-app-theme .bg-yellow-100,
+.user-app-theme [class*="bg-[#F2F7FA]"],
+.user-app-theme [class*="bg-[#EBF5FC]"],
+.user-app-theme .bg-slate-900\/60,
+.user-app-theme .bg-slate-950\/60,
+.user-app-theme .bg-slate-950\/75,
+.user-app-theme .bg-zinc-800 {
+  background-color: var(--user-card-soft) !important;
+}
+
+.user-app-theme select option {
+  background-color: var(--user-card-bg) !important;
+  color: var(--user-text-primary) !important;
+}
+
+/* Black buttons become the yellow accent button. A card that is only built as a <button> (data-card) is not a CTA:
+   it keeps the card colour, otherwise its white text sat on yellow. */
+.user-app-theme button.bg-slate-900:not([data-card]),
+.user-app-theme button.bg-black:not([data-card]),
+.user-app-theme a.bg-slate-900:not([data-card]),
+.user-app-theme a.bg-black:not([data-card]) {
+  background-color: var(--user-accent) !important;
+  color: #0b1220 !important;
+}
+
+@media (min-width: 768px) {
+  /* Let the main container and user pages expand on desktop for a spacious web-app feel */
+  main.max-w-lg,
+  div.max-w-lg {
+    max-width: 72rem !important; /* 1152px */
+  }
+
+  /* Keep the bottom navigation bar and float overlays centered and compact */
+  nav.max-w-lg,
+  .fixed.max-w-lg,
+  .fixed.left-1\/2 {
+    max-width: 32rem !important; /* 512px */
+  }
+}
+
+/* Custom page container background overrides to support dynamic light/dark mode */
+.user-app-theme,
+.user-app-theme main,
+.user-app-theme .min-h-screen {
+  background-color: var(--user-bg) !important;
+}
+
+.user-app-theme [class*="bg-[linear-gradient"],
+.user-app-theme [class*="bg-[#FAFBFF]"],
+.user-app-theme [class*="bg-[#FDFDFD]"],
+.user-app-theme [class*="bg-[#F8FAFC]"],
+.user-app-theme [class*="bg-[#E7F5E8]"],
+.user-app-theme [class*="bg-[#f5f7fb]"] {
+  background: var(--user-bg) !important;
+  background-image: none !important;
+}
+
+/* User App login page Redesign CSS */
+.login-page {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100dvh;
+  background: var(--user-bg) !important;
+  color: var(--user-text-primary) !important;
+  overflow: hidden;
+  font-family: "Outfit", "Plus Jakarta Sans", "Inter", sans-serif !important;
+}
+
+.login-hero {
+  position: relative;
+  height: 58dvh;
+  overflow: hidden;
+}
+
+.login-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.login-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 7, 22, 0.05) 0%,
+    rgba(8, 7, 22, 0.25) 45%,
+    var(--user-bg) 100%
+  ) !important;
+  z-index: 1;
+}
+
+.login-logo {
+  position: absolute;
+  top: 28px;
+  left: 26px;
+  z-index: 10;
+}
+
+.login-hero-text {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 55px;
+  z-index: 2;
+}
+
+.login-card {
+  position: relative;
+  z-index: 3;
+  margin-top: -35px;
+  min-height: 45dvh;
+  background: var(--user-card-bg) !important;
+  border-radius: 32px 32px 0 0;
+  padding: 28px;
+  border-top: 1px solid var(--user-border);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+.login-primary-text {
+  color: var(--user-text-primary) !important;
+}
+
+.login-accent-text {
+  color: var(--user-accent) !important;
+}
+
+.login-subtitle {
+  color: var(--user-text-secondary) !important;
+}
+
+.login-button {
+  width: 100%;
+  height: 58px;
+  background: var(--user-accent) !important;
+  color: #080716 !important;
+  border-radius: 14px;
+  font-weight: 800;
+  margin-top: 40px;
+  transition: all 0.25s ease;
+  box-shadow: 0 8px 24px rgba(255, 196, 0, 0.2) !important;
+}
+
+.login-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(255, 196, 0, 0.35) !important;
+  background: #ffc400 !important;
+}
+
+.login-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.login-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none !important;
+}
+
+.login-page input {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.login-page input:focus {
+  border: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Shake Animation */
+@keyframes otpShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.shake-animation {
+  animation: otpShake 0.4s ease-in-out;
+}
+
+/* Custom OTP Input Style */
+.otp-input-field {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: var(--user-card-soft) !important;
+  border: 2px solid var(--user-border) !important;
+  color: var(--user-text-primary) !important;
+}
+
+.otp-input-field:focus {
+  border-color: var(--user-accent) !important;
+  background-color: var(--user-card-bg) !important;
+  box-shadow: 0 0 12px rgba(255, 196, 0, 0.2) !important;
+}
+
+/* Theme Toggle Button Style */
+.theme-toggle-floating {
+  position: absolute;
+  top: 28px;
+  right: 26px;
+  z-index: 10;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.theme-toggle-floating:hover {
+  transform: scale(1.08);
+  background: rgba(0, 0, 0, 0.45) !important;
+}
+
+.theme-toggle-floating:active {
+  transform: scale(0.95);
+}
+
+.user-app-theme.light .theme-toggle-floating {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  color: #0b1220 !important;
+}
+
+.user-app-theme.light .theme-toggle-floating:hover {
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Custom Search Button Overrides to bypass global button overrides */
+.user-app-theme .search-button-dark {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(63, 63, 70, 0.8) !important;
+}
+
+/* User Theme Custom Variables — the single source of truth for the customer app palette.
+   Brand: signal-yellow accent on deep navy ink. Cards are white (light) / near-black (dark) and
+   separated from the page by a tinted background + a soft shadow, not by heavy borders. */
+:root {
+  --user-bg: #0a0a0a;
+  --user-card-bg: #141414;
+  --user-card-soft: #1c1c1c;
+  --user-text-primary: #FFFFFF;
+  --user-text-secondary: #CBD5E1;
+  --user-text-muted: #94A3B8;
+  --user-border: rgba(255,255,255,0.10);
+  --user-accent: #FFC400;
+  --user-accent-ink: #0B1220;
+  --user-card-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5);
+  --user-nav-bg: #1a1a1a;
+  --user-nav-border: rgba(255,255,255,0.10);
+  --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
+  --user-nav-idle: #9CA3AF;
+  --user-nav-active-bg: rgba(37,99,235,0.20);
+  --user-nav-active-fg: #60A5FA;
+  --user-profile-header-bg: #0a0a0a;
+  --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
+}
+
+.user-app-theme.light,
+.user-app-theme .light,
+.user-app-theme[class*="light"] {
+  --user-bg: #F1F4F9;
+  --user-card-bg: #FFFFFF;
+  --user-card-soft: #E9EDF4;
+  --user-text-primary: #0B1220;
+  --user-text-secondary: #475569;
+  --user-text-muted: #64748B;
+  --user-border: rgba(15,23,42,0.10);
+  --user-accent: #FFC400;
+  --user-accent-ink: #0B1220;
+  --user-card-shadow: 0 1px 2px rgba(15,23,42,0.05), 0 8px 24px -10px rgba(15,23,42,0.14);
+  --user-nav-bg: #FFFFFF;
+  --user-nav-border: #F3F4F6;
+  --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
+  --user-nav-idle: #4B5563;
+  --user-nav-active-bg: #EAF1FF;
+  --user-nav-active-fg: #2563EB;
+  --user-profile-header-bg: #FFFFFF;
+  --user-profile-header-gradient: linear-gradient(180deg, rgba(238, 242, 255, 0.5) 0%, rgba(241, 244, 249, 0) 100%);
+}
+
+.user-app-theme.dark,
+.user-app-theme .dark,
+.user-app-theme[class*="dark"] {
+  --user-bg: #0a0a0a;
+  --user-card-bg: #141414;
+  --user-card-soft: #1c1c1c;
+  --user-text-primary: #FFFFFF;
+  --user-text-secondary: #CBD5E1;
+  --user-text-muted: #94A3B8;
+  --user-border: rgba(255,255,255,0.12);
+  --user-accent: #FFC400;
+  --user-accent-ink: #0B1220;
+  --user-card-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5);
+  --user-nav-bg: #1a1a1a;
+  --user-nav-border: rgba(255,255,255,0.10);
+  --user-nav-shadow: 0 15px 40px -10px rgba(0,0,0,0.3);
+  --user-nav-idle: #9CA3AF;
+  --user-nav-active-bg: rgba(37,99,235,0.20);
+  --user-nav-active-fg: #60A5FA;
+  --user-profile-header-bg: #0a0a0a;
+  --user-profile-header-gradient: linear-gradient(180deg, rgba(255, 196, 0, 0.06) 0%, rgba(10, 10, 10, 1) 100%);
+}
+
+/* Theme variable mapping utilities */
+.user-app-theme {
+  background-color: var(--user-bg) !important;
+  color: var(--user-text-primary) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+@media (max-width: 1023px) {
+  .user-app-theme {
+    max-width: 430px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
+
+/* Shortcut image background blob */
+.shortcut-image-bg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  width: 60px;
+  height: 60px;
+  padding: 10px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.user-app-theme.light .shortcut-image-bg,
+.user-app-theme .light .shortcut-image-bg,
+.user-app-theme[class*="light"] .shortcut-image-bg {
+  background: linear-gradient(135deg, #fff7cc, #eef4ff);
+}
+
+.user-app-theme.dark .shortcut-image-bg,
+.user-app-theme .dark .shortcut-image-bg,
+.user-app-theme[class*="dark"] .shortcut-image-bg {
+  background: linear-gradient(135deg, rgba(255,196,0,0.18), rgba(255,255,255,0.08));
+}
+
+.user-bottom-nav {
+  position: fixed !important;
+  left: 50% !important;
+  /* Exactly Food's nav position (fixed bottom-6, px-6, max-w-md) so switching Taxi <-> Food does not make the bar jump. */
+  bottom: 24px !important;
+  transform: translateX(-50%) !important;
+  z-index: 9997 !important;
+  width: calc(100% - 48px) !important;
+  max-width: 448px !important;
+  pointer-events: auto !important;
+}
+
+/* A solid strip (page colour) behind the floating bar, fading out above it: scrolled content no longer shows through
+   around / under the bar and never looks like it overlaps the footer. */
+.user-bottom-nav::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 100vw;
+  bottom: -24px;
+  height: 108px;
+  transform: translateX(-50%);
+  background: linear-gradient(to top, var(--user-bg) 0, var(--user-bg) 82%, transparent 100%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Same bar as Food's bottom navigation: white / #1a1a1a, 72px tall, big radius, soft drop shadow. */
+.user-bottom-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 72px;
+  padding: 0 8px;
+  border-radius: 2rem;
+  overflow: hidden;
+  background: var(--user-nav-bg);
+  border: 1px solid var(--user-nav-border);
+  box-shadow: var(--user-nav-shadow);
+}
+
+.user-bottom-nav-item {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 1.5rem;
+  color: var(--user-nav-idle);
+  /* No colour transition: the bar's background switches with the theme at once, so a 0.3s colour fade made the
+     icons / labels visibly "fade in" from the default (dark) palette on every refresh and Food -> Taxi switch. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Active tab, same recipe as Food's nav (light red pill + red icon/label): a soft tint of the Taxi blue (#2563EB, the
+   header's Taxi tab) behind a blue icon + label. The pill slides between tabs (.user-bottom-nav-pill). */
+.user-bottom-nav-item.is-active {
+  color: var(--user-nav-active-fg);
+}
+
+.user-bottom-nav-pill {
+  background: var(--user-nav-active-bg);
+}
+
+.user-home-scroll {
+  padding-bottom: 140px;
+}
+
+/* HTML and Body scroll configurations */
+html, body, #root {
+  min-height: 100%;
+}
+
+.user-app,
+.user-home,
+.user-home-page {
+  min-height: 100vh !important;
+  overflow-y: visible !important;
+  overflow-x: clip !important;
+}
+
+/* Home layout styling */
+.user-home {
+  position: relative !important;
+  min-height: 100vh !important;
+  width: 100% !important;
+  overflow-y: visible !important;
+  overflow-x: clip !important;
+  background: var(--user-bg) !important;
+  box-sizing: border-box !important;
+}
+@media (max-width: 1023px) {
+  .user-home {
+    max-width: 430px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
+
+.map-header {
+  position: relative !important;
+  height: 200px !important;
+  z-index: 1 !important;
+  overflow: hidden !important;
+  border-radius: 0 0 20px 20px !important;
+}
+
+.map-header .google-map,
+.map-header iframe,
+.map-header .map-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.pickup-address-pill {
+  position: absolute !important;
+  left: 16px !important;
+  right: 16px !important;
+  bottom: 18px !important;
+  z-index: 20 !important;
+}
+
+.home-sheet {
+  position: relative !important;
+  z-index: 5 !important;
+  margin-top: 0 !important;
+  border-radius: 28px 28px 0 0 !important;
+  background: var(--user-bg) !important;
+  padding: 16px 16px 124px 16px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: clip !important;
+}
+
+.user-search-bar {
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+/* Not sticky: like Food's home, the app bar, the banner and the content scroll away together as one page. */
+.user-home-appbar {
+  position: relative;
+  z-index: 40;
+}
+
+/* All Services Modal Overlay */
+.all-services-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(8, 12, 20, 0.55) !important;
+  z-index: 9998 !important;
+}
+
+/* A dialog in the middle of the screen. Sizes to its content, capped so a long list still scrolls inside it. */
+.all-services-sheet {
+  position: fixed !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: calc(100% - 32px) !important;
+  max-width: 400px !important;
+  height: auto !important;
+  max-height: 80vh !important;
+  background: var(--user-card-bg) !important;
+  border-radius: 24px !important;
+  z-index: 9999 !important;
+  overflow-y: auto !important;
+  padding: 18px 20px 22px !important;
+}
+
+/* Centrally force all max-w-lg page wrapper elements to be mobile responsive */
+.max-w-lg {
+  /* Let tailwind handle max-w-lg or we can override below */
+}
+@media (max-width: 1023px) {
+  .max-w-lg {
+    width: 100% !important;
+    max-width: 430px !important;
+  }
+}
+
+/* Centrally enforce Outfit font-family globally across all elements to override explicit custom font families */
+:where(html.taxi-app-active) *,
+:where(html.taxi-app-active) *::before,
+:where(html.taxi-app-active) *::after,
+.redigo-app,
+.redigo-app * {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
+}
+
+/* The toast wordmark keeps its own lettering; the rule above would turn it into Outfit. */
+html .brand-toast-icon,
+html .brand-toast-icon * {
+  font-family: 'Pacifico', cursive !important;
+}
+
+/* Custom Utility overrides to force dark text on light elements (like yellow cards) inside dark mode */
+.user-app-theme .text-dark-force {
+  color: #0f172a !important;
+}
+.user-app-theme .text-dark-force-muted {
+  color: #475569 !important;
+}
+
+/* User App Promo Banner Carousel Rules */
+.promo-carousel {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  border-radius: 22px;
+}
+
+.promo-track {
+  display: flex;
+  transition: transform 0.45s ease;
+  will-change: transform;
+}
+
+.promo-slide {
+  flex: 0 0 100%;
+  min-width: 100%;
+  position: relative;
+}
+
+.promo-slide img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  display: block;
+  border-radius: 22px;
+}
+
+.promo-dots {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 5;
+}
+
+.promo-dots button {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.45);
+}
+
+.promo-dots button.active {
+  width: 18px;
+  background: #FFC400;
+}
+
+/* Home page spacing and layout alignment rules */
+.user-app,
+.mobile-app-shell {
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+@media (max-width: 1023px) {
+  .user-app,
+  .mobile-app-shell {
+    max-width: 430px !important;
+  }
+}
+
+.home-section,
+.everything-section,
+.explore-section,
+.promo-section,
+.go-places-section {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.user-search-bar,
+.promo-carousel {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.everything-grid {
+  width: 100% !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.everything-card {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Section headings used across the customer app (was 19px / font-black everywhere) */
+.user-section-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--user-text-primary);
+}
+
+/* Service art tile: the uploaded image if there is one, otherwise a glyph on a soft yellow tint. */
+.service-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(255, 196, 0, 0.16);
+  color: #8A6100;
+}
+.user-app-theme.dark .service-art {
+  background: rgba(255, 196, 0, 0.14);
+  color: var(--user-accent);
+}
+.service-art-glyph {
+  color: inherit;
+}
+
+/* "Everything In Minutes" cards: theme-aware surface (they were a fixed near-black in BOTH themes,
+   with the picture stretched to 190% width and cropped behind a gradient). */
+.everything-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 114px;
+  padding: 12px 12px;
+  text-align: center;
+  border-radius: 20px;
+  background: var(--user-card-bg) !important;
+  border: 1px solid var(--user-border);
+  box-shadow: var(--user-card-shadow);
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.everything-card:active {
+  transform: scale(0.98);
+}
+.everything-card-content {
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.everything-card-content span {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--user-text-muted) !important;
+}
+.everything-card-content h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--user-text-primary) !important;
+}
+/* Picture on top-left, text under it: icon and text share one left edge, and the titles of a row sit on one line
+   (the text block is pushed to the bottom). The tile is only ~155px wide, so the text keeps the whole width. */
+.everything-card-art {
+  order: -1;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+.everything-card-art img {
+  padding: 4px;
+}
+
+/* Splash screen specific styles */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100dvh;
+  background: #05070D;
+  z-index: 99999;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  overflow-x: clip !important; /* clip, not hidden: hidden makes these scroll containers and breaks every position:sticky header */
+}
+
+body.splash-active {
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .login-page {
+    display: flex !important;
+    flex-direction: row !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .login-hero {
+    width: 50% !important;
+    height: 100vh !important;
+  }
+  .login-hero-img {
+    height: 100vh !important;
+  }
+  .login-card {
+    margin-top: 0 !important;
+    border-radius: 28px !important;
+    max-width: 440px !important;
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25) !important;
+    border: 1px solid var(--user-border) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .user-app-theme,
+  .user-home,
+  .user-app,
+  .mobile-app-shell {
+    max-width: calc(100% - 32px) !important;
+  }
+}
+
+/* Google Places suggestions are appended to <body>; keep them above sticky headers, sheets and modals. */
+.pac-container {
+  z-index: 10000 !important;
+}
+
+/* Partner Terms / Privacy / Support pages (shared CMS page): keep admin-written content inside the screen width. */
+.driver-cms-fit {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+.driver-cms-fit .prose,
+.driver-cms-fit p,
+.driver-cms-fit li,
+.driver-cms-fit a,
+.driver-cms-fit span {
+  overflow-wrap: anywhere;
+}
+.driver-cms-fit img,
+.driver-cms-fit video,
+.driver-cms-fit iframe {
+  max-width: 100%;
+  height: auto;
+}
+.driver-cms-fit table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.driver-cms-fit pre {
+  white-space: pre-wrap;
+}
+
+/* One button colour across the captain, owner, bus and pooling apps: the Taxi blue. Black, purple, indigo, orange and
+   yellow primary buttons made every partner screen look like a different app. (Cards that are only built as a <button>
+   carry data-card and keep their own colour.) */
+.driver-theme button.bg-slate-900:not([data-card]),
+.driver-theme a.bg-slate-900:not([data-card]),
+.driver-theme button.bg-slate-950:not([data-card]),
+.driver-theme button.bg-black:not([data-card]),
+.driver-theme button.bg-indigo-600:not([data-card]),
+.driver-theme button.bg-violet-600:not([data-card]),
+.driver-theme button.bg-purple-600:not([data-card]),
+.driver-theme button.bg-orange-500:not([data-card]),
+.driver-theme button.bg-yellow-400:not([data-card]),
+.driver-theme button[class*="bg-[#FFC400]"]:not([data-card]),
+.driver-theme button[class*="bg-[#ff6b4a]"]:not([data-card]) {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+.driver-theme button.bg-slate-900:not([data-card]) *,
+.driver-theme button.bg-yellow-400:not([data-card]) *,
+.driver-theme button[class*="bg-[#FFC400]"]:not([data-card]) * {
+  color: inherit;
+}
+
+/* Driver trip screen (ActiveTrip): full-screen height and a scrollable bottom sheet.
+   vh first for WebViews without dvh support; without it the sheet grew past the screen and could not scroll. */
+.trip-screen-root {
+  height: 100vh;
+  height: 100dvh;
+}
+.trip-sheet-scroll {
+  max-height: 85vh;
+  max-height: 85dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}

@@ -12,3 +12,6 @@ docs/
 /node_modules/
 /package.json
 /package-lock.json
+
+# release APKs (built locally, not committed)
+releases/

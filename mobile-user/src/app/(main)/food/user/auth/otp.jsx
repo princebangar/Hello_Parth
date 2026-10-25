@@ -1,0 +1,2 @@
+// /food/user/auth/otp — web: <AuthRedirect module="user"><Navigate to="/login" replace /></AuthRedirect>
+export { AuthLoginRedirect as default } from '@food/components/user/UserRouter';
