@@ -16,7 +16,8 @@ export function NavBarScrim() {
   const buttons = bottom >= BUTTON_NAV_MIN_INSET;
   return (
     <>
-      <NavigationBar style={t.dark ? 'dark' : 'light'} />
+      {/* expo-navigation-bar: style 'dark' = dark buttons (for a light page), 'light' = light buttons */}
+      <NavigationBar style={t.dark ? 'light' : 'dark'} />
       {buttons ? (
         <View
           pointerEvents="none"
@@ -29,7 +30,7 @@ export function NavBarScrim() {
             backgroundColor: t.bg,
             // a thin line on top separates the buttons from the page (like other shopping apps' bars)
             borderTopWidth: StyleSheet.hairlineWidth * 2,
-            borderTopColor: t.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+            borderTopColor: t.dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.14)',
             zIndex: 999,
             elevation: 999,
           }}

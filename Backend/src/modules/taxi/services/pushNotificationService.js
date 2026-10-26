@@ -176,9 +176,11 @@ const sendPushToTargets = async ({
         priority: 'high',
         ...(safeData.notificationId ? { collapseKey: safeData.notificationId } : {}),
         notification: {
-          // same channel + sound as the Food pushes (without a channel_id Android uses its silent fallback channel)
-          channelId: 'default',
-          sound: 'default',
+          // same channel + sound as the Food pushes (without a channel_id Android uses its silent fallback channel);
+          // a driver's ride request rings on the Captain app's 'ride_requests' channel (ride alert tone, lock screen)
+          ...(safeData.type === 'ride_request'
+            ? { channelId: 'ride_requests', sound: 'ride_request_alert', visibility: 'public', defaultVibrateTimings: false }
+            : { channelId: 'default', sound: 'default' }),
           ...(image ? { imageUrl: image } : {}),
           ...(safeData.notificationId ? { tag: safeData.notificationId } : {}),
         },

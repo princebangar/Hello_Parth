@@ -1,0 +1,104 @@
+{
+  "shell": {
+    "owner": "integrator (main session)",
+    "files": [
+      "src/app/**",
+      "src/lib/**",
+      "src/native/**",
+      "src/theme/**",
+      "src/appstore/**",
+      "src/modules/Taxi/DriverApp.jsx",
+      "src/modules/Taxi/modules/driver/routes.jsx",
+      "src/modules/Taxi/modules/driver/driverTabPages.js",
+      "src/modules/Taxi/modules/driver/components/DriverLayout.jsx",
+      "src/modules/Taxi/modules/driver/components/DriverTabKeepAlive.jsx",
+      "src/modules/Taxi/modules/driver/utils/rideRequestAlertSound.js",
+      "src/modules/Taxi/modules/shared/components/DriverBottomNav.jsx",
+      "src/modules/Taxi/modules/shared/components/DriverNavBar.jsx",
+      "src/modules/Taxi/modules/shared/components/DriverTopBar.jsx",
+      "src/modules/Taxi/shared/push/nativeFcmBridge.js",
+      "src/shared/hooks/useOnboardingExitGuard.js"
+    ]
+  },
+  "home": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/DriverHome.jsx",
+      "src/modules/Taxi/modules/driver/pages/IncomingRideRequest.jsx",
+      "src/modules/Taxi/modules/driver/components/DriverRideRequestListener.jsx"
+    ]
+  },
+  "trip": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/ActiveTrip.jsx"
+    ]
+  },
+  "account": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/DriverWallet.jsx",
+      "src/modules/Taxi/modules/driver/pages/RideRequests.jsx",
+      "src/modules/Taxi/modules/driver/pages/DriverIncentives.jsx",
+      "src/modules/Taxi/modules/driver/pages/DriverProfile.jsx",
+      "src/modules/Taxi/modules/driver/pages/DriverBankDetailsPage.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/EditProfile.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/Notifications.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/Referral.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/DeleteAccount.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/DriverSettings.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/SecuritySOS.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/Support.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/HelpSupportOptions.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/SupportChat.jsx"
+    ]
+  },
+  "auth": {
+    "files": [
+      "src/modules/Taxi/modules/driver/components/auth/AuthShell.jsx",
+      "src/modules/Taxi/modules/driver/components/auth/RolePicker.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/LanguageSelect.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/DriverWelcome.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/PhoneRegistration.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/OTPVerification.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/RoleSelection.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/RoleSpecificOnboarding.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/BusSignupBuilderPage.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/StepPersonal.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/StepReferral.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/RegistrationStatus.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/ApplicationStatus.jsx",
+      "src/shared/components/OnboardingExitModal.jsx"
+    ]
+  },
+  "documents": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/registration/StepVehicle.jsx",
+      "src/modules/Taxi/modules/driver/pages/registration/StepDocuments.jsx",
+      "src/modules/Taxi/modules/driver/components/FleetDocumentFields.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/DriverDocuments.jsx"
+    ]
+  },
+  "owner": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/OwnerDashboard.jsx",
+      "src/modules/Taxi/modules/driver/pages/OwnerWallet.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/ManageDrivers.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/AddDriver.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/VehicleFleet.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/OwnerVehicleFleet.jsx",
+      "src/modules/Taxi/modules/driver/pages/settings/AddVehicle.jsx"
+    ]
+  },
+  "bus-owner": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/OwnerBusServicePage.jsx",
+      "src/modules/Taxi/modules/admin/pages/bus-service/BusServiceManager.jsx",
+      "src/modules/Taxi/modules/driver/pages/OwnerBusBookingsPage.jsx"
+    ]
+  },
+  "bus-driver": {
+    "files": [
+      "src/modules/Taxi/modules/driver/pages/BusDriverHome.jsx",
+      "src/modules/Taxi/modules/driver/pages/BusDriverLiveRoute.jsx",
+      "src/modules/Taxi/modules/driver/components/BusDriverBottomNav.jsx"
+    ]
+  }
+}
