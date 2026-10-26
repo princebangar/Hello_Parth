@@ -1,0 +1,162 @@
+{
+  "expo": {
+    "name": "Hello Parth Delivery Partner",
+    "slug": "hello-parth-delivery",
+    "scheme": "helloparth-delivery",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#15498B",
+    "android": {
+      "package": "com.helloparth.delivery",
+      "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-image",
+      "expo-sharing",
+      "expo-task-manager",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./node_modules/@expo-google-fonts/poppins/300Light/Poppins_300Light.ttf",
+            "./node_modules/@expo-google-fonts/poppins/400Regular/Poppins_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/poppins/500Medium/Poppins_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/poppins/600SemiBold/Poppins_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/poppins/700Bold/Poppins_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/poppins/800ExtraBold/Poppins_800ExtraBold.ttf",
+            "./node_modules/@expo-google-fonts/outfit/300Light/Outfit_300Light.ttf",
+            "./node_modules/@expo-google-fonts/outfit/400Regular/Outfit_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/outfit/500Medium/Outfit_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/outfit/600SemiBold/Outfit_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/outfit/700Bold/Outfit_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/outfit/800ExtraBold/Outfit_800ExtraBold.ttf",
+            "./node_modules/@expo-google-fonts/outfit/900Black/Outfit_900Black.ttf",
+            "./node_modules/@expo-google-fonts/inter/300Light/Inter_300Light.ttf",
+            "./node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/inter/800ExtraBold/Inter_800ExtraBold.ttf",
+            "./node_modules/@expo-google-fonts/inter/900Black/Inter_900Black.ttf",
+            "./node_modules/@expo-google-fonts/plus-jakarta-sans/300Light/PlusJakartaSans_300Light.ttf",
+            "./node_modules/@expo-google-fonts/plus-jakarta-sans/400Regular/PlusJakartaSans_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/plus-jakarta-sans/500Medium/PlusJakartaSans_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/plus-jakarta-sans/600SemiBold/PlusJakartaSans_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/plus-jakarta-sans/700Bold/PlusJakartaSans_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/plus-jakarta-sans/800ExtraBold/PlusJakartaSans_800ExtraBold.ttf",
+            "./node_modules/@expo-google-fonts/nunito-sans/500Medium/NunitoSans_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/nunito-sans/600SemiBold/NunitoSans_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/nunito-sans/700Bold/NunitoSans_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/nunito-sans/800ExtraBold/NunitoSans_800ExtraBold.ttf",
+            "./node_modules/@expo-google-fonts/sora/600SemiBold/Sora_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/sora/700Bold/Sora_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/caveat/600SemiBold/Caveat_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/caveat/700Bold/Caveat_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/pacifico/400Regular/Pacifico_400Regular.ttf"
+          ]
+        }
+      ],
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#15498B",
+          "image": "./assets/splash-icon-light.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#15498B",
+            "image": "./assets/splash-icon-light.png"
+          }
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Hello Parth Delivery Partner uses your location to show you nearby orders and to navigate to the restaurant and the customer.",
+          "locationAlwaysAndWhenInUsePermission": "Hello Parth Delivery Partner keeps sending your location while you are online, also when the app is in the background or the screen is off, so you keep getting orders and customers can track their delivery.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Hello Parth Delivery Partner needs your photos to upload your profile picture and documents.",
+          "cameraPermission": "Hello Parth Delivery Partner needs the camera to take photos of your documents, profile picture and orders.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#15498B",
+          "sounds": [
+            "./assets/sounds/restaurant_alert.mp3"
+          ]
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"
+        }
+      ],
+      "./plugins/withReleaseSigning.js",
+      "./plugins/withShortCmakeObjectPaths.js",
+      "./plugins/withReleaseNoMinify.js",
+      "./plugins/withMapsPrewarm.js"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

@@ -126,6 +126,7 @@ export default function Profile() {
   const [vegModeOpen, setVegModeOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false); // log-out confirmed: the popup goes at once
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [walletBalance, setWalletBalance] = useState(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
@@ -554,9 +555,12 @@ export default function Profile() {
 
       {/* Logout Confirmation Popup */}
       <UserLogoutConfirmDialog
+        // confirmed: the popup goes at once (its fade over the log-out cover looked like a flash)
+        animateOut={!leaving}
         open={logoutConfirmOpen}
         onClose={() => setLogoutConfirmOpen(false)}
         onConfirm={() => {
+          setLeaving(true);
           setLogoutConfirmOpen(false);
           handleLogout();
         }}

@@ -10,6 +10,7 @@
 // Razorpay's popup there). The app's checkout (@/lib/razorpay) opens UPI apps itself and returns through the handler, so
 // both top-up buttons use the web's handler flow (verify call, same texts).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { Animated, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -231,6 +232,10 @@ const prefillContactFor = (driverInfo) => {
 };
 
 const DriverWallet = () => {
+  const tabScrollRef = useRef(null);
+  const topUpInputRef = useRef(null);
+  const withdrawInputRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const insets = useSafeAreaInsets();
   const bottomSpace = useBottomNavSpace();
@@ -712,7 +717,7 @@ const DriverWallet = () => {
         </Pressable>
       </View>
 
-      <ScrollView
+      <ScrollView ref={tabScrollRef}
         style={styles.flex1}
         contentContainerStyle={[styles.content, { paddingBottom: bottomSpace }]}
         showsVerticalScrollIndicator={false}
@@ -987,15 +992,17 @@ const DriverWallet = () => {
           </View>
         ) : (
           <View style={styles.gap4}>
-            <View style={styles.amountBox}>
+            {/* a tap anywhere on the box opens the keyboard (only the number line was the input: Prince, 26 Oct) */}
+            <Pressable style={styles.amountBox} onPress={() => topUpInputRef.current?.focus()} accessible={false}>
               <Text style={styles.amountLabel}>Amount</Text>
               <TextInput
+                ref={topUpInputRef}
                 keyboardType="numeric"
                 value={topUpAmount}
                 onChangeText={setTopUpAmount}
                 style={styles.amountInput}
               />
-            </View>
+            </Pressable>
             <View style={styles.quickRow}>
               {quickAmounts.map((amount) => (
                 <Pressable key={amount} onPress={() => setTopUpAmount(amount)} style={styles.quickBtn}>
@@ -1055,9 +1062,10 @@ const DriverWallet = () => {
           </View>
         ) : (
           <View style={styles.gap4}>
-            <View style={styles.amountBox}>
+            <Pressable style={styles.amountBox} onPress={() => withdrawInputRef.current?.focus()} accessible={false}>
               <Text style={styles.amountLabel}>Withdrawal amount</Text>
               <TextInput
+                ref={withdrawInputRef}
                 keyboardType="numeric"
                 value={withdrawAmount}
                 onChangeText={setWithdrawAmount}
@@ -1066,7 +1074,7 @@ const DriverWallet = () => {
                 placeholderTextColor={colors.slate[400]}
               />
               <Text style={styles.availableText}>{`Available balance: ${money(wallet.balance)}`}</Text>
-            </View>
+            </Pressable>
             {withdrawError ? (
               <View style={styles.withdrawError}>
                 <Text style={styles.withdrawErrorText}>{withdrawError}</Text>

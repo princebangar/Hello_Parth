@@ -169,6 +169,10 @@ const normalizeDataMap = (data = {}) => {
     return result;
 };
 
+const RINGING_CHANNELS = {
+    delivery_orders: { channelId: 'delivery_orders', sound: 'restaurant_alert' },
+};
+
 const buildMessagePayload = (payload = {}, token) => {
     const notification = {
         title: sanitizeString(payload.title || payload.notification?.title || 'New notification'),
@@ -197,14 +201,20 @@ const buildMessagePayload = (payload = {}, token) => {
     // A stable tag per notification makes the copies replace each other, so the user sees it once.
     const tag = sanitizeString(payload.tag || data.broadcastId || data.notificationId || data.orderId || '');
 
+    // Ringing channels the native partner apps create (others stay on 'default'): the delivery app's new-order alert
+    // rings with restaurant_alert.mp3 on 'delivery_orders' also when the app is closed. An app without that channel
+    // (old web-wrapper APK) still shows the push on Android's fallback channel.
+    const ringingChannel = RINGING_CHANNELS[sanitizeString(payload.channelId || '')];
+
     message.android = {
         priority: 'high',
         ...(tag ? { collapse_key: tag } : {}),
         notification: {
-            channel_id: 'default',
-            sound: 'default',
-            default_vibrate_timings: true,
+            channel_id: ringingChannel ? ringingChannel.channelId : 'default',
+            sound: ringingChannel ? ringingChannel.sound : 'default',
+            default_vibrate_timings: !ringingChannel,
             default_light_settings: true,
+            ...(ringingChannel ? { visibility: 'public', notification_priority: 'PRIORITY_MAX' } : {}),
             ...(tag ? { tag } : {})
         }
     };

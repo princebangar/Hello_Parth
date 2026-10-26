@@ -7,6 +7,7 @@
 // opens a bottom sheet; the delete confirm (data-driver-overlay) is a Dialog. The edit page is its own screen here, so
 // after "Save Changes" it hands its success message to the list it returns to (navigation state).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -238,6 +239,8 @@ const TypeTile = ({ label, value, capitalize }) => (
 );
 
 const OwnerVehicleFleet = () => {
+  const tabScrollRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const location = useLocation();
   const insets = useSafeAreaInsets();
@@ -1011,7 +1014,7 @@ const OwnerVehicleFleet = () => {
         </View>
       </View>
 
-      <FlatList
+      <FlatList ref={tabScrollRef}
         data={vehicles}
         keyExtractor={(item, index) => String(item._id || `vehicle-${index}`)}
         renderItem={renderVehicle}

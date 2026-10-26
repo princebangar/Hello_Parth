@@ -130,6 +130,7 @@ const Profile = () => {
     .filter((section) => section.items.length > 0);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false); // log-out confirmed: the popup goes at once
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   // Seed from what login already stored, so name/phone show immediately.
   const [profile, setProfile] = useState(() => {
@@ -421,9 +422,12 @@ const Profile = () => {
 
       {/* Same shared logout confirmation Food uses — Taxi recolours the icon / confirm button to its blue. */}
       <UserLogoutConfirmDialog
+        // confirmed: the popup goes at once (its fade over the log-out cover looked like a flash)
+        animateOut={!leaving}
         open={logoutConfirmOpen}
         onClose={() => setLogoutConfirmOpen(false)}
         onConfirm={() => {
+          setLeaving(true);
           setLogoutConfirmOpen(false);
           handleLogout();
         }}

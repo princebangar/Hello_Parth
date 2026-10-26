@@ -39,19 +39,17 @@ import {
     Bell,
     CalendarClock,
     Camera,
-    Navigation,
     Wallet,
-    Clock,
     Power,
     Target,
     IndianRupee,
     ChevronRight,
-    BarChart2,
 } from 'lucide-react-native';
 import { useNavigate } from '@/lib/router';
 import { toast } from '@/lib/toast';
 import { Dialog, Sheet, Skeleton, Text, resolveImageSource } from '@/native/ui';
 import { AppMap, Marker, regionFor } from '@/native/ui/AppMap';
+import MapLoadingOverlay from '@/native/ui/MapLoadingOverlay';
 import { useSplashDone } from '@/native/splashState';
 import { StatusBar } from '@/native/ui/SectionStatusBar';
 import { startOnlineLocationUpdates, stopOnlineLocationUpdates } from '@/lib/driverLocation';
@@ -2235,7 +2233,7 @@ const DriverHome = () => {
     if (walletNotice) lastNoticeRef.current = walletNotice;
 
     return (
-        <View style={styles.root}>
+        <View collapsable={false} style={styles.root}>
             {tabActive ? <StatusBar style="light" /> : null}
 
             {/* Overlay for Ride Request Modal */}
@@ -2470,7 +2468,7 @@ const DriverHome = () => {
             </Sheet>
 
             {/* --- MAP BACKGROUND --- */}
-            <View style={StyleSheet.absoluteFill}>
+            <View collapsable={false} style={StyleSheet.absoluteFill}>
                 {mapsReady ? (
                     <AppMap
                         ref={mapRef}
@@ -2487,17 +2485,19 @@ const DriverHome = () => {
                         <VehicleMarker position={driverPosition} icon={mapVehicleIcon} />
                     </AppMap>
                 ) : null}
-                {/* stays on top until the map has drawn its tiles (no bare grey map in between) */}
-                {!mapsReady || !mapPainted ? (
+                {/* stays on top until the map has drawn its tiles (no bare grey / black map in between): the delivery app's
+                    "Loading Map" animation; the plain message when the map cannot load at all */}
+                {HAS_VALID_GOOGLE_MAPS_KEY && !mapLoadError ? (
+                    <MapLoadingOverlay loaded={mapsReady && mapPainted} />
+                ) : (
                     <View style={[StyleSheet.absoluteFill, styles.mapPlaceholder]}>
                         <View style={styles.mapPlaceholderInner}>
-                            <Skeleton width={64} height={64} rounded={32} style={styles.mapPlaceholderDot} />
                             <Text style={styles.mapPlaceholderText}>
-                                {!HAS_VALID_GOOGLE_MAPS_KEY ? 'Map unavailable. Configure Google Maps key.' : mapLoadError ? 'Map could not load. Check your internet connection.' : 'Loading map...'}
+                                {!HAS_VALID_GOOGLE_MAPS_KEY ? 'Map unavailable. Configure Google Maps key.' : 'Map could not load. Check your internet connection.'}
                             </Text>
                         </View>
                     </View>
-                ) : null}
+                )}
             </View>
 
             {/* Status Based Background Overlay */}
@@ -2558,35 +2558,24 @@ const DriverHome = () => {
 
                     {isTodaySummaryExpanded ? (
                         <View style={styles.summaryContent}>
+                            {/* Prince (26 Oct): no icon row above the values — the labels under them say what they are */}
                             <View style={styles.summaryGrid}>
                                 <View style={styles.summaryCell}>
-                                    <View style={styles.summaryIcon}>
-                                        <IndianRupee size={18} strokeWidth={2.5} color={colors.slate[600]} />
-                                    </View>
                                     {summaryLoaded ? <Text style={styles.summaryValue}>{formatSummaryMoney(todaySummary.earnings)}</Text> : <SummaryNumberSkeleton />}
                                     <Text style={styles.summaryLabel}>Earnings</Text>
                                 </View>
 
                                 <View style={styles.summaryCell}>
-                                    <View style={styles.summaryIcon}>
-                                        <Clock size={18} strokeWidth={2.5} color={colors.slate[600]} />
-                                    </View>
                                     {summaryLoaded ? <Text style={styles.summaryValue}>{activeTimeLabel}</Text> : <SummaryNumberSkeleton />}
                                     <Text style={styles.summaryLabel}>Active</Text>
                                 </View>
 
                                 <View style={styles.summaryCell}>
-                                    <View style={styles.summaryIcon}>
-                                        <Navigation size={18} strokeWidth={2.5} color={colors.slate[600]} />
-                                    </View>
                                     {summaryLoaded ? <Text style={styles.summaryValue}>{formatSummaryDistance(todaySummary.distanceMeters)}</Text> : <SummaryNumberSkeleton />}
                                     <Text style={styles.summaryLabel}>Distance</Text>
                                 </View>
 
                                 <View style={styles.summaryCell}>
-                                    <View style={styles.summaryIcon}>
-                                        <BarChart2 size={18} strokeWidth={2.5} color={colors.slate[600]} />
-                                    </View>
                                     {summaryLoaded ? <Text style={styles.summaryValue}>{String(todaySummary.rides)}</Text> : <SummaryNumberSkeleton />}
                                     <Text style={styles.summaryLabel}>Rides</Text>
                                 </View>

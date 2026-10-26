@@ -1,59 +1,59 @@
 // Web: DriverNavBar.jsx + driverChrome.css (.driver-nav*) — the floating bottom bar shared by every driver app (taxi,
 // owner, bus). items: [{ key, label, Icon, active, onSelect, badge?, onPreload? }]
-// The blue pill is one view that is always mounted and slides to the active tab (transform 0.28s
-// cubic-bezier(0.32, 0.72, 0, 1)), so a tapped tab never blinks.
 // White bar, 72 px high, 24 px above the screen edge (plus the Android navigation bar under it: the app draws edge to
 // edge), 24 px from each side (12 px below 380 px width), max 448 px wide. With the keyboard open the window resizes
 // (softwareKeyboardLayoutMode resize), so the bar rides on top of the keyboard like the web's.
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import React from 'react';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Text } from '@/native/ui';
 import { fonts } from '@/theme';
 
 const BAR_HEIGHT = 72;
 const BAR_GAP = 24;
 
-const DriverNavBar = ({ items = [] }) => {
+// Selected tab (Prince, 26 Oct): a solid (filled) icon in the accent, slightly bigger, and a heavy label in the accent —
+// no tinted pill behind it (Prince: cleaner without). Idle tabs: outline icons in grey.
+// The icons come from Ionicons (filled + outline pairs, the Food bar's set) by tab label; unknown labels keep their
+// lucide Icon. accent: the app's colour (Captain blue by default; the delivery app passes its own blue).
+const ION_BY_LABEL = {
+  home: 'home',
+  history: 'time',
+  milestone: 'trophy',
+  profile: 'person',
+  account: 'person',
+  drivers: 'people',
+  vehicle: 'car',
+  bus: 'bus',
+  schedule: 'calendar',
+  desk: 'bus',
+  bookings: 'clipboard',
+  feed: 'grid',
+  orders: 'cube',
+  pocket: 'wallet',
+};
+
+function TabIcon({ label, Icon, active, accent }) {
+  const color = active ? accent : '#64748B';
+  const key = String(label).toLowerCase();
+  if (key === 'wallet') return <MaterialIcons name="currency-rupee" size={22} color={color} />;
+  const ion = ION_BY_LABEL[key];
+  if (ion) return <Ionicons name={active ? ion : `${ion}-outline`} size={22} color={color} />;
+  return <Icon size={21} strokeWidth={active ? 2.4 : 2} color={color} fill={active ? accent : 'none'} />;
+}
+
+const DriverNavBar = ({ items = [], accent = '#2563EB' }) => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const sideGap = width <= 380 ? 12 : 24;
   const barWidth = Math.min(width - sideGap * 2, 448);
   const count = Math.max(items.length, 1);
-  const pillWidth = (barWidth - 16) / count;
-  const activeIndex = items.findIndex((item) => item.active);
-
-  const x = useRef(new Animated.Value(Math.max(activeIndex, 0) * pillWidth)).current;
-  const opacity = useRef(new Animated.Value(activeIndex < 0 ? 0 : 1)).current;
-  const [laidOut, setLaidOut] = useState(false);
-
-  useEffect(() => {
-    const to = Math.max(activeIndex, 0) * pillWidth;
-    if (!laidOut) {
-      x.setValue(to);
-      return;
-    }
-    Animated.timing(x, {
-      toValue: to,
-      duration: 280,
-      easing: Easing.bezier(0.32, 0.72, 0, 1),
-      useNativeDriver: true,
-    }).start();
-  }, [activeIndex, pillWidth, laidOut, x]);
-
-  useEffect(() => {
-    Animated.timing(opacity, { toValue: activeIndex < 0 ? 0 : 1, duration: 150, useNativeDriver: true }).start();
-  }, [activeIndex, opacity]);
-
   const labelSize = count >= 6 ? (width <= 380 ? 8 : 8.5) : 9;
 
   return (
     <View pointerEvents="box-none" style={[styles.nav, { bottom: BAR_GAP + insets.bottom }]}>
-      <View style={[styles.bar, { width: barWidth }]} onLayout={() => setLaidOut(true)} accessibilityRole="tablist">
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.pill, { width: pillWidth, opacity, transform: [{ translateX: x }] }]}
-        />
+      <View style={[styles.bar, { width: barWidth }]} accessibilityRole="tablist">
         {items.map(({ key, label, Icon, active, onSelect, badge, onPreload }) => (
           <Pressable
             key={key}
@@ -65,8 +65,8 @@ const DriverNavBar = ({ items = [] }) => {
             style={styles.item}
           >
             <View style={styles.itemInner}>
-              <View>
-                <Icon size={21} strokeWidth={active ? 2.4 : 2} color={active ? '#FFFFFF' : '#64748B'} />
+              <View style={active ? styles.iconActive : null}>
+                <TabIcon label={label} Icon={Icon} active={active} accent={accent} />
                 {badge ? (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{badge}</Text>
@@ -78,7 +78,8 @@ const DriverNavBar = ({ items = [] }) => {
                 ellipsizeMode="clip"
                 style={[
                   styles.label,
-                  { fontSize: labelSize, letterSpacing: count >= 6 ? 0 : 0.18, color: active ? '#FFFFFF' : '#64748B' },
+                  { fontSize: labelSize, letterSpacing: count >= 6 ? 0 : 0.18, color: active ? accent : '#64748B' },
+                  active && styles.labelActive,
                 ]}
               >
                 {String(label).toUpperCase()}
@@ -119,19 +120,8 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 14,
   },
-  pill: {
-    position: 'absolute',
-    top: 8,
-    bottom: 8,
-    left: 8,
-    borderRadius: 24,
-    backgroundColor: '#2563EB',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.32,
-    shadowRadius: 8,
-    elevation: 4,
-  },
+  iconActive: { transform: [{ scale: 1.1 }] },
+  labelActive: { fontWeight: '900' },
   item: {
     flex: 1,
     minWidth: 0,

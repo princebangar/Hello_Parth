@@ -6,6 +6,7 @@
 // Native: the <form> is a View; the keyboard's done key submits like Enter did. The number box keeps the web's
 // placeholder look (smaller, regular weight) by switching the input style while it is empty.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { LoginExitGuard } from '@/native/ui/LoginExitGuard';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react-native';
@@ -251,6 +252,7 @@ const PhoneRegistrationPage = () => {
       title={isLoginPage ? 'Welcome back' : 'Join as a partner'}
       subtitle="Choose your role, then verify your mobile number."
     >
+      <LoginExitGuard enabled={isLoginPage} dirty={!phoneEmpty} accent="#0b1220" />
       <View style={styles.form}>
         <View>
           <Text style={styles.fieldLabel}>I am a</Text>

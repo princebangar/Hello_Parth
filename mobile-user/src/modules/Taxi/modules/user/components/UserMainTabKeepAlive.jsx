@@ -5,6 +5,7 @@
 // The layer is hidden on every non-tab route (the stack's screen shows) and when nobody is signed in (the tab routes
 // redirect to /login like the web's UserProtectedRoute).
 import { useLingeringTrue } from '@/native/ui/useLingeringTrue';
+import { useDelayedFalse } from '@/native/ui/useDelayedFalse';
 import { HoldWhileHidden } from '@/native/ui/HoldWhileHidden';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -74,10 +75,12 @@ export default function UserMainTabKeepAlive() {
     });
   }, [activeTab]);
 
-  // Signed out (logout / account deleted): drop the kept tabs so the next user starts fresh.
+  // Signed out (logout / account deleted): drop the kept tabs so the next user starts fresh — a moment after the login
+  // screen is up (hidden meanwhile), so the hand-over does not stutter.
+  const keepMounted = useDelayedFalse(signedIn);
   useEffect(() => {
-    if (!signedIn) setVisited(new Set());
-  }, [signedIn]);
+    if (!keepMounted) setVisited(new Set());
+  }, [keepMounted]);
 
   // Warm the other tabs' first data once the open screen has settled (web: chunk + data preload on idle).
   useEffect(() => {

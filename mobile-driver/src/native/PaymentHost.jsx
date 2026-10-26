@@ -4,6 +4,7 @@ import { ActivityIndicator, Linking, Modal, StyleSheet, View } from 'react-nativ
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { registerPaymentHost } from '@/lib/razorpay';
+import { RAZORPAY_LOGO } from '@/lib/razorpayLogo';
 import { colors } from '@/theme';
 
 const isAppIntent = (url = '') => !/^(https?|about|data|blob):/i.test(url);
@@ -13,6 +14,12 @@ const serializable = (options) => {
   const copy = JSON.parse(JSON.stringify(options || {}, (k, v) => (typeof v === 'function' ? undefined : v)));
   delete copy.handler;
   if (copy.modal) delete copy.modal.ondismiss;
+  // the app's wordmark instead of the name: Razorpay showed an "H" circle and its own font (Prince, 26 Oct). The name
+  // becomes a zero-width space: left out, Razorpay showed the merchant account's name instead.
+  if (!copy.image) {
+    copy.image = RAZORPAY_LOGO;
+    copy.name = '\u200B';
+  }
   return copy;
 };
 
@@ -90,8 +97,9 @@ export function PaymentHost() {
   if (!session) return null;
   const isCheckout = session.kind === 'checkout';
   return (
-    <Modal visible transparent={isCheckout} statusBarTranslucent animationType="fade" onRequestClose={() => (isCheckout ? finishCheckout({ type: 'dismiss' }) : closePage(null))}>
-      <View style={[styles.fill, { paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: isCheckout ? 'rgba(0,0,0,0.6)' : colors.white }]}>
+    <Modal visible transparent={isCheckout} statusBarTranslucent navigationBarTranslucent animationType="fade" onRequestClose={() => (isCheckout ? finishCheckout({ type: 'dismiss' }) : closePage(null))}>
+      {/* the checkout reaches the bottom edge (it left a gap above the navigation bar: Prince, 26 Oct) */}
+      <View style={[styles.fill, { paddingTop: insets.top, paddingBottom: isCheckout ? 0 : insets.bottom, backgroundColor: isCheckout ? 'rgba(0,0,0,0.6)' : colors.white }]}>
         <WebView
           style={styles.web}
           originWhitelist={['*']}

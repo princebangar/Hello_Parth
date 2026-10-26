@@ -9,7 +9,9 @@ import { alpha, radius, useTheme } from '@/theme';
 
 // The opening animation starts from the Modal's onShow: started earlier, it ran (or jumped) before the popup's window
 // existed and the popup flashed in at full size. Closing animates out, then unmounts the Modal.
-function useMountedWhileOpen(open, ms) {
+// animateOut false: closing removes the popup at once (log-out: a fading dim layer over the login screen looked like a
+// flash — Prince, 26 Oct).
+function useMountedWhileOpen(open, ms, animateOut = true) {
   const [mounted, setMounted] = useState(open);
   const anim = useRef(new Animated.Value(open ? 1 : 0)).current;
   const openRef = useRef(open);
@@ -24,6 +26,12 @@ function useMountedWhileOpen(open, ms) {
       if (shownRef.current) animateIn();
       return undefined;
     }
+    if (!animateOut) {
+      anim.setValue(0);
+      shownRef.current = false;
+      setMounted(false);
+      return undefined;
+    }
     const a = Animated.timing(anim, { toValue: 0, duration: Math.round(ms * 0.85), easing: Easing.in(Easing.quad), useNativeDriver: true });
     a.start(({ finished }) => {
       if (finished && !openRef.current) {
@@ -32,7 +40,7 @@ function useMountedWhileOpen(open, ms) {
       }
     });
     return () => a.stop();
-  }, [open, anim, ms, animateIn]);
+  }, [open, anim, ms, animateIn, animateOut]);
   const onShow = useCallback(() => {
     shownRef.current = true;
     if (openRef.current) animateIn();
@@ -66,9 +74,9 @@ export function Sheet({ open, onClose, children, style, backdropOpacity = 0.5, d
   );
 }
 
-export function Dialog({ open, onClose, children, style, backdropOpacity = 0.5, dismissible = true }) {
+export function Dialog({ open, onClose, children, style, backdropOpacity = 0.5, dismissible = true, animateOut = true }) {
   const t = useTheme();
-  const [mounted, anim, onShow] = useMountedWhileOpen(open, 220);
+  const [mounted, anim, onShow] = useMountedWhileOpen(open, 220, animateOut);
   if (!mounted) return null;
   return (
     <Modal visible transparent statusBarTranslucent navigationBarTranslucent animationType="none" onShow={onShow} onRequestClose={() => dismissible && onClose?.()}>

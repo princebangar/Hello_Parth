@@ -4,6 +4,7 @@
 // /taxi/driver/manage-drivers. The web loaded the drivers on every visit (mount); here they are loaded again each time the
 // tab becomes active, keeping the last list on screen meanwhile. Pull-to-refresh reloads the list.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -57,6 +58,8 @@ const InfoLine = ({ icon: Icon, children, wide, truncate, upper = true }) => (
 );
 
 const ManageDrivers = () => {
+  const tabScrollRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const insets = useSafeAreaInsets();
   const bottomSpace = useBottomNavSpace();
@@ -232,7 +235,7 @@ const ManageDrivers = () => {
         <Text style={styles.title}>Manage Drivers</Text>
       </View>
 
-      <FlatList
+      <FlatList ref={tabScrollRef}
         data={isLoading || error ? [] : drivers}
         keyExtractor={(item, index) => String(item.id ?? index)}
         renderItem={renderDriver}

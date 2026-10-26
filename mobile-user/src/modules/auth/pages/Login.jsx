@@ -9,6 +9,7 @@ import { toast } from "@/lib/toast"
 import { Link, useNavigate, useLocation, useSearchParams } from "@/lib/router"
 import { getNativeFcmToken } from "@/lib/push"
 import { AppImage, FontScope, Text, TextInput } from "@/native/ui"
+import { LoginExitGuard } from "@/native/ui/LoginExitGuard"
 import { ForceLight, colors, fonts } from "@/theme"
 import { Spin } from "@/shared/components/Loader"
 import apiClient, { authAPI } from "@food/api"
@@ -867,6 +868,7 @@ function UnifiedOTPFastLogin() {
     // Native feel: a tap anywhere outside a field closes the keyboard; a tap on a card button keeps it open.
     <Pressable accessible={false} onPress={Keyboard.dismiss} style={[styles.root, { height: m.height }]}>
       <StatusBar style="light" />
+      <LoginExitGuard enabled={step === 1} dirty={String(phoneNumber || "").length > 0} accent={BRAND_RED} />
       <View style={styles.page}>
         <LoginHero m={m} />
 

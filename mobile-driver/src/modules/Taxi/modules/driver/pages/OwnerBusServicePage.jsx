@@ -5,6 +5,7 @@
 // BusServiceManagerHost (form to the top on step change, new stop into view) plus a reload signal for pull-to-refresh
 // and for the tab being shown again (the web remounted the screen on every visit; the old list stays while it reloads).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bus, ChevronLeft } from 'lucide-react-native';
@@ -65,6 +66,7 @@ const OwnerBusServicePage = () => {
   const bottomSpace = useBottomNavSpace();
 
   const scrollRef = useRef(null);
+  useTabScrollTop(scrollRef);
   const scrollYRef = useRef(0);
   const [reload, setReload] = useState({ key: 0, silent: false });
   const [refreshing, setRefreshing] = useState(false);

@@ -6,7 +6,8 @@
 // storage) and replace to <prefix>/login; no API call.
 // Native: a kept-alive bottom-bar tab (driverTabPages.js). The web loaded the driver on mount (every visit); here it is
 // loaded again each time the tab becomes active (the old profile stays on screen). Pull-to-refresh reloads it.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -113,6 +114,8 @@ const normalizeBankDetails = (bankDetails = {}) => ({
 const icon = (Icon) => <Icon size={20} color={ICON_CHIP_FG} />;
 
 const DriverProfile = () => {
+  const tabScrollRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const insets = useSafeAreaInsets();
   const bottomSpace = useBottomNavSpace();
@@ -120,6 +123,7 @@ const DriverProfile = () => {
   const { height: windowHeight } = useWindowDimensions();
   const [routeBookingPreferences, setRouteBookingPreferences] = useState(() => readRouteBookingPreferences());
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false); // signed out: the popup goes away at once, no fade over the login screen
   // The top of the page (photo, details, first list) is drawn first; the rest of the list follows a frame later,
   // so opening Profile does not wait for the whole long page.
   const [showFullList, setShowFullList] = useState(false);
@@ -233,6 +237,7 @@ Processing Time: Refunds are typically credited back to the original payment met
 
   const handleLogout = () => {
     clearDriverAuthState();
+    setLeaving(true);
     setIsLogoutOpen(false);
     navigate(`${routePrefix}/login`, { replace: true });
   };
@@ -418,7 +423,7 @@ Processing Time: Refunds are typically credited back to the original payment met
   return (
     <View style={styles.root}>
       {tabActive ? <StatusBar style="light" /> : null}
-      <ScrollView
+      <ScrollView ref={tabScrollRef}
         style={styles.flex1}
         contentContainerStyle={{ paddingBottom: bottomSpace }}
         showsVerticalScrollIndicator={false}
@@ -571,6 +576,7 @@ Processing Time: Refunds are typically credited back to the original payment met
       </ScrollView>
 
       <UserLogoutConfirmDialog
+        animateOut={!leaving}
         open={isLogoutOpen}
         onClose={() => setIsLogoutOpen(false)}
         onConfirm={handleLogout}

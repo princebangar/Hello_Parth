@@ -4,6 +4,7 @@
 // Native: a kept-alive bottom-bar tab (driverTabPages.js). The web loaded the dashboard on every visit (mount); here it is
 // loaded again each time the tab becomes active, keeping the last dashboard on screen meanwhile. Pull-to-refresh reloads it.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { ActivityIndicator, Animated, Easing, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -156,6 +157,8 @@ const Empty = ({ children }) => (
 );
 
 const OwnerDashboard = () => {
+  const tabScrollRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const insets = useSafeAreaInsets();
   const bottomSpace = useBottomNavSpace();
@@ -259,7 +262,7 @@ const OwnerDashboard = () => {
   return (
     <View style={styles.root}>
       {tabActive ? <StatusBar style="dark" /> : null}
-      <ScrollView
+      <ScrollView ref={tabScrollRef}
         style={styles.root}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: bottomSpace }]}
         showsVerticalScrollIndicator={false}

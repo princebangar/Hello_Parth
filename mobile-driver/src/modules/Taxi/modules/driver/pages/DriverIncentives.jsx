@@ -2,7 +2,8 @@
 // streak, weekly trips, rating), milestone quests and bonus boosters with Claim, and the referral offer card.
 // Native: a kept-alive bottom-bar tab (driverTabPages.js). The web loaded the progress on every visit (mount); here it is
 // loaded again each time the tab becomes active, showing the last progress meanwhile. Pull-to-refresh reloads it.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,6 +35,8 @@ const progressPercent = (current, target) => {
 };
 
 const DriverIncentives = () => {
+  const tabScrollRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const insets = useSafeAreaInsets();
   const bottomSpace = useBottomNavSpace();
@@ -141,7 +144,7 @@ const DriverIncentives = () => {
         </View>
       </View>
 
-      <ScrollView
+      <ScrollView ref={tabScrollRef}
         style={styles.flex1}
         contentContainerStyle={[styles.main, { paddingBottom: bottomSpace }]}
         showsVerticalScrollIndicator={false}

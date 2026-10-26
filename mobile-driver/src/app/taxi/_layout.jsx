@@ -7,12 +7,14 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import DriverApp from '@/modules/Taxi/DriverApp';
 import DriverLayout from '@/modules/Taxi/modules/driver/components/DriverLayout';
+import { driverTheme } from '@/theme';
 
 export default function TaxiLayout() {
   return (
     <DriverApp>
       <DriverLayout>
-        <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+        {/* opaque pages: the kept-alive tab layer (with the live map) waits under them while a page is open */}
+        <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: driverTheme.bg } }} />
       </DriverLayout>
     </DriverApp>
   );

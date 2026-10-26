@@ -1,0 +1,292 @@
+import { clearUserLocalData, prepareForSignIn } from '@/shared/utils/userLocalData.js'
+/**
+ * Central API client for backend (auth and future APIs).
+ * - baseURL from VITE_API_BASE_URL (e.g. http://localhost:5000/api/v1)
+ * - When baseURL ends with /api/v1, request paths must NOT include /v1 (use /food/..., /auth/...)
+ * - Attaches Bearer token (user or admin based on request URL)
+ * - On 401: attempts refresh, retries once; on refresh failure logs out
+ */
+
+import axios from "axios";
+import { isBackgroundGet, runInBackground } from "../../shared/utils/backgroundRequests.js";
+
+// Prefer explicit env. If not set, default to /api/v1 so the Vite proxy can forward to backend.
+// This avoids hardcoding ports like 5000 that may conflict with local setups.
+const baseURL =
+  true && globalThis.__ENV__?.VITE_API_BASE_URL
+    ? String(globalThis.__ENV__.VITE_API_BASE_URL).replace(/\/$/, "")
+    : "/api/v1";
+
+const apiClient = axios.create({
+  baseURL: baseURL || undefined,
+  timeout: 30000,
+  headers: { "Content-Type": "application/json" },
+});
+
+function getModuleFromUrl(url = "") {
+  const u = typeof url === "string" ? url : (url?.url || "");
+  if (!u) return "user";
+  
+  const normalized = u.toLowerCase();
+  
+  // Admin detection
+  if (
+    normalized.includes("/admin/") || 
+    normalized.includes("/food/admin/") || 
+    normalized.includes("/food/auth/admin") || 
+    normalized.includes("/auth/admin") || 
+    normalized.includes("admin/login")
+  ) return "admin";
+  
+  // Delivery detection - Catch all delivery-specific functional and auth routes
+  if (
+    normalized.includes("/food/delivery") || 
+    normalized.includes("/auth/delivery") || 
+    normalized.includes("/delivery/")
+  ) return "delivery";
+  
+  // Restaurant detection - Catch all restaurant-specific functional and auth routes
+  if (
+    normalized.includes("/food/restaurant/") || 
+    normalized.includes("/auth/restaurant") || 
+    normalized.includes("/restaurant/")
+  ) {
+    // Exception: /food/restaurants (plural) is usually a public user app route
+    if (normalized.includes("/food/restaurants") && !normalized.includes("/food/restaurant/")) {
+       return "user";
+    }
+    return "restaurant";
+  }
+  
+  return "user";
+}
+
+function getModuleFromConfig(config) {
+  if (config?.contextModule) return config.contextModule;
+  return getModuleFromUrl(config?.url);
+}
+
+function getAccessToken(config) {
+  const module = getModuleFromConfig(config);
+  const key = `${module}_accessToken`;
+  try {
+    // 1. Try module-specific token first
+    const moduleToken = localStorage.getItem(key);
+    if (moduleToken) return moduleToken;
+
+    // 2. Fallback to generic token if module-specific token is missing
+    return localStorage.getItem("accessToken") || null;
+  } catch {
+    return null;
+  }
+}
+
+function getRefreshToken(module) {
+  try {
+    // 1. Try module-specific refresh token
+    const moduleRefreshToken = localStorage.getItem(`${module}_refreshToken`);
+    if (moduleRefreshToken) return moduleRefreshToken;
+
+    // 2. Fallback to generic refresh token
+    return localStorage.getItem("refreshToken") || null;
+  } catch {
+    return null;
+  }
+}
+
+function clearModuleAuth(module) {
+  try {
+    if (module === "user") clearUserLocalData();
+    localStorage.removeItem(`${module}_accessToken`);
+    localStorage.removeItem(`${module}_refreshToken`);
+    localStorage.removeItem(`${module}_authenticated`);
+    localStorage.removeItem(`${module}_user`);
+  } catch (_) {}
+}
+
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+function subscribeToRefresh(cb) {
+  refreshSubscribers.push(cb);
+}
+
+function onRefreshed(newToken, module) {
+  refreshSubscribers.forEach((cb) => cb(newToken, module));
+  refreshSubscribers = [];
+}
+
+function onRefreshFailed(module) {
+  clearModuleAuth(module);
+  // Fail any queued requests that were waiting for this refresh
+  refreshSubscribers.forEach((cb) => cb(null, module));
+  refreshSubscribers = [];
+  
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("authRefreshFailed", { detail: { module } }));
+  }
+}
+
+function isLocalDevBrowser() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (globalThis.__ENV__?.DEV) return true;
+    const host = String(window.location.hostname || "").toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host.endsWith(".local")
+    );
+  } catch {
+    return false;
+  }
+}
+
+apiClient.interceptors.request.use(
+  (config) => {
+    config.contextModule = getModuleFromConfig(config);
+
+    // If sending FormData, let the browser set proper multipart boundary.
+    if (config.data instanceof FormData) {
+      if (config.headers && config.headers["Content-Type"]) {
+        delete config.headers["Content-Type"];
+      }
+    }
+
+    // Same live backend: mark local frontend so maintenance APIs stay open for dev.
+    if (isLocalDevBrowser()) {
+      config.headers["X-HelloParth-Client"] = "local-dev";
+    }
+
+    const token = getAccessToken(config);
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (err) => Promise.reject(err)
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (err) => {
+    const original = err?.config;
+    // server is in maintenance: tell the maintenance gate right away (it also polls the flag)
+    if (err?.response?.data?.code === "MAINTENANCE_MODE") {
+      try { window.dispatchEvent(new CustomEvent("maintenanceModeChanged", { detail: { enabled: true } })) } catch { /* ignore */ }
+    }
+    if (err?.response?.status === 429) {
+      return Promise.reject(err);
+    }
+    if (err?.response?.status !== 401 || !original || original._retry) {
+      return Promise.reject(err);
+    }
+    const module = original.contextModule || getModuleFromUrl(original.url);
+    const refreshToken = getRefreshToken(module);
+    if (!refreshToken) {
+      clearModuleAuth(module);
+      return Promise.reject(err);
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        subscribeToRefresh((newToken) => {
+          if (newToken) {
+            original.headers.Authorization = `Bearer ${newToken}`;
+            resolve(apiClient(original));
+          } else {
+            reject(err);
+          }
+        });
+      });
+    }
+
+    original._retry = true;
+    isRefreshing = true;
+
+    try {
+      // Use relative URL so this works both with an explicit baseURL and with a dev proxy.
+      // Use plain axios to avoid interceptor recursion.
+      const refreshUrl = baseURL ? `${baseURL}/food/auth/refresh-token` : "/api/v1/food/auth/refresh-token";
+      const { data } = await axios.post(refreshUrl, { refreshToken }, { timeout: 10000 });
+      const newAccessToken = data?.data?.accessToken || data?.accessToken;
+      if (newAccessToken) {
+        try {
+          localStorage.setItem(`${module}_accessToken`, newAccessToken);
+          // Dispatch a custom event specifically for the module that refreshed
+          window.dispatchEvent(new CustomEvent("authRefreshed", { 
+            detail: { module, token: newAccessToken } 
+          }));
+        } catch (_) {}
+        onRefreshed(newAccessToken, module);
+        original.headers.Authorization = `Bearer ${newAccessToken}`;
+        return apiClient(original);
+      }
+    } catch (refreshErr) {
+      const status = refreshErr?.response?.status;
+      // Only log out if the server explicitly rejected the refresh token
+      if (status === 401 || status === 403 || status === 400) {
+        onRefreshFailed(module);
+      } else {
+        // Network error or server error - don't clear auth, just fail the queue
+        refreshSubscribers.forEach((cb) => cb(null, module));
+        refreshSubscribers = [];
+      }
+      return Promise.reject(err);
+    } finally {
+      isRefreshing = false;
+    }
+
+    onRefreshFailed(module);
+    return Promise.reject(err);
+  }
+);
+
+// ---------------------------------------------------------------------------------------------------------------
+// Identical GETs fired at the same moment share ONE network request.
+// A screen is built from many components / hooks / context providers that each ask for the same thing (cart, offers,
+// public settings, /me ...), and React StrictMode in dev doubles every effect. Without this each of them became its
+// own request, which filled the browser's 6-connections-per-host queue and made the page the user actually asked for
+// (e.g. the wallet) wait behind them. Only requests that are in flight at the same time are merged - nothing is
+// cached afterwards - and any write drops the merge table so a GET sent after a change is always a fresh one.
+// Opt out for a single call with { dedupe: false }.
+// ---------------------------------------------------------------------------------------------------------------
+const inflightGets = new Map();
+const rawGet = apiClient.get.bind(apiClient);
+
+const dedupedGet = (url, config = {}) => {
+  if (config?.dedupe === false || config?.signal || config?.responseType === "blob" || config?.responseType === "arraybuffer") {
+    return rawGet(url, config);
+  }
+
+  const key = [
+    typeof url === "string" ? url : String(url?.url || ""),
+    JSON.stringify(config?.params || {}),
+    JSON.stringify(config?.headers || {}),
+    getAccessToken({ url, contextModule: config?.contextModule }) || "",
+  ].join("|");
+
+  const pending = inflightGets.get(key);
+  if (pending) return pending;
+
+  const request = rawGet(url, config).finally(() => {
+    if (inflightGets.get(key) === request) inflightGets.delete(key);
+  });
+  inflightGets.set(key, request);
+  return request;
+};
+
+// Reads that only feed a badge / reminder start a moment later so they never queue in front of the open screen.
+apiClient.get = (url, config = {}) =>
+  isBackgroundGet(url, config) ? runInBackground(() => dedupedGet(url, config)) : dedupedGet(url, config);
+
+["post", "put", "patch", "delete"].forEach((method) => {
+  const rawMethod = apiClient[method].bind(apiClient);
+  apiClient[method] = (...args) => {
+    inflightGets.clear();
+    return rawMethod(...args);
+  };
+});
+
+export default apiClient;

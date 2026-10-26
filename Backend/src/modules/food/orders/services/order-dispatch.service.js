@@ -462,6 +462,8 @@ export async function tryAutoAssign(orderId, options = {}) {
             {
               title: 'New order assigned!',
               body: `You have 60 seconds to accept Order #${order.order_id || order._id}.`,
+              // native delivery app: rings on its 'delivery_orders' channel also when the app is closed
+              channelId: 'delivery_orders',
               data: {
                 type: 'new_order',
                 orderId: order.order_id || order._id.toString(),

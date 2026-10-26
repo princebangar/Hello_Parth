@@ -5,6 +5,7 @@
 // page. The web loaded the history on mount (every visit); here it is loaded again each time the tab becomes active,
 // keeping the old list on screen. Pull-to-refresh reloads it; the error's Retry (web: page reload) loads it again.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabScrollTop } from '@/native/ui/tabShown';
 import { Animated, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -245,6 +246,8 @@ const FadeInCard = ({ style, children }) => {
 };
 
 const RideRequests = () => {
+  const tabScrollRef = useRef(null);
+  useTabScrollTop(tabScrollRef);
   const navigate = useNavigate();
   const insets = useSafeAreaInsets();
   const bottomSpace = useBottomNavSpace();
@@ -475,7 +478,7 @@ const RideRequests = () => {
         </Pressable>
       </View>
 
-      <ScrollView
+      <ScrollView ref={tabScrollRef}
         style={styles.flex1}
         contentContainerStyle={[styles.content, { paddingBottom: bottomSpace }]}
         showsVerticalScrollIndicator={false}

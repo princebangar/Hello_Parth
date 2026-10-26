@@ -22,6 +22,7 @@ export default function UserLogoutConfirmDialog({
   iconBgStyle,
   iconColor = "#FF3131",
   confirmButtonStyle,
+  animateOut = true,
 }) {
   const s = useStyles();
   // Taxi passes its blue (confirmButtonStyle.backgroundColor); Food keeps the red.
@@ -31,7 +32,7 @@ export default function UserLogoutConfirmDialog({
   useBodyScrollLock(open);
 
   return (
-    <Dialog open={open} onClose={isLoggingOut ? undefined : onClose} dismissible={!isLoggingOut} backdropOpacity={0.65} style={s.card}>
+    <Dialog animateOut={animateOut} open={open} onClose={isLoggingOut ? undefined : onClose} dismissible={!isLoggingOut} backdropOpacity={0.65} style={s.card}>
       <View accessibilityRole="alert" accessibilityLabel="Log out" style={s.body}>
         {/* soft red glow behind the icon */}
         <LinearGradient pointerEvents="none" colors={[alpha(iconColor, 0.12), alpha(iconColor, 0)]} style={s.topBand} />

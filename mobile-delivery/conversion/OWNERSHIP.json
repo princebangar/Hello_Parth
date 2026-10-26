@@ -1,0 +1,86 @@
+{
+  "shell": {
+    "owner": "integrator (main session)",
+    "files": [
+      "src/app/**",
+      "src/lib/**",
+      "src/native/**",
+      "src/theme/**",
+      "src/appstore/**",
+      "src/modules/DeliveryV2/DeliveryApp.jsx",
+      "src/modules/DeliveryV2/routes.jsx",
+      "src/modules/DeliveryV2/deliveryTabPages.js",
+      "src/modules/DeliveryV2/components/DeliveryRealtimeShell.jsx",
+      "src/modules/DeliveryV2/components/DeliveryTabKeepAlive.jsx",
+      "src/modules/DeliveryV2/components/DeliveryBottomNav.jsx",
+      "src/modules/DeliveryV2/components/ProtectedRoute.jsx",
+      "src/modules/DeliveryV2/hooks/useDeliveryBackNavigation.js",
+      "src/modules/DeliveryV2/hooks/useCloseOnBack.js",
+      "src/modules/DeliveryV2/hooks/useDeliveryOnboardingExitGuard.js",
+      "src/modules/DeliveryV2/hooks/useRiderLocationSync.js",
+      "src/modules/DeliveryV2/hooks/useProximityCheck.js",
+      "src/modules/DeliveryV2/hooks/proximity.utils.js",
+      "src/modules/DeliveryV2/utils/geo.js",
+      "src/modules/DeliveryV2/utils/offerFreshness.js",
+      "src/modules/DeliveryV2/utils/orderMapping.js",
+      "src/modules/DeliveryV2/utils/pickupMetrics.js",
+      "everything outside src/modules/DeliveryV2 except src/modules/Food/hooks/useDeliveryNotifications.js"
+    ]
+  },
+  "auth-profile": {
+    "files": [
+      "src/modules/DeliveryV2/pages/auth/SignIn.jsx",
+      "src/modules/DeliveryV2/pages/auth/SignupStep1.jsx",
+      "src/modules/DeliveryV2/pages/auth/SignupStep2.jsx",
+      "src/modules/DeliveryV2/pages/auth/VerificationPending.jsx",
+      "src/modules/DeliveryV2/utils/deliveryOnboardingStorage.js",
+      "src/modules/DeliveryV2/pages/TermsAndConditionsV2.jsx",
+      "src/modules/DeliveryV2/pages/PrivacyPolicyV2.jsx",
+      "src/modules/DeliveryV2/pages/CMSHelpSupportPage.jsx",
+      "src/modules/DeliveryV2/pages/NotificationsV2.jsx",
+      "src/modules/DeliveryV2/pages/ProfileV2.jsx",
+      "src/modules/DeliveryV2/pages/profile/ProfileDetailsV2.jsx",
+      "src/modules/DeliveryV2/pages/profile/MyReviewsV2.jsx",
+      "src/modules/DeliveryV2/pages/profile/ProfileBankV2.jsx",
+      "src/modules/DeliveryV2/pages/profile/ProfileDocsV2.jsx",
+      "src/modules/DeliveryV2/components/BottomPopup.jsx",
+      "src/modules/DeliveryV2/pages/help/SupportTicketsV2.jsx",
+      "src/modules/DeliveryV2/pages/help/CreateSupportTicketV2.jsx",
+      "src/modules/DeliveryV2/pages/help/ViewSupportTicketV2.jsx",
+      "src/modules/DeliveryV2/pages/help/ShowIdCardV2.jsx"
+    ]
+  },
+  "home-orders": {
+    "files": [
+      "src/modules/DeliveryV2/pages/DeliveryHomeV2.jsx",
+      "src/modules/DeliveryV2/pages/OrdersV2.jsx",
+      "src/modules/DeliveryV2/components/map/LiveMap.jsx",
+      "src/modules/DeliveryV2/components/map/map.icons.js",
+      "src/modules/DeliveryV2/components/modals/PickupActionModal.jsx",
+      "src/modules/DeliveryV2/components/modals/DeliveryVerificationModal.jsx",
+      "src/modules/DeliveryV2/components/modals/NewOrderModal.jsx",
+      "src/modules/DeliveryV2/components/modals/OrderSummaryModal.jsx",
+      "src/modules/DeliveryV2/components/orders/NewOrderCard.jsx",
+      "src/modules/DeliveryV2/components/orders/AcceptedOrderCard.jsx",
+      "src/modules/DeliveryV2/components/orders/OrderSwitcher.jsx",
+      "src/modules/DeliveryV2/components/ui/ActionSlider.jsx",
+      "src/modules/DeliveryV2/hooks/useOrderManager.js",
+      "src/modules/DeliveryV2/store/useDeliveryStore.js",
+      "src/modules/Food/hooks/useDeliveryNotifications.js"
+    ]
+  },
+  "pocket-history": {
+    "files": [
+      "src/modules/DeliveryV2/pages/PocketV2.jsx",
+      "src/modules/DeliveryV2/pages/HistoryV2.jsx",
+      "src/modules/DeliveryV2/components/WeekSelector.jsx",
+      "src/modules/DeliveryV2/pages/pocket/PayoutV2.jsx",
+      "src/modules/DeliveryV2/pages/pocket/PocketStatementV2.jsx",
+      "src/modules/DeliveryV2/pages/pocket/DeductionStatementV2.jsx",
+      "src/modules/DeliveryV2/pages/pocket/LimitSettlementV2.jsx",
+      "src/modules/DeliveryV2/pages/pocket/PocketBalanceV2.jsx",
+      "src/modules/DeliveryV2/pages/pocket/CashLimitInfoV2.jsx",
+      "src/modules/DeliveryV2/pages/pocket/PocketDetailsV2.jsx"
+    ]
+  }
+}
