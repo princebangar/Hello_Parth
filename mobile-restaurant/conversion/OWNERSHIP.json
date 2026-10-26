@@ -1,0 +1,89 @@
+{
+  "shell": {
+    "owner": "integrator (main session)",
+    "files": [
+      "src/app/**", "src/lib/**", "src/native/**", "src/theme/**", "src/appstore/**",
+      "src/modules/Food/components/restaurant/RestaurantApp.jsx",
+      "src/modules/Food/components/restaurant/restaurantRoutes.jsx",
+      "src/modules/Food/components/restaurant/restaurantTabPages.js",
+      "src/modules/Food/components/restaurant/RestaurantTabKeepAlive.jsx",
+      "src/modules/Food/components/restaurant/RestaurantRealtimeShell.jsx",
+      "src/modules/Food/components/restaurant/BottomNavOrders.jsx",
+      "everything not listed in a group below"
+    ]
+  },
+  "auth": {
+    "files": [
+      "src/modules/Food/pages/restaurant/auth/Login.jsx",
+      "src/modules/Food/pages/restaurant/auth/Signup.jsx",
+      "src/modules/Food/pages/restaurant/auth/ForgotPassword.jsx",
+      "src/modules/Food/pages/restaurant/auth/VerificationPending.jsx",
+      "src/modules/Food/pages/restaurant/Onboarding.jsx",
+      "src/modules/Food/components/restaurant/PartnerRolePicker.jsx",
+      "src/modules/Food/components/restaurant/NewRoleConfirmDialog.jsx",
+      "src/modules/Food/pages/restaurant/PrivacyPolicyPage.jsx",
+      "src/modules/Food/pages/restaurant/TermsAndConditionsPage.jsx",
+      "src/modules/Food/pages/restaurant/CMSHelpSupportPage.jsx"
+    ]
+  },
+  "orders": {
+    "files": [
+      "src/modules/Food/pages/restaurant/OrdersMain.jsx",
+      "src/modules/Food/pages/restaurant/AllOrdersPage.jsx",
+      "src/modules/Food/pages/restaurant/OrderDetails.jsx",
+      "src/modules/Food/pages/restaurant/Notifications.jsx",
+      "src/modules/Food/components/restaurant/NewOrderNotification.jsx",
+      "src/modules/Food/components/restaurant/LiveDishNotice.jsx",
+      "src/modules/Food/components/restaurant/ResendNotificationButton.jsx",
+      "src/modules/Food/components/restaurant/RestaurantNavbar.jsx",
+      "src/modules/Food/hooks/useRestaurantNotifications.js"
+    ]
+  },
+  "menu": {
+    "files": [
+      "src/modules/Food/pages/restaurant/Inventory.jsx",
+      "src/modules/Food/pages/restaurant/ItemDetailsPage.jsx",
+      "src/modules/Food/pages/restaurant/MenuCategoriesPage.jsx"
+    ]
+  },
+  "finance-reviews": {
+    "files": [
+      "src/modules/Food/pages/restaurant/HubFinance.jsx",
+      "src/modules/Food/pages/restaurant/FinanceDetailsPage.jsx",
+      "src/modules/Food/pages/restaurant/WithdrawalHistoryPage.jsx",
+      "src/modules/Food/pages/restaurant/DownloadReport.jsx",
+      "src/modules/Food/pages/restaurant/Feedback.jsx",
+      "src/modules/Food/pages/restaurant/RatingsReviews.jsx",
+      "src/modules/Food/pages/restaurant/DishRatings.jsx",
+      "src/modules/Food/pages/restaurant/ShareFeedback.jsx",
+      "src/modules/Food/pages/restaurant/DiningReservations.jsx",
+      "src/modules/Food/pages/restaurant/RestaurantSupport.jsx",
+      "src/modules/Food/pages/restaurant/Hyperpure.jsx",
+      "src/modules/Food/pages/restaurant/ManageOutlets.jsx"
+    ]
+  },
+  "settings-1": {
+    "files": [
+      "src/modules/Food/pages/restaurant/ExploreMore.jsx",
+      "src/modules/Food/pages/restaurant/OutletInfo.jsx",
+      "src/modules/Food/pages/restaurant/OutletTimings.jsx",
+      "src/modules/Food/pages/restaurant/DaySlots.jsx",
+      "src/modules/Food/pages/restaurant/EditCuisines.jsx",
+      "src/modules/Food/pages/restaurant/FssaiDetails.jsx",
+      "src/modules/Food/pages/restaurant/FssaiUpdate.jsx",
+      "src/modules/Food/pages/restaurant/UpdateBankDetails.jsx"
+    ]
+  },
+  "settings-2": {
+    "files": [
+      "src/modules/Food/pages/restaurant/EditOwner.jsx",
+      "src/modules/Food/pages/restaurant/PhoneNumbersPage.jsx",
+      "src/modules/Food/pages/restaurant/EditRestaurantAddress.jsx",
+      "src/modules/Food/components/restaurant/LocationSearchInput.jsx",
+      "src/modules/Food/pages/restaurant/DeliverySettings.jsx",
+      "src/modules/Food/pages/restaurant/RestaurantStatus.jsx",
+      "src/modules/Food/pages/restaurant/RushHour.jsx",
+      "src/modules/Food/pages/restaurant/ZoneSetup.jsx"
+    ]
+  }
+}

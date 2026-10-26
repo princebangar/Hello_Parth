@@ -249,6 +249,7 @@ const toRestaurantProfile = (doc) => {
         ownerEmail: doc.ownerEmail || '',
         ownerPhone: doc.ownerPhone || '',
         primaryContactNumber: doc.primaryContactNumber || '',
+        orderReminderNumbers: Array.isArray(doc.orderReminderNumbers) ? doc.orderReminderNumbers : [],
         panNumber: doc.panNumber || '',
         nameOnPan: doc.nameOnPan || '',
         panImage: doc.panImage ? { url: doc.panImage } : null,
@@ -633,6 +634,7 @@ export const getCurrentRestaurantProfile = async (restaurantId) => {
                 'ownerEmail',
                 'ownerPhone',
                 'primaryContactNumber',
+                'orderReminderNumbers',
                 'accountNumber',
                 'ifscCode',
                 'accountHolderName',
@@ -984,6 +986,15 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
         }
     }
 
+    if (body.orderReminderNumbers !== undefined) {
+        if (!Array.isArray(body.orderReminderNumbers)) {
+            throw new ValidationError('orderReminderNumbers must be an array');
+        }
+        update.orderReminderNumbers = body.orderReminderNumbers
+            .slice(0, 2)
+            .map((v) => normalizePhone(v).digits || String(v || '').trim())
+            .map((v) => v.slice(0, 15));
+    }
     if (body.primaryContactNumber !== undefined) {
         const { digits } = normalizePhone(body.primaryContactNumber);
         const normalizedPrimaryContact =
@@ -1247,6 +1258,7 @@ export const updateRestaurantProfile = async (restaurantId, body = {}) => {
                     'ownerEmail',
                     'ownerPhone',
                     'primaryContactNumber',
+                    'orderReminderNumbers',
                 'pureVegRestaurant',
                 'profileImage',
                 'coverImages',

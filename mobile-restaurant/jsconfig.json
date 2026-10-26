@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "jsx": "react-jsx",
+    "paths": {
+      "@food/api/axios": ["./src/services/api/axios.js"],
+      "@food/api/config": ["./src/services/api/config.js"],
+      "@food/api": ["./src/services/api"],
+      "@food/*": ["./src/modules/Food/*"],
+      "@delivery/*": ["./src/modules/DeliveryV2/*"],
+      "@/assets/*": ["./src/modules/Taxi/assets/*"],
+      "@/components/*": ["./src/modules/Taxi/components/*"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "index.js"]
+}

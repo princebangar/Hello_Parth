@@ -78,6 +78,11 @@ const restaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // the two order reminder numbers of the partner app's Important contacts page
+    orderReminderNumbers: {
+      type: [String],
+      default: undefined,
+    },
     pureVegRestaurant: {
       type: Boolean,
       required: true,

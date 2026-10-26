@@ -171,6 +171,8 @@ const normalizeDataMap = (data = {}) => {
 
 const RINGING_CHANNELS = {
     delivery_orders: { channelId: 'delivery_orders', sound: 'restaurant_alert' },
+    // the native restaurant partner app's new-order alert (notifyRestaurantNewOrder sends this channel)
+    restaurant_orders: { channelId: 'restaurant_orders', sound: 'restaurant_alert' },
 };
 
 const buildMessagePayload = (payload = {}, token) => {
