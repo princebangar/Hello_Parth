@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Local signed release APK -> <repo>/releases/HelloParth-Captain-<version>.apk
 //   npm run build:apk
+//   npm run build:aab -> <repo>/releases/HelloParth-Captain-<version>-<versionCode>.aab (Play Store upload)
 // Needs: Android SDK (ANDROID_HOME) with CMake 3.31.6 on Windows (see plugins/withShortCmakeObjectPaths.js), JDK 17,
 // and the upload keystore properties in ~/.gradle/gradle.properties (see plugins/withReleaseSigning.js); without them
 // Gradle signs with the debug key.
@@ -21,11 +22,23 @@ run('npx expo prebuild --platform android --no-install', ROOT);
 const androidDir = path.join(ROOT, 'android');
 const gradlew = process.platform === 'win32' ? `"${path.join(androidDir, 'gradlew.bat')}"` : './gradlew';
 const workers = process.env.HP_GRADLE_WORKERS || '1';
+// --aab builds the Play Store bundle instead of the APK (Play takes only .aab for app updates)
+const aab = process.argv.includes('--aab');
 run(
-  `${gradlew} assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a --max-workers=${workers} --no-daemon ` +
+  `${gradlew} ${aab ? 'bundleRelease' : 'assembleRelease'} -PreactNativeArchitectures=armeabi-v7a,arm64-v8a --max-workers=${workers} --no-daemon ` +
     '-Dorg.gradle.parallel=false "-Dorg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m" -Pkotlin.compiler.execution.strategy=in-process',
   androidDir,
 );
+
+if (aab) {
+  const bundle = path.join(androidDir, 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab');
+  const outDir = path.resolve(ROOT, '..', 'releases');
+  fs.mkdirSync(outDir, { recursive: true });
+  const out = path.join(outDir, `HelloParth-Captain-${app.version}-${app.android.versionCode}.aab`);
+  fs.copyFileSync(bundle, out);
+  console.log(`\nAAB: ${out} (${(fs.statSync(out).size / 1048576).toFixed(1)} MB)`);
+  process.exit(0);
+}
 
 const apk = path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
 const { verifyApk, snapshotNativeLibs } = require(path.join(__dirname, 'verify-apk.cjs'));

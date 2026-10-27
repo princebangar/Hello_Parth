@@ -80,6 +80,7 @@
     "lint": "expo lint",
     "check": "node scripts/check-converted.cjs src",
     "build:apk": "node scripts/build-release.cjs",
+    "build:aab": "node scripts/build-release.cjs --aab",
     "check:routes": "node scripts/check-routes.cjs",
     "check:links": "node scripts/check-links.cjs",
     "check:raw": "node scripts/check-raw-text.cjs",

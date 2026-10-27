@@ -3,14 +3,14 @@
     "name": "Hello Parth Delivery Partner",
     "slug": "hello-parth-delivery",
     "scheme": "helloparth-delivery",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#15498B",
     "android": {
       "package": "com.helloparth.delivery",
-      "versionCode": 1,
+      "versionCode": 5,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",

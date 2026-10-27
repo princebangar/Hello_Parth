@@ -3,14 +3,14 @@
     "name": "Hello Parth Captain",
     "slug": "hello-parth-captain",
     "scheme": "helloparth-captain",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#12348C",
     "android": {
       "package": "com.helloparth.driver",
-      "versionCode": 1,
+      "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
