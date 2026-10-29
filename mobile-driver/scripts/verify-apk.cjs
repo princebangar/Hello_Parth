@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const SDK = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || 'C:/Users/Prince/Android/Sdk';
-const CAPTAIN_SHA1 = 'BF:72:DE:90:84:84:80:74:BD:9F:6F:5D:AD:46:C0:FB:58:7B:CF:E8';
+const CAPTAIN_SHA1 = 'AF:1B:F4:AB:4A:CD:F0:77:8B:A6:30:9D:DF:23:AE:54:DC:F0:18:D9';
 
 // entries of a zip (central directory), without unzip tools
 function zipEntries(file) {
