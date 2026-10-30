@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#66001D",
     "android": {
-      "package": "com.helloparth.restaurant",
+      "package": "com.restaurant.helloparth",
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

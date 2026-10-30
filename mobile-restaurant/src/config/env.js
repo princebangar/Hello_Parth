@@ -24,4 +24,4 @@ export const ENV = Object.freeze({
 export const API_BASE_URL = ENV.VITE_API_BASE_URL.replace(/\/$/, '');
 export const BACKEND_ORIGIN = ENV.VITE_BACKEND_ORIGIN.replace(/\/$/, '');
 export const GOOGLE_MAPS_API_KEY = ENV.VITE_GOOGLE_MAPS_API_KEY;
-export const ANDROID_PACKAGE = 'com.helloparth.restaurant';
+export const ANDROID_PACKAGE = 'com.restaurant.helloparth';
