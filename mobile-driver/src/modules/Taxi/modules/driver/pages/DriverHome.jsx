@@ -16,7 +16,7 @@
 // - Daily selfie: the web's in-page camera preview (getUserMedia + Capture) is the phone's front camera
 //   (expo-image-picker), shrunk like the web (1280 px, JPEG 0.82) and sent as the same base64 data URL.
 // - The web's "unlock the alert sound on the first tap" is unlockRideRequestAlertSound() once on mount.
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import {
     Alert,
     Animated,
@@ -25,6 +25,7 @@ import {
     Easing,
     Image,
     LayoutAnimation,
+    Linking,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -52,7 +53,8 @@ import { AppMap, Marker, regionFor } from '@/native/ui/AppMap';
 import MapLoadingOverlay from '@/native/ui/MapLoadingOverlay';
 import { useSplashDone } from '@/native/splashState';
 import { StatusBar } from '@/native/ui/SectionStatusBar';
-import { startOnlineLocationUpdates, stopOnlineLocationUpdates } from '@/lib/driverLocation';
+import { ensureOnlineLocationPermission, hasLocationPermission, startOnlineLocationUpdates, stopOnlineLocationUpdates } from '@/lib/driverLocation';
+import { isLocationDisclosureShown, subscribeLocationDisclosureShown } from '@/lib/locationDisclosure';
 import { alpha, colors } from '@/theme';
 
 import DriverTopBar from '../../shared/components/DriverTopBar';
@@ -129,7 +131,8 @@ const getCurrentCoords = ({ purpose = 'generic' } = {}) => new Promise((resolve,
     navigator.geolocation.getCurrentPosition(
         (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
         (error) => reject(new Error(getGeoLocationErrorMessage(error, { purpose }))),
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 10000 },
+        // prompt: false — location is asked from the Online toggle only (once), not when Home opens
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 10000, prompt: false },
     );
 });
 
@@ -744,6 +747,8 @@ const DriverHome = () => {
         }
     }, [isOnline]);
     const [showRequest, setShowRequest] = useState(false);
+    // the ride request popup waits while the location explanation is up (it covered the "Continue" button)
+    const locationScreenShown = useSyncExternalStore(subscribeLocationDisclosureShown, isLocationDisclosureShown);
 
     const [currentRequest, setCurrentRequest] = useState(null);
     const [todaySummary, setTodaySummary] = useState(() => normalizeTodaySummary(rememberedSummary));
@@ -1410,12 +1415,37 @@ const DriverHome = () => {
         if (isTogglingDuty) {
             return;
         }
-        if (isOnline) {
-            // false = location refused: the web's own location messages tell the driver (going online needs a position)
-            startOnlineLocationUpdates().catch(() => {});
-        } else {
+        if (!isOnline) {
             stopOnlineLocationUpdates().catch(() => {});
+            return undefined;
         }
+        let cancelled = false;
+        const dropToOffline = () => {
+            setIsOnline(false);
+            api.patch('/drivers/offline').catch(() => {});
+            socketService.disconnect();
+        };
+        (async () => {
+            // Online from the last session, but location is not allowed (any more): back to Offline straight away,
+            // without asking (the location screen would come up under incoming ride requests). Going Online again
+            // with the toggle asks properly.
+            if (!(await hasLocationPermission())) {
+                if (cancelled) return;
+                dropToOffline();
+                toast.error('You are Offline', {
+                    id: 'online-location-permission',
+                    description: 'Location permission is needed to stay Online. Go Online again to allow it.',
+                    duration: 5000,
+                });
+                return;
+            }
+            const started = await startOnlineLocationUpdates().catch(() => false);
+            if (cancelled || started || (await hasLocationPermission())) return;
+            dropToOffline();
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [isOnline, isTogglingDuty]);
 
     useEffect(() => {
@@ -1595,7 +1625,33 @@ const DriverHome = () => {
         }
     }, [refreshTodaySummary]);
 
-    const handleDutyToggle = useCallback(() => {
+    // Going Online needs location: the explanation + Android's prompt come first (before the selfie), and without
+    // permission the driver stays Offline with a message.
+    const checkingLocationRef = useRef(false);
+    const ensureLocationForOnline = useCallback(async () => {
+        if (checkingLocationRef.current) return false;
+        checkingLocationRef.current = true;
+        let permission;
+        try {
+            permission = await ensureOnlineLocationPermission();
+        } finally {
+            checkingLocationRef.current = false;
+        }
+        if (permission === 'granted') return true;
+        const blocked = permission === 'blocked';
+        setStatusMessage('Location permission is required to go Online.');
+        toast.error('Location permission is required to go Online', {
+            id: 'online-location-permission',
+            description: blocked
+                ? 'Allow location for Hello Parth Captain in the app settings.'
+                : 'We need your location to send you nearby ride requests.',
+            action: blocked ? { label: 'Open settings', onClick: () => Linking.openSettings().catch(() => {}) } : undefined,
+            duration: blocked ? 7000 : 4000,
+        });
+        return false;
+    }, []);
+
+    const handleDutyToggle = useCallback(async () => {
         const now = Date.now();
         if (now - lastDutyToggleAtRef.current < 600) {
             return;
@@ -1643,6 +1699,10 @@ const DriverHome = () => {
             return;
         }
 
+        if (!(await ensureLocationForOnline())) {
+            return;
+        }
+
         if (hasSelfieForToday(onlineSelfie)) {
             goOnline();
             return;
@@ -1651,6 +1711,7 @@ const DriverHome = () => {
         setSelfieError('');
         setShowOnlineSelfiePrompt(true);
     }, [
+        ensureLocationForOnline,
         expiredDocumentNames,
         goOnline,
         isOnline,
@@ -2238,7 +2299,7 @@ const DriverHome = () => {
 
             {/* Overlay for Ride Request Modal */}
             <IncomingRideRequest
-                visible={tabActive && showRequest && Boolean(currentRequest)}
+                visible={tabActive && showRequest && Boolean(currentRequest) && !locationScreenShown}
                 requestData={currentRequest}
                 isAccepting={Boolean(acceptingRideId)}
                 onAccept={handleAccept}

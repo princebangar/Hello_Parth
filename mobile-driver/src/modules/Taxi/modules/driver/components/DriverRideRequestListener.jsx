@@ -149,7 +149,7 @@ const getCurrentCoords = () => new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
         (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
         () => resolve(DEFAULT_MAP_COORDS),
-        { enableHighAccuracy: true, timeout: 7000, maximumAge: 10000 },
+        { enableHighAccuracy: true, timeout: 7000, maximumAge: 10000, prompt: false },
     );
 });
 

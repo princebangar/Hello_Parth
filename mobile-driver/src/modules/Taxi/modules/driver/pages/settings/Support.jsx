@@ -30,8 +30,8 @@ const DriverSupport = () => {
   };
 
   const policyRows = [
-    { label: 'Privacy Policy', Icon: FileText, path: '/privacy' },
-    { label: 'Terms of Service', Icon: Globe, path: '/terms' },
+    { label: 'Privacy Policy', Icon: FileText, path: '/legal/privacy' },
+    { label: 'Terms of Service', Icon: Globe, path: '/legal/terms' },
   ];
 
   return (
@@ -101,8 +101,8 @@ const DriverSupport = () => {
           </View>
 
           <View style={styles.policyList}>
-            {policyRows.map(({ label, Icon }) => (
-              <Pressable key={label} style={styles.policyRow}>
+            {policyRows.map(({ label, Icon, path }) => (
+              <Pressable key={label} style={styles.policyRow} onPress={() => navigate(`${routePrefix}${path}`)}>
                 {({ pressed }) => {
                   const tint = pressed ? colors.slate[900] : colors.slate[400];
                   return (

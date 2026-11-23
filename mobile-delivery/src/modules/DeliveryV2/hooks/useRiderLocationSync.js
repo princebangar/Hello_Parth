@@ -5,6 +5,7 @@ import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 const LAPTOP_TEST_FALLBACK = { lat: 22.7196, lng: 75.8577, heading: 0 };
 
 const geoOptions = {
+  prompt: false, // no prompt from here: location is asked from the Online toggle
   enableHighAccuracy: true,
   maximumAge: 5000,
   timeout: 15000,

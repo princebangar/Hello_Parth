@@ -12,6 +12,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Network from 'expo-network';
 import { ENV } from '../config/env';
 import { localStorageShim, sessionStorageShim } from './storage';
+import { requestLocationDisclosure } from './locationDisclosure';
 
 const g = globalThis;
 
@@ -299,10 +300,15 @@ const toPosition = (loc) => ({
   },
   timestamp: loc.timestamp || Date.now(),
 });
-const ensurePermission = async () => {
+// options.prompt === false (app extension): only read the position when location is already allowed. Screens that
+// fetch it by themselves (Home map on open, listeners) use it, so the permission is asked once, from the Online toggle.
+const ensurePermission = async (options) => {
   const current = await Location.getForegroundPermissionsAsync();
   if (current.granted) return true;
+  if (options?.prompt === false) return false;
   if (!current.canAskAgain) return false;
+  // Play prominent disclosure: explain location use before Android's prompt
+  if (!(await requestLocationDisclosure({ passive: true }))) return false;
   const asked = await Location.requestForegroundPermissionsAsync();
   return asked.granted;
 };
@@ -312,7 +318,7 @@ let watchSeq = 1;
 setProp(nav, 'geolocation', {
   getCurrentPosition(success, error, options = {}) {
     (async () => {
-      if (!(await ensurePermission())) throw geoError(PERMISSION_DENIED, 'User denied Geolocation');
+      if (!(await ensurePermission(options))) throw geoError(PERMISSION_DENIED, 'User denied Geolocation');
       if (options.maximumAge > 0) {
         const last = await Location.getLastKnownPositionAsync({ maxAge: options.maximumAge }).catch(() => null);
         if (last) return last;
@@ -330,7 +336,7 @@ setProp(nav, 'geolocation', {
     const id = watchSeq++;
     watches.set(id, null);
     (async () => {
-      if (!(await ensurePermission())) throw geoError(PERMISSION_DENIED, 'User denied Geolocation');
+      if (!(await ensurePermission(options))) throw geoError(PERMISSION_DENIED, 'User denied Geolocation');
       const sub = await Location.watchPositionAsync(
         { accuracy: accuracyFor(options), distanceInterval: 5, timeInterval: 3000 },
         (loc) => success?.(toPosition(loc)),

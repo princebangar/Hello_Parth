@@ -18,7 +18,7 @@
 //     panels are absolute layers that end above the bottom bar like the web's bottom-[92px]; tel: / Google Maps links
 //     open with Linking; window.location.reload after a session expiry -> a second replace-navigation to the login.
 //   - The minimized trip panel slides in when restored; it is removed at once when minimized (no slide-out).
-import React, { memo, useState, useRef, useEffect, useCallback } from 'react';
+import React, { memo, useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { Animated, Dimensions, Easing, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +29,8 @@ import {
 } from 'lucide-react-native';
 import { useNavigate } from '@/lib/router';
 import { toast } from '@/lib/toast';
-import { setRiderBackgroundHandler } from '@/lib/riderLocation';
+import { ensureOnlineLocationPermission, setRiderBackgroundHandler } from '@/lib/riderLocation';
+import { isLocationDisclosureShown, subscribeLocationDisclosureShown } from '@/lib/locationDisclosure';
 import { AppImage, Sheet, Text, useBottomNavSpace } from '@/native/ui';
 import { StatusBar } from '@/native/ui/SectionStatusBar';
 import { alpha, colors, deliveryTheme, fonts } from '@/theme';
@@ -194,7 +195,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const newOrders = useDeliveryStore((state) => state.newOrders);
   const [dismissedOfferKey, setDismissedOfferKey] = useState(null);
   const [offerActionBusy, setOfferActionBusy] = useState(false);
-  const feedOffer = tabActive && isOnline && acceptedOrders.length === 0
+  // not while the location explanation is up: the popup covered it and the rider could not reach "Continue"
+  const locationScreenShown = useSyncExternalStore(subscribeLocationDisclosureShown, isLocationDisclosureShown);
+  const feedOffer = tabActive && isOnline && acceptedOrders.length === 0 && !locationScreenShown
     ? dedupeOrdersByIdentity(newOrders).find((order) => resolveOrderKey(order) !== dismissedOfferKey && isOfferFresh(order)) || null
     : null;
   const feedOfferKey = feedOffer ? resolveOrderKey(feedOffer) : null;
@@ -632,7 +635,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     navigator.geolocation.getCurrentPosition((pos) => {
       if (liveRef.current.isSimMode || useDeliveryStore.getState().isOnline) return;
       setRiderLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, heading: 0 });
-    }, () => {}, { enableHighAccuracy: true, maximumAge: 60000 });
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 60000, prompt: false }); // no prompt on open: asked from the Online toggle
   }, [tabActive, isOnline, currentTab, setRiderLocation]);
 
   // 3. Location logic (Smart Frequency Tracking) — Feed map only, while on screen
@@ -665,6 +668,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
       enableHighAccuracy: true,
       maximumAge: 3000,
       timeout: 10000,
+      prompt: false,
     });
 
     return () => navigator.geolocation.clearWatch(watchId);
@@ -835,8 +839,33 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     }
   };
 
-  const handleToggleOnline = () => {
+  const togglingOnlineRef = useRef(false);
+  const handleToggleOnline = async () => {
     const nextState = !isOnline;
+    if (nextState) {
+      // Going Online needs location: the explanation + Android's prompt come first, and without permission the rider
+      // stays Offline with a message (otherwise the toggle showed Online while no location and no orders came in).
+      if (togglingOnlineRef.current) return;
+      togglingOnlineRef.current = true;
+      let permission;
+      try {
+        permission = await ensureOnlineLocationPermission();
+      } finally {
+        togglingOnlineRef.current = false;
+      }
+      if (permission !== 'granted') {
+        const blocked = permission === 'blocked';
+        toast.error('Location permission is required to go Online', {
+          id: 'online-location-permission',
+          description: blocked
+            ? 'Allow location for Hello Parth Delivery Partner in the app settings.'
+            : 'We need your location to send you nearby orders.',
+          action: blocked ? { label: 'Open settings', onClick: () => Linking.openSettings().catch(() => {}) } : undefined,
+          duration: blocked ? 7000 : 4000,
+        });
+        return;
+      }
+    }
     toggleOnline(); // Store action
     if (nextState) {
       // Try to get location and sync immediately so we are visible for dispatch right away

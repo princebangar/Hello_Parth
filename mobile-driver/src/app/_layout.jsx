@@ -13,6 +13,7 @@ import { routeFromNotification } from '@/lib/push';
 import { ThemeProvider, driverTheme } from '@/theme';
 import { FontScope, Toaster } from '@/native/ui';
 import { PaymentHost } from '@/native/PaymentHost';
+import { LocationDisclosureHost } from '@/native/LocationDisclosureHost';
 import { AnimatedSplash, SPLASH_BG } from '@/native/AnimatedSplash';
 import { markSplashDone } from '@/native/splashState';
 import { NavBarScrim } from '@/native/NavBarScrim';
@@ -67,6 +68,7 @@ export default function RootLayout() {
               <MaintenanceGate />
               <NavBarScrim />
               <PaymentHost />
+              <LocationDisclosureHost />
               <Toaster />
             </FontScope>
           </ThemeProvider>

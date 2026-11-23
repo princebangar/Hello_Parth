@@ -382,8 +382,9 @@ Processing Time: Refunds are typically credited back to the original payment met
       continues: true,
       items: [
         { id: 'help', label: 'Help & Support', icon: icon(Headset), path: `${routePrefix}/help-support` },
-        { id: 'terms', label: 'Terms & Conditions', icon: icon(ScrollText), action: () => openLegal('terms') },
-        { id: 'privacy', label: 'Privacy Policy', icon: icon(Lock), action: () => openLegal('privacy') },
+        // Terms / Privacy: the admin's Captain pages (same as the login screen and the Play Store policy link), not the old fixed text
+        { id: 'terms', label: 'Terms & Conditions', icon: icon(ScrollText), path: `${routePrefix}/legal/terms` },
+        { id: 'privacy', label: 'Privacy Policy', icon: icon(Lock), path: `${routePrefix}/legal/privacy` },
         { id: 'refund', label: 'Refund Policy', icon: icon(ReceiptText), action: () => openLegal('refund') },
       ],
     },
